@@ -18,6 +18,44 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 export const formatEUR = (n) => eurFmt.format(Number(n || 0));
 
+export const BACKEND = process.env.REACT_APP_BACKEND_URL;
+export const fileUrl = (u) => (u ? (u.startsWith("http") ? u : `${BACKEND}${u}`) : "");
+export const toOptions = (arr) => (arr || []).map((v) => ({ value: v, label: v }));
+
+export function useSettings() {
+  const [settings, setSettings] = useState(null);
+  useEffect(() => { api.get("/settings").then(({ data }) => setSettings(data)).catch(() => {}); }, []);
+  return settings;
+}
+
+export function FileUpload({ label, value, onChange, accept, testid = "file" }) {
+  const [busy, setBusy] = useState(false);
+  const upload = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      onChange(data.url);
+      toast.success("File caricato");
+    } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="space-y-1.5">
+      {label && <Label className="text-xs font-medium text-slate-600">{label}</Label>}
+      <div className="flex items-center gap-2">
+        <input type="file" accept={accept} onChange={upload} data-testid={`${testid}-input`}
+          className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-tiffany-light file:text-tiffany-fg file:font-medium file:cursor-pointer" />
+        {busy && <span className="text-xs text-slate-400">Caricamento...</span>}
+      </div>
+      {value && <a href={fileUrl(value)} target="_blank" rel="noreferrer" className="text-xs text-tiffany-active hover:underline break-all">{value}</a>}
+    </div>
+  );
+}
+
 export function useCollection(endpoint) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -181,11 +219,12 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"] }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions }) {
   const { items, loading, create, update, remove } = useCollection(endpoint);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
+  const [filterVals, setFilterVals] = useState({});
 
   const openNew = () => { setEditing(null); setDialogOpen(true); };
   const openEdit = (row) => { setEditing(row); setDialogOpen(true); };
@@ -201,7 +240,8 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
   };
 
   const filtered = items.filter((i) =>
-    !query || searchKeys.some((k) => String(i[k] || "").toLowerCase().includes(query.toLowerCase()))
+    (!query || searchKeys.some((k) => String(i[k] || "").toLowerCase().includes(query.toLowerCase()))) &&
+    filters.every((f) => !filterVals[f.name] || filterVals[f.name] === "all" || i[f.name] === filterVals[f.name])
   );
 
   return (
@@ -211,9 +251,20 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
         subtitle={subtitle}
         action={<PrimaryButton onClick={openNew} data-testid={`add-${testid}-button`}><Plus className="w-4 h-4 mr-1.5" />Aggiungi</PrimaryButton>}
       />
-      <div className="mb-4 relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <Input className="pl-9" placeholder="Cerca..." value={query} onChange={(e) => setQuery(e.target.value)} data-testid={`search-${testid}-input`} />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input className="pl-9" placeholder="Cerca..." value={query} onChange={(e) => setQuery(e.target.value)} data-testid={`search-${testid}-input`} />
+        </div>
+        {filters.map((f) => (
+          <Select key={f.name} value={filterVals[f.name] || "all"} onValueChange={(v) => setFilterVals((p) => ({ ...p, [f.name]: v }))}>
+            <SelectTrigger className="w-full sm:w-44" data-testid={`filter-${testid}-${f.name}`}><SelectValue placeholder={f.label} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{f.label}: tutti</SelectItem>
+              {f.options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        ))}
       </div>
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -238,6 +289,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
                   ))}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
+                      {rowActions && rowActions(row)}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

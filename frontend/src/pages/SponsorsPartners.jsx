@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { useCollection, EntityDialog, PageHeader, PrimaryButton, StatusBadge, formatEUR } from "@/components/crm";
+import { useCollection, EntityDialog, PageHeader, PrimaryButton, StatusBadge, formatEUR, useSettings, toOptions } from "@/components/crm";
 import { formatApiError } from "@/lib/api";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -19,6 +19,7 @@ export default function SponsorsPartners() {
   const { items: companies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
   const { items: persons } = useCollection("/persons");
+  const settings = useSettings();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -32,6 +33,7 @@ export default function SponsorsPartners() {
     { name: "fase", label: "Fase pipeline", type: "select", options: FASI.map((v) => ({ value: v, label: FASE_LABEL[v] })) },
     { name: "valore", label: "Valore (€)", type: "number" },
     { name: "valore_confermato", label: "Valore confermato (€)", type: "number" },
+    { name: "livello", label: "Livello sponsorship", type: "select", options: toOptions(settings?.livelli_sponsorship) },
     { name: "referente_id", label: "Referente", type: "select", options: persons.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() })) },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
