@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /login
+Sitemap: https://crmevent.emergent.host/sitemap.xml

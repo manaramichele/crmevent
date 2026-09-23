@@ -28,7 +28,7 @@ export default function Login() {
         const payload = mode === "login" ? { email: form.email, password: form.password } : form;
         const { data } = await api.post(url, payload);
         setUser(data);
-        nav("/");
+        nav("/app");
       }
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     finally { setLoading(false); }
@@ -46,8 +46,7 @@ export default function Login() {
         <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-tiffany/20 blur-3xl" />
         <div className="absolute -left-16 bottom-0 w-80 h-80 rounded-full bg-tiffany/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <img src="/icon-crmevent.png" alt="crmevent" className="w-11 h-11 rounded-xl" />
-          <span className="font-display font-extrabold text-white text-xl">crmevent</span>
+          <div className="bg-white rounded-xl px-3 py-2 shadow-sm inline-flex"><img src="/logo-crmevent.png" alt="crmevent" className="h-7 w-auto" /></div>
         </div>
         <div className="relative">
           <h1 className="font-display text-4xl font-bold text-white leading-tight">La piattaforma operativa per eventi, staff e volontari.</h1>

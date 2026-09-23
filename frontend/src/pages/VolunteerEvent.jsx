@@ -27,7 +27,7 @@ export default function VolunteerEvent() {
   const nav = useNavigate();
   const [d, setD] = useState(null);
 
-  useEffect(() => { api.get(`/me/events/${id}`).then(({ data }) => setD(data)).catch(() => { toast.error("Evento non trovato"); nav("/"); }); }, [id, nav]);
+  useEffect(() => { api.get(`/me/events/${id}`).then(({ data }) => setD(data)).catch(() => { toast.error("Evento non trovato"); nav("/app"); }); }, [id, nav]);
 
   if (!d) return <div className="text-slate-400 text-center py-10">Caricamento...</div>;
   const { event, presence, shifts, team, team_leader, colleagues, maps } = d;
@@ -37,7 +37,7 @@ export default function VolunteerEvent() {
 
   return (
     <div className="space-y-4 animate-fade-up">
-      <button onClick={() => nav("/")} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="w-4 h-4" />Indietro</button>
+      <button onClick={() => nav("/app")} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="w-4 h-4" />Indietro</button>
 
       <div className="bg-slate-900 rounded-2xl p-6 text-white relative overflow-hidden">
         <div className="absolute -right-16 -top-16 w-52 h-52 rounded-full bg-tiffany/20 blur-2xl" />

@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake, UserCog,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 
@@ -17,6 +17,7 @@ const NAV = [
   { to: "/staff", label: "Staff & Volontari", icon: UserCog, id: "staff" },
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup" },
+  { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni" },
 ];
 

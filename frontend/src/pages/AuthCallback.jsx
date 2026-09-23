@@ -17,8 +17,8 @@ export default function AuthCallback() {
       try {
         const { data } = await api.post("/auth/session", {}, { headers: { "X-Session-ID": sid } });
         setUser(data);
-        window.history.replaceState(null, "", "/");
-        nav("/", { replace: true });
+        window.history.replaceState(null, "", "/app");
+        nav("/app", { replace: true });
       } catch {
         nav("/login", { replace: true });
       }

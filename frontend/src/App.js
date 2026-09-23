@@ -5,6 +5,8 @@ import { Toaster, toast } from "sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import VolunteerLayout from "@/components/VolunteerLayout";
+import LandingPage from "@/pages/LandingPage";
+import Legal from "@/pages/Legal";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import ResetPassword from "@/pages/ResetPassword";
@@ -18,6 +20,7 @@ import SponsorsPartners from "@/pages/SponsorsPartners";
 import StaffVolunteers from "@/pages/StaffVolunteers";
 import Activities from "@/pages/Activities";
 import Followups from "@/pages/Followups";
+import Leads from "@/pages/Leads";
 import SettingsPage from "@/pages/Settings";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
@@ -44,7 +47,7 @@ function Protected({ children }) {
 
 function AdminOnly({ children }) {
   const { user } = useAuth();
-  if (isVol(user)) return <Navigate to="/" replace />;
+  if (isVol(user)) return <Navigate to="/app" replace />;
   return children;
 }
 
@@ -60,10 +63,14 @@ function Shell() {
     <>
       <CalendarToast />
       <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/privacy" element={<Legal type="privacy" />} />
+        <Route path="/cookie" element={<Legal type="cookie" />} />
+        <Route path="/termini" element={<Legal type="termini" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/attiva" element={<Activate />} />
-        <Route path="/" element={<Protected><HomeRoute /></Protected>} />
+        <Route path="/app" element={<Protected><HomeRoute /></Protected>} />
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />
         <Route path="/eventi" element={<Protected><AdminOnly><Events /></AdminOnly></Protected>} />
@@ -73,6 +80,7 @@ function Shell() {
         <Route path="/staff" element={<Protected><AdminOnly><StaffVolunteers /></AdminOnly></Protected>} />
         <Route path="/attivita" element={<Protected><AdminOnly><Activities /></AdminOnly></Protected>} />
         <Route path="/followup" element={<Protected><AdminOnly><Followups /></AdminOnly></Protected>} />
+        <Route path="/lead" element={<Protected><AdminOnly><Leads /></AdminOnly></Protected>} />
         <Route path="/impostazioni" element={<Protected><AdminOnly><SettingsPage /></AdminOnly></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

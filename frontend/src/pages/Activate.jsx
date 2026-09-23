@@ -24,7 +24,7 @@ export default function Activate() {
       const { data } = await api.post("/auth/activate", { token, password: pw });
       setUser(data);
       toast.success("Account attivato. Benvenuto!");
-      nav("/");
+      nav("/app");
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     finally { setLoading(false); }
   };

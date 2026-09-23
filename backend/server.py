@@ -30,6 +30,7 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALG = "HS256"
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
+APP_URL = os.environ.get("APP_URL") or FRONTEND_URL
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
 app = FastAPI(title="crmevent API")
@@ -277,7 +278,7 @@ async def forgot_password(body: ForgotIn):
         await db.password_reset_tokens.insert_one({"token": token, "user_id": user["user_id"],
                                                    "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
                                                    "used": False, "created_at": now_iso()})
-        link = f"{FRONTEND_URL}/reset-password?token={token}"
+        link = f"{APP_URL}/reset-password?token={token}"
         try:
             await email_utils.send_email(to=email, subject="Reimposta la tua password crmevent",
                                          html=email_utils.link_email(name=user.get("name", ""),
@@ -555,7 +556,7 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
                                    "picture": person.get("foto_url", ""), "activation_token": token,
                                    "activation_expires": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
                                    "created_at": now_iso()})
-    link = f"{FRONTEND_URL}/attiva?token={token}"
+    link = f"{APP_URL}/attiva?token={token}"
     sent = True
     try:
         await email_utils.send_email(to=email, subject="Il tuo accesso a crmevent",
@@ -772,15 +773,15 @@ async def calendar_callback(code: str = "", state: str = ""):
         payload = jwt.decode(state, JWT_SECRET, algorithms=[JWT_ALG])
         uid = payload["uid"]
     except jwt.PyJWTError:
-        return RedirectResponse(f"{FRONTEND_URL}/?calendar=error")
+        return RedirectResponse(f"{APP_URL}/app?calendar=error")
     tokens = gcal_utils.exchange_code(code)
     if "access_token" not in tokens:
-        return RedirectResponse(f"{FRONTEND_URL}/?calendar=error")
+        return RedirectResponse(f"{APP_URL}/app?calendar=error")
     info = gcal_utils.userinfo(tokens["access_token"])
     await db.calendar_connections.update_one({"user_id": uid},
         {"$set": {"user_id": uid, "tokens": tokens, "google_email": info.get("email"),
                   "calendar_id": "primary", "updated_at": now_iso()}}, upsert=True)
-    return RedirectResponse(f"{FRONTEND_URL}/?calendar=connected")
+    return RedirectResponse(f"{APP_URL}/app?calendar=connected")
 
 
 @api.get("/calendar/calendars")
@@ -832,7 +833,7 @@ async def _sync_object(user_id: str, kind: str, ref_id: str, body: dict):
 @api.post("/events/{event_id}/calendar-sync")
 async def sync_event(event_id: str, user: dict = Depends(get_current_user)):
     e = await _get("events", event_id)
-    link = f"{FRONTEND_URL}/eventi?id={event_id}"
+    link = f"{APP_URL}/eventi?id={event_id}"
     desc = (e.get("descrizione") or "") + f"\n\nScheda evento: {link}"
     loc = ", ".join([x for x in [e.get("localita"), e.get("indirizzo"), e.get("citta")] if x])
     body = gcal_utils.build_event_body(summary=e["nome"], description=desc, location=loc,
@@ -918,7 +919,7 @@ async def my_sync_event(event_id: str, user: dict = Depends(get_current_user)):
     if not presence:
         raise HTTPException(status_code=404, detail="Evento non trovato")
     e = await db.events.find_one({"id": event_id}, {"_id": 0})
-    link = f"{FRONTEND_URL}/eventi?id={event_id}"
+    link = f"{APP_URL}/eventi?id={event_id}"
     desc = f"Ruolo: {presence.get('ruolo') or '-'} | Area: {presence.get('area') or '-'} | Punto ritrovo: {presence.get('punto_ritrovo') or '-'}\n{link}"
     body = gcal_utils.build_event_body(summary=e["nome"], description=desc,
                                        location=", ".join([x for x in [e.get("localita"), e.get("citta")] if x]),
@@ -936,7 +937,7 @@ async def my_sync_shift(shift_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Turno non trovato")
     e = await db.events.find_one({"id": sh["evento_id"]}, {"_id": 0})
     team = await db.teams.find_one({"id": sh.get("team_id")}, {"_id": 0}) if sh.get("team_id") else None
-    link = f"{FRONTEND_URL}/eventi?id={sh['evento_id']}"
+    link = f"{APP_URL}/eventi?id={sh['evento_id']}"
     desc = f"Turno {e['nome']} | Ruolo: {sh.get('ruolo') or '-'} | Team: {team.get('nome') if team else '-'} | Luogo: {sh.get('luogo') or '-'} | Ritrovo: {sh.get('punto_ritrovo') or '-'}\n{link}"
     body = gcal_utils.build_event_body(summary=f"Turno · {e['nome']}", description=desc, location=sh.get("luogo") or "",
                                        date_start=sh.get("data"), date_end=sh.get("data"),
@@ -945,6 +946,55 @@ async def my_sync_shift(shift_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Il turno non ha una data")
     ev = await _sync_object(user["user_id"], f"shift", shift_id, body)
     return {"ok": True, "html_link": ev.get("htmlLink")}
+
+
+# ---------------- leads (commercial CRM) ----------------
+class Lead(BaseModel):
+    nome: str
+    cognome: Optional[str] = None
+    organizzazione: Optional[str] = None
+    email: EmailStr
+    telefono: Optional[str] = None
+    tipologia_eventi: Optional[str] = None
+    eventi_anno: Optional[str] = None
+    messaggio: Optional[str] = None
+    privacy: Optional[bool] = False
+
+
+class LeadUpdate(BaseModel):
+    stato: Optional[str] = None
+    note: Optional[str] = None
+
+
+@api.post("/leads")
+async def create_lead(body: Lead):
+    if not body.privacy:
+        raise HTTPException(status_code=400, detail="È necessario accettare la privacy policy")
+    doc = await _create("leads", {**body.model_dump(), "stato": "nuovo", "note": ""})
+    try:
+        await email_utils.send_email(to=os.environ["ADMIN_EMAIL"], subject="Nuova richiesta demo crmevent",
+                                     html=email_utils.link_email(name="Michele",
+                                                                 intro=f"Nuova richiesta demo da {body.nome} {body.cognome or ''} ({body.organizzazione or '-'}) — email {body.email}, tel {body.telefono or '-'}. Tipologia: {body.tipologia_eventi or '-'}, eventi/anno: {body.eventi_anno or '-'}.",
+                                                                 cta_label="Apri crmevent", url=f"{APP_URL}/lead",
+                                                                 footer_note="Gestisci il lead nella sezione Lead."))
+    except Exception as e:
+        logger.error(f"lead notify failed: {e}")
+    return {"ok": True, "id": doc["id"]}
+
+
+@api.get("/leads")
+async def list_leads(admin: dict = Depends(require_admin)):
+    return await _list("leads")
+
+
+@api.put("/leads/{lead_id}")
+async def update_lead(lead_id: str, body: LeadUpdate, admin: dict = Depends(require_admin)):
+    return await _update("leads", lead_id, body.model_dump(exclude_unset=True))
+
+
+@api.delete("/leads/{lead_id}")
+async def delete_lead(lead_id: str, admin: dict = Depends(require_admin)):
+    return await _delete("leads", lead_id)
 
 
 # ---------------- admin reset ----------------
