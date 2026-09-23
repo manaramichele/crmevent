@@ -22,9 +22,9 @@ const NAV = [
 
 function Logo({ collapsed }) {
   return collapsed ? (
-    <img src="/icon-crmevent.png" alt="CRMEvent" className="w-9 h-9 rounded-lg mx-auto" />
+    <img src="/icon-crmevent.png" alt="CRMEvent" className="w-10 h-10 rounded-lg mx-auto" />
   ) : (
-    <img src="/logo-crmevent.png" alt="CRMEvent" className="h-8 w-auto" />
+    <img src="/logo-crmevent.png" alt="CRMEvent" className="h-10 w-auto" />
   );
 }
 
@@ -159,7 +159,7 @@ export default function Layout({ children }) {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="absolute left-0 top-0 h-full w-64 bg-white p-3 shadow-xl">
-            <div className="h-12 flex items-center justify-between mb-2"><Logo /><button onClick={() => setMobileOpen(false)}><X className="w-5 h-5" /></button></div>
+            <div className="h-14 flex items-center justify-between mb-2"><Logo /><button onClick={() => setMobileOpen(false)}><X className="w-6 h-6" /></button></div>
             <nav className="space-y-1">
               {NAV.map((n) => (
                 <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setMobileOpen(false)}

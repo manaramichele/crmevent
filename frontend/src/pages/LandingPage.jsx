@@ -172,7 +172,7 @@ export default function LandingPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent.png" alt="CRMEvent" className="h-9 sm:h-10 w-auto" /></Link>
+          <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent.png" alt="CRMEvent" className="h-11 sm:h-12 w-auto" /></Link>
           <nav className="hidden lg:flex items-center gap-7">
             {NAV.map(([l, id]) => <button key={id} onClick={() => scrollTo(id)} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{l}</button>)}
           </nav>
@@ -348,7 +348,7 @@ export default function LandingPage() {
       <footer className="bg-slate-900 text-slate-300">
         <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2 md:col-span-1">
-            <div className="bg-white rounded-lg px-3 py-2 inline-flex"><img src="/logo-crmevent.png" alt="CRMEvent" className="h-8 w-auto" /></div>
+            <div className="bg-white rounded-lg px-3 py-2 inline-flex"><img src="/logo-crmevent.png" alt="CRMEvent" className="h-9 sm:h-10 w-auto" /></div>
             <p className="text-sm text-slate-400 mt-4 max-w-xs">Il CRM per organizzare eventi: contatti, sponsor, staff, volontari, team, turni e attività.</p>
           </div>
           <div><div className="text-white font-semibold mb-3 text-sm">Prodotto</div>
