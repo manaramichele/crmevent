@@ -1,0 +1,272 @@
+import { useEffect, useState, useCallback } from "react";
+import api, { formatApiError } from "@/lib/api";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
+
+export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+export const formatEUR = (n) => eurFmt.format(Number(n || 0));
+
+export function useCollection(endpoint) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const reload = useCallback(async (params) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get(endpoint, { params });
+      setItems(data);
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail));
+    } finally {
+      setLoading(false);
+    }
+  }, [endpoint]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const create = async (payload) => {
+    const { data } = await api.post(endpoint, payload);
+    setItems((p) => [data, ...p]);
+    return data;
+  };
+  const update = async (id, payload) => {
+    const { data } = await api.put(`${endpoint}/${id}`, payload);
+    setItems((p) => p.map((i) => (i.id === id ? data : i)));
+    return data;
+  };
+  const remove = async (id) => {
+    await api.delete(`${endpoint}/${id}`);
+    setItems((p) => p.filter((i) => i.id !== id));
+  };
+  return { items, loading, reload, create, update, remove, setItems };
+}
+
+export function PageHeader({ title, subtitle, action }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 font-display">{title}</h1>
+        {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+export function SectionCard({ title, children, className = "", action }) {
+  return (
+    <div className={`bg-white border border-slate-200 rounded-xl shadow-sm p-5 ${className}`}>
+      {title && (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-slate-800 font-display">{title}</h3>
+          {action}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+const STATUS_STYLES = {
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  orange: "bg-amber-50 text-amber-700 ring-amber-200",
+  red: "bg-red-50 text-red-700 ring-red-200",
+  tiffany: "bg-tiffany-light text-tiffany-fg ring-tiffany-border",
+  gray: "bg-slate-100 text-slate-600 ring-slate-200",
+  blue: "bg-sky-50 text-sky-700 ring-sky-200",
+};
+
+export function StatusBadge({ children, color = "gray" }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLES[color] || STATUS_STYLES.gray}`}>
+      {children}
+    </span>
+  );
+}
+
+export function PrimaryButton({ children, ...props }) {
+  return (
+    <Button
+      className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98]"
+      {...props}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function Field({ field, value, onChange, options }) {
+  const common = { id: field.name, "data-testid": `field-${field.name}` };
+  if (field.type === "textarea") {
+    return <Textarea {...common} value={value || ""} onChange={(e) => onChange(field.name, e.target.value)} placeholder={field.placeholder} />;
+  }
+  if (field.type === "select") {
+    const opts = field.options || options?.[field.source] || [];
+    return (
+      <Select value={value || ""} onValueChange={(v) => onChange(field.name, v)}>
+        <SelectTrigger data-testid={`field-${field.name}`}><SelectValue placeholder={field.placeholder || "Seleziona..."} /></SelectTrigger>
+        <SelectContent>
+          {opts.map((o) => (
+            <SelectItem key={o.value} value={o.value} data-testid={`option-${field.name}-${o.value}`}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+  return (
+    <Input
+      {...common}
+      type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type || "text"}
+      value={value ?? ""}
+      onChange={(e) => onChange(field.name, field.type === "number" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value)}
+      placeholder={field.placeholder}
+    />
+  );
+}
+
+export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity" }) {
+  const [form, setForm] = useState(initial || {});
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setForm(initial || {}); }, [initial, open]);
+
+  const change = (name, val) => setForm((f) => ({ ...f, [name]: val }));
+
+  const submit = async () => {
+    for (const f of fields) {
+      if (f.required && !form[f.name]) { toast.error(`Campo obbligatorio: ${f.label}`); return; }
+    }
+    setSaving(true);
+    try {
+      await onSubmit(form);
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid={`${testid}-dialog`}>
+        <DialogHeader><DialogTitle className="font-display">{title}</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+          {fields.map((f) => (
+            <div key={f.name} className={f.full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}>
+              <Label htmlFor={f.name} className="text-xs font-medium text-slate-600">
+                {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
+              </Label>
+              <Field field={f} value={form[f.name]} onChange={change} options={options} />
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid={`${testid}-cancel`}>Annulla</Button>
+          <PrimaryButton onClick={submit} disabled={saving} data-testid={`${testid}-save`}>{saving ? "Salvataggio..." : "Salva"}</PrimaryButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"] }) {
+  const { items, loading, create, update, remove } = useCollection(endpoint);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [query, setQuery] = useState("");
+
+  const openNew = () => { setEditing(null); setDialogOpen(true); };
+  const openEdit = (row) => { setEditing(row); setDialogOpen(true); };
+
+  const onSubmit = async (form) => {
+    if (editing) { await update(editing.id, form); toast.success(`${entityLabel} aggiornato`); }
+    else { await create(form); toast.success(`${entityLabel} creato`); }
+  };
+
+  const onDelete = async (row) => {
+    try { await remove(row.id); toast.success(`${entityLabel} eliminato`); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+
+  const filtered = items.filter((i) =>
+    !query || searchKeys.some((k) => String(i[k] || "").toLowerCase().includes(query.toLowerCase()))
+  );
+
+  return (
+    <div className="animate-fade-up">
+      <PageHeader
+        title={title}
+        subtitle={subtitle}
+        action={<PrimaryButton onClick={openNew} data-testid={`add-${testid}-button`}><Plus className="w-4 h-4 mr-1.5" />Aggiungi</PrimaryButton>}
+      />
+      <div className="mb-4 relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Input className="pl-9" placeholder="Cerca..." value={query} onChange={(e) => setQuery(e.target.value)} data-testid={`search-${testid}-input`} />
+      </div>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/70">
+                {columns.map((c) => (
+                  <th key={c.key} className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">{c.label}</th>
+                ))}
+                <th className="px-4 py-3 text-right font-semibold text-slate-600">Azioni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={columns.length + 1} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={columns.length + 1} className="px-4 py-10 text-center text-slate-400">Nessun {entityLabel} trovato.</td></tr>
+              ) : filtered.map((row) => (
+                <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors" data-testid={`${testid}-row-${row.id}`}>
+                  {columns.map((c) => (
+                    <td key={c.key} className="px-4 py-3 text-slate-700">{c.render ? c.render(row) : (row[c.key] || "—")}</td>
+                  ))}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-${testid}-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle>
+                            <AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Annulla</AlertDialogCancel>
+                            <AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(row)} data-testid={`confirm-delete-${testid}-${row.id}`}>Elimina</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <EntityDialog
+        open={dialogOpen} onOpenChange={setDialogOpen}
+        title={editing ? `Modifica ${entityLabel}` : `Nuovo ${entityLabel}`}
+        fields={fields} initial={editing} onSubmit={onSubmit} options={options} testid={testid}
+      />
+    </div>
+  );
+}

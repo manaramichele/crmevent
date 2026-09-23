@@ -1,0 +1,123 @@
+{
+  "brand": {
+    "name": "CRMEvent",
+    "domain": "crmevent.it",
+    "tagline": "Il CRM e Gestionale per Organizzatori di Eventi",
+    "language": "it"
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Plus Jakarta Sans, sans-serif",
+      "body": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "hierarchy": {
+      "h1": "text-3xl md:text-4xl font-bold tracking-tight text-slate-900",
+      "h2": "text-2xl md:text-3xl font-semibold tracking-tight text-slate-900",
+      "h3": "text-lg md:text-xl font-semibold text-slate-800",
+      "h4": "text-base font-medium text-slate-800",
+      "subtitle": "text-sm md:text-base text-slate-500 font-normal",
+      "body": "text-sm text-slate-700 leading-relaxed",
+      "caption": "text-xs text-slate-500 font-medium tracking-wide uppercase"
+    }
+  },
+  "colors": {
+    "primary": {
+      "ral_6027_tiffany": "#81D8D0",
+      "tiffany_hover": "#6ECDC4",
+      "tiffany_active": "#59C1B7",
+      "tiffany_light": "#E8F8F6",
+      "tiffany_border": "#B2E7E1",
+      "tiffany_foreground": "#0F4C45"
+    },
+    "neutral": {
+      "bg_main": "#FFFFFF",
+      "bg_secondary": "#F8FAFC",
+      "bg_hover": "#F1F5F9",
+      "border": "#E2E8F0",
+      "border_subtle": "#EDF2F7",
+      "text_primary_anthracite": "#0F172A",
+      "text_secondary_gray": "#64748B",
+      "text_muted": "#94A3B8"
+    },
+    "status": {
+      "success": "#10B981",
+      "success_bg": "#ECFDF5",
+      "warning": "#F59E0B",
+      "warning_bg": "#FFFBEB",
+      "critical_due": "#EF4444",
+      "critical_bg": "#FEF2F2",
+      "info": "#0EA5E9",
+      "info_bg": "#F0F9FF"
+    },
+    "rules": "IMPORTANT: Do NOT apply RAL 6027 Tiffany to large background surfaces or full containers. Use only for primary action buttons, active tabs, selected states, badges, graphs, key KPI accents, active navigation indicators, and links."
+  },
+  "layout_and_navigation": {
+    "sidebar": {
+      "type": "Collapsible vertical sidebar",
+      "width_expanded": "w-64",
+      "width_collapsed": "w-20",
+      "bg": "bg-white border-r border-slate-200",
+      "sections": [
+        "Dashboard",
+        "Eventi",
+        "Aziende",
+        "Persone",
+        "Sponsor & Partner",
+        "Staff & Volontari",
+        "Attività",
+        "Follow-up",
+        "Impostazioni"
+      ]
+    },
+    "topbar": {
+      "bg": "bg-white/90 backdrop-blur-md border-b border-slate-200 z-40 sticky top-0",
+      "elements": [
+        "Logo CRMEvent with Tiffany badge",
+        "Global Search Bar (Ricerca globale con shortcut Cmd+K)",
+        "Notification Bell with unread count badge",
+        "User Profile Dropdown with avatar, name & multi-role toggle"
+      ]
+    },
+    "grid_system": {
+      "kpi_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5",
+      "content_split": "grid grid-cols-1 lg:grid-cols-12 gap-6",
+      "kanban_pipeline": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4"
+    }
+  },
+  "components_strategy": {
+    "cards": "White background, slate-200 border, subtle shadow-sm (hover:shadow-md transition-shadow), p-5 or p-6 rounded-xl",
+    "buttons": {
+      "primary": "bg-[#81D8D0] hover:bg-[#6ECDC4] text-slate-900 font-semibold px-4 py-2 rounded-lg shadow-sm transition-all focus:ring-2 focus:ring-[#81D8D0]/50 active:scale-[0.98]",
+      "secondary": "bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium px-4 py-2 rounded-lg transition-all",
+      "outline": "border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium px-4 py-2 rounded-lg transition-all",
+      "danger": "bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg shadow-sm"
+    },
+    "tables": "Clean row dividers, border-slate-200, hover:bg-slate-50/80 transition-colors, clear column sorting, rounded-lg overflow-hidden",
+    "charts": "Recharts / Shadcn charts with Tiffany accent (#81D8D0) as primary series, Slate (#64748B) secondary, Green/Orange for conversion stages",
+    "badges": "rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset",
+    "modals_and_drawers": "Shadcn Dialog and Sheet with backdrop-blur-sm bg-slate-900/40"
+  },
+  "media_assets": {
+    "event_hero_1": "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "event_hero_2": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "event_speaker": "https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "event_staff": "https://images.pexels.com/photos/8761304/pexels-photo-8761304.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "logos": {
+      "crm_logo": "CRMEvent (Stylized icon in Tiffany #81D8D0 + Slate-900 text)"
+    }
+  },
+  "general_ui_ux_guidelines": {
+    "language_setting": "All UI strings, labels, buttons, toasts, and status indicators MUST be in Italian (e.g. 'Dashboard', 'Eventi Attivi', 'Aziende', 'Contatti', 'Pipeline Commerciale', 'Staff & Volontari', 'Follow-up Oggi', 'Scadenze', 'Aggiungi Evento', 'Modifica', 'Salva Modifiche', 'Elimina').",
+    "test_attributes": "All interactive elements (buttons, inputs, select items, menu links, tabs, search inputs, modal triggers, pagination) MUST include explicit data-testid attributes in kebab-case (e.g. data-testid='sidebar-link-eventi', data-testid='add-event-button', data-testid='global-search-input').",
+    "accessibility": "Ensure text contrast against white and slate backgrounds. For Tiffany buttons, use dark slate text (#0F172A) for strong WCAG compliance.",
+    "responsiveness": "Full desktop optimization with sidebar collapse on tablet/mobile screens. Touch-friendly touch targets on buttons (min 40px height)."
+  },
+  "instructions_to_main_agent": [
+    "Ensure all components are built in JS/JSX files in /app/frontend/src/.",
+    "Implement the Italian multi-event CRM interface with realistic seed/mock data for events, companies, contacts, sponsors, pipeline stages, staff shifts, and follow-ups.",
+    "Maintain strict adherence to the clean, modern B2B SaaS aesthetic: white backgrounds, slate typography, subtle borders, and precise Tiffany (#81D8D0) accenting.",
+    "Ensure Sonner toasts are used for user feedback (salvataggio, aggiunta, eliminazione, cambio stato).",
+    "Include data-testid on every interactive button, input, tab, card link, dropdown option, and modal button."
+  ]
+}
