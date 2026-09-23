@@ -29,7 +29,7 @@ export default function ResetPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
       <form onSubmit={submit} className="w-full max-w-sm bg-white border border-slate-200 rounded-xl p-8 shadow-sm space-y-4">
-        <div className="mb-2"><img src="/logo-crmevent.png" alt="crmevent" className="h-8 w-auto" /></div>
+        <div className="mb-2"><img src="/logo-crmevent.png" alt="CRMEvent" className="h-8 w-auto" /></div>
         <h2 className="font-display text-xl font-bold text-slate-900">Nuova password</h2>
         <div className="space-y-1.5"><Label>Nuova password</Label><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} data-testid="reset-pw" required /></div>
         <div className="space-y-1.5"><Label>Conferma password</Label><Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} data-testid="reset-pw2" required /></div>

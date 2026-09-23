@@ -42,23 +42,23 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      <div className="hidden lg:flex flex-col justify-between w-1/2 bg-slate-900 p-12 relative overflow-hidden">
+      <div className="hidden lg:flex flex-col justify-between w-1/2 bg-black p-12 relative overflow-hidden">
         <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-tiffany/20 blur-3xl" />
         <div className="absolute -left-16 bottom-0 w-80 h-80 rounded-full bg-tiffany/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <div className="bg-white rounded-xl px-3 py-2 shadow-sm inline-flex"><img src="/logo-crmevent.png" alt="crmevent" className="h-7 w-auto" /></div>
+          <img src="/logo-crmevent-dark.png" alt="CRMEvent" className="h-16 w-auto" />
         </div>
         <div className="relative">
           <h1 className="font-display text-4xl font-bold text-white leading-tight">La piattaforma operativa per eventi, staff e volontari.</h1>
           <p className="text-slate-300 mt-4 max-w-md">Eventi, aziende, sponsor, team, turni e mappe in un unico gestionale.</p>
         </div>
-        <div className="relative text-slate-500 text-sm">crmevent.it</div>
+        <div className="relative text-slate-500 text-sm">crmevent.emergent.host</div>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-6 bg-white">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center justify-center mb-8">
-            <img src="/logo-crmevent.png" alt="crmevent" className="h-9 w-auto" />
+            <img src="/logo-crmevent.png" alt="CRMEvent" className="h-12 w-auto" />
           </div>
           <h2 className="font-display text-2xl font-bold text-slate-900">
             {mode === "login" ? "Accedi" : mode === "register" ? "Crea account" : "Recupera password"}

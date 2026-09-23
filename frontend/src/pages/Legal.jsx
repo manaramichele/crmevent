@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
 
 const CONTENT = {
-  privacy: { title: "Privacy Policy", body: "Questa informativa descrive il trattamento dei dati personali raccolti tramite crmevent. Il testo definitivo sarà fornito prima della commercializzazione. Per informazioni scrivi a privacy@crmevent.it." },
-  cookie: { title: "Cookie Policy", body: "crmevent utilizza esclusivamente cookie tecnici necessari al funzionamento della piattaforma. Eventuali cookie analitici o di marketing verranno introdotti solo previo consenso, tramite una futura Cookie Management Platform." },
-  termini: { title: "Termini e Condizioni", body: "Condizioni di utilizzo del servizio crmevent. Il testo definitivo sarà pubblicato prima dell'attivazione commerciale del servizio." },
+  privacy: { title: "Privacy Policy", body: "Questa informativa descrive il trattamento dei dati personali raccolti tramite CRMEvent. Il testo definitivo sarà fornito prima della commercializzazione. Per informazioni scrivi a privacy@crmevent.it." },
+  cookie: { title: "Cookie Policy", body: "CRMEvent utilizza esclusivamente cookie tecnici necessari al funzionamento della piattaforma. Eventuali cookie analitici o di marketing verranno introdotti solo previo consenso, tramite una futura Cookie Management Platform." },
+  termini: { title: "Termini e Condizioni", body: "Condizioni di utilizzo del servizio CRMEvent. Il testo definitivo sarà pubblicato prima dell'attivazione commerciale del servizio." },
 };
 
 export default function Legal({ type }) {

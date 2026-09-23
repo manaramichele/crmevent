@@ -27,7 +27,7 @@ const columns = [
 export default function Leads() {
   return (
     <EntityManager
-      title="Lead" subtitle="Richieste demo e pipeline commerciale di crmevent"
+      title="Lead" subtitle="Richieste demo e pipeline commerciale di CRMEvent"
       endpoint="/leads" fields={fields} columns={columns}
       entityLabel="lead" testid="lead" searchKeys={["nome", "cognome", "organizzazione", "email"]}
       filters={[{ name: "stato", label: "Stato", options: Object.keys(STATO_LABEL).map((v) => ({ value: v, label: STATO_LABEL[v] })) }]}

@@ -17,7 +17,6 @@ import Events from "@/pages/Events";
 import Companies from "@/pages/Companies";
 import Persons from "@/pages/Persons";
 import SponsorsPartners from "@/pages/SponsorsPartners";
-import StaffVolunteers from "@/pages/StaffVolunteers";
 import Activities from "@/pages/Activities";
 import Followups from "@/pages/Followups";
 import Leads from "@/pages/Leads";
@@ -77,7 +76,6 @@ function Shell() {
         <Route path="/aziende" element={<Protected><AdminOnly><Companies /></AdminOnly></Protected>} />
         <Route path="/persone" element={<Protected><AdminOnly><Persons /></AdminOnly></Protected>} />
         <Route path="/sponsor" element={<Protected><AdminOnly><SponsorsPartners /></AdminOnly></Protected>} />
-        <Route path="/staff" element={<Protected><AdminOnly><StaffVolunteers /></AdminOnly></Protected>} />
         <Route path="/attivita" element={<Protected><AdminOnly><Activities /></AdminOnly></Protected>} />
         <Route path="/followup" element={<Protected><AdminOnly><Followups /></AdminOnly></Protected>} />
         <Route path="/lead" element={<Protected><AdminOnly><Leads /></AdminOnly></Protected>} />

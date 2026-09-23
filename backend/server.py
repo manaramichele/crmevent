@@ -4,9 +4,11 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 import os
+import re
 import uuid
 import logging
 import secrets
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -33,7 +35,7 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 APP_URL = os.environ.get("APP_URL") or FRONTEND_URL
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
-app = FastAPI(title="crmevent API")
+app = FastAPI(title="CRMEvent API")
 api = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("crmevent")
@@ -280,7 +282,7 @@ async def forgot_password(body: ForgotIn):
                                                    "used": False, "created_at": now_iso()})
         link = f"{APP_URL}/reset-password?token={token}"
         try:
-            await email_utils.send_email(to=email, subject="Reimposta la tua password crmevent",
+            await email_utils.send_email(to=email, subject="Reimposta la tua password CRMEvent",
                                          html=email_utils.link_email(name=user.get("name", ""),
                                                                      intro="Hai richiesto il reset della password. Il link scade tra 1 ora.",
                                                                      cta_label="Reimposta password", url=link,
@@ -367,11 +369,15 @@ class Company(BaseModel):
     sito_web: Optional[str] = None
     email: Optional[str] = None
     telefono: Optional[str] = None
+    indirizzo: Optional[str] = None
+    cap: Optional[str] = None
     citta: Optional[str] = None
     provincia: Optional[str] = None
     regione: Optional[str] = None
     nazione: Optional[str] = "Italia"
     tipo: Optional[str] = "azienda"
+    tipologie: Optional[List[str]] = None
+    responsabile_interno: Optional[str] = None
     note: Optional[str] = None
 
 
@@ -379,11 +385,21 @@ class Person(BaseModel):
     nome: str
     cognome: Optional[str] = None
     email: Optional[str] = None
+    email_secondaria: Optional[str] = None
     telefono: Optional[str] = None
+    cellulare: Optional[str] = None
     ruolo: Optional[str] = None
     azienda_id: Optional[str] = None
+    data_nascita: Optional[str] = None
+    indirizzo: Optional[str] = None
+    cap: Optional[str] = None
     citta: Optional[str] = None
+    provincia: Optional[str] = None
+    regione: Optional[str] = None
+    nazione: Optional[str] = None
+    linkedin: Optional[str] = None
     foto_url: Optional[str] = None
+    tag: Optional[List[str]] = None
     note: Optional[str] = None
 
 
@@ -527,6 +543,206 @@ crud_routes("activities", "activities", Activity)
 crud_routes("followups", "followups", Followup)
 
 
+# ---------------- persons <-> companies relations & unified views ----------------
+class PersonCompany(BaseModel):
+    person_id: str
+    company_id: str
+    qualifica: Optional[str] = None
+    ruolo: Optional[str] = None
+    referente_principale: Optional[bool] = False
+    note: Optional[str] = None
+
+
+class ContactIn(BaseModel):
+    person_id: Optional[str] = None
+    nome: Optional[str] = None
+    cognome: Optional[str] = None
+    email: Optional[str] = None
+    telefono: Optional[str] = None
+    cellulare: Optional[str] = None
+    ruolo: Optional[str] = None
+    linkedin: Optional[str] = None
+    referente_principale: Optional[bool] = False
+    note: Optional[str] = None
+
+
+class ContactUpdate(BaseModel):
+    qualifica: Optional[str] = None
+    ruolo: Optional[str] = None
+    referente_principale: Optional[bool] = None
+    note: Optional[str] = None
+
+
+async def _company_contacts(company_id: str):
+    rels = await db.person_companies.find({"company_id": company_id}, {"_id": 0}).to_list(500)
+    have = {r["person_id"] for r in rels}
+    out = []
+    for r in rels:
+        p = await db.persons.find_one({"id": r["person_id"]}, {"_id": 0})
+        if p:
+            out.append({"relation": r, "person": p})
+    legacy = await db.persons.find({"azienda_id": company_id}, {"_id": 0}).to_list(500)
+    for p in legacy:
+        if p["id"] not in have:
+            out.append({"relation": {"id": None, "company_id": company_id, "person_id": p["id"],
+                                     "qualifica": p.get("ruolo"), "referente_principale": True, "legacy": True},
+                        "person": p})
+    return out
+
+
+@api.get("/persons-enriched")
+async def persons_enriched(admin: dict = Depends(require_admin)):
+    persons = await _list("persons")
+    rels = await db.person_companies.find({}, {"_id": 0}).to_list(10000)
+    pres = await db.staff.find({}, {"_id": 0}).to_list(10000)
+    companies = {c["id"]: c for c in await _list("companies")}
+    rel_by = defaultdict(list)
+    for r in rels:
+        rel_by[r["person_id"]].append(r)
+    pres_by = defaultdict(list)
+    for p in pres:
+        pres_by[p["persona_id"]].append(p)
+    out = []
+    for p in persons:
+        pid = p["id"]
+        prs = pres_by.get(pid, [])
+        cats = {x.get("categoria") for x in prs}
+        rp = rel_by.get(pid, [])
+        aziende = [companies[r["company_id"]]["nome"] for r in rp if companies.get(r["company_id"])]
+        if p.get("azienda_id") and companies.get(p["azienda_id"]):
+            n = companies[p["azienda_id"]]["nome"]
+            if n not in aziende:
+                aziende.append(n)
+        out.append({**p,
+                    "is_referente": bool(rp) or bool(p.get("azienda_id")),
+                    "is_staff": bool(cats & {"staff", "collaboratore"}),
+                    "is_volontario": "volontario" in cats,
+                    "aziende_nomi": aziende,
+                    "eventi_count": len({x["evento_id"] for x in prs})})
+    return out
+
+
+@api.post("/persons-match")
+async def persons_match(body: dict, admin: dict = Depends(require_admin)):
+    email = (body.get("email") or "").strip()
+    tel = (body.get("telefono") or body.get("cellulare") or "").strip()
+    nome = (body.get("nome") or "").strip()
+    cognome = (body.get("cognome") or "").strip()
+    conds = []
+    if email:
+        conds.append({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
+    if tel:
+        conds.append({"$or": [{"telefono": tel}, {"cellulare": tel}]})
+    if nome and cognome:
+        conds.append({"nome": {"$regex": f"^{re.escape(nome)}$", "$options": "i"},
+                      "cognome": {"$regex": f"^{re.escape(cognome)}$", "$options": "i"}})
+    if not conds:
+        return {"matches": []}
+    docs = await db.persons.find({"$or": conds}, {"_id": 0}).limit(10).to_list(10)
+    return {"matches": docs}
+
+
+@api.get("/persons/{person_id}/detail")
+async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
+    p = await _get("persons", person_id)
+    rels = await db.person_companies.find({"person_id": person_id}, {"_id": 0}).to_list(200)
+    companies = []
+    seen = set()
+    for r in rels:
+        c = await db.companies.find_one({"id": r["company_id"]}, {"_id": 0})
+        if c:
+            companies.append({"relation": r, "company": c})
+            seen.add(r["company_id"])
+    if p.get("azienda_id") and p["azienda_id"] not in seen:
+        c = await db.companies.find_one({"id": p["azienda_id"]}, {"_id": 0})
+        if c:
+            companies.append({"relation": {"id": None, "company_id": c["id"], "person_id": person_id,
+                                           "qualifica": p.get("ruolo"), "referente_principale": True, "legacy": True},
+                              "company": c})
+    presences = await db.staff.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
+    events = []
+    for pr in presences:
+        e = await db.events.find_one({"id": pr["evento_id"]}, {"_id": 0})
+        events.append({"presence": pr, "event": e})
+    tids = {pr.get("team_id") for pr in presences if pr.get("team_id")}
+    for t in await db.teams.find({"responsabile_id": person_id}, {"_id": 0}).to_list(100):
+        tids.add(t["id"])
+    teams = [t for t in [await db.teams.find_one({"id": tid}, {"_id": 0}) for tid in tids] if t]
+    shifts = await db.shifts.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
+    activities = await db.activities.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
+    followups = await db.followups.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
+    return {"person": p, "companies": companies, "events": events, "teams": teams,
+            "shifts": shifts, "activities": activities, "followups": followups}
+
+
+@api.get("/companies/{company_id}/detail")
+async def company_detail(company_id: str, admin: dict = Depends(require_admin)):
+    c = await _get("companies", company_id)
+    contacts = await _company_contacts(company_id)
+    deals = await db.deals.find({"azienda_id": company_id}, {"_id": 0}).to_list(300)
+    events = []
+    seen = set()
+    for d in deals:
+        if d["evento_id"] in seen:
+            continue
+        seen.add(d["evento_id"])
+        e = await db.events.find_one({"id": d["evento_id"]}, {"_id": 0})
+        if e:
+            events.append({"event": e, "tipo": d.get("tipo"), "fase": d.get("fase")})
+    activities = await db.activities.find({"azienda_id": company_id}, {"_id": 0}).to_list(300)
+    followups = await db.followups.find({"azienda_id": company_id}, {"_id": 0}).to_list(300)
+    return {"company": c, "contacts": contacts, "deals": deals, "events": events,
+            "activities": activities, "followups": followups}
+
+
+@api.get("/companies/{company_id}/contacts")
+async def get_company_contacts(company_id: str, admin: dict = Depends(require_admin)):
+    return await _company_contacts(company_id)
+
+
+@api.post("/companies/{company_id}/contacts")
+async def add_company_contact(company_id: str, body: ContactIn, admin: dict = Depends(require_admin)):
+    await _get("companies", company_id)
+    if body.person_id:
+        person = await db.persons.find_one({"id": body.person_id}, {"_id": 0})
+        if not person:
+            raise HTTPException(status_code=404, detail="Persona non trovata")
+        pid = body.person_id
+    else:
+        if not body.nome:
+            raise HTTPException(status_code=400, detail="Nome referente obbligatorio")
+        person = await _create("persons", {"nome": body.nome, "cognome": body.cognome, "email": body.email,
+                                           "telefono": body.telefono, "cellulare": body.cellulare, "ruolo": body.ruolo,
+                                           "linkedin": body.linkedin, "azienda_id": company_id, "note": body.note,
+                                           "invite_status": "non_invitato"})
+        pid = person["id"]
+    existing = await db.person_companies.find_one({"person_id": pid, "company_id": company_id})
+    rel_data = {"person_id": pid, "company_id": company_id, "qualifica": body.ruolo, "ruolo": body.ruolo,
+                "referente_principale": bool(body.referente_principale), "note": body.note}
+    if existing:
+        rel = await _update("person_companies", existing["id"], rel_data)
+    else:
+        rel = await _create("person_companies", rel_data)
+    if body.referente_principale:
+        await db.person_companies.update_many({"company_id": company_id, "id": {"$ne": rel["id"]}},
+                                              {"$set": {"referente_principale": False}})
+    return {"relation": rel, "person": person}
+
+
+@api.put("/company-contacts/{rel_id}")
+async def update_company_contact(rel_id: str, body: ContactUpdate, admin: dict = Depends(require_admin)):
+    rel = await _update("person_companies", rel_id, body.model_dump(exclude_unset=True))
+    if body.referente_principale:
+        await db.person_companies.update_many({"company_id": rel["company_id"], "id": {"$ne": rel_id}},
+                                              {"$set": {"referente_principale": False}})
+    return rel
+
+
+@api.delete("/company-contacts/{rel_id}")
+async def delete_company_contact(rel_id: str, admin: dict = Depends(require_admin)):
+    return await _delete("person_companies", rel_id)
+
+
 # ---------------- person invite ----------------
 class InviteIn(BaseModel):
     role: str = "volunteer"
@@ -559,9 +775,9 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
     link = f"{APP_URL}/attiva?token={token}"
     sent = True
     try:
-        await email_utils.send_email(to=email, subject="Il tuo accesso a crmevent",
+        await email_utils.send_email(to=email, subject="Il tuo accesso a CRMEvent",
                                      html=email_utils.link_email(name=person["nome"],
-                                                                 intro="Sei stato invitato ad accedere alla tua area personale su crmevent. Attiva l'account e imposta la tua password.",
+                                                                 intro="Sei stato invitato ad accedere alla tua area personale su CRMEvent. Attiva l'account e imposta la tua password.",
                                                                  cta_label="Attiva il mio account", url=link,
                                                                  footer_note="L'invito scade tra 7 giorni."))
     except Exception as e:
@@ -836,7 +1052,7 @@ async def sync_event(event_id: str, user: dict = Depends(get_current_user)):
     link = f"{APP_URL}/eventi?id={event_id}"
     desc = (e.get("descrizione") or "") + f"\n\nScheda evento: {link}"
     loc = ", ".join([x for x in [e.get("localita"), e.get("indirizzo"), e.get("citta")] if x])
-    body = gcal_utils.build_event_body(summary=e["nome"], description=desc, location=loc,
+    body = gcal_utils.build_event_body(summary=f"CRMEvent · {e['nome']}", description=desc, location=loc,
                                        date_start=e.get("data_inizio"), date_end=e.get("data_fine"),
                                        time_start=e.get("ora_inizio"), time_end=e.get("ora_fine"))
     if not e.get("data_inizio"):
@@ -921,7 +1137,7 @@ async def my_sync_event(event_id: str, user: dict = Depends(get_current_user)):
     e = await db.events.find_one({"id": event_id}, {"_id": 0})
     link = f"{APP_URL}/eventi?id={event_id}"
     desc = f"Ruolo: {presence.get('ruolo') or '-'} | Area: {presence.get('area') or '-'} | Punto ritrovo: {presence.get('punto_ritrovo') or '-'}\n{link}"
-    body = gcal_utils.build_event_body(summary=e["nome"], description=desc,
+    body = gcal_utils.build_event_body(summary=f"CRMEvent · {e['nome']}", description=desc,
                                        location=", ".join([x for x in [e.get("localita"), e.get("citta")] if x]),
                                        date_start=e.get("data_inizio"), date_end=e.get("data_fine"),
                                        time_start=e.get("ora_inizio"), time_end=e.get("ora_fine"))
@@ -939,7 +1155,7 @@ async def my_sync_shift(shift_id: str, user: dict = Depends(get_current_user)):
     team = await db.teams.find_one({"id": sh.get("team_id")}, {"_id": 0}) if sh.get("team_id") else None
     link = f"{APP_URL}/eventi?id={sh['evento_id']}"
     desc = f"Turno {e['nome']} | Ruolo: {sh.get('ruolo') or '-'} | Team: {team.get('nome') if team else '-'} | Luogo: {sh.get('luogo') or '-'} | Ritrovo: {sh.get('punto_ritrovo') or '-'}\n{link}"
-    body = gcal_utils.build_event_body(summary=f"Turno · {e['nome']}", description=desc, location=sh.get("luogo") or "",
+    body = gcal_utils.build_event_body(summary=f"CRMEvent · Turno · {e['nome']}", description=desc, location=sh.get("luogo") or "",
                                        date_start=sh.get("data"), date_end=sh.get("data"),
                                        time_start=sh.get("ora_inizio"), time_end=sh.get("ora_fine"))
     if not sh.get("data"):
@@ -972,10 +1188,10 @@ async def create_lead(body: Lead):
         raise HTTPException(status_code=400, detail="È necessario accettare la privacy policy")
     doc = await _create("leads", {**body.model_dump(), "stato": "nuovo", "note": ""})
     try:
-        await email_utils.send_email(to=os.environ["ADMIN_EMAIL"], subject="Nuova richiesta demo crmevent",
+        await email_utils.send_email(to=os.environ["ADMIN_EMAIL"], subject="Nuova richiesta demo CRMEvent",
                                      html=email_utils.link_email(name="Michele",
                                                                  intro=f"Nuova richiesta demo da {body.nome} {body.cognome or ''} ({body.organizzazione or '-'}) — email {body.email}, tel {body.telefono or '-'}. Tipologia: {body.tipologia_eventi or '-'}, eventi/anno: {body.eventi_anno or '-'}.",
-                                                                 cta_label="Apri crmevent", url=f"{APP_URL}/lead",
+                                                                 cta_label="Apri CRMEvent", url=f"{APP_URL}/lead",
                                                                  footer_note="Gestisci il lead nella sezione Lead."))
     except Exception as e:
         logger.error(f"lead notify failed: {e}")
@@ -999,7 +1215,8 @@ async def delete_lead(lead_id: str, admin: dict = Depends(require_admin)):
 
 # ---------------- admin reset ----------------
 OPERATIONAL = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
-               "event_maps", "activities", "followups", "calendar_event_links", "files", "calendar_connections"]
+               "event_maps", "activities", "followups", "calendar_event_links", "files",
+               "calendar_connections", "person_companies"]
 
 
 @api.post("/admin/reset-data")
@@ -1047,18 +1264,18 @@ async def seed_demo():
     ev1 = await ins("events", {"nome": "Tech Summit Milano", "edizione": "2026", "tipologia": "Congresso",
                                "data_inizio": "2026-09-15", "data_fine": "2026-09-17", "ora_inizio": "09:00", "ora_fine": "18:00",
                                "localita": "MiCo Milano", "citta": "Milano", "provincia": "MI", "regione": "Lombardia", "nazione": "Italia",
-                               "organizzatore": "crmevent Agency", "responsabile": "Michele Manara", "sito_web": "https://techsummit.it",
+                               "organizzatore": "CRMEvent Agency", "responsabile": "Michele Manara", "sito_web": "https://techsummit.it",
                                "email": "info@techsummit.it", "telefono": "+39 02 1234567", "partecipanti_previsti": 3500,
                                "budget": 450000, "stato": "attivo", "descrizione": "Il più grande evento tech del Nord Italia."})
     ev2 = await ins("events", {"nome": "Green Food Festival", "edizione": "2026", "tipologia": "Festival",
                                "data_inizio": "2026-07-04", "data_fine": "2026-07-06", "localita": "Parco Dora",
                                "citta": "Torino", "provincia": "TO", "regione": "Piemonte", "nazione": "Italia",
-                               "organizzatore": "crmevent Agency", "responsabile": "Laura Bianchi", "partecipanti_previsti": 12000,
+                               "organizzatore": "CRMEvent Agency", "responsabile": "Laura Bianchi", "partecipanti_previsti": 12000,
                                "budget": 220000, "stato": "attivo", "descrizione": "Festival del cibo sostenibile."})
     ev3 = await ins("events", {"nome": "Gala della Moda", "edizione": "2025", "tipologia": "Gala",
                                "data_inizio": "2025-11-20", "data_fine": "2025-11-20", "localita": "Palazzo Reale",
                                "citta": "Napoli", "provincia": "NA", "regione": "Campania", "nazione": "Italia",
-                               "organizzatore": "crmevent Agency", "partecipanti_previsti": 600, "budget": 180000, "stato": "concluso"})
+                               "organizzatore": "CRMEvent Agency", "partecipanti_previsti": 600, "budget": 180000, "stato": "concluso"})
 
     comps = []
     for nome, sett, tipo in [("TechNova S.p.A.", "Tecnologia", "prospect"), ("BioGusto Srl", "Food & Beverage", "azienda"),
@@ -1138,6 +1355,25 @@ async def seed_demo():
     logger.info("Demo data seeded")
 
 
+async def migrate_person_companies():
+    """Idempotent: turn legacy person.azienda_id into person_companies relations."""
+    persons = await db.persons.find({"azienda_id": {"$nin": [None, ""]}}, {"_id": 0}).to_list(10000)
+    created = 0
+    for p in persons:
+        exists = await db.person_companies.find_one({"person_id": p["id"], "company_id": p["azienda_id"]})
+        if exists:
+            continue
+        company = await db.companies.find_one({"id": p["azienda_id"]})
+        if not company:
+            continue
+        await _create("person_companies", {"person_id": p["id"], "company_id": p["azienda_id"],
+                                            "qualifica": p.get("ruolo"), "ruolo": p.get("ruolo"),
+                                            "referente_principale": True, "note": None})
+        created += 1
+    if created:
+        logger.info(f"Migrated {created} person-company relations")
+
+
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
@@ -1149,6 +1385,7 @@ async def startup():
         logger.error(f"Storage init failed: {e}")
     await seed_admin()
     await seed_demo()
+    await migrate_person_companies()
     creds = ROOT_DIR.parent / "memory" / "test_credentials.md"
     try:
         creds.write_text(

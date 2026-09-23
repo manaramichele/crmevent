@@ -129,7 +129,7 @@ function DemoForm() {
     <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-sm">
       <div className="w-14 h-14 rounded-full bg-tiffany-light flex items-center justify-center mx-auto mb-4"><Check className="w-7 h-7 text-tiffany-active" /></div>
       <h3 className="font-display text-xl font-bold text-slate-900">Grazie, richiesta ricevuta!</h3>
-      <p className="text-slate-500 mt-2 text-sm">Il team crmevent ti contatterà al più presto per organizzare la demo.</p>
+      <p className="text-slate-500 mt-2 text-sm">Il team CRMEvent ti contatterà al più presto per organizzare la demo.</p>
     </div>
   );
   return (
@@ -165,14 +165,14 @@ const H2 = ({ children }) => <h2 className="font-display text-3xl md:text-4xl fo
 
 export default function LandingPage() {
   const [open, setOpen] = useState(false);
-  useEffect(() => { document.title = "crmevent | Il CRM per organizzare eventi"; }, []);
+  useEffect(() => { document.title = "CRMEvent | Il CRM per organizzare eventi"; }, []);
 
   return (
     <div className="bg-white text-slate-900">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent.png" alt="crmevent" className="h-7 w-auto" /></Link>
+          <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent.png" alt="CRMEvent" className="h-9 sm:h-10 w-auto" /></Link>
           <nav className="hidden lg:flex items-center gap-7">
             {NAV.map(([l, id]) => <button key={id} onClick={() => scrollTo(id)} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{l}</button>)}
           </nav>
@@ -197,7 +197,7 @@ export default function LandingPage() {
           <div className="animate-fade-up">
             <div className="inline-flex items-center gap-2 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1 text-xs font-semibold ring-1 ring-tiffany-border mb-6">Software SaaS per la gestione eventi</div>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">Organizza il tuo evento. <span className="text-tiffany-active">Tutto in un unico posto.</span></h1>
-            <p className="text-lg text-slate-500 mt-6 max-w-xl">crmevent riunisce contatti, sponsor, staff, volontari, turni e attività in un'unica piattaforma semplice da usare.</p>
+            <p className="text-lg text-slate-500 mt-6 max-w-xl">CRMEvent riunisce contatti, sponsor, staff, volontari, turni e attività in un'unica piattaforma semplice da usare.</p>
             <div className="flex flex-wrap gap-3 mt-8">
               <button onClick={() => scrollTo("demo")} className="h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Richiedi una demo <ArrowRight className="w-4 h-4" /></button>
               <button onClick={() => scrollTo("come-funziona")} className="h-12 px-6 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-800 font-semibold transition-colors">Scopri come funziona</button>
@@ -215,7 +215,7 @@ export default function LandingPage() {
             {["Contatti sparsi tra Excel, email e WhatsApp.", "Sponsor da ricontattare.", "Volontari da coordinare.", "Turni da assegnare.", "Mappe e informazioni da distribuire.", "Persone che chiedono continuamente dove devono essere e a che ora."].map((t) => (
               <li key={t} className="flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-2.5" />{t}</li>))}
           </ul>
-          <p className="mt-6 text-xl font-display font-bold text-slate-900">crmevent mette tutto insieme.</p>
+          <p className="mt-6 text-xl font-display font-bold text-slate-900">CRMEvent mette tutto insieme.</p>
         </div>
       </Section>
 
@@ -296,7 +296,7 @@ export default function LandingPage() {
       {/* Target */}
       <Section id="per-chi" className="py-20 bg-slate-50/60 border-y border-slate-100">
         <div className="text-center max-w-2xl mx-auto"><Eyebrow>Per chi è</Eyebrow><H2>Pensato per chi organizza eventi.</H2>
-          <p className="text-slate-500 mt-4">Dallo sport ai festival, dalle fiere agli eventi aziendali: crmevent si adatta a ogni tipologia di evento.</p></div>
+          <p className="text-slate-500 mt-4">Dallo sport ai festival, dalle fiere agli eventi aziendali: CRMEvent si adatta a ogni tipologia di evento.</p></div>
         <div className="flex flex-wrap justify-center gap-3 mt-10">
           {TARGETS.map((t) => <span key={t} className="px-4 py-2 rounded-full bg-white border border-slate-200 text-sm font-medium text-slate-700 hover:border-tiffany hover:text-tiffany-fg transition-colors">{t}</span>)}
         </div>
@@ -312,16 +312,16 @@ export default function LandingPage() {
           </div>
           <div className="bg-slate-900 rounded-xl p-6 relative overflow-hidden">
             <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-tiffany/20 blur-2xl" />
-            <div className="relative"><div className="text-sm font-semibold text-tiffany uppercase mb-4">Con crmevent</div>
+            <div className="relative"><div className="text-sm font-semibold text-tiffany uppercase mb-4">Con CRMEvent</div>
               <div className="text-2xl font-display font-bold text-white">Un unico spazio di lavoro.</div>
-              <p className="text-slate-300 text-sm mt-3">crmevent centralizza le informazioni operative del tuo evento: persone, sponsor, staff e attività sempre allineati.</p></div>
+              <p className="text-slate-300 text-sm mt-3">CRMEvent centralizza le informazioni operative del tuo evento: persone, sponsor, staff e attività sempre allineati.</p></div>
           </div>
         </div>
       </Section>
 
       {/* Screenshots */}
       <Section className="py-20 bg-slate-50/60 border-y border-slate-100">
-        <div className="text-center max-w-2xl mx-auto"><Eyebrow>Il prodotto</Eyebrow><H2>Guarda crmevent in azione</H2></div>
+        <div className="text-center max-w-2xl mx-auto"><Eyebrow>Il prodotto</Eyebrow><H2>Guarda CRMEvent in azione</H2></div>
         <div className="grid lg:grid-cols-2 gap-6 mt-12 items-start">
           <BrowserFrame url="app.crmevent.it/app"><DashboardMock /></BrowserFrame>
           <BrowserFrame url="app.crmevent.it/sponsor"><PipelineMock /></BrowserFrame>
@@ -334,7 +334,7 @@ export default function LandingPage() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div>
             <H2>Il tuo prossimo evento può essere più semplice da gestire.</H2>
-            <p className="text-slate-500 mt-5 max-w-lg">Scopri come crmevent può aiutarti a organizzare persone, sponsor e attività da un unico posto. Compila il form e ti mostreremo la piattaforma.</p>
+            <p className="text-slate-500 mt-5 max-w-lg">Scopri come CRMEvent può aiutarti a organizzare persone, sponsor e attività da un unico posto. Compila il form e ti mostreremo la piattaforma.</p>
             <div className="mt-6 space-y-2">
               {["Demo personalizzata sul tuo tipo di evento", "Nessun impegno", "Ti ricontattiamo entro pochi giorni"].map((t) => (
                 <div key={t} className="flex items-center gap-2 text-sm text-slate-600"><Check className="w-4 h-4 text-tiffany-active" />{t}</div>))}
@@ -348,7 +348,7 @@ export default function LandingPage() {
       <footer className="bg-slate-900 text-slate-300">
         <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2 md:col-span-1">
-            <div className="bg-white rounded-lg px-3 py-2 inline-flex"><img src="/logo-crmevent.png" alt="crmevent" className="h-6 w-auto" /></div>
+            <div className="bg-white rounded-lg px-3 py-2 inline-flex"><img src="/logo-crmevent.png" alt="CRMEvent" className="h-8 w-auto" /></div>
             <p className="text-sm text-slate-400 mt-4 max-w-xs">Il CRM per organizzare eventi: contatti, sponsor, staff, volontari, team, turni e attività.</p>
           </div>
           <div><div className="text-white font-semibold mb-3 text-sm">Prodotto</div>
@@ -367,7 +367,7 @@ export default function LandingPage() {
               <li><Link to="/termini" className="hover:text-white">Termini e condizioni</Link></li>
             </ul></div>
         </div>
-        <div className="border-t border-white/10"><div className="max-w-6xl mx-auto px-6 py-5 text-sm text-slate-400">© 2026 crmevent</div></div>
+        <div className="border-t border-white/10"><div className="max-w-6xl mx-auto px-6 py-5 text-sm text-slate-400">© 2026 CRMEvent</div></div>
       </footer>
     </div>
   );

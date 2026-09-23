@@ -1,6 +1,6 @@
 {
-  "name": "crmevent",
-  "short_name": "crmevent",
+  "name": "CRMEvent",
+  "short_name": "CRMEvent",
   "description": "Il CRM per organizzare eventi: contatti, sponsor, staff, volontari, team, turni e attività in un'unica piattaforma.",
   "start_url": "/",
   "display": "standalone",

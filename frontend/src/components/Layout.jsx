@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, CalendarDays, Building2, Users, Handshake, UserCog,
+  LayoutDashboard, CalendarDays, Building2, Users, Handshake,
   ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
@@ -14,7 +14,6 @@ const NAV = [
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende" },
   { to: "/persone", label: "Persone", icon: Users, id: "persone" },
   { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor" },
-  { to: "/staff", label: "Staff & Volontari", icon: UserCog, id: "staff" },
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup" },
   { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
@@ -23,9 +22,9 @@ const NAV = [
 
 function Logo({ collapsed }) {
   return collapsed ? (
-    <img src="/icon-crmevent.png" alt="crmevent" className="w-9 h-9 rounded-lg mx-auto" />
+    <img src="/icon-crmevent.png" alt="CRMEvent" className="w-9 h-9 rounded-lg mx-auto" />
   ) : (
-    <img src="/logo-crmevent.png" alt="crmevent" className="h-8 w-auto" />
+    <img src="/logo-crmevent.png" alt="CRMEvent" className="h-8 w-auto" />
   );
 }
 
