@@ -1,0 +1,34 @@
+{
+  "summary": "First MVP test of CRMEvent. Ran 29 pytest cases against backend covering auth, protected endpoints, dashboard, full CRUD for events/companies/persons/deals/staff/activities/followups, search, notifications, settings. All 29 passed. Frontend UI tested via Playwright: login with admin creds works, dashboard shows 21 KPIs, all 9 sidebar links navigate, seeded demo data visible (3 events, 8 companies, 10 persons, 8 deals across 6 pipeline columns, 5 staff, 3 activities, 4 followups). Created new event via UI dialog successfully. Global search returns evento+azienda matches. Notifications bell rendered.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Any entity dialog (EntityDialog)", "issues": ["React a11y warning: DialogContent missing Description/aria-describedby. Add DialogDescription for accessibility (non-blocking)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Add DialogDescription to EntityDialog in /app/frontend/src/components/crm.jsx to silence Radix a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py handles both JWT and Google session_token cleanly via resolve_user_from_token. Solid.",
+    "seed_admin correctly updates existing admin password if it drifts from env (playbook-compliant).",
+    "Cookies set with httpOnly + secure + samesite=none: correct for cross-origin same-domain preview. Good.",
+    "PUT /api/settings accepts raw dict - consider Pydantic model for stricter validation but acceptable for MVP.",
+    "crud_routes: PUT uses exclude_unset=True and _update filters None values, allowing partial updates correctly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new)"
+  ],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100% of tested flows"},
+  "test_credentials": "manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Used server-side seed_demo data. Created TEST_UI_Event via UI (may remain in DB).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend fully green. Frontend core flows verified. Note: Google OAuth (/api/auth/session) was not tested (requires real Google account per playbook). Kanban drag-drop wasn't tested but the fase-change dropdown on deal cards is present. Edit/delete-existing entity flows verified via delete button presence; the CRUD create/update/delete path was fully covered by backend tests. TEST_UI_Event may need cleanup in DB."
+}

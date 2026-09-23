@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -161,7 +161,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid={`${testid}-dialog`}>
-        <DialogHeader><DialogTitle className="font-display">{title}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="font-display">{title}</DialogTitle><DialogDescription className="sr-only">Compila i campi e salva.</DialogDescription></DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
           {fields.map((f) => (
             <div key={f.name} className={f.full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}>
