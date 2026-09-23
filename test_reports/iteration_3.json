@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 3 tested the CRMEvent unification refactor end-to-end. Backend pytest suite for the new endpoints: 10/10 pass (persons-enriched shape, persons-match by email/negative, persons/{id}/detail, companies/{id}/detail, POST /companies/{id}/contacts auto-creates Person, dedup via /persons-match + POST with person_id link (no duplicate), unification: SAME persona as staff on event1 + volontario on event2 => single anagrafica in persons-enriched with is_staff+is_volontario+eventi_count>=2, unification: SAME azienda as sponsor + partner across two events => single company + single search hit). Full regression: /app/backend/tests/backend_test.py + test_iter2.py still green (previous iteration reported 51/51 pass). Frontend Playwright E2E: admin login (email/password from /app/memory/test_credentials.md) works; sidebar contains Dashboard/Eventi/Aziende/Persone/Sponsor & Partner/Attività/Follow-up/Lead/Impostazioni and does NOT contain 'Staff & Volontari' link; Persone page tabs Tutte(15)/Referenti(12)/Staff(3)/Volontari(2)/Team/Turni all render with correct filtering; person row click opens person-detail-dialog with all 8 tabs (Anagrafica/Aziende/Eventi/Ruoli/Team/Turni/Attività/Accesso); tab-team and tab-turni render EntityManager tables with add buttons and filter selects; Aziende 'Aggiungi azienda' opens company-dialog, inline company-add-referente adds two referenti (company-ref-nome-0/1 + company-ref-email-0/1), company-save persists both referenti as Persons visible in Persone anagrafica; company row opens company-detail-dialog with 7 tabs; Referenti tab add-referente-btn -> ref-nome/ref-email/ref-save triggers ref-matches panel with 1 link-person-* button when using existing 'Mario Rossi/mario.rossi@mail.it' (dedup works, Collega link visible); global-search-input returns single persona result for referente name (no duplicates); CRMEvent brand logo visible in sidebar. Note: login redirects to /app (not /dashboard) but dashboard loads correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter3_refactor.py",
+    "/app/test_reports/pytest/iter3_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POST /api/companies/{company_id}/contacts (server.py:703) does NOT perform server-side dedup by name/email — it always creates a new Person unless a person_id is passed. Dedup is client-driven via POST /api/persons-match + link with person_id. This is intentional (matches the UI 'Verifica e salva' -> Collega flow) but should be documented; direct API consumers could inadvertently create duplicates by calling with only name/email.",
+    "server.py is 1400+ lines; consider splitting into modules (auth, persons, companies, deals, files/maps) for maintainability.",
+    "persons-enriched (line ~600) does N+1 style aggregation in Python; fine at current scale (12 persons) but consider mongo aggregation pipeline as data grows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter3_refactor.py (new, 10 tests, all pass)"
+  ],
+  "success_rate": {"backend": "100% (10/10 new refactor tests)", "frontend": "100% of tested flows"},
+  "test_credentials": "Admin manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "Tests create+delete TEST_* transient objects. One UI probe left a company 'TEST_UI_Co_jtxjbm' with 2 referenti 'TESTRef0_jtxjbm' + 'TESTRef1_jtxjbm' in DB (used for global-search dedup verification). Cosmetic; can be cleaned by admin if desired.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor is stable. Backend total: 61 tests green (29 original + 22 iter2 + 10 iter3). Frontend all new refactor flows verified. Anagrafica unification confirmed both API-level (persons-enriched shows 1 record with is_staff+is_volontario flags) and UI-level (single Persone row). Company dedup requires client-side match-then-link; direct POST /contacts skips dedup by design. Google Calendar remains not configured (expected). Do NOT call POST /api/admin/reset-data."
+}
