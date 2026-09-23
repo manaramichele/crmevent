@@ -27,7 +27,7 @@ function InviteDialog({ person, open, onOpenChange, onDone }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="invite-dialog">
-        <DialogHeader><DialogTitle className="font-display">Invita su CRMEvent</DialogTitle>
+        <DialogHeader><DialogTitle className="font-display">Invita su crmevent</DialogTitle>
           <DialogDescription>{person?.nome} {person?.cognome} — {person?.email || "nessuna email"}</DialogDescription></DialogHeader>
         <div className="space-y-3 py-2">
           <div className="flex items-center gap-2"><span className="text-sm text-slate-500">Stato attuale:</span><StatusBadge color={INV[status]}>{INV_LABEL[status]}</StatusBadge></div>
@@ -71,7 +71,7 @@ export default function Persons() {
     { key: "invite_status", label: "Accesso", render: (r) => <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge> },
   ];
   const rowActions = (row) => (
-    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Invita su CRMEvent" onClick={() => setInvite(row)} data-testid={`invite-${row.id}`}><UserPlus className="w-4 h-4" /></Button>
+    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Invita su crmevent" onClick={() => setInvite(row)} data-testid={`invite-${row.id}`}><UserPlus className="w-4 h-4" /></Button>
   );
 
   return (

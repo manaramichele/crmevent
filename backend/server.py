@@ -32,7 +32,7 @@ JWT_ALG = "HS256"
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
-app = FastAPI(title="CRMEvent API")
+app = FastAPI(title="crmevent API")
 api = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("crmevent")
@@ -279,7 +279,7 @@ async def forgot_password(body: ForgotIn):
                                                    "used": False, "created_at": now_iso()})
         link = f"{FRONTEND_URL}/reset-password?token={token}"
         try:
-            await email_utils.send_email(to=email, subject="Reimposta la tua password CRMEvent",
+            await email_utils.send_email(to=email, subject="Reimposta la tua password crmevent",
                                          html=email_utils.link_email(name=user.get("name", ""),
                                                                      intro="Hai richiesto il reset della password. Il link scade tra 1 ora.",
                                                                      cta_label="Reimposta password", url=link,
@@ -558,9 +558,9 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
     link = f"{FRONTEND_URL}/attiva?token={token}"
     sent = True
     try:
-        await email_utils.send_email(to=email, subject="Il tuo accesso a CRMEvent",
+        await email_utils.send_email(to=email, subject="Il tuo accesso a crmevent",
                                      html=email_utils.link_email(name=person["nome"],
-                                                                 intro="Sei stato invitato ad accedere alla tua area personale su CRMEvent. Attiva l'account e imposta la tua password.",
+                                                                 intro="Sei stato invitato ad accedere alla tua area personale su crmevent. Attiva l'account e imposta la tua password.",
                                                                  cta_label="Attiva il mio account", url=link,
                                                                  footer_note="L'invito scade tra 7 giorni."))
     except Exception as e:
@@ -997,18 +997,18 @@ async def seed_demo():
     ev1 = await ins("events", {"nome": "Tech Summit Milano", "edizione": "2026", "tipologia": "Congresso",
                                "data_inizio": "2026-09-15", "data_fine": "2026-09-17", "ora_inizio": "09:00", "ora_fine": "18:00",
                                "localita": "MiCo Milano", "citta": "Milano", "provincia": "MI", "regione": "Lombardia", "nazione": "Italia",
-                               "organizzatore": "CRMEvent Agency", "responsabile": "Michele Manara", "sito_web": "https://techsummit.it",
+                               "organizzatore": "crmevent Agency", "responsabile": "Michele Manara", "sito_web": "https://techsummit.it",
                                "email": "info@techsummit.it", "telefono": "+39 02 1234567", "partecipanti_previsti": 3500,
                                "budget": 450000, "stato": "attivo", "descrizione": "Il più grande evento tech del Nord Italia."})
     ev2 = await ins("events", {"nome": "Green Food Festival", "edizione": "2026", "tipologia": "Festival",
                                "data_inizio": "2026-07-04", "data_fine": "2026-07-06", "localita": "Parco Dora",
                                "citta": "Torino", "provincia": "TO", "regione": "Piemonte", "nazione": "Italia",
-                               "organizzatore": "CRMEvent Agency", "responsabile": "Laura Bianchi", "partecipanti_previsti": 12000,
+                               "organizzatore": "crmevent Agency", "responsabile": "Laura Bianchi", "partecipanti_previsti": 12000,
                                "budget": 220000, "stato": "attivo", "descrizione": "Festival del cibo sostenibile."})
     ev3 = await ins("events", {"nome": "Gala della Moda", "edizione": "2025", "tipologia": "Gala",
                                "data_inizio": "2025-11-20", "data_fine": "2025-11-20", "localita": "Palazzo Reale",
                                "citta": "Napoli", "provincia": "NA", "regione": "Campania", "nazione": "Italia",
-                               "organizzatore": "CRMEvent Agency", "partecipanti_previsti": 600, "budget": 180000, "stato": "concluso"})
+                               "organizzatore": "crmevent Agency", "partecipanti_previsti": 600, "budget": 180000, "stato": "concluso"})
 
     comps = []
     for nome, sett, tipo in [("TechNova S.p.A.", "Tecnologia", "prospect"), ("BioGusto Srl", "Food & Beverage", "azienda"),

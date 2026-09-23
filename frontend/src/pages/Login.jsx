@@ -48,7 +48,7 @@ export default function Login() {
         <div className="absolute -left-16 bottom-0 w-80 h-80 rounded-full bg-tiffany/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-tiffany flex items-center justify-center"><CalendarDays className="w-6 h-6 text-slate-900" /></div>
-          <span className="font-display font-extrabold text-white text-xl">CRM<span className="text-tiffany">Event</span></span>
+          <span className="font-display font-extrabold text-white text-xl">crm<span className="text-tiffany">event</span></span>
         </div>
         <div className="relative">
           <h1 className="font-display text-4xl font-bold text-white leading-tight">La piattaforma operativa per eventi, staff e volontari.</h1>
@@ -61,7 +61,7 @@ export default function Login() {
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
             <div className="w-9 h-9 rounded-lg bg-tiffany flex items-center justify-center"><CalendarDays className="w-5 h-5 text-slate-900" /></div>
-            <span className="font-display font-extrabold text-slate-900 text-lg">CRM<span className="text-tiffany-active">Event</span></span>
+            <span className="font-display font-extrabold text-slate-900 text-lg">crm<span className="text-tiffany-active">event</span></span>
           </div>
           <h2 className="font-display text-2xl font-bold text-slate-900">
             {mode === "login" ? "Accedi" : mode === "register" ? "Crea account" : "Recupera password"}

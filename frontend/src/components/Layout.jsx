@@ -28,7 +28,7 @@ function Logo({ collapsed }) {
       </div>
       {!collapsed && (
         <div className="leading-tight">
-          <div className="font-display font-extrabold text-slate-900 text-lg">CRM<span className="text-tiffany-active">Event</span></div>
+          <div className="font-display font-extrabold text-slate-900 text-lg">crm<span className="text-tiffany-active">event</span></div>
         </div>
       )}
     </div>

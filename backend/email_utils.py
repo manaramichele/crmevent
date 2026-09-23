@@ -11,7 +11,7 @@ logger = logging.getLogger("crmevent.email")
 
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
-EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "CRMEvent")
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "crmevent")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
@@ -104,7 +104,7 @@ def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: 
         f'<table role="presentation" width="100%" style="background:#f8fafc;padding:24px"><tr><td>'
         f'<table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;'
         f'border-radius:12px;border:1px solid #e2e8f0;font-family:Arial,sans-serif"><tr><td style="padding:28px">'
-        f'<div style="font-size:20px;font-weight:800;color:#0f172a">CRM<span style="color:#59C1B7">Event</span></div>'
+        f'<div style="font-size:20px;font-weight:800;color:#0f172a">crm<span style="color:#59C1B7">event</span></div>'
         f'<p style="color:#0f172a;font-size:15px">Ciao {escape(name)},</p>'
         f'<p style="color:#475569;font-size:14px;line-height:1.6">{escape(intro)}</p>'
         f'<p style="text-align:center;margin:28px 0"><a href="{escape(url)}" '
@@ -113,6 +113,6 @@ def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: 
         f'<p style="color:#94a3b8;font-size:12px;line-height:1.6">Se il pulsante non funziona copia questo link:<br>'
         f'<span style="color:#59C1B7">{escape(url)}</span></p>'
         f'<p style="color:#94a3b8;font-size:12px;border-top:1px solid #edf2f7;padding-top:12px">'
-        f'{escape(footer_note)} Inviato da CRMEvent. Non chiediamo mai password o dati di pagamento via email.</p>'
+        f'{escape(footer_note)} Inviato da crmevent. Non chiediamo mai password o dati di pagamento via email.</p>'
         f'</td></tr></table></td></tr></table>'
     )
