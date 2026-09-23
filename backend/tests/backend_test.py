@@ -153,7 +153,7 @@ class TestCRUD:
         pp = auth_session.get(f"{API}/persons").json()[0]["id"]
         _crud(auth_session, "staff",
               {"persona_id": pp, "evento_id": ev, "categoria": "staff", "ruolo": "Tecnico", "stato": "invitato"},
-              {"stato": "confermato", "turno_coperto": True})
+              {"stato": "confermato", "area": "Logistica"})
 
 
 # ----- Search / Notifications / Settings -----

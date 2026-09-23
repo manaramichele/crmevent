@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 2 e2e testing for CRMEvent major update. Extended backend pytest suite to 51 tests total (22 new + 29 existing regression). All 51 pass (100%). New coverage: dynamic Tipologia in Settings + POST /api/settings/usage, event partial update preserving fields, Presence/Team/Shift CRUD (incl. uncovered shift with persona_id null), file upload + download + Maps CRUD, dashboard staff KPIs (all 11 required keys present), change-password (wrong current->400, short new->400, correct->200 + login with new works), forgot-password (200), reset-password invalid token->400, invite (sets invite_status=invito_inviato) + access toggle (accesso_disabilitato), permissions (volunteer 403 on /events /dashboard /persons /settings /companies /deals), volunteer /me/events + /me/events/{id} + /me/shifts + object isolation (404 on foreign event), calendar/status configured:false, calendar/connect 400. Frontend Playwright verified: admin login, Settings add-tipologie_evento, new tipologia appears in Eventi field-tipologia select, StaffVolunteers tabs (presenze/team/turni) render with add buttons, Persons invite-dialog + send-invite present, Eventi row maps-dialog with add-map-button works, calsync shows expected 'Google Calendar non collegato' error toast, volunteer login redirects to /area with 2 vol-event cards, event detail shows presence/role/team/2 vol-shifts/1 vol-map, bottom nav vol-nav-home/profile/logout all present, admin sidebar hidden for volunteer.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin header", "issues": ["profilo-link is nested inside user menu popover (needs click on user avatar to open); works but not directly targetable — minor."]},
+      {"screen": "StaffVolunteers filters", "issues": ["No filters currently rendered on tab-team/tab-turni (filter-staff-* count = 0). Request expected filter-staff-evento_id. Likely EntityManager filters config not passed for these tabs — non-blocking, low priority."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter2.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [
+    "(Low) Add filters (e.g., filter-staff-evento_id) on StaffVolunteers tabs so admins can filter presenze/team/turni by event.",
+    "(Optional) Also expose Profilo link outside the user dropdown or keep as-is (works when menu is opened)."
+  ],
+  "critical_code_review_comments": [
+    "Dynamic Tipologia bug FIXED: Events form reads tipologie_evento live from /api/settings. Confirmed via UI: adding TEST_UI_Tip in Impostazioni appears in field-tipologia select immediately.",
+    "GET /api/settings/usage correctly returns counts across all consumers.",
+    "PUT /api/events supports partial update with exclude_unset — preserves nome/citta when only tipologia+ora_inizio are sent.",
+    "Volunteer endpoints return dict payloads {events:[]} and {shifts:[]}. Not a list — frontend and previous docs may expect list; consistent with pages so acceptable but worth documenting in API contract.",
+    "Volunteer isolation confirmed: fresh event admin-created returns 404 for volunteer /me/events/{id}. Good.",
+    "Calendar disabled path returns configured:false and connect 400 — expected behavior with empty GOOGLE_CLIENT_ID/SECRET.",
+    "Password change enforces min 8 chars and validates current password; forgot-password does not leak email existence.",
+    "File upload persists to storage_utils and /api/files/{id} authenticated GET returns raw bytes with correct content-type."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter2.py (new: 22 tests)",
+    "/app/backend/tests/backend_test.py (staff test updated for new model field 'area' instead of removed 'turno_coperto')"
+  ],
+  "success_rate": {"backend": "100% (51/51)", "frontend": "100% of tested flows"},
+  "test_credentials": "Admin manara.michele.pro@gmail.com / CrmEvent2026!  |  Volunteer mario.rossi@mail.it / Volontario2026! (from /app/memory/test_credentials.md and request)",
+  "seed_data_creation": "Tests create+delete TEST_* transient objects (events, persons, teams, shifts, staff, maps, files, tipologia). One TEST_UI_Map/TEST_UI_Tip may remain from UI probes (cosmetic).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend green 51/51. Frontend all major new flows verified. Google Calendar intentionally not configured (secrets empty) — sync returns error toast: this is expected, do not treat as bug. Volunteer Mario is assigned to Tech Summit Milano + Green Food Festival with 2 shifts on the Festival. Do NOT call POST /api/admin/reset-data. Sidebar testids use short ids (sidebar-link-staff not sidebar-link-staff-volontari; see Layout.jsx nav config)."
+}
