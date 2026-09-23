@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { CalendarDays, Home, User, LogOut } from "lucide-react";
+import { Home, User, LogOut } from "lucide-react";
 
 export default function VolunteerLayout({ children }) {
   const { user, logout } = useAuth();
@@ -12,8 +12,7 @@ export default function VolunteerLayout({ children }) {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 h-14 flex items-center justify-between px-4">
         <button onClick={() => nav("/")} className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-tiffany flex items-center justify-center"><CalendarDays className="w-5 h-5 text-slate-900" /></div>
-          <span className="font-display font-extrabold text-slate-900">crm<span className="text-tiffany-active">event</span></span>
+          <img src="/logo-crmevent.png" alt="crmevent" className="h-7 w-auto" />
         </button>
         <div className="flex items-center gap-1 text-sm">
           {user?.picture ? <img src={user.picture} alt="" className="w-8 h-8 rounded-full" /> : <span className="text-slate-600 font-medium max-w-[120px] truncate">{user?.name}</span>}

@@ -13,6 +13,7 @@ EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "crmevent")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
+EMAIL_LOGO_URL = "https://customer-assets-jai6qajn.emergentagent.net/job_manage-events-12/artifacts/6flsyynu_ChatGPT%20Image%2023%20set%202026%2C%2014_52_43.png"
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 _CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
@@ -104,7 +105,7 @@ def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: 
         f'<table role="presentation" width="100%" style="background:#f8fafc;padding:24px"><tr><td>'
         f'<table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;'
         f'border-radius:12px;border:1px solid #e2e8f0;font-family:Arial,sans-serif"><tr><td style="padding:28px">'
-        f'<div style="font-size:20px;font-weight:800;color:#0f172a">crm<span style="color:#59C1B7">event</span></div>'
+        f'<img src="{EMAIL_LOGO_URL}" alt="crmevent" width="160" style="display:block;height:auto;border:0;margin-bottom:8px" />'
         f'<p style="color:#0f172a;font-size:15px">Ciao {escape(name)},</p>'
         f'<p style="color:#475569;font-size:14px;line-height:1.6">{escape(intro)}</p>'
         f'<p style="text-align:center;margin:28px 0"><a href="{escape(url)}" '

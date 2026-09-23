@@ -5,7 +5,6 @@ import api, { formatApiError } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Activate() {
@@ -33,7 +32,7 @@ export default function Activate() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
       <form onSubmit={submit} className="w-full max-w-sm bg-white border border-slate-200 rounded-xl p-8 shadow-sm space-y-4">
-        <div className="flex items-center gap-2 mb-2"><div className="w-9 h-9 rounded-lg bg-tiffany flex items-center justify-center"><CalendarDays className="w-5 h-5 text-slate-900" /></div><span className="font-display font-extrabold text-slate-900">crm<span className="text-tiffany-active">event</span></span></div>
+        <div className="mb-2"><img src="/logo-crmevent.png" alt="crmevent" className="h-8 w-auto" /></div>
         <h2 className="font-display text-xl font-bold text-slate-900">Attiva il tuo account</h2>
         <p className="text-sm text-slate-500">Imposta la password per accedere alla tua area personale.</p>
         <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} data-testid="activate-pw" required /></div>

@@ -21,17 +21,10 @@ const NAV = [
 ];
 
 function Logo({ collapsed }) {
-  return (
-    <div className="flex items-center gap-2.5 px-1">
-      <div className="w-9 h-9 rounded-lg bg-tiffany flex items-center justify-center shadow-sm shrink-0">
-        <CalendarDays className="w-5 h-5 text-slate-900" strokeWidth={2.4} />
-      </div>
-      {!collapsed && (
-        <div className="leading-tight">
-          <div className="font-display font-extrabold text-slate-900 text-lg">crm<span className="text-tiffany-active">event</span></div>
-        </div>
-      )}
-    </div>
+  return collapsed ? (
+    <img src="/icon-crmevent.png" alt="crmevent" className="w-9 h-9 rounded-lg mx-auto" />
+  ) : (
+    <img src="/logo-crmevent.png" alt="crmevent" className="h-8 w-auto" />
   );
 }
 
