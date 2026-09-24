@@ -1132,7 +1132,7 @@ async def support_feedback(body: FeedbackIn, user: dict = Depends(get_current_us
         raise HTTPException(status_code=403, detail="Non autorizzato")
     val = "down" if body.value == "down" else "up"
     await db.support_messages.update_one({"id": body.message_id}, {"$set": {"feedback": val}})
-    await _create("support_feedback", {"org_id": DEFAULT_ORG, "message_id": body.message_id,
+    await _create("support_feedback", {"org_id": m.get("org_id", DEFAULT_ORG), "message_id": body.message_id,
                                        "conversation_id": m["conversation_id"], "user_id": user["user_id"], "value": val})
     return {"ok": True}
 
@@ -1145,7 +1145,7 @@ async def support_create_ticket(body: dict, user: dict = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Conversazione non trovata")
     msgs = await db.support_messages.find({"conversation_id": cid}, {"_id": 0}).sort("created_at", 1).to_list(100)
     domanda = next((m["content"] for m in msgs if m["role"] == "user"), conv.get("last_question"))
-    t = await _create("support_tickets", {"org_id": DEFAULT_ORG, "conversation_id": cid, "user_id": user["user_id"],
+    t = await _create("support_tickets", {"org_id": conv.get("org_id", DEFAULT_ORG), "conversation_id": cid, "user_id": user["user_id"],
                                           "utente": user.get("email"), "event_id": conv.get("event_id"),
                                           "page_context": conv.get("page_context"), "domanda": domanda,
                                           "cronologia": [{"role": m["role"], "content": m["content"]} for m in msgs], "stato": "aperto"})

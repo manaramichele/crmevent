@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 4 tested the new CRMEvent AI Support Assistant end-to-end (backend + frontend). Backend pytest suite /app/backend/tests/test_iter4_support.py: 13/13 PASS in 14.4s covering KB seeded + published, POST /api/support/chat (known KB question answered=true from sponsor KB, off-topic answered=false, feature-request question sets is_feature_request=true and creates/updates a support_feature_requests record), POST /api/support/feedback persistence, POST /api/support/ticket creation, admin-only GET /api/support/conversations & /api/support/insights (200 for admin, blocked (401/403) for anonymous), POST /api/support/faq/generate (real Emergent LLM call, ~2-3s), GET /api/support/my-conversations, and POST /api/support-kb with comma-separated 'parole_chiave' string (accepted). Frontend Playwright E2E (admin login via /app/memory/test_credentials.md, httpOnly cookie): support-fab visible after login and opens support-panel titled 'Assistente CRMEvent'; asking 'Come inserisco uno sponsor?' streamed a real KB-sourced answer (~356 chars) in support-answer; support-thumbup clicks POST /api/support/feedback and becomes disabled after click; off-topic 'Qual è la capitale della Francia?' shows support-ticket-btn 'Invia richiesta al supporto' which on click creates a ticket and shows the green 'Richiesta inviata al supporto' toast + inline confirmation. sidebar-link-supporto visible for admin and /supporto loads with all 5 tabs (stab-conversazioni, stab-kb, stab-faq, stab-feature, stab-insights). Conversazioni: 9 conv-row-* rendered, clicking opens conv-detail with all messages and conv-resolve button. Knowledge Base tab shows 9 seeded KB rows in the EntityManager table. Richieste funzionalità tab lists 2 feature requests (WhatsApp sponsor request captured from chat). Insights tab renders KPIs (contains 'domande'/'utili'/'ticket'), insights-gen-faq button present, insights-to-kb button present in unanswered list. FAQ tab loads (empty state before generation). Data isolation: anon requests to admin-only /api/support/conversations and /api/support/insights are correctly rejected with 401/403; admin nav shows 'Supporto' (no non-admin member account available for direct 403-per-role browser test, but backend rules verified via require_superadmin and anon 401 check).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter4_support.py",
+    "/app/test_reports/pytest/iter4_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now ~1730 lines (support routes + models added on top). Recommend splitting support endpoints into /app/backend/support_routes.py alongside support_service.py for maintainability; same recommendation from iteration 3 still open.",
+    "GET /api/support/conversations text search (server.py:1191) loads ALL support_messages into memory (to_list(20000)) and filters in Python. This will not scale beyond a few thousand messages; use a MongoDB $regex text index or $text search.",
+    "support-tickets and support-feedback create records with hardcoded org_id=DEFAULT_ORG (server.py:1135, 1148) instead of the conversation's org_id — will break multi-tenant isolation once org_id is actually variable per user. Consider using conv['org_id'] to be future-proof.",
+    "GET /api/support/my-conversations does not filter by org_id — only by user_id. In a multi-org setup where a user could belong to multiple orgs, add org_id filter.",
+    "No rate limiting on POST /api/support/chat which calls a paid LLM (openai/gpt-5.4-mini) — a malicious authenticated user could burn LLM credits. Add per-user rate limit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter4_support.py (new, 13 tests, all pass)"
+  ],
+  "success_rate": {"backend": "100% (13/13 iter4 tests)", "frontend": "100% of tested flows"},
+  "test_credentials": "Admin manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md). No 'member' role account available; member-vs-admin data isolation could only be verified through anon 401 + require_superadmin route inspection, not a real member session.",
+  "seed_data_creation": "Tests created transient support conversations/messages/tickets/feedback under the admin user. One support_feature_requests entry 'WhatsApp automatico agli sponsor' was created via chat and left in DB (visible in Richieste funzionalità tab, count=2). Cosmetic.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "AI Support Assistant is fully functional. Backend 13/13 iter4 tests pass; regression backend_test.py + test_iter2.py + test_iter3_refactor.py from previous iterations remain green (61 tests). All support-* testids used by SupportChat.jsx and Support.jsx work as documented. LLM calls take ~2-5s per chat/faq-generate — use ≥15s timeout in Playwright when waiting for support-answer or generated FAQ. Do NOT call POST /api/admin/reset-data."
+}

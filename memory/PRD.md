@@ -39,6 +39,15 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - [x] Referenti inline: creazione Azienda + N referenti in un'unica schermata (CompanyDialog); controllo duplicati via /api/persons-match (email/cellulare/nome+cognome) con "Collega persona esistente". Sponsor&Partner/Media leggono da Aziende + relazioni, nessuna anagrafica duplicata.
 - Endpoints nuovi: GET /persons-enriched, POST /persons-match, GET /persons/{id}/detail, GET /companies/{id}/detail, GET/POST /companies/{id}/contacts, PUT/DELETE /company-contacts/{id}.
 
+### 2026-06 (Assistente Virtuale AI + Supporto — verificato 13/13 backend + frontend E2E)
+- [x] Assistente chat "Chiedi a CRMEvent": pulsante flottante + pannello responsive (`SupportChat.jsx`, montato nel Layout CRM). Contesto pagina passato automaticamente all'AI. Feedback 👍/👎 sotto ogni risposta.
+- [x] Servizio AI ISOLATO (`support_service.py`) provider-agnostic (env `SUPPORT_AI_PROVIDER`/`SUPPORT_AI_MODEL`), modello OpenAI **gpt-5.4-mini** via Emergent LLM key. Risponde SOLO dalla Knowledge Base (no allucinazioni); se non sa → `answered=false` + bottone "Invia richiesta al supporto" che genera ticket automatico con cronologia.
+- [x] Rilevamento richieste di nuove funzionalità (`is_feature_request`) → raggruppamento per similarità parole chiave in `support_feature_requests` (stati Nuova→Completata/Scartata).
+- [x] Area SuperAdmin (ruolo `admin`) → **Supporto** (`Support.jsx`, nav filtrata, `require_superadmin`): Conversazioni (filtri periodo/categoria/feedback/risolto + ricerca testo + dettaglio + risolvi), Knowledge Base (CRUD, stati Bozza/Pubblicato/Archiviato; solo Pubblicato usato dall'assistente), FAQ (+ "Genera FAQ" AI da approvare, mai pubblicata automaticamente), Richieste funzionalità, Insights (KPI, % utili/non utili, senza risposta, ticket, categorie, trend, domande frequenti; domande senza risposta e 👎 convertibili in KB/FAQ con un click).
+- [x] Isolamento dati per utente: organizzatore `member` vede solo le proprie conversazioni (`/support/my-conversations`); aggregati e insights riservati al SuperAdmin. Campo `org_id` presente su tutte le strutture (predisposizione multi-tenant). Architettura predisposta a vector embeddings futuri (campo `embedding` su KB).
+- Collezioni: support_conversations, support_messages, support_feedback, support_categories, support_knowledge_base, support_faq, support_tickets, support_feature_requests, support_feature_request_matches.
+- Endpoint: POST /support/chat|feedback|ticket|faq/generate, GET /support/my-conversations|conversations|conversations/{id}|insights, PUT /support/conversations/{id}/resolve, CRUD /support-kb|support-faq|support-categories|support-feature-requests|support-tickets.
+
 ## Backlog (P1/P2)
 - P1: Drag&drop reale nel Kanban; scheda dettaglio evento con tab dedicata.
 - P2: Export CSV/PDF; calendario turni visuale; foto persona upload in anagrafica; notifiche email automatiche follow-up.
