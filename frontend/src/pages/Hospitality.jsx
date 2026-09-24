@@ -343,10 +343,16 @@ export default function Hospitality() {
   useEffect(() => { load(); }, [load]);
 
   const eventTeams = useMemo(() => teams.filter((t) => t.evento_id === eventId), [teams, eventId]);
-  const days = useMemo(() => { const e = events.find((x) => x.id === eventId); return e ? eachDay(e.data_inizio, e.data_fine) : []; }, [events, eventId]);
-  useEffect(() => { if (days.length && !day) setDay(days[0]); }, [days, day]);
+  const days = useMemo(() => {
+    const e = events.find((x) => x.id === eventId);
+    const set = new Set(e ? eachDay(e.data_inizio, e.data_fine) : []);
+    (data?.meals || []).forEach((m) => m.data && set.add(m.data));
+    (data?.lodgings || []).forEach((l) => { l.check_in && set.add(l.check_in); });
+    return Array.from(set).sort();
+  }, [events, eventId, data]);
+  useEffect(() => { if (days.length && !days.includes(day)) setDay(days[0]); }, [days, day]);
 
-  const persons = data?.persons || [];
+  const persons = useMemo(() => data?.persons || [], [data]);
   const filteredPersons = persons.filter((p) => {
     if (q && !fullName(p).toLowerCase().includes(q.toLowerCase())) return false;
     if (fRuolo && p.categoria !== fRuolo) return false;
@@ -433,6 +439,12 @@ export default function Hospitality() {
             </TabsContent>
 
             <TabsContent value="giorno">
+              {days.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500" data-testid="giorno-empty">
+                  Nessuna data disponibile. Imposta le date dell'evento oppure aggiungi pernottamenti/pasti con una data.
+                </div>
+              ) : (
+              <>
               <div className="flex items-center gap-2 mb-4">
                 <Label className="text-xs text-slate-500">Giorno</Label>
                 <Select value={day} onValueChange={setDay}><SelectTrigger className="w-48" data-testid="day-select"><SelectValue placeholder="Seleziona giorno" /></SelectTrigger><SelectContent>{days.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select>
@@ -453,6 +465,8 @@ export default function Hospitality() {
                   );
                 })}
               </div>
+              </>
+              )}
             </TabsContent>
 
             <TabsContent value="struttura">

@@ -1,0 +1,40 @@
+{
+  "summary": "Tested new 'Ospitalità & Pasti' feature end-to-end. Backend: 13/13 pytest cases pass (aggregation, single/bulk CRUD for lodgings & meals, group delete, error handling, cost visibility for admin, individual-override precedence, regression on events/persons/staff/companies). Frontend: full UI flow works — login, sidebar nav to /ospitalita, event selector switches to Tech Summit Milano showing 4 person rows, all 7 summary cards render, person plan dialog opens with lodging add/edit/delete, meal add via meal-tipo dropdown, esigenze editor saves. Three views (persona/giorno/struttura), filters, and bulk-assign dialog render and submit. AI chat widget 'Chiedi a CRMEvent' still visible (regression OK).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Bulk assign submit -> summary refresh",
+        "issue": "After clicking bulk-assign-submit (colazione, select-all), the 'summary-colazioni' card kept showing 0 in the immediate re-read; the per-giorno view then had no day-select and per-struttura had 0 cards. Backend /api/meals/bulk endpoint works correctly (verified by pytest); this may be a UI state refetch race after the bulk dialog closes, OR the automation clicked bulk-select-all after the meal-tipo dropdown closed and the count actually was 0 in that specific run. Worth a manual verification by main agent.",
+        "affected_selectors": ["[data-testid=\"summary-colazioni\"]", "[data-testid=\"bulk-assign-submit\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter7_hospitality.py",
+    "/app/test_reports/pytest/iter7_hospitality.xml"
+  ],
+  "action_items": [
+    "Manually verify bulk assignment updates the summary cards immediately (may need to add a refetch/mutate call after bulk-assign submit closes the dialog).",
+    "Consider ensuring the /ospitalita per-giorno tab shows an empty-state hint when no lodgings/meals exist (currently day-select simply doesn't render)."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 664: can_costs = admin.get('role') == 'admin'. Since require_admin already gates admin+member, this correctly redacts cost fields for member users. Redaction path only triggers when role != 'admin'. Consider adding a member test user for full coverage.",
+    "Lodging/Meal models have persona_id + evento_id as required strings but no validation that the person is actually linked to the event via staff. Bulk endpoints resolve via staff, but single POST /api/lodgings and /api/meals accept any pair. Minor.",
+    "crud_routes list endpoint filters by evento_id only when provided; a global GET /api/lodgings without filters returns ALL lodgings across events — fine for admin but consider pagination."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter7_hospitality.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "test_credentials": "admin: manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Test lodgings/meals created during pytest were cleaned up via module teardown and inline deletes. UI test also removed created bulk meals via per-person delete.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature 'Ospitalità & Pasti' fully covered. Backend regression suite at /app/backend/tests/test_iter7_hospitality.py (13 tests). Event id for tests: 25299c763b9e45b38db227d0692c97bf (Tech Summit Milano, 4 people). Only observed anomaly is that bulk submit didn't visibly update summary counts in a single UI pass — investigate refetch trigger in Hospitality.jsx BulkAssignDialog onSubmit."
+}

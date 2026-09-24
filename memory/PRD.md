@@ -74,6 +74,16 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ## Next Tasks
 - Eseguire il reset finale dopo validazione utente (azzera tutti i dati operativi, mantiene admin/config).
 
+### 2026-06 (Ospitalità & Pasti — verificato: backend 13/13 pytest, frontend 95%)
+- [x] Nuova sezione **Ospitalità & Pasti** (`/ospitalita`, voce menu con selettore evento), integrata con anagrafica Persone esistente (nessun duplicato). Dati legati alla relazione Persona↔Evento (collection `staff`).
+- [x] Nuove collection `lodgings` (pernottamenti) e `meals` (colazione/pranzo/cena), aggiunte a OPERATIONAL. Modelli `Lodging`/`Meal` in server.py.
+- [x] `Person` e `Presence` estesi con `esigenze_alimentari` + `esigenze_note` (default in anagrafica, override per evento).
+- [x] Endpoint: crud `/lodgings` `/meals`; `POST /lodgings/bulk` e `/meals/bulk` (assegnazione multipla per persona_ids/categorie/ruoli/team); `DELETE /hospitality/group/{gruppo_id}?tipo=`; `GET /events/{id}/hospitality` (aggregato persons+lodgings+meals+summary, redazione campi costo se ruolo≠admin).
+- [x] 3 viste: Per persona (tabella + dialog piano completo con CRUD pernottamenti/pasti + editor esigenze), Per giorno (colonne pernott./colazione/pranzo/cena con conteggi), Per struttura/servizio (raggruppamento + breakdown esigenze). Dashboard riepilogo (7 card), filtri (ricerca/ruolo/stato/esigenze/giorno), mobile-first.
+- [x] Permessi: view/edit admin+member; costi/pagamenti/note amministrative solo SuperAdmin (`can_view_costs`).
+- [x] Assegnazione multipla con selezione manuale / per categoria / per team / tutti; la modifica individuale prevale.
+- Predisposizione futura (non implementata ora, come da scelta utente): briefing personale, export Excel/PDF, rooming list, voucher, budget.
+
 ### 2026-06 (Riferimenti legali + Footer — verificato via screenshot)
 - [x] Footer condiviso (`components/Footer.jsx`) usato su landing + pagine legali; logo fondo nero, link Privacy Policy/Cookie Policy/Termini; riga legale "© 2026 CRMEvent – P. IVA 02671780340" (nome titolare NON mostrato).
 - [x] Nuova rotta `/privacy-policy` (Privacy Policy completa per SaaS CRM eventi); `/privacy` reindirizza a `/privacy-policy`.
