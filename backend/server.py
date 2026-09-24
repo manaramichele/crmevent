@@ -9,6 +9,7 @@ import uuid
 import logging
 import secrets
 from collections import defaultdict
+import support_service
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -112,6 +113,12 @@ async def get_current_user(request: Request) -> dict:
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if user.get("role") not in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Accesso riservato agli amministratori")
+    return user
+
+
+async def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Accesso riservato al SuperAdmin")
     return user
 
 
@@ -960,6 +967,340 @@ async def settings_usage(list: str, value: str, admin: dict = Depends(require_ad
     return {"count": count}
 
 
+# ---------------- Support Assistant (AI) ----------------
+DEFAULT_ORG = "default"
+
+
+class KBEntry(BaseModel):
+    titolo: str
+    categoria: Optional[str] = None
+    domanda: Optional[str] = None
+    risposta: str
+    parole_chiave: Optional[str] = None
+    stato: Optional[str] = "bozza"
+    org_id: Optional[str] = DEFAULT_ORG
+    embedding: Optional[List[float]] = None  # predisposizione ricerca semantica futura
+
+
+class FAQEntry(BaseModel):
+    domanda: str
+    risposta: str
+    categoria: Optional[str] = None
+    parole_chiave: Optional[str] = None
+    stato: Optional[str] = "bozza"
+    richieste_count: Optional[int] = 0
+    suggested: Optional[bool] = False
+    org_id: Optional[str] = DEFAULT_ORG
+
+
+class SupportCategory(BaseModel):
+    nome: str
+    slug: Optional[str] = None
+    org_id: Optional[str] = DEFAULT_ORG
+
+
+class FeatureRequest(BaseModel):
+    titolo: str
+    descrizione: Optional[str] = None
+    stato: Optional[str] = "nuova"
+    utenti_count: Optional[int] = 1
+    organizzazioni: Optional[List[str]] = None
+    org_id: Optional[str] = DEFAULT_ORG
+
+
+class SupportTicket(BaseModel):
+    conversation_id: Optional[str] = None
+    utente: Optional[str] = None
+    domanda: Optional[str] = None
+    stato: Optional[str] = "aperto"
+    org_id: Optional[str] = DEFAULT_ORG
+
+
+crud_routes("support-kb", "support_knowledge_base", KBEntry)
+crud_routes("support-faq", "support_faq", FAQEntry)
+crud_routes("support-categories", "support_categories", SupportCategory)
+crud_routes("support-feature-requests", "support_feature_requests", FeatureRequest)
+crud_routes("support-tickets", "support_tickets", SupportTicket)
+
+
+def _sup_tokens(s: str):
+    return set(re.findall(r"[a-zàèéìòù0-9]{3,}", (s or "").lower()))
+
+
+def _as_list(v):
+    if not v:
+        return []
+    if isinstance(v, list):
+        return [str(x).strip() for x in v if str(x).strip()]
+    return [x.strip() for x in str(v).split(",") if x.strip()]
+
+
+async def build_kb_context(question: str):
+    q = _sup_tokens(question)
+    kb = await db.support_knowledge_base.find({"stato": "pubblicato"}, {"_id": 0}).to_list(2000)
+    faq = await db.support_faq.find({"stato": "pubblicato"}, {"_id": 0}).to_list(2000)
+    scored = []
+    for e in kb + faq:
+        kws = _as_list(e.get("parole_chiave"))
+        text = " ".join([e.get("titolo", ""), e.get("domanda", ""), e.get("risposta", ""), " ".join(kws)])
+        score = len(q & _sup_tokens(text))
+        for kwd in kws:
+            if kwd and kwd.lower() in (question or "").lower():
+                score += 2
+        if score > 0:
+            scored.append((score, e))
+    scored.sort(key=lambda x: -x[0])
+    top = [e for _, e in scored[:4]]
+    ctx = "\n\n".join([f"[{e.get('categoria', 'generale')}] {e.get('titolo') or e.get('domanda')}\nD: {e.get('domanda', '')}\nR: {e.get('risposta')}" for e in top])
+    return ctx, [e["id"] for e in top], (scored[0][0] if scored else 0)
+
+
+async def _record_feature_request(title: str, question: str, conv_id: str, user: dict, org: str):
+    existing = await db.support_feature_requests.find({"org_id": org}, {"_id": 0}).to_list(1000)
+    qt = _sup_tokens(title)
+    best, bs = None, 0
+    for fr in existing:
+        s = len(qt & _sup_tokens(f"{fr.get('titolo', '')} {fr.get('descrizione', '')}"))
+        if s > bs:
+            bs, best = s, fr
+    if best and bs >= 2:
+        orgs = set(best.get("organizzazioni") or [])
+        orgs.add(org)
+        await db.support_feature_requests.update_one({"id": best["id"]}, {"$set": {"ultima_richiesta": now_iso(), "organizzazioni": list(orgs)}, "$inc": {"utenti_count": 1}})
+        fr_id = best["id"]
+    else:
+        fr = await _create("support_feature_requests", {"org_id": org, "titolo": title[:140], "descrizione": question,
+                                                         "stato": "nuova", "utenti_count": 1, "organizzazioni": [org],
+                                                         "prima_richiesta": now_iso(), "ultima_richiesta": now_iso()})
+        fr_id = fr["id"]
+    await _create("support_feature_request_matches", {"org_id": org, "feature_request_id": fr_id,
+                                                       "conversation_id": conv_id, "user_id": user["user_id"], "question": question})
+
+
+class ChatIn(BaseModel):
+    question: str
+    conversation_id: Optional[str] = None
+    page_context: Optional[str] = None
+    event_id: Optional[str] = None
+
+
+@api.post("/support/chat")
+async def support_chat(body: ChatIn, user: dict = Depends(get_current_user)):
+    org = DEFAULT_ORG
+    if body.conversation_id:
+        conv = await db.support_conversations.find_one({"id": body.conversation_id}, {"_id": 0})
+        if not conv or conv["user_id"] != user["user_id"]:
+            raise HTTPException(status_code=404, detail="Conversazione non trovata")
+    else:
+        conv = await _create("support_conversations", {"org_id": org, "user_id": user["user_id"],
+                                                        "user_email": user.get("email"), "user_name": user.get("name") or user.get("email"),
+                                                        "event_id": body.event_id, "page_context": body.page_context,
+                                                        "category": None, "stato": "aperta", "last_question": body.question})
+    await _create("support_messages", {"org_id": org, "conversation_id": conv["id"], "role": "user",
+                                        "content": body.question, "user_id": user["user_id"], "feedback": None})
+    hist = await db.support_messages.find({"conversation_id": conv["id"]}, {"_id": 0}).sort("created_at", 1).to_list(50)
+    ctx, sources, _ = await build_kb_context(body.question)
+    result = await support_service.answer_question(body.question, ctx, page_context=body.page_context,
+                                                   history=[{"role": m["role"], "content": m["content"]} for m in hist[:-1]])
+    amsg = await _create("support_messages", {"org_id": org, "conversation_id": conv["id"], "role": "assistant",
+                                              "content": result["answer"], "category": result.get("category"),
+                                              "confidence": result.get("confidence"), "answered": result.get("answered", True),
+                                              "sources": sources, "feedback": None})
+    upd = {"category": result.get("category"), "last_question": body.question, "updated_at": now_iso()}
+    if body.event_id:
+        upd["event_id"] = body.event_id
+    await db.support_conversations.update_one({"id": conv["id"]}, {"$set": upd})
+    if result.get("is_feature_request"):
+        await _record_feature_request(result.get("feature_request_summary") or body.question, body.question, conv["id"], user, org)
+    return {"conversation_id": conv["id"], "message_id": amsg["id"], "answer": result["answer"],
+            "answered": result.get("answered", True), "category": result.get("category"),
+            "confidence": result.get("confidence"), "is_feature_request": result.get("is_feature_request", False)}
+
+
+class FeedbackIn(BaseModel):
+    message_id: str
+    value: str  # up | down
+
+
+@api.post("/support/feedback")
+async def support_feedback(body: FeedbackIn, user: dict = Depends(get_current_user)):
+    m = await db.support_messages.find_one({"id": body.message_id}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Messaggio non trovato")
+    conv = await db.support_conversations.find_one({"id": m["conversation_id"]}, {"_id": 0})
+    if conv and conv["user_id"] != user["user_id"] and user.get("role") not in ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+    val = "down" if body.value == "down" else "up"
+    await db.support_messages.update_one({"id": body.message_id}, {"$set": {"feedback": val}})
+    await _create("support_feedback", {"org_id": DEFAULT_ORG, "message_id": body.message_id,
+                                       "conversation_id": m["conversation_id"], "user_id": user["user_id"], "value": val})
+    return {"ok": True}
+
+
+@api.post("/support/ticket")
+async def support_create_ticket(body: dict, user: dict = Depends(get_current_user)):
+    cid = body.get("conversation_id")
+    conv = await db.support_conversations.find_one({"id": cid}, {"_id": 0})
+    if not conv or (conv["user_id"] != user["user_id"] and user.get("role") not in ADMIN_ROLES):
+        raise HTTPException(status_code=404, detail="Conversazione non trovata")
+    msgs = await db.support_messages.find({"conversation_id": cid}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    domanda = next((m["content"] for m in msgs if m["role"] == "user"), conv.get("last_question"))
+    t = await _create("support_tickets", {"org_id": DEFAULT_ORG, "conversation_id": cid, "user_id": user["user_id"],
+                                          "utente": user.get("email"), "event_id": conv.get("event_id"),
+                                          "page_context": conv.get("page_context"), "domanda": domanda,
+                                          "cronologia": [{"role": m["role"], "content": m["content"]} for m in msgs], "stato": "aperto"})
+    await db.support_conversations.update_one({"id": cid}, {"$set": {"stato": "ticket"}})
+    return t
+
+
+@api.get("/support/my-conversations")
+async def support_my_conversations(user: dict = Depends(get_current_user)):
+    return await db.support_conversations.find({"user_id": user["user_id"]}, {"_id": 0}).sort("updated_at", -1).to_list(500)
+
+
+@api.get("/support/conversations")
+async def support_conversations(user_id: Optional[str] = None, category: Optional[str] = None,
+                                event_id: Optional[str] = None, feedback: Optional[str] = None,
+                                resolved: Optional[str] = None, q: Optional[str] = None,
+                                date_from: Optional[str] = None, date_to: Optional[str] = None,
+                                admin: dict = Depends(require_superadmin)):
+    query = {"org_id": DEFAULT_ORG}
+    if user_id:
+        query["user_id"] = user_id
+    if category:
+        query["category"] = category
+    if event_id:
+        query["event_id"] = event_id
+    if resolved == "true":
+        query["stato"] = "risolta"
+    elif resolved == "false":
+        query["stato"] = {"$ne": "risolta"}
+    if date_from or date_to:
+        rng = {}
+        if date_from:
+            rng["$gte"] = date_from
+        if date_to:
+            rng["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = rng
+    convs = await db.support_conversations.find(query, {"_id": 0}).sort("updated_at", -1).to_list(2000)
+    if feedback in ("up", "down"):
+        fb_convs = set(m["conversation_id"] for m in await db.support_messages.find({"feedback": feedback}, {"_id": 0, "conversation_id": 1}).to_list(5000))
+        convs = [c for c in convs if c["id"] in fb_convs]
+    if q:
+        ql = q.lower()
+        match_ids = set(m["conversation_id"] for m in await db.support_messages.find({}, {"_id": 0, "conversation_id": 1, "content": 1}).to_list(20000) if ql in (m.get("content") or "").lower())
+        convs = [c for c in convs if c["id"] in match_ids or ql in (c.get("last_question") or "").lower()]
+    return convs
+
+
+@api.get("/support/conversations/{cid}")
+async def support_conversation_detail(cid: str, user: dict = Depends(get_current_user)):
+    conv = await db.support_conversations.find_one({"id": cid}, {"_id": 0})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversazione non trovata")
+    if conv["user_id"] != user["user_id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+    msgs = await db.support_messages.find({"conversation_id": cid}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return {"conversation": conv, "messages": msgs}
+
+
+@api.put("/support/conversations/{cid}/resolve")
+async def support_resolve_conversation(cid: str, body: dict, admin: dict = Depends(require_superadmin)):
+    await db.support_conversations.update_one({"id": cid}, {"$set": {"stato": "risolta" if body.get("resolved", True) else "aperta"}})
+    return {"ok": True}
+
+
+@api.post("/support/faq/generate")
+async def support_faq_generate(body: dict, admin: dict = Depends(require_superadmin)):
+    question = body.get("question") or ""
+    ctx, _, _ = await build_kb_context(question)
+    return await support_service.draft_faq(question, ctx)
+
+
+@api.get("/support/insights")
+async def support_insights(admin: dict = Depends(require_superadmin)):
+    org = DEFAULT_ORG
+    convs = await db.support_conversations.find({"org_id": org}, {"_id": 0}).to_list(5000)
+    msgs = await db.support_messages.find({"org_id": org}, {"_id": 0}).to_list(50000)
+    user_msgs = [m for m in msgs if m["role"] == "user"]
+    asst_msgs = [m for m in msgs if m["role"] == "assistant"]
+    tickets = await db.support_tickets.count_documents({"org_id": org})
+    up = sum(1 for m in asst_msgs if m.get("feedback") == "up")
+    down = sum(1 for m in asst_msgs if m.get("feedback") == "down")
+    rated = up + down
+    unanswered = [{"message_id": m["id"], "conversation_id": m["conversation_id"], "content": m["content"], "created_at": m.get("created_at")}
+                  for m in asst_msgs if m.get("answered") is False]
+    negatives = []
+    for m in asst_msgs:
+        if m.get("feedback") == "down":
+            uq = next((x["content"] for x in user_msgs if x["conversation_id"] == m["conversation_id"]), "")
+            negatives.append({"message_id": m["id"], "conversation_id": m["conversation_id"], "question": uq, "answer": m["content"]})
+    cat_count = defaultdict(int)
+    for c in convs:
+        if c.get("category"):
+            cat_count[c["category"]] += 1
+    categorie = sorted([{"categoria": k, "count": v} for k, v in cat_count.items()], key=lambda x: -x["count"])
+    freq = defaultdict(lambda: {"count": 0, "example": ""})
+    for m in user_msgs:
+        key = " ".join(sorted(list(_sup_tokens(m["content"]))[:6]))
+        freq[key]["count"] += 1
+        if not freq[key]["example"]:
+            freq[key]["example"] = m["content"]
+    domande_frequenti = sorted([{"argomento": v["example"], "count": v["count"]} for v in freq.values() if v["count"] > 0], key=lambda x: -x["count"])[:15]
+    from collections import Counter
+    day_count = Counter((m.get("created_at") or "")[:10] for m in user_msgs if m.get("created_at"))
+    trend = [{"data": d, "count": c} for d, c in sorted(day_count.items())][-14:]
+    return {
+        "domande_totali": len(user_msgs),
+        "utenti_attivi": len(set(c["user_id"] for c in convs)),
+        "conversazioni": len(convs),
+        "perc_utili": round(up / rated * 100, 1) if rated else 0,
+        "perc_non_utili": round(down / rated * 100, 1) if rated else 0,
+        "domande_senza_risposta": len(unanswered),
+        "ticket_generati": tickets,
+        "categorie_piu_richieste": categorie,
+        "domande_frequenti": domande_frequenti,
+        "trend": trend,
+        "unanswered_list": unanswered[:50],
+        "negative_list": negatives[:50],
+    }
+
+
+async def seed_support():
+    if await db.support_categories.count_documents({}) == 0:
+        for n in ["Eventi", "Persone", "Aziende", "Sponsor", "Staff", "Volontari", "Team", "Turni",
+                  "Attività", "Documenti", "Briefing", "Impostazioni", "Account"]:
+            await _create("support_categories", {"org_id": DEFAULT_ORG, "nome": n, "slug": n.lower()})
+    if await db.support_knowledge_base.count_documents({}) == 0:
+        kb = [
+            ("Inserire uno sponsor", "sponsor", "Come inserisco uno sponsor?",
+             "Vai in 'Sponsor & Partner' per la pipeline commerciale, oppure apri l'Azienda in 'Aziende'. Se l'azienda non esiste creala con 'Aggiungi azienda', imposta il tipo 'Sponsor' e aggiungi i referenti nella stessa schermata. Per collegarla a un evento usa una trattativa (deal) nella pipeline Sponsor & Partner indicando evento, livello e valore.",
+             ["sponsor", "aggiungere sponsor", "nuovo sponsor", "inserire sponsor", "pipeline"]),
+            ("Assegnare un volontario a un evento", "volontari", "Come assegno un volontario a un evento?",
+             "Apri 'Persone', clicca sulla persona e vai nella scheda 'Eventi': seleziona l'evento, scegli la categoria 'Volontario', assegna eventualmente ruolo, area e team e premi 'Associa'. La stessa persona può essere volontaria in un evento e staff in un altro senza duplicare l'anagrafica.",
+             ["volontario", "assegnare volontario", "associare volontario", "evento"]),
+            ("Creare un turno", "turni", "Come creo un turno?",
+             "Vai in 'Persone' → scheda 'Turni' (oppure nella scheda dell'evento) e usa 'Aggiungi'. Indica evento, data, ora inizio/fine, area, ruolo, team e luogo. Lascia la persona vuota per creare un turno scoperto da assegnare in seguito.",
+             ["turno", "creare turno", "nuovo turno", "shift"]),
+            ("Collegare una persona a più eventi", "persone", "Come collego una persona a più eventi?",
+             "In CRMEvent l'anagrafica è unica: apri la persona in 'Persone' e nella scheda 'Eventi' aggiungi tutte le associazioni evento che servono, ognuna con la propria categoria e ruolo. Non creare anagrafiche separate: la stessa persona resta un unico record.",
+             ["collegare persona", "più eventi", "persona multipla", "associare persona"]),
+            ("Modificare i dati di un'azienda", "aziende", "Come modifico i dati di un'azienda?",
+             "Vai in 'Aziende', clicca sulla riga dell'azienda per aprire la scheda e premi 'Modifica'. Puoi aggiornare ragione sociale, settore, contatti e responsabile interno. Dalla scheda gestisci anche i referenti nella tab 'Referenti'.",
+             ["modificare azienda", "aggiornare azienda", "dati azienda"]),
+            ("Aggiungere referenti a un'azienda", "aziende", "Come aggiungo un referente a un'azienda?",
+             "Durante la creazione dell'azienda puoi aggiungere uno o più referenti nella stessa schermata con 'Aggiungi referente'. In alternativa apri la scheda azienda, tab 'Referenti', 'Aggiungi referente': il sistema verifica i duplicati (email/cellulare/nome) e propone di collegare una persona esistente invece di crearne una nuova.",
+             ["referente", "aggiungere referente", "contatto azienda", "referenti"]),
+            ("Preparare il briefing dello staff", "briefing", "Come preparo il briefing dello staff?",
+             "Nella scheda dell'evento trovi le viste operative Staff, Volontari, Team e Turni: da qui verifica ruoli, aree, punti di ritrovo e turni assegnati. Puoi allegare mappe e percorsi nella sezione Mappe dell'evento per distribuire le informazioni operative al team.",
+             ["briefing", "staff", "preparare briefing", "istruzioni staff"]),
+        ]
+        for titolo, cat, dom, risp, kw in kb:
+            await _create("support_knowledge_base", {"org_id": DEFAULT_ORG, "titolo": titolo, "categoria": cat,
+                                                     "domanda": dom, "risposta": risp, "parole_chiave": kw, "stato": "pubblicato"})
+    logger.info("Support KB seeded")
+
+
 # ---------------- Google Calendar ----------------
 def _cal_state(user_id: str) -> str:
     return jwt.encode({"uid": user_id, "exp": datetime.now(timezone.utc) + timedelta(minutes=15)}, JWT_SECRET, algorithm=JWT_ALG)
@@ -1386,6 +1727,7 @@ async def startup():
     await seed_admin()
     await seed_demo()
     await migrate_person_companies()
+    await seed_support()
     creds = ROOT_DIR.parent / "memory" / "test_credentials.md"
     try:
         creds.write_text(

@@ -4,9 +4,10 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
+import SupportChat from "@/components/SupportChat";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
@@ -17,6 +18,7 @@ const NAV = [
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup" },
   { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
+  { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto", superadmin: true },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni" },
 ];
 
@@ -125,13 +127,14 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const navItems = NAV.filter((n) => !n.superadmin || user?.role === "admin");
   const sidebar = (
     <aside className={`${collapsed ? "w-20" : "w-64"} shrink-0 bg-white border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col transition-all duration-300`}>
       <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100">
         <Logo collapsed={collapsed} />
       </div>
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {NAV.map((n) => (
+        {navItems.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end} data-testid={`sidebar-link-${n.id}`}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -161,7 +164,7 @@ export default function Layout({ children }) {
           <aside className="absolute left-0 top-0 h-full w-64 bg-white p-3 shadow-xl">
             <div className="h-14 flex items-center justify-between mb-2"><Logo /><button onClick={() => setMobileOpen(false)}><X className="w-6 h-6" /></button></div>
             <nav className="space-y-1">
-              {NAV.map((n) => (
+              {navItems.map((n) => (
                 <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setMobileOpen(false)}
                   className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${isActive ? "bg-tiffany-light text-tiffany-fg" : "text-slate-600 hover:bg-slate-50"}`}>
                   <n.icon className="w-5 h-5" /><span>{n.label}</span>
@@ -199,6 +202,7 @@ export default function Layout({ children }) {
         </header>
         <main className="flex-1 p-4 lg:p-8 bg-slate-50/40">{children}</main>
       </div>
+      <SupportChat />
     </div>
   );
 }

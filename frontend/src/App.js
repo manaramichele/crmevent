@@ -21,6 +21,7 @@ import Activities from "@/pages/Activities";
 import Followups from "@/pages/Followups";
 import Leads from "@/pages/Leads";
 import SettingsPage from "@/pages/Settings";
+import Support from "@/pages/Support";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
 
@@ -80,6 +81,7 @@ function Shell() {
         <Route path="/followup" element={<Protected><AdminOnly><Followups /></AdminOnly></Protected>} />
         <Route path="/lead" element={<Protected><AdminOnly><Leads /></AdminOnly></Protected>} />
         <Route path="/impostazioni" element={<Protected><AdminOnly><SettingsPage /></AdminOnly></Protected>} />
+        <Route path="/supporto" element={<Protected><AdminOnly><Support /></AdminOnly></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
