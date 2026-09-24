@@ -37,7 +37,7 @@ function InviteDialog({ person, open, onOpenChange, onDone }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="invite-dialog">
-        <DialogHeader><DialogTitle className="font-display">Invita su CRMEvent</DialogTitle>
+        <DialogHeader><DialogTitle className="font-display">Invita su <strong className="font-semibold">CRMEvent</strong></DialogTitle>
           <DialogDescription>{person?.nome} {person?.cognome} — {person?.email || "nessuna email"}</DialogDescription></DialogHeader>
         <div className="space-y-3 py-2">
           <div className="flex items-center gap-2"><span className="text-sm text-slate-500">Stato attuale:</span><StatusBadge color={INV[status]}>{INV_LABEL[status]}</StatusBadge></div>

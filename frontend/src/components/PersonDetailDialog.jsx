@@ -189,7 +189,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
 
               <TabsContent value="accesso" className="pt-2">
                 <div className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-4">
-                  <div><div className="text-sm text-slate-500 mb-1">Stato account CRMEvent</div>
+                  <div><div className="text-sm text-slate-500 mb-1">Stato account <strong className="font-semibold text-slate-700">CRMEvent</strong></div>
                     <StatusBadge color={INV[p.invite_status || "non_invitato"]}>{INV_LABEL[p.invite_status || "non_invitato"]}</StatusBadge></div>
                   <Button variant="outline" onClick={() => onInvite && onInvite(p)} disabled={!p.email} data-testid="person-detail-invite"><UserPlus className="w-4 h-4 mr-1" />Gestisci accesso</Button>
                 </div>
