@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 
 const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
+  { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende" },
   { to: "/persone", label: "Persone", icon: Users, id: "persone" },
@@ -131,7 +131,9 @@ export default function Layout({ children }) {
   const sidebar = (
     <aside className={`${collapsed ? "w-20" : "w-64"} shrink-0 bg-white border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col transition-all duration-300`}>
       <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100">
-        <Logo collapsed={collapsed} />
+        <button onClick={() => navigate("/")} data-testid="sidebar-logo-home" title="Vai al sito CRMEvent" className="flex items-center">
+          <Logo collapsed={collapsed} />
+        </button>
       </div>
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
         {navItems.map((n) => (
@@ -162,7 +164,7 @@ export default function Layout({ children }) {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="absolute left-0 top-0 h-full w-64 bg-white p-3 shadow-xl">
-            <div className="h-14 flex items-center justify-between mb-2"><Logo /><button onClick={() => setMobileOpen(false)}><X className="w-6 h-6" /></button></div>
+            <div className="h-14 flex items-center justify-between mb-2"><button onClick={() => { setMobileOpen(false); navigate("/"); }} data-testid="mobile-logo-home" className="flex items-center"><Logo /></button><button onClick={() => setMobileOpen(false)}><X className="w-6 h-6" /></button></div>
             <nav className="space-y-1">
               {navItems.map((n) => (
                 <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setMobileOpen(false)}

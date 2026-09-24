@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Pencil, UserPlus, Trash2, Building2, CalendarDays, Users, Clock, ListChecks, IdCard, KeyRound, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-const CAT = { staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario" };
+const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
 const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
 const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Account attivo", accesso_disabilitato: "Accesso disabilitato" };
