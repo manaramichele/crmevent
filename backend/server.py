@@ -407,6 +407,8 @@ class Person(BaseModel):
     linkedin: Optional[str] = None
     foto_url: Optional[str] = None
     tag: Optional[List[str]] = None
+    esigenze_alimentari: Optional[List[str]] = None
+    esigenze_note: Optional[str] = None
     note: Optional[str] = None
 
 
@@ -439,6 +441,8 @@ class Presence(BaseModel):  # collection: staff (Persona <-> Evento)
     ora_partenza: Optional[str] = None
     stato: Optional[str] = "da_contattare"
     note_operative: Optional[str] = None
+    esigenze_alimentari: Optional[List[str]] = None
+    esigenze_note: Optional[str] = None
 
 
 class Team(BaseModel):
@@ -504,6 +508,46 @@ class Followup(BaseModel):
     note: Optional[str] = None
 
 
+class Lodging(BaseModel):  # collection: lodgings — pernottamento (persona <-> evento)
+    evento_id: str
+    persona_id: str
+    struttura_nome: Optional[str] = None
+    tipo_struttura: Optional[str] = None  # hotel/bnb/appartamento/foresteria/altro
+    indirizzo: Optional[str] = None
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    tipo_camera: Optional[str] = None  # singola/doppia/tripla/multipla
+    compagni_camera: Optional[str] = None
+    codice_prenotazione: Optional[str] = None
+    referente: Optional[str] = None
+    telefono: Optional[str] = None
+    a_carico_di: Optional[str] = None  # organizzazione/persona/sponsor/altro/da_definire
+    costo: Optional[float] = None
+    stato_pagamento: Optional[str] = None  # pagato/non_pagato
+    note: Optional[str] = None
+    note_amministrative: Optional[str] = None
+    gruppo_id: Optional[str] = None
+
+
+class Meal(BaseModel):  # collection: meals — colazione/pranzo/cena (persona <-> evento)
+    evento_id: str
+    persona_id: str
+    data: Optional[str] = None
+    tipo_pasto: Optional[str] = None  # colazione/pranzo/cena
+    tipologia_servizio: Optional[str] = None
+    struttura_nome: Optional[str] = None
+    luogo: Optional[str] = None
+    indirizzo: Optional[str] = None
+    orario: Optional[str] = None
+    referente: Optional[str] = None
+    telefono: Optional[str] = None
+    a_carico_di: Optional[str] = None
+    costo: Optional[float] = None
+    note: Optional[str] = None
+    note_amministrative: Optional[str] = None
+    gruppo_id: Optional[str] = None
+
+
 def _opt(model):
     class M(model):
         pass
@@ -548,6 +592,129 @@ crud_routes("shifts", "shifts", Shift)
 crud_routes("maps", "event_maps", EventMap)
 crud_routes("activities", "activities", Activity)
 crud_routes("followups", "followups", Followup)
+crud_routes("lodgings", "lodgings", Lodging)
+crud_routes("meals", "meals", Meal)
+
+
+# ---------------- ospitalità & pasti ----------------
+COST_FIELDS = ("costo", "stato_pagamento", "note_amministrative")
+
+
+class BulkAssignIn(BaseModel):
+    evento_id: str
+    persona_ids: Optional[List[str]] = None
+    categorie: Optional[List[str]] = None
+    ruoli: Optional[List[str]] = None
+    team_ids: Optional[List[str]] = None
+    tutti: Optional[bool] = False
+    data: dict = {}
+
+
+async def _resolve_persons(b: BulkAssignIn) -> list:
+    ids = set(b.persona_ids or [])
+    if b.tutti or b.categorie or b.ruoli or b.team_ids:
+        links = await db.staff.find({"evento_id": b.evento_id}, {"_id": 0}).to_list(5000)
+        for l in links:
+            if b.tutti:
+                ids.add(l["persona_id"])
+                continue
+            if b.categorie and l.get("categoria") in b.categorie:
+                ids.add(l["persona_id"])
+            if b.ruoli and l.get("ruolo") in b.ruoli:
+                ids.add(l["persona_id"])
+            if b.team_ids and l.get("team_id") in b.team_ids:
+                ids.add(l["persona_id"])
+    return list(ids)
+
+
+@api.post("/lodgings/bulk")
+async def lodgings_bulk(b: BulkAssignIn, admin: dict = Depends(require_admin)):
+    persons = await _resolve_persons(b)
+    if not persons:
+        raise HTTPException(status_code=400, detail="Nessuna persona selezionata")
+    gid = new_id()
+    for pid in persons:
+        await _create("lodgings", {**b.data, "evento_id": b.evento_id, "persona_id": pid, "gruppo_id": gid})
+    return {"ok": True, "gruppo_id": gid, "count": len(persons)}
+
+
+@api.post("/meals/bulk")
+async def meals_bulk(b: BulkAssignIn, admin: dict = Depends(require_admin)):
+    persons = await _resolve_persons(b)
+    if not persons:
+        raise HTTPException(status_code=400, detail="Nessuna persona selezionata")
+    gid = new_id()
+    for pid in persons:
+        await _create("meals", {**b.data, "evento_id": b.evento_id, "persona_id": pid, "gruppo_id": gid})
+    return {"ok": True, "gruppo_id": gid, "count": len(persons)}
+
+
+@api.delete("/hospitality/group/{gruppo_id}")
+async def delete_hospitality_group(gruppo_id: str, tipo: str, admin: dict = Depends(require_admin)):
+    coll = "lodgings" if tipo == "lodging" else "meals"
+    res = await db[coll].delete_many({"gruppo_id": gruppo_id})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
+@api.get("/events/{event_id}/hospitality")
+async def event_hospitality(event_id: str, admin: dict = Depends(require_admin)):
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    can_costs = admin.get("role") == "admin"
+    links = await db.staff.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
+    lodgings = await db.lodgings.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
+    meals = await db.meals.find({"evento_id": event_id}, {"_id": 0}).to_list(20000)
+    if not can_costs:
+        for x in lodgings + meals:
+            for f in COST_FIELDS:
+                x.pop(f, None)
+    teams = {t["id"]: t for t in await db.teams.find({"evento_id": event_id}, {"_id": 0}).to_list(1000)}
+    lod_by, meal_by = {}, {}
+    for l in lodgings:
+        lod_by.setdefault(l["persona_id"], []).append(l)
+    for m in meals:
+        meal_by.setdefault(m["persona_id"], []).append(m)
+    persons = []
+    for l in links:
+        p = await db.persons.find_one({"id": l["persona_id"]}, {"_id": 0})
+        if not p:
+            continue
+        override = l.get("esigenze_alimentari") is not None
+        eff_esig = l.get("esigenze_alimentari") if override else p.get("esigenze_alimentari")
+        eff_note = l.get("esigenze_note") or p.get("esigenze_note")
+        plod = lod_by.get(l["persona_id"], [])
+        pmeal = meal_by.get(l["persona_id"], [])
+        if not plod and not pmeal:
+            stato = "da_definire"
+        elif plod and pmeal:
+            stato = "completo"
+        else:
+            stato = "parziale"
+        persons.append({
+            "persona_id": p["id"], "nome": p.get("nome"), "cognome": p.get("cognome"),
+            "ruolo": l.get("ruolo") or p.get("ruolo"), "categoria": l.get("categoria"),
+            "team_id": l.get("team_id"), "team_nome": teams.get(l.get("team_id"), {}).get("nome"),
+            "presence_id": l.get("id"),
+            "esigenze_alimentari": eff_esig or [], "esigenze_note": eff_note, "esigenze_override": override,
+            "lodgings": plod, "meals": pmeal, "stato": stato,
+        })
+    persons.sort(key=lambda x: ((x.get("cognome") or "").lower(), (x.get("nome") or "").lower()))
+
+    def _c(t):
+        return len([m for m in meals if m.get("tipo_pasto") == t])
+
+    servizi_da_def = len([x for x in lodgings + meals if x.get("a_carico_di") in (None, "", "da_definire")])
+    summary = {
+        "persone_gestite": len([1 for x in persons if x["lodgings"] or x["meals"]]),
+        "persone_totali": len(persons),
+        "pernottamenti": len(lodgings), "camere": len(lodgings),
+        "colazioni": _c("colazione"), "pranzi": _c("pranzo"), "cene": _c("cena"),
+        "servizi_da_definire": servizi_da_def,
+        "senza_sistemazione": len([x for x in persons if not x["lodgings"]]),
+    }
+    return {"event": event, "persons": persons, "lodgings": lodgings, "meals": meals,
+            "summary": summary, "can_view_costs": can_costs}
 
 
 # ---------------- persons <-> companies relations & unified views ----------------
@@ -1689,7 +1856,7 @@ async def delete_lead(lead_id: str, admin: dict = Depends(require_admin)):
 # ---------------- admin reset ----------------
 OPERATIONAL = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
                "event_maps", "activities", "followups", "calendar_event_links", "files",
-               "calendar_connections", "person_companies"]
+               "calendar_connections", "person_companies", "lodgings", "meals"]
 
 
 @api.post("/admin/reset-data")

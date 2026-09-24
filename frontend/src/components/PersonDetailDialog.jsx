@@ -99,6 +99,11 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                   <Row label="Provincia" value={p.provincia} /><Row label="Regione" value={p.regione} /><Row label="Nazione" value={p.nazione} />
                 </div>
                 {p.note && <div className="mt-3 text-sm text-slate-600"><span className="text-xs text-slate-400 block">Note</span>{p.note}</div>}
+                {(p.esigenze_alimentari && p.esigenze_alimentari.length > 0) || p.esigenze_note ? (
+                  <div className="mt-3"><span className="text-xs text-slate-400 block mb-1">Esigenze alimentari</span>
+                    <span className="flex flex-wrap gap-1.5">{(p.esigenze_alimentari || []).map((e) => <StatusBadge key={e} color="blue">{e}</StatusBadge>)}</span>
+                    {p.esigenze_note && <p className="text-sm text-slate-600 mt-1">{p.esigenze_note}</p>}</div>
+                ) : null}
               </TabsContent>
 
               <TabsContent value="aziende" className="pt-2 space-y-2">

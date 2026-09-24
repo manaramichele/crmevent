@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
@@ -14,6 +14,7 @@ const NAV = [
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende" },
   { to: "/persone", label: "Persone", icon: Users, id: "persone" },
+  { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita" },
   { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor" },
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup" },
