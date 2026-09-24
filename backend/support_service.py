@@ -60,6 +60,10 @@ async def answer_question(question: str, kb_context: str, page_context: str = No
     """Return {answer, answered, category, confidence, is_feature_request, feature_request_summary}."""
     role_labels = {"admin": "Organizzatore/Amministratore", "staff": "Staff", "volontario": "Volontario"}
     role_label = role_labels.get(role, "Organizzatore/Amministratore")
+    admin_note = (
+        "Poiché il ruolo è amministrativo, se nella KNOWLEDGE BASE è presente una procedura pertinente, "
+        "considerala valida anche quando la domanda usa 'mio/miei/il mio' e imposta \"answered\": true.\n\n"
+    ) if role == "admin" else ""
     fallback = {
         "answer": "Non ho trovato una risposta sufficientemente precisa nella documentazione di CRMEvent.",
         "answered": False, "category": "altro", "confidence": 0.0,
@@ -77,6 +81,7 @@ async def answer_question(question: str, kb_context: str, page_context: str = No
         + "procedure amministrative (creare/modificare eventi, gestire anagrafiche persone/aziende, pipeline sponsor, "
         + "impostazioni, inviti): spiega invece cosa può fare dalla propria area personale. Se l'azione richiesta è "
         + "riservata all'organizzatore, indicalo gentilmente e suggerisci di contattare l'organizzatore o il Team Leader.\n\n"
+        + admin_note
         + (f"CONTESTO PAGINA (sezione da cui l'utente scrive): {page_context}\n\n" if page_context else "")
         + (f"CRONOLOGIA CONVERSAZIONE:\n{hist_txt}\n\n" if hist_txt else "")
         + "KNOWLEDGE BASE (unica fonte consentita):\n"

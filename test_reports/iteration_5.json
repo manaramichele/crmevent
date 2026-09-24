@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 5 verified role-aware CRMEvent AI Support Assistant + personal-area KB (backend + frontend). Backend pytest suite /app/backend/tests/test_iter5_role_aware.py: 9/10 PASS in 10.7s. Verified: (1) Volunteer 'Come modifico il mio turno?' -> role-aware answer citing read-only / assigned-by-organizer semantics, NOT the admin 'Persone->Turni->Modifica clicca' procedure; (2) Volunteer 'Come creo un nuovo evento?' -> answered=false; (3) Volunteer 'Come vedo i miei turni?' -> answered=true, mentions turni personal-area block; (4) Admin 'Come creo un nuovo evento?' -> answered=true (full admin procedure); (5) KB has >=3 entries with ruoli containing 'volontario', all stato=pubblicato; (6) support-feature-requests has >=4 entries with stato=da_valutare (feature gap); (7) Volunteer session correctly gets 403 on /api/support/conversations and /api/support/insights, 200 on /api/support/my-conversations. KB POST /api/support-kb persists 'ruoli' field ('staff,volontario' round-trips). Frontend Playwright: Admin desktop (1920x1080) -> support-fab present, opens support-panel, 'Come inserisco uno sponsor?' streams a 398-char KB answer in support-answer (regression pass). Volunteer mobile (390x844) -> after login lands on /app (I miei eventi), support-fab visible & positioned at y=712 (clearly above bottom nav at ~780), opens support-panel; 'Come vedo i miei turni?' returns a personal-area answer describing the 'I miei turni' block with data/orario/ruolo/area/luogo + Google Calendar hint (244 chars). Bottom nav (Eventi/Profilo/Esci) renders correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/support/chat (admin, 'Come modifico il mio turno?')", "issue": "LLM returned answered=false for the admin phrasing 'il mio turno' even though the answer text does cite the admin path 'Persone → Turni'. The requirement said admin should get answered=true. This is an LLM interpretation nuance on the possessive 'mio' — the KB context is retrieved but the model marks it as insufficient. Consider strengthening the admin system prompt to always return answered=true when KB context on 'modifica turno' is present, regardless of possessive. Non-blocking (admin still sees a useful answer)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter5_role_aware.py",
+    "/app/test_reports/pytest/iter5_results.xml"
+  ],
+  "action_items": [
+    "(Minor) Tighten support_service.answer_question so that admin queries containing 'mio/miei' still return answered=true when the KB has a matching admin procedure (currently admin 'Come modifico il mio turno?' returns answered=false)."
+  ],
+  "critical_code_review_comments": [
+    "Carry-over from iter4: server.py is now ~1800+ lines with support routes; split into support_routes.py.",
+    "GET /api/support/conversations still loads up to 20000 messages into memory for text search — replace with Mongo $text or $regex index.",
+    "support-tickets/feedback still hardcode org_id=DEFAULT_ORG instead of conv['org_id'].",
+    "No rate limiting on POST /api/support/chat — a volunteer account can now also burn LLM credits."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter5_role_aware.py (new)"
+  ],
+  "success_rate": {"backend": "90% (9/10 iter5 tests; 1 LLM nuance)", "frontend": "100% of tested flows"},
+  "test_credentials": "Admin manara.michele.pro@gmail.com / CrmEvent2026! ; Volunteer volontario.test@crmevent.it / VolTest2026! (both verified working via httponly cookie login).",
+  "seed_data_creation": "Test created transient support conversations/messages for the volunteer user (visible in /api/support/my-conversations) and one TEST_ruoli KB entry (cleaned up).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Role-aware assistant works end-to-end. Volunteer mobile FAB is positioned above the bottom nav correctly. Only nuance: admin phrasing 'Come modifico il MIO turno?' triggers answered=false from the LLM even though answer contains admin path; admin phrasing without 'mio' (e.g. 'Come modifico un turno?') would likely return answered=true. Use >=15s waits on support-answer for real LLM calls.",
+  "rca of the issue": "The admin 'modifico il MIO turno?' case: support_service.answer_question receives KB context including the admin turno-modifica procedure, but the LLM (openai/gpt-5.4-mini) treats 'mio' as personal ownership. Its response text still references 'Persone → Turni' (from KB), yet it sets the structured answered=false flag saying the docs don't cover modifying one's own turno specifically. Mitigation: in the system prompt for role=admin/superadmin, add rule: 'If the user says mio/miei/il mio, treat as generic admin action on that entity when a matching KB procedure exists, and set answered=true.'"
+}

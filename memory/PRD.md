@@ -48,6 +48,14 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - Collezioni: support_conversations, support_messages, support_feedback, support_categories, support_knowledge_base, support_faq, support_tickets, support_feature_requests, support_feature_request_matches.
 - Endpoint: POST /support/chat|feedback|ticket|faq/generate, GET /support/my-conversations|conversations|conversations/{id}|insights, PUT /support/conversations/{id}/resolve, CRUD /support-kb|support-faq|support-categories|support-feature-requests|support-tickets.
 
+### 2026-06 (Assistente role-aware + KB area personale staff/volontari — verificato 9/10 backend + frontend, nuance admin poi corretta)
+- [x] KB ampliata a ~37 voci pubblicate; nuove procedure per l'AREA PERSONALE (staff/volontario): i miei eventi, i miei turni (data/ora/luogo), team + Team Leader, briefing/info operative, mappe/percorsi/documenti, disponibilità/presenza (sola lettura), modifiche/comunicazioni turno (sola lettura), uso da smartphone, accesso/recupero password, sync Google Calendar.
+- [x] Campo `ruoli` su ogni voce KB (es. "staff,volontario", "tutti"); voci senza `ruoli` = solo admin.
+- [x] Assistente ROLE-AWARE: `_support_role` + `_kb_visible` filtrano la KB per ruolo; `answer_question(role)` adatta la risposta ai permessi. Volontario che chiede "come modifico il mio turno" riceve risposta di sola lettura ("gestito dall'organizzatore"), NON la procedura admin; "come creo un evento" → answered=false. Admin riceve le procedure complete.
+- [x] Funzioni area personale non ancora esistenti NON inventate: create 4 richieste funzionalità (stato da_valutare): conferma disponibilità, check-in presenze, modifica turno, comunicazioni/messaggi con Team Leader.
+- [x] Assistente montato anche nel portale volontari (`VolunteerLayout`, pulsante sopra la bottom-nav). Isolamento confermato: volontario 403 su conversations/insights, 200 solo su my-conversations.
+- [x] Account volontario di test creato (`/app/scripts/seed_test_volunteer.py`) → vedi test_credentials.md.
+
 ## Backlog (P1/P2)
 - P1: Drag&drop reale nel Kanban; scheda dettaglio evento con tab dedicata.
 - P2: Export CSV/PDF; calendario turni visuale; foto persona upload in anagrafica; notifiche email automatiche follow-up.
