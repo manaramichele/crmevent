@@ -64,7 +64,8 @@ function Shell() {
       <CalendarToast />
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/privacy" element={<Legal type="privacy" />} />
+        <Route path="/privacy-policy" element={<Legal type="privacy" />} />
+        <Route path="/privacy" element={<Navigate to="/privacy-policy" replace />} />
         <Route path="/cookie" element={<Legal type="cookie" />} />
         <Route path="/termini" element={<Legal type="termini" />} />
         <Route path="/login" element={<Login />} />

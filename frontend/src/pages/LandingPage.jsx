@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
+import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import {
   CalendarDays, Building2, Users, Handshake, UserCog, Users2, Clock, Map as MapIcon,
@@ -344,30 +345,7 @@ export default function LandingPage() {
       </Section>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-slate-300">
-        <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
-          <div className="col-span-2 md:col-span-1">
-            <img src="/logo-footer-dark.png?v=3" alt="CRMEvent" className="h-10 sm:h-12 w-auto" />
-            <p className="text-sm text-slate-400 mt-4 max-w-xs">Il CRM per organizzare eventi: contatti, sponsor, staff, volontari, team, turni e attività.</p>
-          </div>
-          <div><div className="text-white font-semibold mb-3 text-sm">Prodotto</div>
-            <ul className="space-y-2 text-sm">
-              <li><button onClick={() => scrollTo("funzionalita")} className="hover:text-white">Funzionalità</button></li>
-              <li><button onClick={() => scrollTo("staff")} className="hover:text-white">Staff & Volontari</button></li>
-              <li><button onClick={() => scrollTo("sponsor")} className="hover:text-white">Sponsor</button></li>
-              <li><Link to="/login" className="hover:text-white">Accedi</Link></li>
-            </ul></div>
-          <div><div className="text-white font-semibold mb-3 text-sm">Azienda</div>
-            <ul className="space-y-2 text-sm"><li><button onClick={() => scrollTo("demo")} className="hover:text-white">Contatti</button></li></ul></div>
-          <div><div className="text-white font-semibold mb-3 text-sm">Legale</div>
-            <ul className="space-y-2 text-sm">
-              <li><Link to="/privacy" className="hover:text-white">Privacy Policy</Link></li>
-              <li><Link to="/cookie" className="hover:text-white">Cookie Policy</Link></li>
-              <li><Link to="/termini" className="hover:text-white">Termini e condizioni</Link></li>
-            </ul></div>
-        </div>
-        <div className="border-t border-white/10"><div className="max-w-6xl mx-auto px-6 py-5 text-sm text-slate-400">© 2026 <strong className="font-semibold text-slate-300">CRMEvent</strong></div></div>
-      </footer>
+      <Footer />
     </div>
   );
 }

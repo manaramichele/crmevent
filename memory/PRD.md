@@ -73,3 +73,8 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 
 ## Next Tasks
 - Eseguire il reset finale dopo validazione utente (azzera tutti i dati operativi, mantiene admin/config).
+
+### 2026-06 (Riferimenti legali + Footer — verificato via screenshot)
+- [x] Footer condiviso (`components/Footer.jsx`) usato su landing + pagine legali; logo fondo nero, link Privacy Policy/Cookie Policy/Termini; riga legale "© 2026 CRMEvent – P. IVA 02671780340" (nome titolare NON mostrato).
+- [x] Nuova rotta `/privacy-policy` (Privacy Policy completa per SaaS CRM eventi); `/privacy` reindirizza a `/privacy-policy`.
+- [x] `Legal.jsx` riscritta: Privacy Policy (13 sezioni GDPR), Cookie Policy (tecnici + analitici + marketing, con banner/CMP), Termini. Titolare nel testo: MANARA MICHELE – P.IVA 02671780340. Dati non configurati (indirizzo, email privacy, data center, durate conservazione, fornitori analytics/marketing, CMP) marcati [DA COMPLETARE], nessuna info legale inventata.
