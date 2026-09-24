@@ -56,6 +56,14 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - [x] Assistente montato anche nel portale volontari (`VolunteerLayout`, pulsante sopra la bottom-nav). Isolamento confermato: volontario 403 su conversations/insights, 200 solo su my-conversations.
 - [x] Account volontario di test creato (`/app/scripts/seed_test_volunteer.py`) → vedi test_credentials.md.
 
+### 2026-06 (Rifiniture UI + fix navigazione/Sponsor — verificato 6/6 backend + frontend)
+- [x] Homepage: logo CRMEvent ingrandito (h-14 mobile / h-16 desktop); rimossa scritta "Software SaaS per la gestione eventi"; hero → "Organizza il tuo evento. Tutto in un'unica piattaforma."
+- [x] Nome "CRMEvent" mostrato in grassetto nelle copy della landing (e già bold in titoli/loghi).
+- [x] Loghi PNG ufficiali aggiornati: "Logo per fondo bianco" → logo-crmevent.png (aree chiare), "Logo per fondo nero" → logo-crmevent-dark.png (login/aree scure). Nessuna ricreazione via testo/SVG/CSS.
+- [x] Navigazione: sidebar "Dashboard" → /app (dashboard app); click sul logo in alto a sinistra → homepage pubblica (/). Verificato da più sezioni.
+- [x] Persone: ruolo per relazione Persona↔Evento con opzioni Referente/Staff/Collaboratore/Volontario/Team; stessa persona con ruoli diversi in eventi diversi senza duplicare l'anagrafica (una sola Persona in /persons).
+- [x] FIX Sponsor: modale "Modifica trattativa" non più coperta dalla sidebar/colonne (Dialog z-[100]); tutti i campi accessibili su desktop/tablet/mobile.
+
 ## Backlog (P1/P2)
 - P1: Drag&drop reale nel Kanban; scheda dettaglio evento con tab dedicata.
 - P2: Export CSV/PDF; calendario turni visuale; foto persona upload in anagrafica; notifiche email automatiche follow-up.

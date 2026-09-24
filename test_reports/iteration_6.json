@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 6 verified all CRMEvent UI changes end-to-end. Backend pytest /app/backend/tests/test_iter6_ui_changes.py: 5/5 PASS in 2.07s (admin login, events/persons/deals list, and the critical per-event role assignment test: same person -> Event A as 'volontario' + Event B as 'staff' with NO anagrafica duplication (/api/persons returns exactly 1 record), role changeable to 'team', removal returns detail with only remaining association). Frontend Playwright (admin login via https public URL) covered: (1) Public homepage / -> hero contains 'Tutto in un'unica piattaforma', 'Software SaaS per la gestione eventi' is REMOVED, landing-logo rendered at h=64 (h-16 desktop). (2) NAV FIX: from /persone clicking sidebar-logo-home navigates to '/' (public homepage); clicking sidebar-link-dashboard navigates to '/app'. (3) SPONSOR MODAL: on /sponsor both add-deal-button and edit-deal-<id> open deal-dialog with computed z-index=100. Desktop 1920: sidebar box x=0..256, dialog box x=624..1296 -> NO overlap; Tablet 768: dialog centered at x=48 w=672 (mobile sidebar collapsed, no overlap); Mobile 390: dialog full-width (x=0, w=390) -> no overlap, all fields (Azienda, Evento, Tipo, Fase pipeline, Valore, Valore confermato, Livello sponsorship, Referente, Note) and Salva button fully visible. (4) PERSONE ROLES: presence-cat select in Eventi tab lists exactly ['Referente','Staff','Collaboratore','Volontario','Team']. (5) support-fab still present in app. No console errors beyond expected pre-login 401s.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter6_ui_changes.py",
+    "/app/test_reports/pytest/iter6.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Carry-over: /app/backend/server.py is ~1881 lines; strongly recommend splitting into modules (support_routes.py, persons_routes.py, sponsors_routes.py). Not blocking but hurts maintainability.",
+    "Layout.jsx sidebar-logo-home uses navigate('/') from a <button> — good; ensure title tooltip 'Vai al sito CRMEvent' is a11y-friendly (currently OK).",
+    "Dialog.jsx: z-[100] fixes the sidebar overlap but the header inside app is z-40 and the profile/notif dropdowns are z-50 — consistent. No action needed."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter6_ui_changes.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of tested flows"},
+  "test_credentials": "Admin manara.michele.pro@gmail.com / CrmEvent2026! (httponly cookie auth verified). Volunteer not touched.",
+  "seed_data_creation": "Test created a transient TEST_<uuid> person + 2 presences on the first 2 events; all cleaned up in finally block.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iter6 UI changes verified working. Deal dialog z-index bumped to 100 (dialog.jsx) fixes the primary reported overlap bug; verified at 1920/768/390. Same-person multi-event role assignment persists via POST /api/staff with different categoria per (persona_id, evento_id); /api/persons/{id}/detail returns events list with presence.categoria which is what PersonDetailDialog uses. No regressions on support assistant.",
+  "rca of the issue": "Original bug: Sponsor 'Modifica trattativa' modal was covered by sidebar (sidebar z-40, old dialog z-50 -> Radix Portal appended late, but stacking still put dialog beneath when a same-parent stacking context was created). Fix applied by main agent: raise DialogOverlay and DialogContent to z-[100] in /app/frontend/src/components/ui/dialog.jsx. Verified: dialog now renders above sidebar at all viewports."
+}
