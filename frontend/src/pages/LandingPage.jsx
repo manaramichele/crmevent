@@ -347,7 +347,7 @@ export default function LandingPage() {
       <footer className="bg-slate-900 text-slate-300">
         <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2 md:col-span-1">
-            <div className="bg-white rounded-lg px-3 py-2 inline-flex"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-9 sm:h-10 w-auto" /></div>
+            <img src="/logo-footer-dark.png?v=3" alt="CRMEvent" className="h-10 sm:h-12 w-auto" />
             <p className="text-sm text-slate-400 mt-4 max-w-xs">Il CRM per organizzare eventi: contatti, sponsor, staff, volontari, team, turni e attività.</p>
           </div>
           <div><div className="text-white font-semibold mb-3 text-sm">Prodotto</div>
