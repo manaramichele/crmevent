@@ -24,9 +24,9 @@ const NAV = [
 
 function Logo({ collapsed }) {
   return collapsed ? (
-    <img src="/icon-crmevent.png" alt="CRMEvent" className="w-10 h-10 rounded-lg mx-auto" />
+    <img src="/icon-crmevent.png?v=2" alt="CRMEvent" className="w-10 h-10 rounded-lg mx-auto" />
   ) : (
-    <img src="/logo-crmevent.png" alt="CRMEvent" className="h-10 w-auto" />
+    <img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-10 w-auto" />
   );
 }
 

@@ -13,7 +13,7 @@ export default function VolunteerLayout({ children }) {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 h-14 flex items-center justify-between px-4">
         <button onClick={() => nav("/app")} className="flex items-center gap-2">
-          <img src="/logo-crmevent.png" alt="CRMEvent" className="h-11 sm:h-10 w-auto" />
+          <img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-11 sm:h-10 w-auto" />
         </button>
         <div className="flex items-center gap-1 text-sm">
           {user?.picture ? <img src={user.picture} alt="" className="w-8 h-8 rounded-full" /> : <span className="text-slate-600 font-medium max-w-[120px] truncate">{user?.name}</span>}

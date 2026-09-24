@@ -11,7 +11,7 @@ export default function Legal({ type }) {
   return (
     <div className="min-h-screen bg-white">
       <header className="border-b border-slate-100 h-16 flex items-center px-6">
-        <Link to="/"><img src="/logo-crmevent.png" alt="crmevent" className="h-7 w-auto" /></Link>
+        <Link to="/"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-7 w-auto" /></Link>
       </header>
       <main className="max-w-3xl mx-auto px-6 py-16">
         <h1 className="font-display text-3xl font-bold text-slate-900 mb-6">{c.title}</h1>

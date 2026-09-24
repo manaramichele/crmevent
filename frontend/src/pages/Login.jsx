@@ -46,7 +46,7 @@ export default function Login() {
         <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-tiffany/20 blur-3xl" />
         <div className="absolute -left-16 bottom-0 w-80 h-80 rounded-full bg-tiffany/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <img src="/logo-crmevent-dark.png" alt="CRMEvent" className="h-20 w-auto" />
+          <img src="/logo-crmevent-dark.png?v=2" alt="CRMEvent" className="h-20 w-auto" />
         </div>
         <div className="relative">
           <h1 className="font-display text-4xl font-bold text-white leading-tight">La piattaforma operativa per eventi, staff e volontari.</h1>
@@ -58,7 +58,7 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center p-6 bg-white">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center justify-center mb-8">
-            <img src="/logo-crmevent.png" alt="CRMEvent" className="h-16 sm:h-14 w-auto" />
+            <img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-16 sm:h-14 w-auto" />
           </div>
           <h2 className="font-display text-2xl font-bold text-slate-900">
             {mode === "login" ? "Accedi" : mode === "register" ? "Crea account" : "Recupera password"}
