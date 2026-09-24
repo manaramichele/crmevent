@@ -10,9 +10,10 @@ const CTX = {
   "/": "Dashboard", "/eventi": "Eventi", "/aziende": "Aziende", "/persone": "Persone",
   "/sponsor": "Sponsor & Partner", "/attivita": "Attività", "/followup": "Follow-up",
   "/lead": "Lead", "/impostazioni": "Impostazioni", "/supporto": "Supporto", "/profilo": "Profilo",
+  "/app": "Area personale — I miei eventi",
 };
 
-export default function SupportChat() {
+export default function SupportChat({ bottomOffset = false }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);
@@ -20,7 +21,7 @@ export default function SupportChat() {
   const [busy, setBusy] = useState(false);
   const [convId, setConvId] = useState(null);
   const scrollRef = useRef(null);
-  const pageContext = CTX[location.pathname] || "CRMEvent";
+  const pageContext = location.pathname.startsWith("/evento/") ? "Area personale — Dettaglio evento" : (CTX[location.pathname] || "CRMEvent");
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
 
@@ -57,7 +58,7 @@ export default function SupportChat() {
     <>
       {!open && (
         <button onClick={() => setOpen(true)} data-testid="support-fab"
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-slate-900 text-white pl-4 pr-5 py-3 shadow-xl hover:bg-slate-800 transition-all hover:scale-[1.03] active:scale-95">
+          className={`fixed ${bottomOffset ? "bottom-20" : "bottom-5"} right-5 z-50 flex items-center gap-2 rounded-full bg-slate-900 text-white pl-4 pr-5 py-3 shadow-xl hover:bg-slate-800 transition-all hover:scale-[1.03] active:scale-95`}>
           <span className="w-7 h-7 rounded-full bg-tiffany flex items-center justify-center"><Sparkles className="w-4 h-4 text-slate-900" /></span>
           <span className="text-sm font-semibold">Chiedi a CRMEvent</span>
         </button>

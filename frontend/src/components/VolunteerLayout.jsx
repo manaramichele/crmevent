@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Home, User, LogOut } from "lucide-react";
+import SupportChat from "@/components/SupportChat";
 
 export default function VolunteerLayout({ children }) {
   const { user, logout } = useAuth();
@@ -26,6 +27,7 @@ export default function VolunteerLayout({ children }) {
         <button onClick={() => nav("/profilo")} data-testid="vol-nav-profile" className={`flex flex-col items-center gap-0.5 text-xs ${active("/profilo") ? "text-tiffany-active" : "text-slate-500"}`}><User className="w-5 h-5" />Profilo</button>
         <button onClick={logout} data-testid="vol-logout" className="flex flex-col items-center gap-0.5 text-xs text-slate-500"><LogOut className="w-5 h-5" />Esci</button>
       </nav>
+      <SupportChat bottomOffset />
     </div>
   );
 }

@@ -238,11 +238,13 @@ export default function Support() {
     { name: "stato", label: "Stato", type: "select", options: statoOpts },
     { name: "domanda", label: "Domanda", full: true },
     { name: "risposta", label: "Risposta", type: "textarea", required: true, full: true },
+    { name: "ruoli", label: "Ruoli applicabili (es. admin · staff,volontario · tutti)", full: true },
     { name: "parole_chiave", label: "Parole chiave (separate da virgola)", full: true },
   ];
   const kbCols = [
     { key: "titolo", label: "Titolo", render: (r) => <span className="font-medium text-slate-800">{r.titolo}</span> },
     { key: "categoria", label: "Categoria", render: (r) => r.categoria ? <StatusBadge color="tiffany">{r.categoria}</StatusBadge> : "—" },
+    { key: "ruoli", label: "Ruoli", render: (r) => r.ruoli ? <StatusBadge color="blue">{r.ruoli}</StatusBadge> : <StatusBadge color="gray">admin</StatusBadge> },
     { key: "stato", label: "Stato", render: (r) => <StatusBadge color={STATO_COLOR[r.stato] || "gray"}>{r.stato}</StatusBadge> },
     { key: "updated_at", label: "Aggiornato", render: (r) => (r.updated_at || "").slice(0, 10) },
   ];

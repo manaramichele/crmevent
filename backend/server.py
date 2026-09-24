@@ -978,6 +978,7 @@ class KBEntry(BaseModel):
     risposta: str
     parole_chiave: Optional[str] = None
     stato: Optional[str] = "bozza"
+    ruoli: Optional[str] = None  # ruoli a cui si applica (es. "admin", "staff,volontario", "tutti")
     org_id: Optional[str] = DEFAULT_ORG
     embedding: Optional[List[float]] = None  # predisposizione ricerca semantica futura
 
@@ -1035,10 +1036,24 @@ def _as_list(v):
     return [x.strip() for x in str(v).split(",") if x.strip()]
 
 
-async def build_kb_context(question: str):
+def _support_role(user: dict) -> str:
+    return {"admin": "admin", "member": "admin", "staff": "staff", "volunteer": "volontario"}.get(user.get("role"), "admin")
+
+
+def _kb_visible(entry: dict, role: str) -> bool:
+    roles = _as_list(entry.get("ruoli"))
+    if not roles:
+        return role == "admin"  # procedure amministrative visibili solo all'organizzatore
+    if "tutti" in roles:
+        return True
+    return role in roles
+
+
+async def build_kb_context(question: str, role: str = "admin"):
     q = _sup_tokens(question)
     kb = await db.support_knowledge_base.find({"stato": "pubblicato"}, {"_id": 0}).to_list(2000)
     faq = await db.support_faq.find({"stato": "pubblicato"}, {"_id": 0}).to_list(2000)
+    kb = [e for e in kb if _kb_visible(e, role)]
     scored = []
     for e in kb + faq:
         kws = _as_list(e.get("parole_chiave"))
@@ -1099,9 +1114,11 @@ async def support_chat(body: ChatIn, user: dict = Depends(get_current_user)):
     await _create("support_messages", {"org_id": org, "conversation_id": conv["id"], "role": "user",
                                         "content": body.question, "user_id": user["user_id"], "feedback": None})
     hist = await db.support_messages.find({"conversation_id": conv["id"]}, {"_id": 0}).sort("created_at", 1).to_list(50)
-    ctx, sources, _ = await build_kb_context(body.question)
+    role = _support_role(user)
+    ctx, sources, _ = await build_kb_context(body.question, role=role)
     result = await support_service.answer_question(body.question, ctx, page_context=body.page_context,
-                                                   history=[{"role": m["role"], "content": m["content"]} for m in hist[:-1]])
+                                                   history=[{"role": m["role"], "content": m["content"]} for m in hist[:-1]],
+                                                   role=role)
     amsg = await _create("support_messages", {"org_id": org, "conversation_id": conv["id"], "role": "assistant",
                                               "content": result["answer"], "category": result.get("category"),
                                               "confidence": result.get("confidence"), "answered": result.get("answered", True),
@@ -1358,6 +1375,62 @@ async def seed_support():
         added += 1
     if added:
         logger.info(f"Support KB: +{added} voci pubblicate")
+    portal = [
+        ("Area personale: i miei eventi", "eventi", "Come vedo i miei eventi?",
+         "Nella tua area personale, in 'I miei eventi', trovi tutti gli eventi a cui sei stato associato, con il tuo ruolo e lo stato. Tocca un evento per aprirne i dettagli operativi.",
+         ["miei eventi", "vedere eventi", "area personale", "eventi assegnati"], "staff,volontario"),
+        ("Area personale: i miei turni", "turni", "Come vedo i miei turni?",
+         "Apri l'evento dalla tua area personale: nel blocco 'I miei turni' trovi ogni turno con data, orario di inizio e fine, ruolo, area e luogo. Con il pulsante 'Calendar' puoi aggiungere un turno a Google Calendar.",
+         ["miei turni", "vedere turni", "orario turno", "quando lavoro"], "staff,volontario"),
+        ("Area personale: data, orario e luogo del turno", "turni", "Dove vedo data, ora e luogo del mio turno?",
+         "Nel dettaglio dell'evento, nel blocco 'I miei turni', ogni turno mostra data e orario; area, luogo operativo e punto di ritrovo li trovi nel blocco 'Il mio ruolo'.",
+         ["luogo turno", "orario turno", "dove devo andare", "punto di ritrovo"], "staff,volontario"),
+        ("Area personale: il mio team e il Team Leader", "team", "Come vedo il mio team e chi è il Team Leader?",
+         "Nel dettaglio dell'evento, il blocco 'Il mio ruolo' mostra il tuo team; nel blocco 'Il mio Team' vedi i colleghi e il Team Leader è indicato accanto al nome.",
+         ["mio team", "team leader", "colleghi", "squadra"], "staff,volontario"),
+        ("Area personale: briefing e informazioni operative", "briefing", "Dove trovo il briefing e le informazioni operative?",
+         "Nel dettaglio dell'evento trovi ruolo, area, luogo operativo, punto di ritrovo ed eventuali note operative nel blocco 'Il mio ruolo', oltre alla descrizione dell'evento in alto. Sono le informazioni condivise dall'organizzatore per la tua attività.",
+         ["briefing", "informazioni operative", "istruzioni", "note operative"], "staff,volontario"),
+        ("Area personale: mappe, percorsi e documenti", "documenti", "Come vedo mappe, percorsi e documenti condivisi?",
+         "Nel dettaglio dell'evento, nel blocco 'Mappe e percorsi', puoi aprire le immagini, i PDF, i file e i link a Google Maps che l'organizzatore ha condiviso per l'evento.",
+         ["mappe", "percorsi", "documenti", "planimetria", "come arrivo"], "staff,volontario"),
+        ("Area personale: la mia disponibilità e presenza (sola lettura)", "volontari", "Come vedo o confermo la mia disponibilità e presenza?",
+         "Nell'area personale puoi VISUALIZZARE il tuo stato di presenza (es. confermato, da riconfermare) e gli orari di arrivo e partenza nel blocco 'La mia presenza'. La conferma o la modifica dello stato è gestita dall'organizzatore: per comunicare la tua disponibilità o eventuali variazioni contatta il tuo Team Leader o l'organizzatore dell'evento.",
+         ["disponibilità", "confermare presenza", "mia presenza", "stato presenza"], "staff,volontario"),
+        ("Area personale: modifiche e comunicazioni sul turno", "turni", "Come modifico il mio turno o segnalo un problema?",
+         "I turni sono assegnati dall'organizzatore e nella tua area personale sono in sola lettura: non puoi modificarli direttamente. Per richieste di cambio turno o segnalazioni contatta il tuo Team Leader o l'organizzatore dell'evento.",
+         ["modificare turno", "cambiare turno", "segnalare problema turno"], "staff,volontario"),
+        ("Area personale: usare CRMEvent da smartphone", "account", "Posso usare l'area personale dal telefono?",
+         "Sì, l'area personale è ottimizzata per smartphone e tablet: puoi consultare i tuoi eventi, turni, team, mappe e sincronizzare i tuoi impegni con Google Calendar direttamente dal cellulare.",
+         ["smartphone", "telefono", "mobile", "cellulare", "app"], "staff,volontario"),
+        ("Area personale: aggiungere eventi e turni a Google Calendar", "impostazioni", "Come aggiungo i miei turni al calendario?",
+         "Dal dettaglio dell'evento premi 'Aggiungi a Google Calendar' per l'evento, oppure il pulsante 'Calendar' accanto a ciascun turno. È necessario avere il proprio account Google collegato.",
+         ["google calendar", "aggiungere al calendario", "sincronizzare turni"], "staff,volontario"),
+        ("Accesso e recupero password (staff e volontari)", "account", "Non riesco ad accedere, come recupero la password?",
+         "Dalla pagina di login usa 'Password dimenticata' per ricevere via email il link di reimpostazione. Se hai appena ricevuto un invito, controlla l'email di attivazione (anche nello spam) per impostare la prima password. Se l'accesso risulta disabilitato, contatta l'organizzatore.",
+         ["accesso", "login", "password dimenticata", "recupero password", "non riesco ad accedere"], "tutti"),
+    ]
+    for titolo, cat, dom, risp, kw, ruoli in portal:
+        if titolo in existing_titles:
+            continue
+        await _create("support_knowledge_base", {"org_id": DEFAULT_ORG, "titolo": titolo, "categoria": cat,
+                                                 "domanda": dom, "risposta": risp, "parole_chiave": kw,
+                                                 "stato": "pubblicato", "ruoli": ruoli})
+        added += 1
+    # Segnala funzionalità area personale non ancora disponibili (da valutare)
+    gaps = [
+        ("Conferma disponibilità dall'area personale", "Staff e volontari vorrebbero confermare/aggiornare la propria disponibilità e lo stato di presenza direttamente dall'area personale (oggi in sola lettura)."),
+        ("Check-in / registrazione presenze dall'area personale", "Possibilità per staff e volontari di registrare l'arrivo/partenza (check-in) dal proprio dispositivo."),
+        ("Modifica turno e richieste di cambio dall'area personale", "Staff e volontari vorrebbero poter richiedere o segnalare cambi turno dall'area personale."),
+        ("Comunicazioni/messaggi con il Team Leader dall'area personale", "Canale di comunicazione tra volontari/staff e Team Leader/organizzatore all'interno dell'app."),
+    ]
+    existing_fr = set(f.get("titolo") for f in await db.support_feature_requests.find({"stato": {"$in": ["nuova", "da_valutare", "pianificata", "in_sviluppo"]}}, {"_id": 0, "titolo": 1}).to_list(2000))
+    for titolo, desc in gaps:
+        if titolo in existing_fr:
+            continue
+        await _create("support_feature_requests", {"org_id": DEFAULT_ORG, "titolo": titolo, "descrizione": desc,
+                                                    "stato": "da_valutare", "utenti_count": 0, "organizzazioni": [DEFAULT_ORG],
+                                                    "prima_richiesta": now_iso(), "ultima_richiesta": now_iso(), "origine": "area_personale"})
 
 
 # ---------------- Google Calendar ----------------
