@@ -64,14 +64,24 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - [x] Persone: ruolo per relazione Persona↔Evento con opzioni Referente/Staff/Collaboratore/Volontario/Team; stessa persona con ruoli diversi in eventi diversi senza duplicare l'anagrafica (una sola Persona in /persons).
 - [x] FIX Sponsor: modale "Modifica trattativa" non più coperta dalla sidebar/colonne (Dialog z-[100]); tutti i campi accessibili su desktop/tablet/mobile.
 
-## Backlog (P1/P2)
-- P1: Drag&drop reale nel Kanban; scheda dettaglio evento con tab dedicata.
-- P2: Export CSV/PDF; calendario turni visuale; foto persona upload in anagrafica; notifiche email automatiche follow-up.
-
-## Configurazioni esterne richieste dall'utente
-- Google Cloud (Calendar API): GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET nei Secrets; redirect URI `<BACKEND_URL>/api/oauth/calendar/callback`.
-
 ## Next Tasks
+
+### 2026-06 (Briefing Evento — verificato: backend 8/8 pytest 100%, frontend e2e ~100% dopo fix)
+- [x] **Briefing Evento**: documento operativo aggregato per evento, accessibile da Eventi (icona `briefing-{id}`) alla rotta `/eventi/:id/briefing` (admin-only).
+- [x] **BOZZA LIVE** (`GET /api/events/{id}/briefing-live`): aggregazione in SOLA LETTURA da collection esistenti (staff, teams, shifts, event_maps, lodgings, meals, deals) — NESSUNA duplicazione dati. Sezioni: Team&responsabili, Staff&volontari, Turni (scoperti evidenziati), Mappe, Ospitalità (costi redatti se non SuperAdmin), Sponsor&Partner, Timeline. Stats card (staff/volontari/team/turni/scoperti/mappe/sponsor/pernottamenti/pasti).
+- [x] **Completezza Briefing %** con 8 check (date, località, staff, team con responsabile, turni coperti, mappe, volontari con referente, ospitalità) → warning con dettaglio per dati mancanti.
+- [x] **Versioning & Snapshot** (collection `briefing_versions`): `POST /api/events/{id}/briefing-versions` congela snapshot JSON con versione incrementale + content_hash + published_by; `GET` lista (senza content), `GET /api/briefing-versions/{id}` snapshot completo, `DELETE` rimozione. UI Storico versioni + visualizzazione read-only snapshot con banner "torna alla bozza live".
+- [x] **Rilevamento dati obsoleti**: `is_stale` true quando i dati live differiscono dall'ultima versione pubblicata → banner ambra "Pubblica una nuova versione".
+- [x] **Presentation Mode** fullscreen (slide deck cover→panoramica→sezioni, nav prev/next/ESC).
+- [x] **Export PDF lato client** via `window.print()` + print CSS A4 (nasconde chrome, mantiene logo/mappe/tabelle).
+- [x] Fix z-index: `AlertDialog` overlay/content portati a z-[110] (sopra `Dialog` z-[100]) — la conferma eliminazione versione dentro il dialog Storico era bloccata dall'overlay.
+- Note: `briefing_versions` aggiunta a OPERATIONAL (reset). Briefing non ancora esposto in area personale staff/volontari (scelta rimandata).
+
+## Backlog (P1/P2)
+- P1: Drag&drop reale nel Kanban; scheda dettaglio evento con tab dedicata; Briefing in area personale staff/volontari (vista read-only per ruolo).
+- P1: Cascade delete `briefing_versions` (+ staff/shifts/maps/lodgings/meals) all'eliminazione di un evento.
+- P2: Export CSV/PDF altri moduli; calendario turni visuale; foto persona upload in anagrafica; notifiche email automatiche follow-up; pagina Prezzi/Piani SaaS; banner Cookie/CMP funzionante; completare dati legali `[DA COMPLETARE]` in Privacy Policy.
+- P2: refactoring `server.py` (>2200 righe) in router per risorsa.
 
 ### 2026-06 (Pulizia database demo — PREVIEW eseguita + backup)
 - [x] Backup completo preview: `mongodump` in `/app/backups/preview_20260925_112942` (persistente).

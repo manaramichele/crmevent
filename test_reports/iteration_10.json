@@ -1,0 +1,41 @@
+{
+  "summary": "Tested Briefing Evento feature (backend + frontend). Backend: 8/8 pytest tests pass covering auth gating, live briefing structure, hospitality cost redaction, publish/list/get/delete versions, version numbering, stale detection after data mutation, and no-duplication invariant (live shifts count equals /api/shifts count). Frontend: /eventi/:id/briefing loads with BOZZA LIVE badge, completeness panel (62%), all 7 sections (teams, staff, shifts, maps, hospitality, sponsors, timeline), publish dialog flow works and clears stale banner, versions dialog lists snapshots, Visualizza opens read-only snapshot with viewing-version-banner and back-to-live returns to draft, presentation mode prev/next/close works, Esporta PDF calls window.print. Found ONE real UX bug: nested AlertDialog inside the versions Dialog cannot be confirmed because the parent Dialog overlay (z-[100]) covers the AlertDialog content/action (z-50), preventing users from deleting a published version from the Storico dialog.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Briefing versions dialog (delete version)",
+        "issue": "AlertDialog for delete confirmation opens INSIDE the parent Dialog. Dialog overlay uses z-[100] while AlertDialog overlay/content use z-50, so the Dialog overlay intercepts pointer events and the 'Elimina' confirm button cannot be clicked. Users cannot delete a published version from the Storico dialog.",
+        "selector": "[data-testid^=del-version-] -> AlertDialogAction (Elimina)",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_briefing.py",
+    "/app/test_reports/pytest/iter10.xml"
+  ],
+  "action_items": [
+    "Fix z-index conflict: raise AlertDialogOverlay/AlertDialogContent above z-[100] (e.g. z-[110]/z-[120]) in /app/frontend/src/components/ui/alert-dialog.jsx, OR replace nested AlertDialog inside versions Dialog with a confirm-in-place pattern / close the parent Dialog before opening the AlertDialog."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2278 lines — consider splitting (routers per resource).",
+    "briefing_versions cleanup on event deletion: verify cascade (OPERATIONAL list includes briefing_versions for admin reset, but per-event delete flow should also clean up briefing_versions).",
+    "AlertDialog z-index (z-50) is lower than Dialog (z-[100]) in the shadcn setup — any nested AlertDialog inside a Dialog is unusable. Global fix recommended."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_briefing.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~95% (delete-version blocked by z-index bug)"},
+  "test_credentials": "manara.michele.pro@gmail.com / CrmEvent2026! (admin) — from /app/memory/test_credentials.md",
+  "seed_data_creation": "None persisted. Created TEST_UI_v and TEST_stale briefing versions during tests; both cleaned up via API afterwards. Remaining versions on event d6f6296a0f1a406fb13c4dacbccea885: ['Pre-evento'].",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest for briefing lives at /app/backend/tests/test_iter10_briefing.py. Known event id d6f6296a0f1a406fb13c4dacbccea885 has 1 team, 1 staff (Anna Verdi), 1 volunteer (Marco Blu), 2 shifts (1 uncovered), 1 map, 1 published version 'Pre-evento'. Publish endpoints use /api/events/{id}/briefing-versions (POST/GET) and /api/briefing-versions/{id} (GET/DELETE). Frontend event-maps endpoint is /api/maps (not /api/event-maps).",
+  "rca of the issue": "Version deletion bug RCA: In /app/frontend/src/components/ui/dialog.jsx, DialogOverlay uses z-[100]; in /app/frontend/src/components/ui/alert-dialog.jsx, AlertDialogOverlay and AlertDialogContent use z-50. When AlertDialog is rendered inside an open Dialog (versions Storico dialog contains AlertDialog per version row), the Dialog's overlay is painted above the AlertDialog. Playwright confirmed: DialogOverlay intercepts pointer events on 'Elimina' button. Mitigation: bump alert-dialog overlay/content to z-[110] and z-[110], or close parent Dialog before showing delete confirmation, or use inline confirm."
+}
