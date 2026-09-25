@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
-import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink } from "lucide-react";
 
 const STATUS_LABEL = { trial: "Trial", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pag. fallito", suspended: "Sospeso" };
 const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange" };
@@ -22,12 +24,34 @@ export default function Platform() {
   const [stats, setStats] = useState(null);
   const [orgs, setOrgs] = useState([]);
   const [subs, setSubs] = useState([]);
+  const [fic, setFic] = useState(null);
+  const [params, setParams] = useSearchParams();
+
+  const loadFic = () => api.get("/fic/status").then(({ data }) => setFic(data)).catch(() => {});
 
   useEffect(() => {
     Promise.all([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions")])
       .then(([a, b, c]) => { setStats(a.data); setOrgs(b.data); setSubs(c.data); })
       .catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
+    loadFic();
   }, []);
+
+  useEffect(() => {
+    const f = params.get("fic");
+    if (!f) return;
+    if (f === "connected") toast.success("Fatture in Cloud collegato");
+    else toast.error("Collegamento Fatture in Cloud non riuscito");
+    params.delete("fic"); setParams(params, { replace: true }); loadFic();
+  }, [params, setParams]);
+
+  const connectFic = async () => {
+    try { const { data } = await api.get("/fic/oauth/start"); window.location.href = data.authorize_url; }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const disconnectFic = async () => {
+    try { await api.post("/fic/disconnect"); toast.success("Fatture in Cloud scollegato"); loadFic(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
 
   return (
     <div className="animate-fade-up" data-testid="platform-page">
@@ -45,6 +69,23 @@ export default function Platform() {
           <Stat icon={Inbox} label="Lead" value={stats.leads} />
         </div>
       )}
+
+      {/* Fatture in Cloud */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8 flex items-center gap-4" data-testid="fic-card">
+        <div className="w-10 h-10 rounded-lg bg-tiffany-light text-tiffany-fg flex items-center justify-center"><ReceiptText className="w-5 h-5" /></div>
+        <div className="min-w-0">
+          <div className="font-semibold text-slate-800">Fatturazione elettronica · Fatture in Cloud</div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {!fic ? "…" : !fic.configured ? "Non configurato: imposta FIC_CLIENT_ID / SECRET / REDIRECT_URI nei Secrets" :
+              fic.connected ? <>Collegato · company_id {fic.company_id || "—"}</> : "Configurato — non ancora collegato"}
+          </div>
+        </div>
+        <div className="ml-auto">
+          {fic && fic.configured && (fic.connected
+            ? <Button variant="outline" size="sm" onClick={disconnectFic} data-testid="fic-disconnect"><Unlink className="w-4 h-4 mr-1.5" />Scollega</Button>
+            : <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={connectFic} data-testid="fic-connect"><Link2 className="w-4 h-4 mr-1.5" />Collega Fatture in Cloud</Button>)}
+        </div>
+      </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Organizzazioni</div>

@@ -8,6 +8,7 @@ import re
 import uuid
 import logging
 import secrets
+import time
 import hashlib
 import json
 from collections import defaultdict
@@ -2507,6 +2508,186 @@ async def platform_subscriptions(admin: dict = Depends(require_superadmin)):
                     "stripe_subscription_id": sub.get("stripe_subscription_id"),
                     "fatturazione": (last_inv or {}).get("fic_stato_sdi", "—") if last_inv else "—"})
     return out
+
+
+# ---------------- fatture in cloud (e-invoicing) ----------------
+FIC_BASE = "https://api-v2.fattureincloud.it"
+FIC_CLIENT_ID = os.environ.get("FIC_CLIENT_ID", "")
+FIC_CLIENT_SECRET = os.environ.get("FIC_CLIENT_SECRET", "")
+FIC_REDIRECT_URI = os.environ.get("FIC_REDIRECT_URI", "")
+FIC_COMPANY_ID = os.environ.get("FIC_COMPANY_ID", "")
+FIC_SCOPES = "issued_documents.invoices:r issued_documents.invoices:a settings:r"
+
+
+def fic_configured() -> bool:
+    return bool(FIC_CLIENT_ID and FIC_CLIENT_SECRET and FIC_REDIRECT_URI)
+
+
+async def _fic_save_tokens(t: dict):
+    await db.fic_settings.update_one({"provider": "fic"}, {"$set": {
+        "provider": "fic", "access_token": t["access_token"], "refresh_token": t["refresh_token"],
+        "expires_at": time.time() + int(t.get("expires_in", 86400)), "updated_at": now_iso()}}, upsert=True)
+
+
+async def _fic_token() -> str:
+    doc = await db.fic_settings.find_one({"provider": "fic"})
+    if not doc:
+        raise HTTPException(status_code=409, detail="Fatture in Cloud non collegato")
+    if doc.get("expires_at", 0) < time.time() + 60:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(f"{FIC_BASE}/oauth/token", json={"grant_type": "refresh_token",
+                "client_id": FIC_CLIENT_ID, "client_secret": FIC_CLIENT_SECRET, "refresh_token": doc["refresh_token"]})
+        r.raise_for_status()
+        t = r.json(); await _fic_save_tokens(t); return t["access_token"]
+    return doc["access_token"]
+
+
+async def _fic_company_id() -> str:
+    doc = await db.fic_settings.find_one({"provider": "fic"})
+    return (doc or {}).get("company_id") or FIC_COMPANY_ID
+
+
+@api.get("/fic/status")
+async def fic_status(admin: dict = Depends(require_superadmin)):
+    doc = await db.fic_settings.find_one({"provider": "fic"}, {"_id": 0, "access_token": 0, "refresh_token": 0})
+    return {"configured": fic_configured(), "connected": bool(doc), "redirect_uri": FIC_REDIRECT_URI,
+            "company_id": await _fic_company_id(), "updated_at": (doc or {}).get("updated_at")}
+
+
+@api.get("/fic/oauth/start")
+async def fic_oauth_start(admin: dict = Depends(require_superadmin)):
+    if not fic_configured():
+        raise HTTPException(status_code=400, detail="Configura prima FIC_CLIENT_ID / SECRET / REDIRECT_URI")
+    state = secrets.token_urlsafe(24)
+    await db.fic_oauth_states.insert_one({"state": state, "created_at": time.time()})
+    from urllib.parse import urlencode
+    q = urlencode({"response_type": "code", "client_id": FIC_CLIENT_ID, "redirect_uri": FIC_REDIRECT_URI,
+                   "scope": FIC_SCOPES, "state": state})
+    return {"authorize_url": f"{FIC_BASE}/oauth/authorize?{q}"}
+
+
+@api.get("/fic/oauth/callback")
+async def fic_oauth_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    if error or not code or not state:
+        return RedirectResponse(f"{APP_URL}/piattaforma?fic=error")
+    saved = await db.fic_oauth_states.find_one_and_delete({"state": state})
+    if not saved or time.time() - saved["created_at"] > 600:
+        return RedirectResponse(f"{APP_URL}/piattaforma?fic=state_error")
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.post(f"{FIC_BASE}/oauth/token", json={"grant_type": "authorization_code",
+            "client_id": FIC_CLIENT_ID, "client_secret": FIC_CLIENT_SECRET,
+            "redirect_uri": FIC_REDIRECT_URI, "code": code})
+    if r.status_code >= 400:
+        return RedirectResponse(f"{APP_URL}/piattaforma?fic=token_error")
+    await _fic_save_tokens(r.json())
+    # auto-detect company_id if not set
+    try:
+        token = await _fic_token()
+        async with httpx.AsyncClient(timeout=20) as c:
+            cr = await c.get(f"{FIC_BASE}/user/companies", headers={"Authorization": f"Bearer {token}"})
+        comps = (cr.json().get("data") or {}).get("companies") or cr.json().get("data") or []
+        if not FIC_COMPANY_ID and comps:
+            await db.fic_settings.update_one({"provider": "fic"}, {"$set": {"company_id": str(comps[0]["id"])}})
+    except Exception as e:
+        logger.warning(f"FIC company detect failed: {e}")
+    return RedirectResponse(f"{APP_URL}/piattaforma?fic=connected")
+
+
+@api.post("/fic/disconnect")
+async def fic_disconnect(admin: dict = Depends(require_superadmin)):
+    await db.fic_settings.delete_one({"provider": "fic"})
+    return {"ok": True}
+
+
+@api.get("/fic/companies")
+async def fic_companies(admin: dict = Depends(require_superadmin)):
+    token = await _fic_token()
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(f"{FIC_BASE}/user/companies", headers={"Authorization": f"Bearer {token}"})
+    r.raise_for_status()
+    return r.json().get("data")
+
+
+async def _fic_vat_id(company_id: str, token: str) -> Optional[int]:
+    override = os.environ.get("FIC_VAT_ID")
+    if override:
+        return int(override)
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.get(f"{FIC_BASE}/c/{company_id}/settings/vat_types", headers={"Authorization": f"Bearer {token}"})
+        for v in (r.json().get("data") or []):
+            if abs(float(v.get("value", 0)) - 22.0) < 0.01:
+                return v["id"]
+    except Exception:
+        pass
+    return None
+
+
+def _fic_entity(org: dict) -> dict:
+    b = org.get("billing") or {}
+    paese = (b.get("paese") or "IT").upper()
+    name = b.get("ragione_sociale") or (f"{b.get('nome','')} {b.get('cognome','')}".strip()) or org.get("nome")
+    ei = b.get("codice_sdi") or ("XXXXXXX" if paese != "IT" else "0000000")
+    ent = {"name": name, "vat_number": b.get("partita_iva"), "tax_code": b.get("codice_fiscale"),
+           "address_street": b.get("indirizzo"), "address_postal_code": b.get("cap"),
+           "address_city": b.get("citta"), "address_province": b.get("provincia"),
+           "country": "Italia" if paese == "IT" else (b.get("paese") or ""), "ei_code": ei}
+    if b.get("pec"):
+        ent["certified_email"] = b.get("pec")
+    return ent
+
+
+async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
+    """Create an issued invoice in FIC from a CRMEvent invoice record (TEST: no real SDI transmission)."""
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    token = await _fic_token()
+    cid = await _fic_company_id()
+    if not cid:
+        raise HTTPException(status_code=400, detail="company_id FIC mancante")
+    vat_id = await _fic_vat_id(cid, token)
+    net = inv.get("imponibile") or inv.get("totale") or 0
+    line = {"name": f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1, "net_price": net}
+    if vat_id is not None:
+        line["vat"] = {"id": vat_id}
+    body = {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
+                     "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"}}}
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents",
+                         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, json=body)
+    if r.status_code >= 400:
+        raise HTTPException(status_code=r.status_code, detail={"fic_create": r.json()})
+    d = r.json().get("data", {})
+    amounts = {"imponibile": d.get("amount_net"), "iva": d.get("amount_vat"), "totale": d.get("amount_gross")}
+    validation = None
+    doc_id = d.get("id")
+    if dry_run and doc_id:
+        try:
+            async with httpx.AsyncClient(timeout=30) as c:
+                vr = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents/{doc_id}/e_invoice/send",
+                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                                  json={"data": {}, "options": {"dry_run": True}})
+            validation = {"status": vr.status_code, "body": vr.json() if vr.content else None}
+        except Exception as e:
+            validation = {"error": str(e)[:200]}
+    upd = {"fic_document_id": doc_id, "fic_numero": d.get("number"), "fic_data": d.get("date"),
+           "fic_stato_documento": "creato_test", "fic_stato_sdi": "dry_run_validato" if dry_run else "non_inviato",
+           "fic_pdf_url": d.get("url") or d.get("pdf_url"),
+           "imponibile": amounts["imponibile"] if amounts["imponibile"] is not None else inv.get("imponibile"),
+           "iva": amounts["iva"] if amounts["iva"] is not None else inv.get("iva"),
+           "totale": amounts["totale"] if amounts["totale"] is not None else inv.get("totale"),
+           "updated_at": now_iso()}
+    await db.invoices.update_one({"id": inv["id"]}, {"$set": upd})
+    return {"document": d, "amounts": amounts, "validation": validation}
+
+
+@api.post("/fic/issue/{invoice_id}")
+async def fic_issue(invoice_id: str, admin: dict = Depends(require_superadmin)):
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Fattura non trovata")
+    return await _fic_issue_document(inv, dry_run=True)
 
 
 # ---------------- seed ----------------
