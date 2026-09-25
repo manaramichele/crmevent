@@ -479,6 +479,8 @@ class EventMap(BaseModel):
     immagine_url: Optional[str] = None
     pdf_url: Optional[str] = None
     file_url: Optional[str] = None
+    gpx_url: Optional[str] = None
+    distanza: Optional[float] = None
     url_esterno: Optional[str] = None
     google_maps_url: Optional[str] = None
     team_id: Optional[str] = None
