@@ -59,7 +59,6 @@ function InviteDialog({ person, open, onOpenChange, onDone }) {
 function EventRolesDialog({ person, events, teams, settings, open, onOpenChange, onDone }) {
   const [links, setLinks] = useState([]);
   const [nf, setNf] = useState({ categoria: "staff" });
-  const ruoloOpts = toOptions(settings?.ruoli_staff);
   const load = useCallback(async () => {
     if (!person?.id) return;
     try { const { data } = await api.get(`/persons/${person.id}/detail`); setLinks(data.events || []); }
@@ -104,13 +103,10 @@ function EventRolesDialog({ person, events, teams, settings, open, onOpenChange,
                   <span className="font-medium text-slate-800 text-sm">{x.event?.nome || "—"}</span>
                   <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => del(p.id)} data-testid={`role-del-${p.id}`}><Trash2 className="w-4 h-4" /></Button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <Select value={p.categoria} onValueChange={(v) => save(p, { categoria: v })}>
-                    <SelectTrigger data-testid={`role-cat-${p.id}`}><SelectValue /></SelectTrigger>
-                    <SelectContent>{Object.keys(CAT).map((k) => <SelectItem key={k} value={k}>{CAT[k]}</SelectItem>)}</SelectContent></Select>
-                  <Select value={p.ruolo || "none"} onValueChange={(v) => save(p, { ruolo: v === "none" ? "" : v })}>
-                    <SelectTrigger data-testid={`role-ruolo-${p.id}`}><SelectValue placeholder="Ruolo operativo" /></SelectTrigger>
-                    <SelectContent><SelectItem value="none">— Nessun ruolo operativo —</SelectItem>{ruoloOpts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Select value={["staff", "volontario"].includes(p.categoria) ? p.categoria : ""} onValueChange={(v) => (v === "none" ? del(p.id) : save(p, { categoria: v }))}>
+                    <SelectTrigger data-testid={`role-cat-${p.id}`}><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
+                    <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem><SelectItem value="none">Nessun ruolo (rimuovi)</SelectItem></SelectContent></Select>
                   <Select value={p.team_id || "none"} onValueChange={(v) => save(p, { team_id: v === "none" ? "" : v })}>
                     <SelectTrigger data-testid={`role-team-${p.id}`}><SelectValue placeholder="Team" /></SelectTrigger>
                     <SelectContent><SelectItem value="none">— Nessun team —</SelectItem>{evTeams.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
@@ -128,7 +124,7 @@ function EventRolesDialog({ person, events, teams, settings, open, onOpenChange,
               <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
             <Select value={nf.categoria} onValueChange={(v) => setNf((f) => ({ ...f, categoria: v }))}>
               <SelectTrigger data-testid="new-role-cat"><SelectValue /></SelectTrigger>
-              <SelectContent>{Object.keys(CAT).map((k) => <SelectItem key={k} value={k}>{CAT[k]}</SelectItem>)}</SelectContent></Select>
+              <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent></Select>
             <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={add} data-testid="new-role-add">Assegna ruolo</Button>
           </div>
         </div>

@@ -72,7 +72,15 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - Google Cloud (Calendar API): GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET nei Secrets; redirect URI `<BACKEND_URL>/api/oauth/calendar/callback`.
 
 ## Next Tasks
-- Eseguire il reset finale dopo validazione utente (azzera tutti i dati operativi, mantiene admin/config).
+- Team upgrade (parti 4-9): Responsabile Team (persona Staff dell'evento), componenti multipli (Staff/Volontari) senza cambiare il loro Ruolo evento, scheda Team con conteggi (Staff/Volontari/totale) e collegamento Turni. Predisporre per Briefing (Team→Responsabile→Staff→Volontari→Qualifiche→Turni).
+- Eseguire il reset finale dopo validazione utente.
+
+### 2026-06 (Ruolo evento semplificato a Staff/Volontario — verificato curl + UI)
+- [x] Ruolo evento ora SOLO **Staff / Volontario / Nessun ruolo** (rimuove l'associazione), sia nella colonna "Ruolo eventi" (dialog `EventRolesDialog`) sia nella scheda Persona (tab Eventi). Salvato in Persona↔Evento (collection `staff`), non in anagrafica.
+- [x] Rimossi come Ruolo evento: Referente, Collaboratore, Team, e il vecchio select "ruolo operativo" (la Qualifica resta in anagrafica Person.ruolo).
+- [x] **Referente** resta gestito nelle Aziende (Persona↔Azienda); backend persons-enriched `is_referente` di nuovo solo company-based.
+- [x] Team resta funzionalità separata (gruppo operativo per evento), non è un Ruolo evento; associazione Team ancora possibile dal dialog/scheda (opzionale) senza cambiare il ruolo.
+- [x] Flusso obbligatorio testato: persona senza ruolo → Staff → Volontario → Nessun ruolo; le viste Staff/Volontari si aggiornano. Associazioni/Referenti/Team esistenti non toccati.
 
 ### 2026-06 (Ruolo evento gestibile in Persone — verificato frontend 100%, backend curl)
 - [x] Distinzione **Qualifica** (Person.ruolo, anagrafica) vs **Ruolo evento** (link persona↔evento, collection `staff`, campo `categoria`: referente/staff/collaboratore/volontario/team + `ruolo` operativo + `team_id`). Una persona = una sola anagrafica, ruoli diversi in eventi diversi.

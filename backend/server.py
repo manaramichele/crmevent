@@ -791,7 +791,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
             if n not in aziende:
                 aziende.append(n)
         out.append({**p,
-                    "is_referente": bool(rp) or bool(p.get("azienda_id")) or ("referente" in cats),
+                    "is_referente": bool(rp) or bool(p.get("azienda_id")),
                     "is_staff": bool(cats & {"staff", "collaboratore"}),
                     "is_volontario": "volontario" in cats,
                     "is_team": "team" in cats,

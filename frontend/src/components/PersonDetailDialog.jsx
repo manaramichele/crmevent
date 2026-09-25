@@ -126,23 +126,17 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
               <TabsContent value="eventi" className="pt-2 space-y-3">
                 <div className="border border-dashed border-slate-300 rounded-lg p-3 bg-slate-50/50">
                   <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Associa a un evento</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <Select value={pf.evento_id || ""} onValueChange={(v) => setPf((f) => ({ ...f, evento_id: v }))}>
                       <SelectTrigger data-testid="presence-event"><SelectValue placeholder="Evento" /></SelectTrigger>
                       <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
                     <Select value={pf.categoria} onValueChange={(v) => setPf((f) => ({ ...f, categoria: v }))}>
-                      <SelectTrigger data-testid="presence-cat"><SelectValue /></SelectTrigger>
-                      <SelectContent>{Object.keys(CAT).map((k) => <SelectItem key={k} value={k}>{CAT[k]}</SelectItem>)}</SelectContent></Select>
-                    <Select value={pf.ruolo || ""} onValueChange={(v) => setPf((f) => ({ ...f, ruolo: v }))}>
-                      <SelectTrigger data-testid="presence-role"><SelectValue placeholder="Ruolo" /></SelectTrigger>
-                      <SelectContent>{ruoloOpts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select>
-                    <Select value={pf.area || ""} onValueChange={(v) => setPf((f) => ({ ...f, area: v }))}>
-                      <SelectTrigger data-testid="presence-area"><SelectValue placeholder="Area" /></SelectTrigger>
-                      <SelectContent>{areaOpts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select>
+                      <SelectTrigger data-testid="presence-cat"><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
+                      <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent></Select>
                     <Select value={pf.team_id || ""} onValueChange={(v) => setPf((f) => ({ ...f, team_id: v }))}>
-                      <SelectTrigger data-testid="presence-team"><SelectValue placeholder="Team" /></SelectTrigger>
-                      <SelectContent>{teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
-                    <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={addPresence} data-testid="presence-add">Associa</Button>
+                      <SelectTrigger data-testid="presence-team"><SelectValue placeholder="Team (opzionale)" /></SelectTrigger>
+                      <SelectContent>{teams.filter((t) => !pf.evento_id || t.evento_id === pf.evento_id).map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
+                    <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold sm:col-span-3" onClick={addPresence} data-testid="presence-add">Associa</Button>
                   </div>
                 </div>
                 {d.events.length === 0 ? <p className="text-sm text-slate-400 py-2">Nessun evento associato.</p> :
@@ -152,13 +146,10 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                         <div className="font-medium text-slate-800">{x.event?.nome || "—"}</div>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => delPresence(x.presence.id)} data-testid={`presence-del-${x.presence.id}`}><Trash2 className="w-4 h-4" /></Button>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <Select value={x.presence.categoria} onValueChange={(v) => savePresence(x.presence, { categoria: v })}>
-                          <SelectTrigger data-testid={`presence-edit-cat-${x.presence.id}`}><SelectValue /></SelectTrigger>
-                          <SelectContent>{Object.keys(CAT).map((k) => <SelectItem key={k} value={k}>{CAT[k]}</SelectItem>)}</SelectContent></Select>
-                        <Select value={x.presence.ruolo || "none"} onValueChange={(v) => savePresence(x.presence, { ruolo: v === "none" ? "" : v })}>
-                          <SelectTrigger data-testid={`presence-edit-ruolo-${x.presence.id}`}><SelectValue placeholder="Ruolo operativo" /></SelectTrigger>
-                          <SelectContent><SelectItem value="none">— Nessun ruolo operativo —</SelectItem>{ruoloOpts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Select value={["staff", "volontario"].includes(x.presence.categoria) ? x.presence.categoria : ""} onValueChange={(v) => (v === "none" ? delPresence(x.presence.id) : savePresence(x.presence, { categoria: v }))}>
+                          <SelectTrigger data-testid={`presence-edit-cat-${x.presence.id}`}><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
+                          <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem><SelectItem value="none">Nessun ruolo (rimuovi)</SelectItem></SelectContent></Select>
                         <Select value={x.presence.team_id || "none"} onValueChange={(v) => savePresence(x.presence, { team_id: v === "none" ? "" : v })}>
                           <SelectTrigger data-testid={`presence-edit-team-${x.presence.id}`}><SelectValue placeholder="Team" /></SelectTrigger>
                           <SelectContent><SelectItem value="none">— Nessun team —</SelectItem>{teams.filter((t) => t.evento_id === x.presence.evento_id).map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
