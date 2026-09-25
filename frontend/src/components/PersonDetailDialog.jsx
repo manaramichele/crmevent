@@ -50,6 +50,12 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
     try { await api.delete(`/staff/${id}`); await load(); onChanged && onChanged(); toast.success("Associazione rimossa"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
+  const savePresence = async (pres, patch) => {
+    try {
+      await api.put(`/staff/${pres.id}`, { evento_id: pres.evento_id, persona_id: personId, categoria: pres.categoria, ruolo: pres.ruolo, team_id: pres.team_id, area: pres.area, stato: pres.stato, ...patch });
+      toast.success("Ruolo evento aggiornato"); await load(); onChanged && onChanged();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
 
   const p = d?.person;
   const eName = (id) => events.find((e) => e.id === id)?.nome || "—";
@@ -141,10 +147,22 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                 </div>
                 {d.events.length === 0 ? <p className="text-sm text-slate-400 py-2">Nessun evento associato.</p> :
                   d.events.map((x) => (
-                    <div key={x.presence.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-3">
-                      <div><div className="font-medium text-slate-800">{x.event?.nome || "—"}</div>
-                        <div className="text-xs text-slate-500">{CAT[x.presence.categoria] || x.presence.categoria} · {x.presence.ruolo || "—"} · {STATO[x.presence.stato] || x.presence.stato || "—"}</div></div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => delPresence(x.presence.id)} data-testid={`presence-del-${x.presence.id}`}><Trash2 className="w-4 h-4" /></Button>
+                    <div key={x.presence.id} className="border border-slate-200 rounded-lg px-4 py-3" data-testid={`presence-row-${x.presence.id}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-medium text-slate-800">{x.event?.nome || "—"}</div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => delPresence(x.presence.id)} data-testid={`presence-del-${x.presence.id}`}><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <Select value={x.presence.categoria} onValueChange={(v) => savePresence(x.presence, { categoria: v })}>
+                          <SelectTrigger data-testid={`presence-edit-cat-${x.presence.id}`}><SelectValue /></SelectTrigger>
+                          <SelectContent>{Object.keys(CAT).map((k) => <SelectItem key={k} value={k}>{CAT[k]}</SelectItem>)}</SelectContent></Select>
+                        <Select value={x.presence.ruolo || "none"} onValueChange={(v) => savePresence(x.presence, { ruolo: v === "none" ? "" : v })}>
+                          <SelectTrigger data-testid={`presence-edit-ruolo-${x.presence.id}`}><SelectValue placeholder="Ruolo operativo" /></SelectTrigger>
+                          <SelectContent><SelectItem value="none">— Nessun ruolo operativo —</SelectItem>{ruoloOpts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select>
+                        <Select value={x.presence.team_id || "none"} onValueChange={(v) => savePresence(x.presence, { team_id: v === "none" ? "" : v })}>
+                          <SelectTrigger data-testid={`presence-edit-team-${x.presence.id}`}><SelectValue placeholder="Team" /></SelectTrigger>
+                          <SelectContent><SelectItem value="none">— Nessun team —</SelectItem>{teams.filter((t) => t.evento_id === x.presence.evento_id).map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
+                      </div>
                     </div>
                   ))}
               </TabsContent>

@@ -56,7 +56,88 @@ function InviteDialog({ person, open, onOpenChange, onDone }) {
   );
 }
 
-function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete }) {
+function EventRolesDialog({ person, events, teams, settings, open, onOpenChange, onDone }) {
+  const [links, setLinks] = useState([]);
+  const [nf, setNf] = useState({ categoria: "staff" });
+  const ruoloOpts = toOptions(settings?.ruoli_staff);
+  const load = useCallback(async () => {
+    if (!person?.id) return;
+    try { const { data } = await api.get(`/persons/${person.id}/detail`); setLinks(data.events || []); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  }, [person?.id]);
+  useEffect(() => { if (open) load(); }, [open, load]);
+
+  const clean = (pres, patch) => {
+    const base = { evento_id: pres.evento_id, persona_id: person.id, categoria: pres.categoria, ruolo: pres.ruolo, team_id: pres.team_id, area: pres.area, stato: pres.stato };
+    return { ...base, ...patch };
+  };
+  const save = async (pres, patch) => {
+    try { await api.put(`/staff/${pres.id}`, clean(pres, patch)); toast.success("Ruolo aggiornato"); await load(); onDone && onDone(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const del = async (id) => {
+    try { await api.delete(`/staff/${id}`); toast.success("Ruolo rimosso"); await load(); onDone && onDone(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const add = async () => {
+    if (!nf.evento_id) return toast.error("Seleziona un evento");
+    try {
+      await api.post("/staff", { persona_id: person.id, evento_id: nf.evento_id, categoria: nf.categoria || "staff", ruolo: nf.ruolo, team_id: nf.team_id, stato: "da_contattare" });
+      toast.success("Persona collegata all'evento"); setNf({ categoria: "staff" }); await load(); onDone && onDone();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="event-roles-dialog">
+        <DialogHeader><DialogTitle className="font-display">Ruoli evento — {person?.nome} {person?.cognome}</DialogTitle>
+          <DialogDescription>Assegna, modifica o rimuovi il ruolo di questa persona per ciascun evento. Una persona può avere ruoli diversi in eventi diversi.</DialogDescription></DialogHeader>
+
+        <div className="space-y-2 py-2">
+          {links.length === 0 && <p className="text-sm text-slate-400">Nessun evento collegato.</p>}
+          {links.map((x) => {
+            const p = x.presence;
+            const evTeams = teams.filter((t) => t.evento_id === x.evento_id || t.evento_id === p.evento_id);
+            return (
+              <div key={p.id} className="border border-slate-200 rounded-lg px-3 py-3" data-testid={`role-link-${p.id}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-slate-800 text-sm">{x.event?.nome || "—"}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => del(p.id)} data-testid={`role-del-${p.id}`}><Trash2 className="w-4 h-4" /></Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Select value={p.categoria} onValueChange={(v) => save(p, { categoria: v })}>
+                    <SelectTrigger data-testid={`role-cat-${p.id}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>{Object.keys(CAT).map((k) => <SelectItem key={k} value={k}>{CAT[k]}</SelectItem>)}</SelectContent></Select>
+                  <Select value={p.ruolo || "none"} onValueChange={(v) => save(p, { ruolo: v === "none" ? "" : v })}>
+                    <SelectTrigger data-testid={`role-ruolo-${p.id}`}><SelectValue placeholder="Ruolo operativo" /></SelectTrigger>
+                    <SelectContent><SelectItem value="none">— Nessun ruolo operativo —</SelectItem>{ruoloOpts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select>
+                  <Select value={p.team_id || "none"} onValueChange={(v) => save(p, { team_id: v === "none" ? "" : v })}>
+                    <SelectTrigger data-testid={`role-team-${p.id}`}><SelectValue placeholder="Team" /></SelectTrigger>
+                    <SelectContent><SelectItem value="none">— Nessun team —</SelectItem>{evTeams.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="border-t border-slate-100 pt-3">
+          <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Collega a un nuovo evento (o aggiungi un altro ruolo nello stesso evento)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Select value={nf.evento_id || ""} onValueChange={(v) => setNf((f) => ({ ...f, evento_id: v }))}>
+              <SelectTrigger data-testid="new-role-event"><SelectValue placeholder="Evento" /></SelectTrigger>
+              <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
+            <Select value={nf.categoria} onValueChange={(v) => setNf((f) => ({ ...f, categoria: v }))}>
+              <SelectTrigger data-testid="new-role-cat"><SelectValue /></SelectTrigger>
+              <SelectContent>{Object.keys(CAT).map((k) => <SelectItem key={k} value={k}>{CAT[k]}</SelectItem>)}</SelectContent></Select>
+            <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={add} data-testid="new-role-add">Assegna ruolo</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, onRoleClick }) {
   const [q, setQ] = useState("");
   const filtered = rows.filter((r) => {
     if (tab === "referenti" && !r.is_referente) return false;
@@ -85,7 +166,15 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete })
                     <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.nome} {r.cognome}</span></td>
                     <td className="px-4 py-3 text-slate-700">{r.ruolo || "—"}</td>
                     <td className="px-4 py-3 text-slate-700">{(r.aziende_nomi && r.aziende_nomi.length) ? r.aziende_nomi.join(", ") : "—"}</td>
-                    <td className="px-4 py-3"><span className="flex flex-wrap gap-1">{r.is_staff && <StatusBadge color="blue">Staff</StatusBadge>}{r.is_volontario && <StatusBadge color="green">Volontario</StatusBadge>}{!r.is_staff && !r.is_volontario && "—"}</span></td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={() => onRoleClick(r)} title="Gestisci ruoli evento" data-testid={`role-cell-${r.id}`}
+                        className="flex flex-wrap items-center gap-1 rounded-md px-1.5 py-1 -ml-1.5 hover:bg-tiffany-light/60 transition-colors group">
+                        {r.is_staff && <StatusBadge color="blue">Staff</StatusBadge>}{r.is_volontario && <StatusBadge color="green">Volontario</StatusBadge>}
+                        {r.is_referente && <StatusBadge color="tiffany">Referente</StatusBadge>}
+                        {!r.is_staff && !r.is_volontario && !r.is_referente && <span className="text-slate-400">—</span>}
+                        <Pencil className="w-3 h-3 text-slate-300 group-hover:text-tiffany-active" />
+                      </button>
+                    </td>
                     <td className="px-4 py-3"><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
@@ -119,6 +208,7 @@ export default function Persons() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [invite, setInvite] = useState(null);
+  const [rolesFor, setRolesFor] = useState(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -198,7 +288,7 @@ export default function Persons() {
         {["tutte", "referenti", "staff", "volontari"].map((t) => (
           <TabsContent key={t} value={t}>
             <PeopleTable rows={rows} loading={loading} tab={t} onOpen={(r) => setDetailId(r.id)}
-              onEdit={(r) => { setEditing(r); setFormOpen(true); }} onInvite={(r) => setInvite(r)} onDelete={delPerson} />
+              onEdit={(r) => { setEditing(r); setFormOpen(true); }} onInvite={(r) => setInvite(r)} onDelete={delPerson} onRoleClick={(r) => setRolesFor(r)} />
           </TabsContent>
         ))}
         <TabsContent value="team">
@@ -218,6 +308,7 @@ export default function Persons() {
         events={events} teams={teams} settings={settings} onChanged={reload}
         onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={(p) => { setDetailId(null); setInvite(p); }} />}
       {invite && <InviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
+      {rolesFor && <EventRolesDialog person={rolesFor} events={events} teams={teams} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
     </div>
   );
 }
