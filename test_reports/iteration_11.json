@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 11 - Multi-tenant B2B SaaS release gate. 22/22 backend tests PASS (registration, trial, IDOR GET/PUT/DELETE, briefing-live isolation, person/company detail isolation, dashboard/search/persons-enriched scoping, superadmin platform stats/orgs, role authorization). Frontend UI flows verified end-to-end: pricing toggle, registration with terms, trial banner, /account page, org A/B isolation in UI, and superadmin /piattaforma showing both test orgs. Only issue: <StatusBadge> component does not forward data-testid prop so [data-testid=account-status] is missing on Account page.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "components/crm.jsx StatusBadge", "issue": "Component does not forward data-testid prop; the expected [data-testid=\"account-status\"] on /account is not rendered. Visual text 'Prova gratuita' is shown, but the testid required by the review request is missing.", "selector": "[data-testid=\"account-status\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter11_multitenant.py",
+    "/app/test_reports/pytest/iter11.xml"
+  ],
+  "action_items": [
+    "Fix StatusBadge in /app/frontend/src/components/crm.jsx to spread ...props (or accept and forward data-testid) so account-status testid is present.",
+    "Optional cleanup of test-created orgs (nomi TESTorg_* / OrgUI A 122012 / OrgUI B 122012 in DB collections: organizations, users, events)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2502 lines - consider splitting into modules (auth, org, crm, briefing, platform).",
+    "oq() helper is applied consistently across manual endpoints and crud_routes factory - good pattern for multi-tenant scoping.",
+    "register-organization returns 400 on both password<8 and duplicate email (consistent).",
+    "StatusBadge (crm.jsx L163) does not spread extra props - blocks test automation on any place it's used with data-testid."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter11_multitenant.py (new)"
+  ],
+  "success_rate": {"backend": "100% (22/22)", "frontend": "~95% (1 missing testid)"},
+  "test_credentials": "Superadmin: manara.michele.pro@gmail.com / CrmEvent2026!. UI test orgs: orga_122012@example.com and orgb_122012@example.com (password123). Backend pytest also created several TESTorg_* orgs with unique test emails - safe to purge.",
+  "seed_data_creation": "Created ~8 org accounts during backend+frontend test runs (all visible in /piattaforma). Suggest cleanup by DB filter on organizations.nome matching /^TESTorg|^OrgUI /.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Multi-tenant isolation is solid at API level (22 tests). If future work touches oq() or adds new endpoints, extend test_iter11_multitenant.py with new resource IDOR checks. StatusBadge needs data-testid forwarding for proper e2e coverage."
+}

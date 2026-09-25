@@ -160,9 +160,9 @@ const STATUS_STYLES = {
   blue: "bg-sky-50 text-sky-700 ring-sky-200",
 };
 
-export function StatusBadge({ children, color = "gray" }) {
+export function StatusBadge({ children, color = "gray", ...props }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLES[color] || STATUS_STYLES.gray}`}>
+    <span {...props} className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLES[color] || STATUS_STYLES.gray}`}>
       {children}
     </span>
   );
