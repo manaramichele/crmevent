@@ -346,6 +346,38 @@ export default function LandingPage() {
         </div>
       </Section>
 
+      {/* Prezzi teaser */}
+      <Section id="prezzi-teaser" className="py-20 bg-slate-900 text-white">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div>
+            <div className="text-tiffany font-semibold text-sm uppercase tracking-wide mb-3">Prezzi trasparenti</div>
+            <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Un solo piano. Tutto CRMEvent.</h2>
+            <p className="text-slate-300 mt-4 max-w-lg">Tutto ciò che ti serve per organizzare e gestire i tuoi eventi in un'unica piattaforma. 14 giorni di prova gratuita, nessuna carta richiesta.</p>
+            <div className="mt-6 space-y-2">
+              {["Tutte le funzionalità incluse", "Aggiornamenti inclusi", "Nessun costo di attivazione · Cancella quando vuoi"].map((t) => (
+                <div key={t} className="flex items-center gap-2 text-sm text-slate-200"><Check className="w-4 h-4 text-tiffany" />{t}</div>))}
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link to="/prezzi" data-testid="home-pricing-cta" className="h-12 px-7 rounded-xl bg-tiffany hover:bg-tiffany-hover text-slate-900 text-base font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Scopri i prezzi<ArrowRight className="w-5 h-5" /></Link>
+              <Link to="/registrati" data-testid="home-pricing-try" className="h-12 px-7 rounded-xl border border-white/25 hover:bg-white/10 text-white text-base font-semibold transition-all inline-flex items-center">Prova CRMEvent gratis</Link>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-8 backdrop-blur">
+            <div className="text-sm uppercase tracking-widest text-tiffany font-semibold">Piano CRMEvent</div>
+            <div className="mt-4 flex items-end gap-2">
+              <span className="text-5xl font-bold font-display">19,90 €</span><span className="text-slate-300 mb-1.5">/ mese + IVA</span>
+            </div>
+            <div className="mt-2 text-slate-300">oppure <span className="font-semibold text-white">199 € / anno</span> <span className="inline-flex items-center rounded-full bg-tiffany/20 text-tiffany px-2 py-0.5 text-xs font-semibold ml-1">2 mesi inclusi</span></div>
+            <div className="mt-6 h-px bg-white/10" />
+            <div className="mt-6 space-y-2 text-sm text-slate-200">
+              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />14 giorni di prova gratuita</div>
+              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Nessuna carta richiesta per iniziare</div>
+              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Aggiornamenti inclusi</div>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {/* Footer */}
       <Footer />
     </div>
