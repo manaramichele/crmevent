@@ -72,6 +72,14 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - Google Cloud (Calendar API): GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET nei Secrets; redirect URI `<BACKEND_URL>/api/oauth/calendar/callback`.
 
 ## Next Tasks
+
+### 2026-06 (Pulizia database demo — PREVIEW eseguita + backup)
+- [x] Backup completo preview: `mongodump` in `/app/backups/preview_20260925_112942` (persistente).
+- [x] Reset PREVIEW via `/api/admin/reset-data`: azzerate le collection operative (events, companies, persons, deals, staff, teams, shifts, event_maps, activities, followups, files, calendar links, person_companies, lodgings, meals) + account demo staff/volontari; impostato `settings.demo_disabled=true` (seed_demo NON ripopola più). Preservati: admin, settings, Knowledge Base/categorie/procedure supporto, conversazioni. Config email/Resend/dominio = env (intatte).
+- [x] Validato flusso da zero (event→company→person→staff→team→shift→deal→map) e login admin OK.
+- [ ] **PRODUZIONE**: NON eseguita da qui (DB separato, nessun accesso/backup dal mio ambiente). L'utente deve lanciarla su crmevent.it: Impostazioni → "Azzera database operativo" (`reset-data-button`) → conferma. Nessun backup di produzione garantito dal mio lato.
+- Ambiente demo: preview e produzione sono già DB separati; demo_disabled=true impedisce la generazione di dati demo.
+
 - Team upgrade (parti 4-9): Responsabile Team (persona Staff dell'evento), componenti multipli (Staff/Volontari) senza cambiare il loro Ruolo evento, scheda Team con conteggi (Staff/Volontari/totale) e collegamento Turni. Predisporre per Briefing (Team→Responsabile→Staff→Volontari→Qualifiche→Turni).
 - Eseguire il reset finale dopo validazione utente.
 
