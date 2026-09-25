@@ -21,10 +21,11 @@ function Stat({ icon: Icon, label, value, tone = "slate" }) {
 export default function Platform() {
   const [stats, setStats] = useState(null);
   const [orgs, setOrgs] = useState([]);
+  const [subs, setSubs] = useState([]);
 
   useEffect(() => {
-    Promise.all([api.get("/platform/stats"), api.get("/platform/organizations")])
-      .then(([a, b]) => { setStats(a.data); setOrgs(b.data); })
+    Promise.all([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions")])
+      .then(([a, b, c]) => { setStats(a.data); setOrgs(b.data); setSubs(c.data); })
       .catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
   }, []);
 
@@ -67,6 +68,37 @@ export default function Platform() {
                   <td className="py-2.5 px-4 text-center text-slate-600">{o.members}</td>
                   <td className="py-2.5 px-4 text-center text-slate-600">{o.events}</td>
                   <td className="py-2.5 px-4 text-slate-500">{o.created_at ? new Date(o.created_at).toLocaleDateString("it-IT") : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Abbonamenti */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-8" data-testid="platform-subscriptions">
+        <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Abbonamenti</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-slate-200 text-left text-slate-500">
+              <th className="py-2.5 px-4 font-semibold">Organizzazione</th><th className="py-2.5 px-4 font-semibold">Stato</th>
+              <th className="py-2.5 px-4 font-semibold">Ciclo</th><th className="py-2.5 px-4 font-semibold text-right">Importo</th>
+              <th className="py-2.5 px-4 font-semibold">Prossimo rinnovo</th><th className="py-2.5 px-4 font-semibold">Stripe Customer</th>
+              <th className="py-2.5 px-4 font-semibold">Stripe Subscription</th><th className="py-2.5 px-4 font-semibold">Fatturazione</th>
+            </tr></thead>
+            <tbody>
+              {subs.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-slate-400">Nessun abbonamento.</td></tr>
+              ) : subs.map((o) => (
+                <tr key={o.id} className="border-b border-slate-100" data-testid={`platform-sub-${o.id}`}>
+                  <td className="py-2.5 px-4 font-medium text-slate-800">{o.nome}</td>
+                  <td className="py-2.5 px-4"><StatusBadge color={STATUS_COLOR[o.status] || "gray"}>{STATUS_LABEL[o.status] || o.status}</StatusBadge></td>
+                  <td className="py-2.5 px-4 text-slate-600">{o.billing_cycle === "yearly" ? "Annuale" : o.billing_cycle === "monthly" ? "Mensile" : "—"}</td>
+                  <td className="py-2.5 px-4 text-right text-slate-600">{o.amount ? `${o.amount} €` : "—"}</td>
+                  <td className="py-2.5 px-4 text-slate-600">{o.status === "trial" ? `Trial · ${o.days_left} gg` : (o.current_period_end ? new Date(o.current_period_end).toLocaleDateString("it-IT") : "—")}</td>
+                  <td className="py-2.5 px-4 text-slate-400 text-xs font-mono">{o.stripe_customer_id || "—"}</td>
+                  <td className="py-2.5 px-4 text-slate-400 text-xs font-mono">{o.stripe_subscription_id || "—"}</td>
+                  <td className="py-2.5 px-4 text-slate-500 text-xs">{o.fatturazione}</td>
                 </tr>
               ))}
             </tbody>

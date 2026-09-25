@@ -2255,7 +2255,7 @@ async def delete_briefing_version(version_id: str, admin: dict = Depends(require
 # ---------------- admin reset ----------------
 OPERATIONAL = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
                "event_maps", "activities", "followups", "calendar_event_links", "files",
-               "person_companies", "lodgings", "meals", "briefing_versions"]
+               "person_companies", "lodgings", "meals", "briefing_versions", "invoices"]
 
 
 @api.post("/admin/reset-data")
@@ -2305,6 +2305,207 @@ async def platform_organizations(admin: dict = Depends(require_superadmin)):
         out.append({"id": o["id"], "nome": o.get("nome"), "created_at": o.get("created_at"),
                     "owner_email": (owner or {}).get("email"), "owner_name": (owner or {}).get("name"),
                     "members": members, "events": events, "subscription": _sub_summary(o)})
+    return out
+
+
+# ---------------- stripe billing ----------------
+import stripe as stripe_sdk
+stripe_sdk.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+PRICE_LOOKUPS = {"monthly": "crmevent_monthly", "yearly": "crmevent_yearly"}
+STRIPE_STATUS_MAP = {"active": "active", "trialing": "active", "past_due": "past_due",
+                     "canceled": "canceled", "unpaid": "suspended", "incomplete": "past_due",
+                     "incomplete_expired": "expired"}
+
+
+class BillingDetails(BaseModel):
+    tipo: Optional[str] = "azienda"          # azienda | privato
+    paese: Optional[str] = "IT"
+    ragione_sociale: Optional[str] = None
+    nome: Optional[str] = None
+    cognome: Optional[str] = None
+    indirizzo: Optional[str] = None
+    cap: Optional[str] = None
+    citta: Optional[str] = None
+    provincia: Optional[str] = None
+    codice_fiscale: Optional[str] = None
+    partita_iva: Optional[str] = None
+    codice_sdi: Optional[str] = None
+    pec: Optional[str] = None
+    email_fatturazione: Optional[str] = None
+
+
+@api.get("/account/billing")
+async def get_billing(user: dict = Depends(require_admin)):
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    return (org or {}).get("billing") or {}
+
+
+@api.put("/account/billing")
+async def put_billing(body: BillingDetails, user: dict = Depends(require_admin)):
+    data = body.model_dump()
+    await db.organizations.update_one({"id": user["org_id"]}, {"$set": {"billing": data, "updated_at": now_iso()}})
+    return data
+
+
+async def _ensure_stripe_customer(org: dict, user: dict) -> str:
+    existing = (org.get("subscription") or {}).get("stripe_customer_id")
+    if existing:
+        return existing
+    b = org.get("billing") or {}
+    name = b.get("ragione_sociale") or (f"{b.get('nome','')} {b.get('cognome','')}".strip()) or org.get("nome")
+    address = {k: v for k, v in {"line1": b.get("indirizzo"), "postal_code": b.get("cap"),
+                                 "city": b.get("citta"), "state": b.get("provincia"),
+                                 "country": (b.get("paese") or "IT")}.items() if v}
+    cust = stripe_sdk.Customer.create(name=name, email=b.get("email_fatturazione") or user.get("email"),
+                                      address=address or None, metadata={"org_id": org["id"]})
+    await db.organizations.update_one({"id": org["id"]}, {"$set": {"subscription.stripe_customer_id": cust.id}})
+    return cust.id
+
+
+class CheckoutIn(BaseModel):
+    billing_cycle: str
+    origin_url: str
+
+
+@api.post("/account/checkout")
+async def create_checkout(body: CheckoutIn, user: dict = Depends(require_admin)):
+    if body.billing_cycle not in PRICE_LOOKUPS:
+        raise HTTPException(status_code=400, detail="Ciclo di fatturazione non valido")
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    if not (org.get("billing") or {}).get("paese"):
+        raise HTTPException(status_code=400, detail="Completa prima i dati di fatturazione")
+    prices = stripe_sdk.Price.list(lookup_keys=[PRICE_LOOKUPS[body.billing_cycle]], active=True, limit=1).data
+    if not prices:
+        raise HTTPException(status_code=500, detail="Prezzo non configurato su Stripe")
+    cust_id = await _ensure_stripe_customer(org, user)
+    session = stripe_sdk.checkout.Session.create(
+        mode="subscription", customer=cust_id,
+        line_items=[{"price": prices[0].id, "quantity": 1}],
+        success_url=f"{body.origin_url}/account?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/account?checkout=cancel",
+        metadata={"org_id": org["id"], "billing_cycle": body.billing_cycle},
+        subscription_data={"metadata": {"org_id": org["id"], "billing_cycle": body.billing_cycle}},
+    )
+    return {"checkout_url": session.url, "session_id": session.id}
+
+
+@api.post("/account/portal")
+async def billing_portal(body: dict, user: dict = Depends(require_admin)):
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    cust = (org.get("subscription") or {}).get("stripe_customer_id")
+    if not cust:
+        raise HTTPException(status_code=400, detail="Nessun cliente Stripe associato")
+    origin = body.get("origin_url") or APP_URL
+    ps = stripe_sdk.billing_portal.Session.create(customer=cust, return_url=f"{origin}/account")
+    return {"url": ps.url}
+
+
+async def _sync_subscription(sub: dict, org_id: Optional[str] = None):
+    org_id = org_id or (sub.get("metadata") or {}).get("org_id")
+    if not org_id:
+        o = await db.organizations.find_one({"subscription.stripe_customer_id": sub.get("customer")}, {"_id": 0})
+        org_id = o["id"] if o else None
+    if not org_id:
+        return
+    items = (sub.get("items") or {}).get("data") or []
+    interval = items[0]["price"]["recurring"]["interval"] if items else None
+    cycle = "yearly" if interval == "year" else ("monthly" if interval == "month" else None)
+    cpe = sub.get("current_period_end")
+    await db.organizations.update_one({"id": org_id}, {"$set": {
+        "subscription.status": STRIPE_STATUS_MAP.get(sub.get("status"), sub.get("status")),
+        "subscription.stripe_subscription_id": sub.get("id"),
+        "subscription.stripe_customer_id": sub.get("customer"),
+        "subscription.billing_cycle": cycle,
+        "subscription.cancel_at_period_end": bool(sub.get("cancel_at_period_end")),
+        "subscription.current_period_end": datetime.fromtimestamp(cpe, timezone.utc).isoformat() if cpe else None,
+        "updated_at": now_iso()}})
+
+
+async def _record_invoice(inv: dict, payment_status: str):
+    o = await db.organizations.find_one({"subscription.stripe_customer_id": inv.get("customer")}, {"_id": 0})
+    if not o:
+        return
+    created = inv.get("created")
+    doc = {"org_id": o["id"], "stripe_invoice_id": inv.get("id"), "stripe_payment_intent": inv.get("payment_intent"),
+           "numero_stripe": inv.get("number"),
+           "data": datetime.fromtimestamp(created, timezone.utc).isoformat() if created else now_iso(),
+           "imponibile": (inv.get("subtotal") or 0) / 100.0, "iva": (inv.get("tax") or 0) / 100.0,
+           "totale": (inv.get("total") or 0) / 100.0, "valuta": inv.get("currency"),
+           "hosted_invoice_url": inv.get("hosted_invoice_url"), "stripe_pdf": inv.get("invoice_pdf"),
+           "payment_status": payment_status, "updated_at": now_iso()}
+    existing = await db.invoices.find_one({"stripe_invoice_id": inv.get("id")})
+    if existing:
+        await db.invoices.update_one({"stripe_invoice_id": inv.get("id")}, {"$set": doc})
+    else:
+        # Fatture in Cloud (SDI) scaffold — populated later when FIC is wired
+        doc.update({"id": new_id(), "created_at": now_iso(), "fic_document_id": None, "fic_numero": None,
+                    "fic_data": None, "fic_stato_documento": "da_emettere", "fic_stato_sdi": "non_inviato",
+                    "fic_pdf_url": None})
+        await db.invoices.insert_one(doc)
+
+
+@api.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe_sdk.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Firma webhook non valida")
+    t, obj = event["type"], event["data"]["object"]
+    if t == "customer.subscription.deleted":
+        await db.organizations.update_one({"subscription.stripe_subscription_id": obj["id"]},
+                                          {"$set": {"subscription.status": "canceled", "updated_at": now_iso()}})
+    elif t in ("customer.subscription.created", "customer.subscription.updated"):
+        await _sync_subscription(obj)
+    elif t == "checkout.session.completed":
+        if obj.get("subscription"):
+            sub = stripe_sdk.Subscription.retrieve(obj["subscription"])
+            await _sync_subscription(sub, (obj.get("metadata") or {}).get("org_id"))
+    elif t in ("invoice.paid", "invoice.payment_succeeded"):
+        await _record_invoice(obj, "paid")
+    elif t == "invoice.payment_failed":
+        await db.organizations.update_one({"subscription.stripe_customer_id": obj.get("customer")},
+                                          {"$set": {"subscription.status": "past_due", "updated_at": now_iso()}})
+        await _record_invoice(obj, "payment_failed")
+    return {"received": True}
+
+
+@api.post("/account/sync-subscription")
+async def sync_subscription_now(user: dict = Depends(require_admin)):
+    """Fallback sync (also useful in tests): pull latest subscription from Stripe."""
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    cust = (org.get("subscription") or {}).get("stripe_customer_id")
+    if not cust:
+        return {"synced": False}
+    subs = stripe_sdk.Subscription.list(customer=cust, status="all", limit=1).data
+    if subs:
+        await _sync_subscription(subs[0])
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    return {"synced": True, "subscription": _sub_summary(org)}
+
+
+@api.get("/account/invoices")
+async def account_invoices(user: dict = Depends(require_admin)):
+    return await db.invoices.find(oq(user), {"_id": 0}).sort("data", -1).to_list(500)
+
+
+@api.get("/platform/subscriptions")
+async def platform_subscriptions(admin: dict = Depends(require_superadmin)):
+    orgs = await db.organizations.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    out = []
+    for o in orgs:
+        sub = o.get("subscription") or {}
+        s = _sub_summary(o)
+        last_inv = await db.invoices.find_one({"org_id": o["id"]}, {"_id": 0}, sort=[("data", -1)])
+        amount = PRICE_YEARLY if s["billing_cycle"] == "yearly" else (PRICE_MONTHLY if s["billing_cycle"] == "monthly" else None)
+        out.append({"id": o["id"], "nome": o.get("nome"), "status": s["status"],
+                    "billing_cycle": s["billing_cycle"], "amount": amount,
+                    "current_period_end": s["current_period_end"], "days_left": s["days_left"],
+                    "stripe_customer_id": sub.get("stripe_customer_id"),
+                    "stripe_subscription_id": sub.get("stripe_subscription_id"),
+                    "fatturazione": (last_inv or {}).get("fic_stato_sdi", "—") if last_inv else "—"})
     return out
 
 
