@@ -74,6 +74,12 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ## Next Tasks
 - Eseguire il reset finale dopo validazione utente (azzera tutti i dati operativi, mantiene admin/config).
 
+### 2026-06 (Auth persistence + Email branding Resend + rimozione riferimenti Emergent — verificato in PRODUZIONE dall'utente)
+- [x] **Bug password risolto**: `seed_admin()` reso idempotente — non sovrascrive più la password di un admin esistente ad ogni restart/deploy (causa reale del "devo rifare password dimenticata"). Testato: cambio password → restart → la nuova password persiste; logout/sessione non invalidano la password.
+- [x] **Email mittente**: passaggio a Resend (account utente, dominio crmevent.it verificato SPF/DKIM/DMARC). Mittente reale **"CRMEvent <noreply@crmevent.it>"**. `email_utils.send_email` usa Resend quando `RESEND_API_KEY`+`EMAIL_FROM_ADDRESS` presenti, con fallback gestito non-bloccante. Nessun Reply-To. Nuovi env: `EMAIL_FROM_ADDRESS`, `RESEND_API_KEY`. Verificato in produzione dall'utente (email ricevuta, mittente/dominio/link/reset/login OK).
+- [x] **Rimozione riferimenti Emergent visibili**: login page text, canonical/OpenGraph, sitemap.xml, robots.txt → `crmevent.it`. Riferimenti residui solo tecnici/invisibili (auth Google, script piattaforma, endpoint interni).
+- [x] Secret produzione: APP_URL/FRONTEND_URL/REACT_APP_BACKEND_URL = https://crmevent.it; BACKEND_PUBLIC_URL corretto su URL backend; EMAIL_FROM_NAME=CRMEvent.
+
 ### 2026-06 (Ospitalità & Pasti — verificato: backend 13/13 pytest, frontend 95%)
 - [x] Nuova sezione **Ospitalità & Pasti** (`/ospitalita`, voce menu con selettore evento), integrata con anagrafica Persone esistente (nessun duplicato). Dati legati alla relazione Persona↔Evento (collection `staff`).
 - [x] Nuove collection `lodgings` (pernottamenti) e `meals` (colazione/pranzo/cena), aggiunte a OPERATIONAL. Modelli `Lodging`/`Meal` in server.py.
