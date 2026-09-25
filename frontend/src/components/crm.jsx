@@ -56,6 +56,40 @@ export function FileUpload({ label, value, onChange, accept, testid = "file" }) 
   );
 }
 
+export function ImageUpload({ value, onChange, testid = "image" }) {
+  const [busy, setBusy] = useState(false);
+  const upload = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!/\.(png|jpe?g)$/i.test(f.name)) { toast.error("Formato non supportato: usa PNG o JPG/JPEG"); e.target.value = ""; return; }
+    setBusy(true);
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      onChange(data.url);
+      toast.success("Logo caricato");
+    } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
+    finally { setBusy(false); e.target.value = ""; }
+  };
+  return (
+    <div className="flex items-center gap-3">
+      {value ? (
+        <div className="h-16 w-28 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
+          <img src={fileUrl(value)} alt="Logo evento" className="max-h-full max-w-full object-contain" data-testid={`${testid}-preview`} />
+        </div>
+      ) : (
+        <div className="h-16 w-28 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[11px] text-slate-400 shrink-0">Nessun logo</div>
+      )}
+      <div className="space-y-1.5">
+        <input type="file" accept="image/png,image/jpeg" onChange={upload} data-testid={`${testid}-input`}
+          className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-tiffany-light file:text-tiffany-fg file:font-medium file:cursor-pointer" />
+        {busy && <span className="text-xs text-slate-400">Caricamento...</span>}
+        {value && <button type="button" onClick={() => onChange("")} className="block text-xs text-red-500 hover:underline" data-testid={`${testid}-remove`}>Elimina logo</button>}
+      </div>
+    </div>
+  );
+}
+
 export function useCollection(endpoint) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -147,6 +181,9 @@ export function PrimaryButton({ children, ...props }) {
 
 function Field({ field, value, onChange, options }) {
   const common = { id: field.name, "data-testid": `field-${field.name}` };
+  if (field.type === "image") {
+    return <ImageUpload value={value} onChange={(u) => onChange(field.name, u)} testid={`field-${field.name}`} />;
+  }
   if (field.type === "textarea") {
     return <Textarea {...common} value={value || ""} onChange={(e) => onChange(field.name, e.target.value)} placeholder={field.placeholder} />;
   }

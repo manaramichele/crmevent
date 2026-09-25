@@ -239,6 +239,7 @@ export default function Events() {
 
   const fields = [
     { name: "nome", label: "Nome evento", required: true, full: true },
+    { name: "logo_url", label: "Logo evento (PNG/JPG)", type: "image", full: true },
     { name: "edizione", label: "Edizione" },
     { name: "tipologia", label: "Tipologia", type: "select", options: toOptions(settings.tipologie_evento) },
     { name: "data_inizio", label: "Data inizio", type: "date" },

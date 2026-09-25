@@ -74,6 +74,11 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ## Next Tasks
 - Eseguire il reset finale dopo validazione utente (azzera tutti i dati operativi, mantiene admin/config).
 
+### 2026-06 (Logo evento — verificato backend curl + UI)
+- [x] Campo **Logo evento** nell'anagrafica Evento (crea/modifica): upload PNG/JPG, anteprima (object-contain, proporzioni mantenute), sostituzione ed eliminazione. Nuovo tipo campo `image` in `crm.jsx` (componente `ImageUpload`) usato da `EntityDialog`.
+- [x] Backend `Event.logo_url` (Optional). Salvato in modo permanente come elemento dell'evento → riutilizzabile in futuro per documenti/PDF/accrediti/pass (parte 6).
+- [ ] Integrazione nel **Briefing** (copertina con logo/nome/data/località + toggle "Mostra logo evento", parti 3-5): NON implementata perché la funzione **Briefing non esiste ancora** in CRMEvent. Il logo è già pronto e verrà usato automaticamente quando si costruirà il Briefing.
+
 ### 2026-06 (Mappe & Percorsi — view/edit + GPX + mappa — verificato frontend 100%)
 - [x] Dialog "Mappe & Percorsi" (Events.jsx) riorganizzato: sezione "PERCORSI ESISTENTI" (righe con Nome, Tipologia, distanza, stato GPX + azioni Visualizza/Modifica/Elimina) e sezione "NUOVO/MODIFICA PERCORSO".
 - [x] Modifica carica il record nel form; pulsante commuta tra "Aggiungi percorso" e "Salva modifiche"; "+ Nuovo percorso" svuota il form. La modifica NON crea duplicati (dopo POST resta in edit sul nuovo id).

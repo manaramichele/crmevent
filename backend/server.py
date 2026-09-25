@@ -346,6 +346,7 @@ async def activate(body: ActivateIn, response: Response):
 class Event(BaseModel):
     nome: str
     edizione: Optional[str] = None
+    logo_url: Optional[str] = None
     tipologia: Optional[str] = None
     data_inizio: Optional[str] = None
     data_fine: Optional[str] = None
