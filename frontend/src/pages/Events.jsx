@@ -210,8 +210,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
               <div className="flex flex-wrap items-center gap-2">
                 <input type="file" accept=".gpx" onChange={onGpxFile} data-testid="map-gpx-input"
                   className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-tiffany-light file:text-tiffany-fg file:font-medium file:cursor-pointer" />
-                {gpxBusy && <span className="text-xs text-slate-400">Elaborazione...</span>}
-                {form.gpx_url && !gpxBusy && (
+                {gpxBusy && <span className="text-xs text-slate-400">Elaborazione...</span>}                {form.gpx_url && !gpxBusy && (
                   <>
                     <a href={fileUrl(form.gpx_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-tiffany-active hover:underline" data-testid="map-gpx-download"><Download className="w-3.5 h-3.5" />Scarica</a>
                     <span className="inline-flex items-center gap-1 text-xs text-slate-400"><RefreshCw className="w-3.5 h-3.5" />Seleziona un file per sostituire</span>
@@ -220,6 +219,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
                 )}
               </div>
               {form.gpx_url && <div className="mt-2"><GpxMap gpxUrl={form.gpx_url} /></div>}
+              <p className="text-[11px] text-slate-400 mt-1.5">La distanza viene calcolata automaticamente dal GPX quando il campo "Distanza" è vuoto.</p>
             </div>
           </div>
 

@@ -74,6 +74,13 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ## Next Tasks
 - Eseguire il reset finale dopo validazione utente (azzera tutti i dati operativi, mantiene admin/config).
 
+### 2026-06 (Mappe & Percorsi — view/edit + GPX + mappa — verificato frontend 100%)
+- [x] Dialog "Mappe & Percorsi" (Events.jsx) riorganizzato: sezione "PERCORSI ESISTENTI" (righe con Nome, Tipologia, distanza, stato GPX + azioni Visualizza/Modifica/Elimina) e sezione "NUOVO/MODIFICA PERCORSO".
+- [x] Modifica carica il record nel form; pulsante commuta tra "Aggiungi percorso" e "Salva modifiche"; "+ Nuovo percorso" svuota il form. La modifica NON crea duplicati (dopo POST resta in edit sul nuovo id).
+- [x] Campo dedicato "File GPX (.gpx)": valida, calcola distanza (haversine), auto-compila Distanza se vuota, anteprima mappa interattiva Leaflet (traccia + partenza + arrivo, zoom/pan), download/sostituisci/elimina GPX.
+- [x] Backend EventMap: aggiunti `gpx_url`, `distanza` (retrocompatibile, dati esistenti intatti). CRUD /maps invariato. Dipendenza frontend: leaflet 1.9.4.
+- [x] Regression OK: Immagine/PDF/File/Google Maps/URL esterno continuano a funzionare.
+
 ### 2026-06 (Auth persistence + Email branding Resend + rimozione riferimenti Emergent — verificato in PRODUZIONE dall'utente)
 - [x] **Bug password risolto**: `seed_admin()` reso idempotente — non sovrascrive più la password di un admin esistente ad ogni restart/deploy (causa reale del "devo rifare password dimenticata"). Testato: cambio password → restart → la nuova password persiste; logout/sessione non invalidano la password.
 - [x] **Email mittente**: passaggio a Resend (account utente, dominio crmevent.it verificato SPF/DKIM/DMARC). Mittente reale **"CRMEvent <noreply@crmevent.it>"**. `email_utils.send_email` usa Resend quando `RESEND_API_KEY`+`EMAIL_FROM_ADDRESS` presenti, con fallback gestito non-bloccante. Nessun Reply-To. Nuovi env: `EMAIL_FROM_ADDRESS`, `RESEND_API_KEY`. Verificato in produzione dall'utente (email ricevuta, mittente/dominio/link/reset/login OK).
