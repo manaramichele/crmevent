@@ -74,6 +74,13 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ## Next Tasks
 - Eseguire il reset finale dopo validazione utente (azzera tutti i dati operativi, mantiene admin/config).
 
+### 2026-06 (Ruolo evento gestibile in Persone — verificato frontend 100%, backend curl)
+- [x] Distinzione **Qualifica** (Person.ruolo, anagrafica) vs **Ruolo evento** (link persona↔evento, collection `staff`, campo `categoria`: referente/staff/collaboratore/volontario/team + `ruolo` operativo + `team_id`). Una persona = una sola anagrafica, ruoli diversi in eventi diversi.
+- [x] Colonna "Ruolo eventi" resa **interattiva** (`role-cell-<id>`): apre `EventRolesDialog` che elenca gli eventi collegati con select modificabili (categoria/ruolo/team), rimozione, e "Collega a nuovo evento" (anche più ruoli nello stesso evento).
+- [x] Scheda Persona → tab Eventi: ogni associazione ora **modificabile inline** (categoria/ruolo/team salvano su PUT /staff/{id}); add/delete invariati.
+- [x] I ruoli alimentano automaticamente le viste: backend persons-enriched → `is_referente` ora vero anche per event-role "referente", `is_staff` (staff/collaboratore), `is_volontario`, nuovo `is_team`. Cambiando Staff→Volontario la persona si sposta tra i tab.
+- [x] Fix z-index: `SelectContent` z-[200] (Dialog usa z-[100]) — le Select dentro i Dialog erano bloccate dall'overlay.
+
 ### 2026-06 (Logo evento — verificato backend curl + UI)
 - [x] Campo **Logo evento** nell'anagrafica Evento (crea/modifica): upload PNG/JPG, anteprima (object-contain, proporzioni mantenute), sostituzione ed eliminazione. Nuovo tipo campo `image` in `crm.jsx` (componente `ImageUpload`) usato da `EntityDialog`.
 - [x] Backend `Event.logo_url` (Optional). Salvato in modo permanente come elemento dell'evento → riutilizzabile in futuro per documenti/PDF/accrediti/pass (parte 6).

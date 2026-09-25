@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend testing of 'Ruolo eventi' (per-event role) management in Persone section. All mandatory flows PASS after applying a z-index CSS fix to Radix Select inside Dialog. Tested: create person -> assign Staff role -> verify in Staff tab -> change to Volontario (removed from Staff, appears in Volontari) -> add same-event Referente role (appears in Referenti, multi-badges shown, single anagraphic record) -> PersonDetailDialog Eventi tab shows editable selects (category/ruolo/team), changes persist via PUT /staff.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ui/select.jsx (SelectContent)",
+        "issue": "Radix SelectContent had z-50 while Dialog/DialogOverlay use z-[100]. Any <Select> rendered inside a <Dialog> had its options blocked by the DialogOverlay (pointer events intercepted). This affected EventRolesDialog (new-role-event, new-role-cat, role-cat-<id>) and PersonDetailDialog inline edit selects (presence-edit-cat/-ruolo/-team). Fixed by bumping SelectContent to z-[200]. Consider reviewing globally for other z-index conflicts.",
+        "selector": "/app/frontend/src/components/ui/select.jsx",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Verify the z-index change in /app/frontend/src/components/ui/select.jsx (z-50 -> z-[200]) does not conflict with other overlays (Sheet, Popover, Toaster). Consider standardizing dialog=z-[100], select/popover=z-[110] via Tailwind theme layer to avoid future collisions."
+  ],
+  "critical_code_review_comments": [
+    "Persons.jsx EventRolesDialog: <Select value={nf.evento_id || ''}> passes '' as controlled value to Radix Select which is technically not supported (Radix expects undefined for uncontrolled empty). Works today but may throw console warnings; consider value={nf.evento_id ?? undefined}.",
+    "Persons.jsx: PeopleTable filters rows for staff/volontari/referenti based on is_staff/is_volontario/is_referente. If the same person has both Volontario and Referente in DIFFERENT events (not same event), tab filtering still correctly includes them; verified with in-event multi-role case.",
+    "EventRolesDialog: 'Assegna ruolo' allows adding duplicate (evento_id, categoria) combos; backend seems to allow it. Consider deduping on the client or surfacing a confirmation."
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/ui/select.jsx"
+  ],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (all mandatory scenarios passing after fix)"},
+  "test_credentials": "manara.michele.pro@gmail.com / CrmEvent2026! (admin, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created and cleaned up temporary TESTZ<timestamp> persons and their /staff links during testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The single most impactful discovery this iteration was a z-index conflict: Radix SelectContent (z-50) rendered under DialogOverlay (z-[100]). Any future Dialog+Select flows should now work. The Radix Select options inside dialogs need slight wait (~500ms) between opening the trigger and clicking an option, and click should NOT use force=True (it bypasses the pointer target and Radix state won't update). Use page.get_by_role('option', name=..., exact=True).click() without force after the fix.",
+  "rca of the issue": "Before fix: PeopleTable role-cell click opened EventRolesDialog (z-[100]). Inside the dialog, clicking new-role-event opened Radix SelectContent portal at z-50, which sits BELOW the DialogOverlay (z-[100]). Users could visually see the options list but clicks landed on the overlay, so nf.evento_id never updated. Then 'Assegna ruolo' rejected with 'Seleziona un evento' toast (silently in tests). Same issue affected the category selects. Fix: bump SelectContent to z-[200] so it renders above DialogOverlay. Verified by full E2E scenario passing (Staff -> Volontario transition flips tabs; second Referente role for same event adds multi-badge; PersonDetailDialog inline PUT /staff succeeded)."
+}
