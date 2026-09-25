@@ -176,18 +176,20 @@ export default function LandingPage() {
           <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-14 sm:h-16 w-auto" /></Link>
           <nav className="hidden lg:flex items-center gap-7">
             {NAV.map(([l, id]) => <button key={id} onClick={() => scrollTo(id)} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{l}</button>)}
+            <Link to="/prezzi" data-testid="landing-pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Prezzi</Link>
           </nav>
           <div className="hidden lg:flex items-center gap-3">
             <Link to="/login" data-testid="landing-login" className="text-sm font-semibold text-slate-700 hover:text-slate-900">Accedi</Link>
-            <button onClick={() => scrollTo("demo")} data-testid="landing-demo-cta" className="h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98]">Richiedi una demo</button>
+            <Link to="/registrati" data-testid="landing-try-cta" className="h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center">Prova gratis</Link>
           </div>
           <button className="lg:hidden" onClick={() => setOpen((o) => !o)} data-testid="landing-menu">{open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
         </div>
         {open && (
           <div className="lg:hidden border-t border-slate-100 bg-white px-6 py-4 space-y-3">
             {NAV.map(([l, id]) => <button key={id} onClick={() => { scrollTo(id); setOpen(false); }} className="block text-sm font-medium text-slate-600">{l}</button>)}
+            <Link to="/prezzi" onClick={() => setOpen(false)} className="block text-sm font-medium text-slate-600">Prezzi</Link>
             <div className="flex gap-3 pt-2"><Link to="/login" className="flex-1 h-10 rounded-lg border border-slate-200 flex items-center justify-center text-sm font-semibold">Accedi</Link>
-              <button onClick={() => { scrollTo("demo"); setOpen(false); }} className="flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold">Demo</button></div>
+              <Link to="/registrati" onClick={() => setOpen(false)} className="flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">Prova gratis</Link></div>
           </div>
         )}
       </header>

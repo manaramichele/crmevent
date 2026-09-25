@@ -43,7 +43,10 @@ api = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("crmevent")
 
-ADMIN_ROLES = {"admin", "member"}
+ADMIN_ROLES = {"admin"}  # organization admin (org owner)
+TRIAL_DAYS = 14
+PRICE_MONTHLY = 19.90
+PRICE_YEARLY = 199.00
 
 
 # ---------------- helpers ----------------
@@ -115,13 +118,70 @@ async def get_current_user(request: Request) -> dict:
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if user.get("role") not in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Accesso riservato agli amministratori")
+    if not user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Nessuna organizzazione associata all'account")
     return user
 
 
 async def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Accesso riservato al SuperAdmin")
+    if user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Accesso riservato al Super Admin CRMEvent")
     return user
+
+
+async def require_support_manager(user: dict = Depends(get_current_user)) -> dict:
+    if user.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Accesso riservato")
+    return user
+
+
+def oq(user: dict, **extra) -> dict:
+    """Org-scoped Mongo query: pins the current user's org_id. Anti cross-tenant."""
+    return {"org_id": user["org_id"], **extra}
+
+
+# ---------------- multi-tenant & subscription ----------------
+def _days_left(iso_dt: Optional[str]) -> int:
+    if not iso_dt:
+        return 0
+    try:
+        d = datetime.fromisoformat(iso_dt)
+    except Exception:
+        return 0
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    secs = (d - datetime.now(timezone.utc)).total_seconds()
+    return max(0, int((secs + 86399) // 86400))
+
+
+def _sub_summary(org: dict) -> dict:
+    sub = (org or {}).get("subscription", {}) or {}
+    status = sub.get("status", "trial")
+    trial_end = sub.get("trial_end")
+    period_end = sub.get("current_period_end")
+    ref = trial_end if status == "trial" else period_end
+    days_left = _days_left(ref)
+    if status == "trial" and days_left <= 0:
+        status = "expired"
+    active = status == "active" or (status == "trial" and days_left > 0)
+    return {"status": status, "plan": sub.get("plan", "crmevent"),
+            "billing_cycle": sub.get("billing_cycle"), "trial_end": trial_end,
+            "current_period_end": period_end, "days_left": days_left,
+            "access": "full" if active else "limited",
+            "price_monthly": PRICE_MONTHLY, "price_yearly": PRICE_YEARLY}
+
+
+async def _create_organization(name: str, owner_user_id: str) -> dict:
+    now = datetime.now(timezone.utc)
+    org = {"id": new_id(), "nome": name, "owner_user_id": owner_user_id,
+           "subscription": {"status": "trial", "plan": "crmevent", "billing_cycle": None,
+                            "trial_start": now.isoformat(),
+                            "trial_end": (now + timedelta(days=TRIAL_DAYS)).isoformat(),
+                            "current_period_end": None, "stripe_customer_id": None,
+                            "stripe_subscription_id": None},
+           "created_at": now_iso(), "updated_at": now_iso()}
+    await db.organizations.insert_one(org)
+    return org
 
 
 # ---------------- generic crud ----------------
@@ -191,23 +251,82 @@ class ActivateIn(BaseModel):
 
 def public_user(u: dict) -> dict:
     return {"user_id": u["user_id"], "email": u["email"], "name": u.get("name"),
-            "role": u.get("role", "member"), "picture": u.get("picture", ""),
-            "auth_provider": u.get("auth_provider", "password"), "person_id": u.get("person_id")}
+            "role": u.get("role", "admin"), "picture": u.get("picture", ""),
+            "auth_provider": u.get("auth_provider", "password"), "person_id": u.get("person_id"),
+            "org_id": u.get("org_id")}
 
 
-@api.post("/auth/register")
-async def register(body: RegisterIn, response: Response):
+async def user_payload(u: dict) -> dict:
+    base = public_user(u)
+    if u.get("role") == "superadmin":
+        base["needs_org"] = False
+        return base
+    if not u.get("org_id"):
+        base["needs_org"] = True
+        return base
+    org = await db.organizations.find_one({"id": u["org_id"]}, {"_id": 0})
+    base["needs_org"] = org is None
+    base["org_name"] = (org or {}).get("nome")
+    base["subscription"] = _sub_summary(org)
+    return base
+
+
+class OrgRegisterIn(BaseModel):
+    nome: str
+    cognome: Optional[str] = None
+    email: EmailStr
+    password: str
+    org_name: str
+    telefono: Optional[str] = None
+    accept_terms: bool = False
+
+
+class CompleteOrgIn(BaseModel):
+    org_name: str
+    telefono: Optional[str] = None
+    accept_terms: bool = False
+
+
+@api.post("/auth/register-organization")
+async def register_organization(body: OrgRegisterIn, response: Response):
+    if not body.accept_terms:
+        raise HTTPException(status_code=400, detail="Devi accettare le condizioni per registrarti")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="La password deve avere almeno 8 caratteri")
+    if not body.org_name.strip():
+        raise HTTPException(status_code=400, detail="Il nome dell'organizzazione è obbligatorio")
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email già registrata")
     uid = f"user_{uuid.uuid4().hex[:12]}"
-    await db.users.insert_one({"user_id": uid, "email": email, "name": body.name,
-                               "password_hash": hash_password(body.password), "role": "member",
-                               "auth_provider": "password", "picture": "", "active": True, "created_at": now_iso()})
+    org = await _create_organization(body.org_name.strip(), uid)
+    full_name = f"{body.nome} {body.cognome or ''}".strip()
+    await db.users.insert_one({"user_id": uid, "email": email, "name": full_name,
+                               "password_hash": hash_password(body.password), "role": "admin",
+                               "auth_provider": "password", "org_id": org["id"], "telefono": body.telefono,
+                               "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso()})
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
-    return public_user(u)
+    return await user_payload(u)
+
+
+@api.post("/auth/complete-organization")
+async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_current_user)):
+    if user.get("role") == "superadmin":
+        raise HTTPException(status_code=400, detail="Il Super Admin non crea organizzazioni")
+    if user.get("org_id"):
+        raise HTTPException(status_code=400, detail="Organizzazione già presente")
+    if not body.accept_terms:
+        raise HTTPException(status_code=400, detail="Devi accettare le condizioni per continuare")
+    if not body.org_name.strip():
+        raise HTTPException(status_code=400, detail="Il nome dell'organizzazione è obbligatorio")
+    org = await _create_organization(body.org_name.strip(), user["user_id"])
+    await db.users.update_one({"user_id": user["user_id"]},
+                              {"$set": {"org_id": org["id"], "role": "admin", "telefono": body.telefono,
+                                        "accepted_terms_at": now_iso()}})
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return await user_payload(u)
 
 
 @api.post("/auth/login")
@@ -220,7 +339,7 @@ async def login(body: LoginIn, response: Response):
         raise HTTPException(status_code=403, detail="Accesso disabilitato")
     token = create_access_token(user["user_id"], email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
-    return public_user(user)
+    return await user_payload(user)
 
 
 @api.post("/auth/session")
@@ -238,7 +357,7 @@ async def google_session(request: Request, response: Response):
     if not user:
         uid = f"user_{uuid.uuid4().hex[:12]}"
         await db.users.insert_one({"user_id": uid, "email": email, "name": data.get("name", email),
-                                   "role": "member", "auth_provider": "google", "active": True,
+                                   "role": "admin", "auth_provider": "google", "active": True,
                                    "picture": data.get("picture", ""), "created_at": now_iso()})
     else:
         uid = user["user_id"]
@@ -249,12 +368,12 @@ async def google_session(request: Request, response: Response):
                                        "created_at": now_iso()})
     set_auth_cookie(response, "session_token", session_token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
-    return public_user(u)
+    return await user_payload(u)
 
 
 @api.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
-    return public_user(user)
+    return await user_payload(user)
 
 
 @api.post("/auth/logout")
@@ -341,7 +460,7 @@ async def activate(body: ActivateIn, response: Response):
     token = create_access_token(user["user_id"], user["email"])
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    return public_user(u)
+    return await user_payload(u)
 
 
 # ---------------- entity models ----------------
@@ -563,28 +682,64 @@ def _opt(model):
     return M
 
 
-def crud_routes(path, coll, model):
+def crud_routes(path, coll, model, org_scoped=True):
     upd_model = _opt(model)
+
+    if not org_scoped:
+        @api.get(f"/{path}", name=f"list_{path}")
+        async def _l(evento_id: Optional[str] = None, user: dict = Depends(require_support_manager)):
+            return await _list(coll, {"evento_id": evento_id} if evento_id else {})
+
+        @api.post(f"/{path}", name=f"create_{path}")
+        async def _c(body: model, user: dict = Depends(require_support_manager)):
+            return await _create(coll, body.model_dump())
+
+        @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
+        async def _g(item_id: str, user: dict = Depends(require_support_manager)):
+            return await _get(coll, item_id)
+
+        @api.put(f"/{path}/{{item_id}}", name=f"update_{path}")
+        async def _u(item_id: str, body: upd_model, user: dict = Depends(require_support_manager)):
+            return await _update(coll, item_id, body.model_dump(exclude_unset=True))
+
+        @api.delete(f"/{path}/{{item_id}}", name=f"delete_{path}")
+        async def _d(item_id: str, user: dict = Depends(require_support_manager)):
+            return await _delete(coll, item_id)
+        return
 
     @api.get(f"/{path}", name=f"list_{path}")
     async def _l(evento_id: Optional[str] = None, user: dict = Depends(require_admin)):
-        return await _list(coll, {"evento_id": evento_id} if evento_id else {})
+        q = oq(user)
+        if evento_id:
+            q["evento_id"] = evento_id
+        return await _list(coll, q)
 
     @api.post(f"/{path}", name=f"create_{path}")
     async def _c(body: model, user: dict = Depends(require_admin)):
-        return await _create(coll, body.model_dump())
+        data = body.model_dump()
+        data["org_id"] = user["org_id"]
+        return await _create(coll, data)
 
     @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
     async def _g(item_id: str, user: dict = Depends(require_admin)):
-        return await _get(coll, item_id)
+        doc = await db[coll].find_one(oq(user, id=item_id), {"_id": 0})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Elemento non trovato")
+        return doc
 
     @api.put(f"/{path}/{{item_id}}", name=f"update_{path}")
     async def _u(item_id: str, body: upd_model, user: dict = Depends(require_admin)):
-        return await _update(coll, item_id, body.model_dump(exclude_unset=True))
+        clean = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+        clean["updated_at"] = now_iso()
+        res = await db[coll].update_one(oq(user, id=item_id), {"$set": clean})
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Elemento non trovato")
+        return await db[coll].find_one(oq(user, id=item_id), {"_id": 0})
 
     @api.delete(f"/{path}/{{item_id}}", name=f"delete_{path}")
     async def _d(item_id: str, user: dict = Depends(require_admin)):
-        return await _delete(coll, item_id)
+        await db[coll].delete_one(oq(user, id=item_id))
+        return {"ok": True}
 
 
 crud_routes("events", "events", Event)
@@ -615,10 +770,10 @@ class BulkAssignIn(BaseModel):
     data: dict = {}
 
 
-async def _resolve_persons(b: BulkAssignIn) -> list:
+async def _resolve_persons(b: BulkAssignIn, org_id: str) -> list:
     ids = set(b.persona_ids or [])
     if b.tutti or b.categorie or b.ruoli or b.team_ids:
-        links = await db.staff.find({"evento_id": b.evento_id}, {"_id": 0}).to_list(5000)
+        links = await db.staff.find({"org_id": org_id, "evento_id": b.evento_id}, {"_id": 0}).to_list(5000)
         for l in links:
             if b.tutti:
                 ids.add(l["persona_id"])
@@ -634,47 +789,47 @@ async def _resolve_persons(b: BulkAssignIn) -> list:
 
 @api.post("/lodgings/bulk")
 async def lodgings_bulk(b: BulkAssignIn, admin: dict = Depends(require_admin)):
-    persons = await _resolve_persons(b)
+    persons = await _resolve_persons(b, admin["org_id"])
     if not persons:
         raise HTTPException(status_code=400, detail="Nessuna persona selezionata")
     gid = new_id()
     for pid in persons:
-        await _create("lodgings", {**b.data, "evento_id": b.evento_id, "persona_id": pid, "gruppo_id": gid})
+        await _create("lodgings", {**b.data, "org_id": admin["org_id"], "evento_id": b.evento_id, "persona_id": pid, "gruppo_id": gid})
     return {"ok": True, "gruppo_id": gid, "count": len(persons)}
 
 
 @api.post("/meals/bulk")
 async def meals_bulk(b: BulkAssignIn, admin: dict = Depends(require_admin)):
-    persons = await _resolve_persons(b)
+    persons = await _resolve_persons(b, admin["org_id"])
     if not persons:
         raise HTTPException(status_code=400, detail="Nessuna persona selezionata")
     gid = new_id()
     for pid in persons:
-        await _create("meals", {**b.data, "evento_id": b.evento_id, "persona_id": pid, "gruppo_id": gid})
+        await _create("meals", {**b.data, "org_id": admin["org_id"], "evento_id": b.evento_id, "persona_id": pid, "gruppo_id": gid})
     return {"ok": True, "gruppo_id": gid, "count": len(persons)}
 
 
 @api.delete("/hospitality/group/{gruppo_id}")
 async def delete_hospitality_group(gruppo_id: str, tipo: str, admin: dict = Depends(require_admin)):
     coll = "lodgings" if tipo == "lodging" else "meals"
-    res = await db[coll].delete_many({"gruppo_id": gruppo_id})
+    res = await db[coll].delete_many({"org_id": admin["org_id"], "gruppo_id": gruppo_id})
     return {"ok": True, "deleted": res.deleted_count}
 
 
 @api.get("/events/{event_id}/hospitality")
 async def event_hospitality(event_id: str, admin: dict = Depends(require_admin)):
-    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    event = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
     if not event:
         raise HTTPException(status_code=404, detail="Evento non trovato")
     can_costs = admin.get("role") == "admin"
-    links = await db.staff.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
-    lodgings = await db.lodgings.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
-    meals = await db.meals.find({"evento_id": event_id}, {"_id": 0}).to_list(20000)
+    links = await db.staff.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(5000)
+    lodgings = await db.lodgings.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(5000)
+    meals = await db.meals.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(20000)
     if not can_costs:
         for x in lodgings + meals:
             for f in COST_FIELDS:
                 x.pop(f, None)
-    teams = {t["id"]: t for t in await db.teams.find({"evento_id": event_id}, {"_id": 0}).to_list(1000)}
+    teams = {t["id"]: t for t in await db.teams.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(1000)}
     lod_by, meal_by = {}, {}
     for l in lodgings:
         lod_by.setdefault(l["persona_id"], []).append(l)
@@ -752,15 +907,15 @@ class ContactUpdate(BaseModel):
     note: Optional[str] = None
 
 
-async def _company_contacts(company_id: str):
-    rels = await db.person_companies.find({"company_id": company_id}, {"_id": 0}).to_list(500)
+async def _company_contacts(company_id: str, org_id: str):
+    rels = await db.person_companies.find({"org_id": org_id, "company_id": company_id}, {"_id": 0}).to_list(500)
     have = {r["person_id"] for r in rels}
     out = []
     for r in rels:
-        p = await db.persons.find_one({"id": r["person_id"]}, {"_id": 0})
+        p = await db.persons.find_one({"id": r["person_id"], "org_id": org_id}, {"_id": 0})
         if p:
             out.append({"relation": r, "person": p})
-    legacy = await db.persons.find({"azienda_id": company_id}, {"_id": 0}).to_list(500)
+    legacy = await db.persons.find({"azienda_id": company_id, "org_id": org_id}, {"_id": 0}).to_list(500)
     for p in legacy:
         if p["id"] not in have:
             out.append({"relation": {"id": None, "company_id": company_id, "person_id": p["id"],
@@ -771,10 +926,10 @@ async def _company_contacts(company_id: str):
 
 @api.get("/persons-enriched")
 async def persons_enriched(admin: dict = Depends(require_admin)):
-    persons = await _list("persons")
-    rels = await db.person_companies.find({}, {"_id": 0}).to_list(10000)
-    pres = await db.staff.find({}, {"_id": 0}).to_list(10000)
-    companies = {c["id"]: c for c in await _list("companies")}
+    persons = await _list("persons", oq(admin))
+    rels = await db.person_companies.find(oq(admin), {"_id": 0}).to_list(10000)
+    pres = await db.staff.find(oq(admin), {"_id": 0}).to_list(10000)
+    companies = {c["id"]: c for c in await _list("companies", oq(admin))}
     rel_by = defaultdict(list)
     for r in rels:
         rel_by[r["person_id"]].append(r)
@@ -818,109 +973,119 @@ async def persons_match(body: dict, admin: dict = Depends(require_admin)):
                       "cognome": {"$regex": f"^{re.escape(cognome)}$", "$options": "i"}})
     if not conds:
         return {"matches": []}
-    docs = await db.persons.find({"$or": conds}, {"_id": 0}).limit(10).to_list(10)
+    docs = await db.persons.find({"org_id": admin["org_id"], "$or": conds}, {"_id": 0}).limit(10).to_list(10)
     return {"matches": docs}
 
 
 @api.get("/persons/{person_id}/detail")
 async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
-    p = await _get("persons", person_id)
-    rels = await db.person_companies.find({"person_id": person_id}, {"_id": 0}).to_list(200)
+    p = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Persona non trovata")
+    rels = await db.person_companies.find(oq(admin, person_id=person_id), {"_id": 0}).to_list(200)
     companies = []
     seen = set()
     for r in rels:
-        c = await db.companies.find_one({"id": r["company_id"]}, {"_id": 0})
+        c = await db.companies.find_one({"id": r["company_id"], "org_id": admin["org_id"]}, {"_id": 0})
         if c:
             companies.append({"relation": r, "company": c})
             seen.add(r["company_id"])
     if p.get("azienda_id") and p["azienda_id"] not in seen:
-        c = await db.companies.find_one({"id": p["azienda_id"]}, {"_id": 0})
+        c = await db.companies.find_one({"id": p["azienda_id"], "org_id": admin["org_id"]}, {"_id": 0})
         if c:
             companies.append({"relation": {"id": None, "company_id": c["id"], "person_id": person_id,
                                            "qualifica": p.get("ruolo"), "referente_principale": True, "legacy": True},
                               "company": c})
-    presences = await db.staff.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
+    presences = await db.staff.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
     events = []
     for pr in presences:
-        e = await db.events.find_one({"id": pr["evento_id"]}, {"_id": 0})
+        e = await db.events.find_one({"id": pr["evento_id"], "org_id": admin["org_id"]}, {"_id": 0})
         events.append({"presence": pr, "event": e})
     tids = {pr.get("team_id") for pr in presences if pr.get("team_id")}
-    for t in await db.teams.find({"responsabile_id": person_id}, {"_id": 0}).to_list(100):
+    for t in await db.teams.find(oq(admin, responsabile_id=person_id), {"_id": 0}).to_list(100):
         tids.add(t["id"])
-    teams = [t for t in [await db.teams.find_one({"id": tid}, {"_id": 0}) for tid in tids] if t]
-    shifts = await db.shifts.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
-    activities = await db.activities.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
-    followups = await db.followups.find({"persona_id": person_id}, {"_id": 0}).to_list(300)
+    teams = [t for t in [await db.teams.find_one({"id": tid, "org_id": admin["org_id"]}, {"_id": 0}) for tid in tids] if t]
+    shifts = await db.shifts.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
+    activities = await db.activities.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
+    followups = await db.followups.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
     return {"person": p, "companies": companies, "events": events, "teams": teams,
             "shifts": shifts, "activities": activities, "followups": followups}
 
 
 @api.get("/companies/{company_id}/detail")
 async def company_detail(company_id: str, admin: dict = Depends(require_admin)):
-    c = await _get("companies", company_id)
-    contacts = await _company_contacts(company_id)
-    deals = await db.deals.find({"azienda_id": company_id}, {"_id": 0}).to_list(300)
+    c = await db.companies.find_one(oq(admin, id=company_id), {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Azienda non trovata")
+    contacts = await _company_contacts(company_id, admin["org_id"])
+    deals = await db.deals.find(oq(admin, azienda_id=company_id), {"_id": 0}).to_list(300)
     events = []
     seen = set()
     for d in deals:
         if d["evento_id"] in seen:
             continue
         seen.add(d["evento_id"])
-        e = await db.events.find_one({"id": d["evento_id"]}, {"_id": 0})
+        e = await db.events.find_one({"id": d["evento_id"], "org_id": admin["org_id"]}, {"_id": 0})
         if e:
             events.append({"event": e, "tipo": d.get("tipo"), "fase": d.get("fase")})
-    activities = await db.activities.find({"azienda_id": company_id}, {"_id": 0}).to_list(300)
-    followups = await db.followups.find({"azienda_id": company_id}, {"_id": 0}).to_list(300)
+    activities = await db.activities.find(oq(admin, azienda_id=company_id), {"_id": 0}).to_list(300)
+    followups = await db.followups.find(oq(admin, azienda_id=company_id), {"_id": 0}).to_list(300)
     return {"company": c, "contacts": contacts, "deals": deals, "events": events,
             "activities": activities, "followups": followups}
 
 
 @api.get("/companies/{company_id}/contacts")
 async def get_company_contacts(company_id: str, admin: dict = Depends(require_admin)):
-    return await _company_contacts(company_id)
+    return await _company_contacts(company_id, admin["org_id"])
 
 
 @api.post("/companies/{company_id}/contacts")
 async def add_company_contact(company_id: str, body: ContactIn, admin: dict = Depends(require_admin)):
-    await _get("companies", company_id)
+    company = await db.companies.find_one(oq(admin, id=company_id), {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Azienda non trovata")
     if body.person_id:
-        person = await db.persons.find_one({"id": body.person_id}, {"_id": 0})
+        person = await db.persons.find_one({"id": body.person_id, "org_id": admin["org_id"]}, {"_id": 0})
         if not person:
             raise HTTPException(status_code=404, detail="Persona non trovata")
         pid = body.person_id
     else:
         if not body.nome:
             raise HTTPException(status_code=400, detail="Nome referente obbligatorio")
-        person = await _create("persons", {"nome": body.nome, "cognome": body.cognome, "email": body.email,
+        person = await _create("persons", {"org_id": admin["org_id"], "nome": body.nome, "cognome": body.cognome, "email": body.email,
                                            "telefono": body.telefono, "cellulare": body.cellulare, "ruolo": body.ruolo,
                                            "linkedin": body.linkedin, "azienda_id": company_id, "note": body.note,
                                            "invite_status": "non_invitato"})
         pid = person["id"]
-    existing = await db.person_companies.find_one({"person_id": pid, "company_id": company_id})
-    rel_data = {"person_id": pid, "company_id": company_id, "qualifica": body.ruolo, "ruolo": body.ruolo,
+    existing = await db.person_companies.find_one({"org_id": admin["org_id"], "person_id": pid, "company_id": company_id})
+    rel_data = {"org_id": admin["org_id"], "person_id": pid, "company_id": company_id, "qualifica": body.ruolo, "ruolo": body.ruolo,
                 "referente_principale": bool(body.referente_principale), "note": body.note}
     if existing:
         rel = await _update("person_companies", existing["id"], rel_data)
     else:
         rel = await _create("person_companies", rel_data)
     if body.referente_principale:
-        await db.person_companies.update_many({"company_id": company_id, "id": {"$ne": rel["id"]}},
+        await db.person_companies.update_many({"org_id": admin["org_id"], "company_id": company_id, "id": {"$ne": rel["id"]}},
                                               {"$set": {"referente_principale": False}})
     return {"relation": rel, "person": person}
 
 
 @api.put("/company-contacts/{rel_id}")
 async def update_company_contact(rel_id: str, body: ContactUpdate, admin: dict = Depends(require_admin)):
+    existing = await db.person_companies.find_one(oq(admin, id=rel_id), {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Relazione non trovata")
     rel = await _update("person_companies", rel_id, body.model_dump(exclude_unset=True))
     if body.referente_principale:
-        await db.person_companies.update_many({"company_id": rel["company_id"], "id": {"$ne": rel_id}},
+        await db.person_companies.update_many({"org_id": admin["org_id"], "company_id": rel["company_id"], "id": {"$ne": rel_id}},
                                               {"$set": {"referente_principale": False}})
     return rel
 
 
 @api.delete("/company-contacts/{rel_id}")
 async def delete_company_contact(rel_id: str, admin: dict = Depends(require_admin)):
-    return await _delete("person_companies", rel_id)
+    await db.person_companies.delete_one(oq(admin, id=rel_id))
+    return {"ok": True}
 
 
 # ---------------- person invite ----------------
@@ -934,7 +1099,9 @@ class AccessIn(BaseModel):
 
 @api.post("/persons/{person_id}/invite")
 async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(require_admin)):
-    person = await _get("persons", person_id)
+    person = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0})
+    if not person:
+        raise HTTPException(status_code=404, detail="Persona non trovata")
     if not person.get("email"):
         raise HTTPException(status_code=400, detail="La persona non ha un'email")
     role = body.role if body.role in ("staff", "volunteer") else "volunteer"
@@ -942,13 +1109,13 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
     token = secrets.token_urlsafe(32)
     existing = await db.users.find_one({"email": email})
     if existing:
-        await db.users.update_one({"email": email}, {"$set": {"person_id": person_id, "role": role,
+        await db.users.update_one({"email": email}, {"$set": {"person_id": person_id, "role": role, "org_id": admin["org_id"],
                                                               "activation_token": token, "active": True,
                                                               "activation_expires": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()}})
     else:
         uid = f"user_{uuid.uuid4().hex[:12]}"
         await db.users.insert_one({"user_id": uid, "email": email, "name": f"{person['nome']} {person.get('cognome','')}".strip(),
-                                   "role": role, "auth_provider": "password", "person_id": person_id, "active": True,
+                                   "role": role, "auth_provider": "password", "person_id": person_id, "org_id": admin["org_id"], "active": True,
                                    "picture": person.get("foto_url", ""), "activation_token": token,
                                    "activation_expires": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
                                    "created_at": now_iso()})
@@ -963,17 +1130,20 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
     except Exception as e:
         logger.error(f"invite email failed: {e}")
         sent = False
-    await db.persons.update_one({"id": person_id}, {"$set": {"invite_status": "invito_inviato", "user_role": role}})
+    await db.persons.update_one(oq(admin, id=person_id), {"$set": {"invite_status": "invito_inviato", "user_role": role}})
     return {"ok": True, "email_sent": sent}
 
 
 @api.put("/persons/{person_id}/access")
 async def set_access(person_id: str, body: AccessIn, admin: dict = Depends(require_admin)):
-    u = await db.users.find_one({"person_id": person_id})
+    person = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0})
+    if not person:
+        raise HTTPException(status_code=404, detail="Persona non trovata")
+    u = await db.users.find_one({"person_id": person_id, "org_id": admin["org_id"]})
     if not u:
         raise HTTPException(status_code=404, detail="Nessun account collegato")
-    await db.users.update_one({"person_id": person_id}, {"$set": {"active": body.enabled}})
-    await db.persons.update_one({"id": person_id}, {"$set": {"invite_status": "account_attivato" if body.enabled else "accesso_disabilitato"}})
+    await db.users.update_one({"person_id": person_id, "org_id": admin["org_id"]}, {"$set": {"active": body.enabled}})
+    await db.persons.update_one(oq(admin, id=person_id), {"$set": {"invite_status": "account_attivato" if body.enabled else "accesso_disabilitato"}})
     return {"ok": True}
 
 
@@ -990,7 +1160,7 @@ async def upload(file: UploadFile = File(...), admin: dict = Depends(require_adm
     data = await file.read()
     ctype = file.content_type or MIME.get(ext, "application/octet-stream")
     result = storage_utils.put_object(path, data, ctype)
-    await db.files.insert_one({"id": fid, "storage_path": result["path"], "original_filename": file.filename,
+    await db.files.insert_one({"id": fid, "org_id": admin["org_id"], "storage_path": result["path"], "original_filename": file.filename,
                                "content_type": ctype, "size": result.get("size"), "is_deleted": False, "created_at": now_iso()})
     return {"id": fid, "url": f"/api/files/{fid}", "filename": file.filename}
 
@@ -1000,6 +1170,8 @@ async def download(file_id: str, user: dict = Depends(get_current_user)):
     rec = await db.files.find_one({"id": file_id, "is_deleted": False}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="File non trovato")
+    if user.get("role") != "superadmin" and rec.get("org_id") not in (None, user.get("org_id")):
+        raise HTTPException(status_code=404, detail="File non trovato")
     data, ctype = storage_utils.get_object(rec["storage_path"])
     return Response(content=data, media_type=rec.get("content_type", ctype))
 
@@ -1007,11 +1179,11 @@ async def download(file_id: str, user: dict = Depends(get_current_user)):
 # ---------------- dashboard / search / notifications ----------------
 @api.get("/dashboard")
 async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(require_admin)):
-    ev_q = {} if not evento_id else {"id": evento_id}
-    rel_q = {} if not evento_id else {"evento_id": evento_id}
+    ev_q = oq(admin) if not evento_id else oq(admin, id=evento_id)
+    rel_q = oq(admin) if not evento_id else oq(admin, evento_id=evento_id)
     events = await db.events.find(ev_q, {"_id": 0}).to_list(5000)
-    companies = await db.companies.find({}, {"_id": 0}).to_list(5000)
-    persons = await db.persons.find({}, {"_id": 0}).to_list(5000)
+    companies = await db.companies.find(oq(admin), {"_id": 0}).to_list(5000)
+    persons = await db.persons.find(oq(admin), {"_id": 0}).to_list(5000)
     deals = await db.deals.find(rel_q, {"_id": 0}).to_list(5000)
     staff = await db.staff.find(rel_q, {"_id": 0}).to_list(5000)
     teams = await db.teams.find(rel_q, {"_id": 0}).to_list(5000)
@@ -1069,7 +1241,7 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
 @api.get("/notifications")
 async def notifications(admin: dict = Depends(require_admin)):
     today = datetime.now(timezone.utc).date().isoformat()
-    fus = await db.followups.find({"stato": {"$ne": "completato"}}, {"_id": 0}).to_list(3000)
+    fus = await db.followups.find(oq(admin, stato={"$ne": "completato"}), {"_id": 0}).to_list(3000)
     items = []
     for f in fus:
         sc = (f.get("scadenza") or "")[:10]
@@ -1086,19 +1258,20 @@ async def search(q: str, admin: dict = Depends(require_admin)):
     if not q or len(q) < 2:
         return {"results": []}
     rx = {"$regex": q, "$options": "i"}
+    oid = admin["org_id"]
     results = []
-    for e in await db.events.find({"nome": rx}, {"_id": 0}).limit(6).to_list(6):
+    for e in await db.events.find({"org_id": oid, "nome": rx}, {"_id": 0}).limit(6).to_list(6):
         results.append({"tipo": "evento", "id": e["id"], "label": e["nome"], "sub": e.get("citta", "")})
-    for c in await db.companies.find({"nome": rx}, {"_id": 0}).limit(6).to_list(6):
+    for c in await db.companies.find({"org_id": oid, "nome": rx}, {"_id": 0}).limit(6).to_list(6):
         results.append({"tipo": "azienda", "id": c["id"], "label": c["nome"], "sub": c.get("settore", "")})
-    for p in await db.persons.find({"$or": [{"nome": rx}, {"cognome": rx}, {"email": rx}]}, {"_id": 0}).limit(6).to_list(6):
+    for p in await db.persons.find({"org_id": oid, "$or": [{"nome": rx}, {"cognome": rx}, {"email": rx}]}, {"_id": 0}).limit(6).to_list(6):
         results.append({"tipo": "persona", "id": p["id"], "label": f"{p['nome']} {p.get('cognome','')}".strip(), "sub": p.get("ruolo", "")})
     return {"results": results}
 
 
 # ---------------- settings ----------------
-def default_settings():
-    return {"id": "global",
+def default_settings(org_id="global"):
+    return {"id": org_id,
             "tipologie_evento": ["Fiera", "Congresso", "Concerto", "Festival", "Conferenza", "Workshop", "Gala"],
             "settori": ["Tecnologia", "Food & Beverage", "Moda", "Automotive", "Finanza", "Media", "No Profit"],
             "ruoli_staff": ["Coordinatore", "Hostess", "Tecnico", "Sicurezza", "Accoglienza", "Logistica"],
@@ -1110,9 +1283,10 @@ def default_settings():
 
 @api.get("/settings")
 async def get_settings(admin: dict = Depends(require_admin)):
-    doc = await db.settings.find_one({"id": "global"}, {"_id": 0})
+    sid = admin["org_id"]
+    doc = await db.settings.find_one({"id": sid}, {"_id": 0})
     if not doc:
-        doc = default_settings()
+        doc = default_settings(sid)
         await db.settings.insert_one(dict(doc))
     return doc
 
@@ -1120,9 +1294,9 @@ async def get_settings(admin: dict = Depends(require_admin)):
 @api.put("/settings")
 async def update_settings(body: dict, admin: dict = Depends(require_admin)):
     body.pop("_id", None)
-    body["id"] = "global"
-    await db.settings.update_one({"id": "global"}, {"$set": body}, upsert=True)
-    return await db.settings.find_one({"id": "global"}, {"_id": 0})
+    body["id"] = admin["org_id"]
+    await db.settings.update_one({"id": admin["org_id"]}, {"$set": body}, upsert=True)
+    return await db.settings.find_one({"id": admin["org_id"]}, {"_id": 0})
 
 
 USAGE_MAP = {"tipologie_evento": ("events", "tipologia"), "settori": ("companies", "settore"),
@@ -1136,7 +1310,7 @@ async def settings_usage(list: str, value: str, admin: dict = Depends(require_ad
     if not m:
         return {"count": 0}
     coll, field = m
-    count = await db[coll].count_documents({field: value})
+    count = await db[coll].count_documents({"org_id": admin["org_id"], field: value})
     return {"count": count}
 
 
@@ -1190,11 +1364,11 @@ class SupportTicket(BaseModel):
     org_id: Optional[str] = DEFAULT_ORG
 
 
-crud_routes("support-kb", "support_knowledge_base", KBEntry)
-crud_routes("support-faq", "support_faq", FAQEntry)
-crud_routes("support-categories", "support_categories", SupportCategory)
-crud_routes("support-feature-requests", "support_feature_requests", FeatureRequest)
-crud_routes("support-tickets", "support_tickets", SupportTicket)
+crud_routes("support-kb", "support_knowledge_base", KBEntry, org_scoped=False)
+crud_routes("support-faq", "support_faq", FAQEntry, org_scoped=False)
+crud_routes("support-categories", "support_categories", SupportCategory, org_scoped=False)
+crud_routes("support-feature-requests", "support_feature_requests", FeatureRequest, org_scoped=False)
+crud_routes("support-tickets", "support_tickets", SupportTicket, org_scoped=False)
 
 
 def _sup_tokens(s: str):
@@ -1693,8 +1867,10 @@ async def _sync_object(user_id: str, kind: str, ref_id: str, body: dict):
 
 
 @api.post("/events/{event_id}/calendar-sync")
-async def sync_event(event_id: str, user: dict = Depends(get_current_user)):
-    e = await _get("events", event_id)
+async def sync_event(event_id: str, user: dict = Depends(require_admin)):
+    e = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not e:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
     link = f"{APP_URL}/eventi?id={event_id}"
     desc = (e.get("descrizione") or "") + f"\n\nScheda evento: {link}"
     loc = ", ".join([x for x in [e.get("localita"), e.get("indirizzo"), e.get("citta")] if x])
@@ -1724,10 +1900,11 @@ async def my_events(user: dict = Depends(get_current_user)):
     pid = user.get("person_id")
     if not pid:
         return {"events": []}
-    presences = await db.staff.find({"persona_id": pid}, {"_id": 0}).to_list(500)
+    oid = user.get("org_id")
+    presences = await db.staff.find({"persona_id": pid, "org_id": oid}, {"_id": 0}).to_list(500)
     out = []
     for pr in presences:
-        ev = await db.events.find_one({"id": pr["evento_id"]}, {"_id": 0})
+        ev = await db.events.find_one({"id": pr["evento_id"], "org_id": oid}, {"_id": 0})
         if ev:
             out.append({"event": ev, "presence": pr})
     out.sort(key=lambda x: x["event"].get("data_inizio") or "9999")
@@ -1737,27 +1914,28 @@ async def my_events(user: dict = Depends(get_current_user)):
 @api.get("/me/events/{event_id}")
 async def my_event_detail(event_id: str, user: dict = Depends(get_current_user)):
     pid = user.get("person_id")
-    presence = await db.staff.find_one({"persona_id": pid, "evento_id": event_id}, {"_id": 0})
+    oid = user.get("org_id")
+    presence = await db.staff.find_one({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0})
     if not presence:
         raise HTTPException(status_code=404, detail="Evento non trovato")  # object check
-    event = await db.events.find_one({"id": event_id}, {"_id": 0})
-    my_shifts = await db.shifts.find({"persona_id": pid, "evento_id": event_id}, {"_id": 0}).to_list(200)
+    event = await db.events.find_one({"id": event_id, "org_id": oid}, {"_id": 0})
+    my_shifts = await db.shifts.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(200)
     my_shifts.sort(key=lambda s: (s.get("data") or "", s.get("ora_inizio") or ""))
     team = None
     colleagues = []
     if presence.get("team_id"):
-        team = await db.teams.find_one({"id": presence["team_id"]}, {"_id": 0})
-        mates = await db.staff.find({"team_id": presence["team_id"], "evento_id": event_id}, {"_id": 0}).to_list(200)
+        team = await db.teams.find_one({"id": presence["team_id"], "org_id": oid}, {"_id": 0})
+        mates = await db.staff.find({"team_id": presence["team_id"], "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(200)
         for m in mates:
-            p = await db.persons.find_one({"id": m["persona_id"]}, {"_id": 0})
+            p = await db.persons.find_one({"id": m["persona_id"], "org_id": oid}, {"_id": 0})
             if p:
                 colleagues.append(_safe_colleague(p, m, team))
     leader = None
     if team and team.get("responsabile_id"):
-        lp = await db.persons.find_one({"id": team["responsabile_id"]}, {"_id": 0})
+        lp = await db.persons.find_one({"id": team["responsabile_id"], "org_id": oid}, {"_id": 0})
         if lp:
             leader = {"nome": lp.get("nome"), "cognome": lp.get("cognome"), "foto_url": lp.get("foto_url")}
-    maps = await db.event_maps.find({"evento_id": event_id}, {"_id": 0}).to_list(200)
+    maps = await db.event_maps.find({"evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(200)
     prio = [m for m in maps if m.get("team_id") == presence.get("team_id") or m.get("area") == presence.get("area")]
     others = [m for m in maps if m not in prio]
     return {"event": event, "presence": presence, "shifts": my_shifts, "team": team,
@@ -1769,7 +1947,7 @@ async def my_shifts(user: dict = Depends(get_current_user)):
     pid = user.get("person_id")
     if not pid:
         return {"shifts": []}
-    s = await db.shifts.find({"persona_id": pid}, {"_id": 0}).to_list(500)
+    s = await db.shifts.find({"persona_id": pid, "org_id": user.get("org_id")}, {"_id": 0}).to_list(500)
     s.sort(key=lambda x: (x.get("data") or "", x.get("ora_inizio") or ""))
     return {"shifts": s}
 
@@ -1845,17 +2023,17 @@ async def create_lead(body: Lead):
 
 
 @api.get("/leads")
-async def list_leads(admin: dict = Depends(require_admin)):
+async def list_leads(admin: dict = Depends(require_superadmin)):
     return await _list("leads")
 
 
 @api.put("/leads/{lead_id}")
-async def update_lead(lead_id: str, body: LeadUpdate, admin: dict = Depends(require_admin)):
+async def update_lead(lead_id: str, body: LeadUpdate, admin: dict = Depends(require_superadmin)):
     return await _update("leads", lead_id, body.model_dump(exclude_unset=True))
 
 
 @api.delete("/leads/{lead_id}")
-async def delete_lead(lead_id: str, admin: dict = Depends(require_admin)):
+async def delete_lead(lead_id: str, admin: dict = Depends(require_superadmin)):
     return await _delete("leads", lead_id)
 
 
@@ -1865,20 +2043,20 @@ def _briefing_hash(data: dict) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-async def _build_briefing(event_id: str) -> dict:
-    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+async def _build_briefing(event_id: str, org_id: str) -> dict:
+    event = await db.events.find_one({"id": event_id, "org_id": org_id}, {"_id": 0})
     if not event:
         raise HTTPException(status_code=404, detail="Evento non trovato")
 
-    persons = {p["id"]: p for p in await db.persons.find({}, {"_id": 0}).to_list(10000)}
-    teams = await db.teams.find({"evento_id": event_id}, {"_id": 0}).to_list(1000)
-    links = await db.staff.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
-    shifts = await db.shifts.find({"evento_id": event_id}, {"_id": 0}).sort([("data", 1), ("ora_inizio", 1)]).to_list(5000)
-    maps = await db.event_maps.find({"evento_id": event_id}, {"_id": 0}).to_list(1000)
-    lodgings = await db.lodgings.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
-    meals = await db.meals.find({"evento_id": event_id}, {"_id": 0}).to_list(20000)
-    deals = await db.deals.find({"evento_id": event_id}, {"_id": 0}).to_list(2000)
-    companies = {c["id"]: c for c in await db.companies.find({}, {"_id": 0}).to_list(10000)}
+    persons = {p["id"]: p for p in await db.persons.find({"org_id": org_id}, {"_id": 0}).to_list(10000)}
+    teams = await db.teams.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(1000)
+    links = await db.staff.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(5000)
+    shifts = await db.shifts.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).sort([("data", 1), ("ora_inizio", 1)]).to_list(5000)
+    maps = await db.event_maps.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(1000)
+    lodgings = await db.lodgings.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(5000)
+    meals = await db.meals.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(20000)
+    deals = await db.deals.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(2000)
+    companies = {c["id"]: c for c in await db.companies.find({"org_id": org_id}, {"_id": 0}).to_list(10000)}
 
     team_map = {t["id"]: t for t in teams}
 
@@ -2027,8 +2205,8 @@ async def _build_briefing(event_id: str) -> dict:
 
 @api.get("/events/{event_id}/briefing-live")
 async def briefing_live(event_id: str, admin: dict = Depends(require_admin)):
-    data = await _build_briefing(event_id)
-    versions = await db.briefing_versions.find({"evento_id": event_id}, {"content": 0, "_id": 0}).sort("versione", -1).to_list(200)
+    data = await _build_briefing(event_id, admin["org_id"])
+    versions = await db.briefing_versions.find(oq(admin, evento_id=event_id), {"content": 0, "_id": 0}).sort("versione", -1).to_list(200)
     live_hash = _briefing_hash(data)
     latest = versions[0] if versions else None
     data["live_hash"] = live_hash
@@ -2044,10 +2222,10 @@ class BriefingPublishIn(BaseModel):
 
 @api.post("/events/{event_id}/briefing-versions")
 async def publish_briefing(event_id: str, body: BriefingPublishIn, admin: dict = Depends(require_admin)):
-    data = await _build_briefing(event_id)
-    last = await db.briefing_versions.find_one({"evento_id": event_id}, sort=[("versione", -1)])
+    data = await _build_briefing(event_id, admin["org_id"])
+    last = await db.briefing_versions.find_one(oq(admin, evento_id=event_id), sort=[("versione", -1)])
     versione = (last.get("versione", 0) + 1) if last else 1
-    doc = {"id": new_id(), "evento_id": event_id, "versione": versione,
+    doc = {"id": new_id(), "org_id": admin["org_id"], "evento_id": event_id, "versione": versione,
            "titolo": body.titolo or f"Versione {versione}", "note": body.note,
            "content": data, "content_hash": _briefing_hash(data),
            "published_by": admin.get("name") or admin.get("email"), "created_at": now_iso()}
@@ -2057,12 +2235,12 @@ async def publish_briefing(event_id: str, body: BriefingPublishIn, admin: dict =
 
 @api.get("/events/{event_id}/briefing-versions")
 async def list_briefing_versions(event_id: str, admin: dict = Depends(require_admin)):
-    return await db.briefing_versions.find({"evento_id": event_id}, {"content": 0, "_id": 0}).sort("versione", -1).to_list(200)
+    return await db.briefing_versions.find(oq(admin, evento_id=event_id), {"content": 0, "_id": 0}).sort("versione", -1).to_list(200)
 
 
 @api.get("/briefing-versions/{version_id}")
 async def get_briefing_version(version_id: str, admin: dict = Depends(require_admin)):
-    v = await db.briefing_versions.find_one({"id": version_id}, {"_id": 0})
+    v = await db.briefing_versions.find_one(oq(admin, id=version_id), {"_id": 0})
     if not v:
         raise HTTPException(status_code=404, detail="Versione non trovata")
     return v
@@ -2070,24 +2248,64 @@ async def get_briefing_version(version_id: str, admin: dict = Depends(require_ad
 
 @api.delete("/briefing-versions/{version_id}")
 async def delete_briefing_version(version_id: str, admin: dict = Depends(require_admin)):
-    await db.briefing_versions.delete_one({"id": version_id})
+    await db.briefing_versions.delete_one(oq(admin, id=version_id))
     return {"ok": True}
 
 
 # ---------------- admin reset ----------------
 OPERATIONAL = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
                "event_maps", "activities", "followups", "calendar_event_links", "files",
-               "calendar_connections", "person_companies", "lodgings", "meals", "briefing_versions"]
+               "person_companies", "lodgings", "meals", "briefing_versions"]
 
 
 @api.post("/admin/reset-data")
 async def reset_data(admin: dict = Depends(require_admin)):
     for c in OPERATIONAL:
-        await db[c].delete_many({})
-    await db.users.delete_many({"role": {"$in": ["staff", "volunteer"]}})
-    await db.settings.update_one({"id": "global"}, {"$set": {"demo_disabled": True}}, upsert=True)
-    counts = {c: await db[c].count_documents({}) for c in OPERATIONAL}
-    return {"ok": True, "counts": counts, "demo_disabled": True}
+        await db[c].delete_many({"org_id": admin["org_id"]})
+    await db.users.delete_many({"role": {"$in": ["staff", "volunteer"]}, "org_id": admin["org_id"]})
+    counts = {c: await db[c].count_documents({"org_id": admin["org_id"]}) for c in OPERATIONAL}
+    return {"ok": True, "counts": counts}
+
+
+# ---------------- account & platform (superadmin) ----------------
+@api.get("/account/subscription")
+async def account_subscription(user: dict = Depends(require_admin)):
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    return {"organization": {"id": org["id"], "nome": org.get("nome"), "created_at": org.get("created_at")},
+            "subscription": _sub_summary(org)}
+
+
+@api.get("/platform/stats")
+async def platform_stats(admin: dict = Depends(require_superadmin)):
+    orgs = await db.organizations.find({}, {"_id": 0}).to_list(5000)
+    summaries = [_sub_summary(o) for o in orgs]
+    trial = len([s for s in summaries if s["status"] == "trial"])
+    active = len([s for s in summaries if s["status"] == "active"])
+    expired = len([s for s in summaries if s["status"] in ("expired", "canceled", "suspended", "past_due")])
+
+    def _mrr(s):
+        if s["status"] != "active":
+            return 0
+        return PRICE_MONTHLY if s["billing_cycle"] == "monthly" else (PRICE_YEARLY / 12 if s["billing_cycle"] == "yearly" else 0)
+    mrr = sum(_mrr(s) for s in summaries)
+    return {"organizations": len(orgs), "trial": trial, "active": active, "expired": expired,
+            "mrr": round(mrr, 2), "arr": round(mrr * 12, 2), "leads": await db.leads.count_documents({})}
+
+
+@api.get("/platform/organizations")
+async def platform_organizations(admin: dict = Depends(require_superadmin)):
+    orgs = await db.organizations.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    out = []
+    for o in orgs:
+        owner = await db.users.find_one({"user_id": o.get("owner_user_id")}, {"_id": 0, "password_hash": 0})
+        members = await db.users.count_documents({"org_id": o["id"]})
+        events = await db.events.count_documents({"org_id": o["id"]})
+        out.append({"id": o["id"], "nome": o.get("nome"), "created_at": o.get("created_at"),
+                    "owner_email": (owner or {}).get("email"), "owner_name": (owner or {}).get("name"),
+                    "members": members, "events": events, "subscription": _sub_summary(o)})
+    return out
 
 
 # ---------------- seed ----------------
@@ -2099,16 +2317,17 @@ async def seed_admin():
         # First-time bootstrap only. ADMIN_PASSWORD is used solely to create the
         # initial account; it is never re-applied afterwards.
         await db.users.insert_one({"user_id": f"user_{uuid.uuid4().hex[:12]}", "email": email, "name": "Michele Manara",
-                                   "password_hash": hash_password(pw), "role": "admin", "auth_provider": "password",
-                                   "picture": "", "active": True, "created_at": now_iso()})
-        logger.info("Admin account bootstrapped")
+                                   "password_hash": hash_password(pw), "role": "superadmin", "auth_provider": "password",
+                                   "org_id": None, "picture": "", "active": True, "created_at": now_iso()})
+        logger.info("Super Admin account bootstrapped")
         return
-    # Existing account: ensure it keeps admin role and stays enabled, but NEVER
-    # modify the password_hash. A deploy/restart must not reset a password the
-    # owner has changed via change-password or reset-password.
+    # Existing account: promote to Super Admin CRMEvent (platform owner, no org),
+    # keep it enabled, but NEVER modify the password_hash.
     upd = {}
-    if existing.get("role") != "admin":
-        upd["role"] = "admin"
+    if existing.get("role") != "superadmin":
+        upd["role"] = "superadmin"
+    if existing.get("org_id") is not None:
+        upd["org_id"] = None
     if existing.get("active") is False:
         upd["active"] = True
     if upd:
@@ -2248,19 +2467,25 @@ async def migrate_person_companies():
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
+    for c in ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
+              "event_maps", "activities", "followups", "lodgings", "meals",
+              "person_companies", "briefing_versions", "files"]:
+        try:
+            await db[c].create_index("org_id")
+        except Exception:
+            pass
     try:
         storage_utils.init_storage()
         logger.info("Storage initialized")
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
     await seed_admin()
-    await seed_demo()
     await migrate_person_companies()
     await seed_support()
     creds = ROOT_DIR.parent / "memory" / "test_credentials.md"
     try:
         creds.write_text(
-            f"# Test Credentials\n\n## Admin (email/password)\n- Email: {os.environ['ADMIN_EMAIL']}\n- Password: {os.environ['ADMIN_PASSWORD']}\n- Role: admin\n\n## Roles\n- admin/member: CRM amministrativo\n- staff/volunteer: solo area personale (/area), collegati a una Persona via invito\n\n## Auth endpoints\n- POST /api/auth/register, /api/auth/login, /api/auth/logout\n- POST /api/auth/change-password, /api/auth/forgot-password, /api/auth/reset-password\n- POST /api/auth/activate (invito), /api/auth/session (Google login)\n\n## Notes\n- Google Calendar OAuth requires GOOGLE_CLIENT_ID/SECRET in .env (currently empty).\n- Staff/volunteer users are created via POST /api/persons/{{id}}/invite.\n"
+            f"# Test Credentials\n\n## Super Admin CRMEvent (platform owner, email/password)\n- Email: {os.environ['ADMIN_EMAIL']}\n- Password: {os.environ['ADMIN_PASSWORD']}\n- Role: superadmin (NO organization; manages the platform at /piattaforma)\n\n## Roles\n- superadmin: platform owner (CRMEvent). No org_id. Sees /piattaforma. Cannot access org CRM data.\n- admin: organization admin/owner. Has org_id. Full CRM access for own org only.\n- staff/volunteer: org members, personal area only (/app), linked to a Person via invite.\n\n## Organization signup (self-serve organizer)\n- POST /api/auth/register-organization {{nome, cognome, email, password, org_name, telefono, accept_terms}} -> creates Organization + admin user + 14-day trial\n- POST /api/auth/complete-organization {{org_name, telefono, accept_terms}} -> for Google users without an org\n- Public pages: /prezzi (pricing), /registrati (signup)\n\n## Multi-tenant\n- Every operational document carries org_id; all reads/writes are scoped server-side to the caller's org_id (anti cross-tenant/IDOR).\n\n## Auth endpoints\n- POST /api/auth/login, /api/auth/logout, /api/auth/register-organization, /api/auth/complete-organization\n- POST /api/auth/change-password, /api/auth/forgot-password, /api/auth/reset-password\n- POST /api/auth/activate (invito), /api/auth/session (Google login)\n\n## Notes\n- Google Calendar OAuth requires GOOGLE_CLIENT_ID/SECRET in .env (currently empty).\n- Stripe billing is scaffolded (subscription states + data model) but real payments are NOT active yet.\n"
         )
     except Exception as e:
         logger.warning(f"creds write failed: {e}")

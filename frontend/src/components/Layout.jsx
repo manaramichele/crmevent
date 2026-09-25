@@ -4,12 +4,12 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 
-const NAV = [
+const ORG_NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende" },
@@ -18,10 +18,27 @@ const NAV = [
   { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor" },
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup" },
-  { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
-  { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto", superadmin: true },
+  { to: "/account", label: "Account e abbonamento", icon: CreditCard, id: "account" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni" },
 ];
+
+const SUPER_NAV = [
+  { to: "/piattaforma", label: "Organizzazioni", icon: Building2, id: "piattaforma" },
+  { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
+  { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
+];
+
+function TrialBanner({ sub, onCta }) {
+  if (!sub || sub.status === "active") return null;
+  const limited = sub.access !== "full";
+  return (
+    <div className={`px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm ${limited ? "bg-red-50 text-red-700 border-b border-red-200" : "bg-tiffany-light text-tiffany-fg border-b border-tiffany-border"}`} data-testid="trial-banner">
+      {limited ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <Sparkles className="w-4 h-4 shrink-0" />}
+      <span className="font-medium">{limited ? "Periodo di prova terminato — i tuoi dati sono al sicuro." : `Prova gratuita – ${sub.days_left} ${sub.days_left === 1 ? "giorno" : "giorni"} rimanenti`}</span>
+      <button onClick={onCta} data-testid="trial-banner-cta" className="ml-auto font-semibold underline hover:no-underline">Attiva CRMEvent</button>
+    </div>
+  );
+}
 
 function Logo({ collapsed }) {
   return collapsed ? (
@@ -128,7 +145,7 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const navItems = NAV.filter((n) => !n.superadmin || user?.role === "admin");
+  const navItems = user?.role === "superadmin" ? SUPER_NAV : ORG_NAV;
   const sidebar = (
     <aside className={`${collapsed ? "w-20" : "w-64"} shrink-0 bg-white border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col transition-all duration-300`}>
       <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100">
@@ -203,6 +220,7 @@ export default function Layout({ children }) {
             )}
           </div>
         </header>
+        {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/account")} />}
         <main className="flex-1 p-4 lg:p-8 bg-slate-50/40">{children}</main>
       </div>
       <SupportChat />

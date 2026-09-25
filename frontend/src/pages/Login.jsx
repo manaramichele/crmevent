@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiError } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,8 @@ import { toast } from "sonner";
 export default function Login() {
   const { setUser } = useAuth();
   const nav = useNavigate();
-  const [mode, setMode] = useState("login"); // login | register | forgot
-  const [form, setForm] = useState({ email: "", password: "", name: "" });
+  const [mode, setMode] = useState("login"); // login | forgot
+  const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -24,11 +24,9 @@ export default function Login() {
         toast.success("Se l'email esiste, riceverai un link per reimpostare la password.");
         setMode("login");
       } else {
-        const url = mode === "login" ? "/auth/login" : "/auth/register";
-        const payload = mode === "login" ? { email: form.email, password: form.password } : form;
-        const { data } = await api.post(url, payload);
+        const { data } = await api.post("/auth/login", { email: form.email, password: form.password });
         setUser(data);
-        nav("/app");
+        nav(data.needs_org ? "/completa-organizzazione" : "/app");
       }
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     finally { setLoading(false); }
@@ -61,7 +59,7 @@ export default function Login() {
             <img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-16 sm:h-14 w-auto" />
           </div>
           <h2 className="font-display text-2xl font-bold text-slate-900">
-            {mode === "login" ? "Accedi" : mode === "register" ? "Crea account" : "Recupera password"}
+            {mode === "login" ? "Accedi" : "Recupera password"}
           </h2>
           <p className="text-sm text-slate-500 mb-6">
             {mode === "forgot" ? "Inserisci la tua email per ricevere il link di reset." : "Entra nel tuo gestionale eventi."}
@@ -78,10 +76,6 @@ export default function Login() {
           )}
 
           <form onSubmit={submit} className="space-y-4">
-            {mode === "register" && (
-              <div className="space-y-1.5"><Label htmlFor="name">Nome completo</Label>
-                <Input id="name" data-testid="name-input" value={form.name} onChange={ch("name")} required /></div>
-            )}
             <div className="space-y-1.5"><Label htmlFor="email">Email</Label>
               <Input id="email" type="email" data-testid="email-input" value={form.email} onChange={ch("email")} required /></div>
             {mode !== "forgot" && (
@@ -93,19 +87,14 @@ export default function Login() {
             )}
             <Button type="submit" disabled={loading} data-testid="submit-auth-button"
               className="w-full h-11 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98]">
-              {loading ? "Attendere..." : mode === "login" ? "Accedi" : mode === "register" ? "Registrati" : "Invia link"}
+              {loading ? "Attendere..." : mode === "login" ? "Accedi" : "Invia link"}
             </Button>
           </form>
 
           <p className="text-sm text-slate-500 mt-6 text-center">
             {mode === "forgot" ? (
               <button onClick={() => setMode("login")} className="text-tiffany-active font-semibold hover:underline">Torna al login</button>
-            ) : (<>
-              {mode === "login" ? "Non hai un account? " : "Hai già un account? "}
-              <button onClick={() => setMode(mode === "login" ? "register" : "login")} data-testid="toggle-auth-mode" className="text-tiffany-active font-semibold hover:underline">
-                {mode === "login" ? "Registrati" : "Accedi"}
-              </button>
-            </>)}
+            ) : (<>Non hai un account? <Link to="/registrati" data-testid="go-register" className="text-tiffany-active font-semibold hover:underline">Prova CRMEvent gratis</Link></>)}
           </p>
         </div>
       </div>

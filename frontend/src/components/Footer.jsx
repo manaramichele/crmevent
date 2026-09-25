@@ -12,6 +12,7 @@ export default function Footer() {
           <div className="text-white font-semibold mb-3 text-sm">Prodotto</div>
           <ul className="space-y-2 text-sm">
             <li><a href="/#funzionalita" className="hover:text-white">Funzionalità</a></li>
+            <li><Link to="/prezzi" data-testid="footer-pricing-link" className="hover:text-white">Prezzi</Link></li>
             <li><a href="/#staff" className="hover:text-white">Staff & Volontari</a></li>
             <li><a href="/#sponsor" className="hover:text-white">Sponsor</a></li>
             <li><Link to="/login" className="hover:text-white">Accedi</Link></li>
