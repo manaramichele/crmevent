@@ -8,6 +8,8 @@ import re
 import uuid
 import logging
 import secrets
+import hashlib
+import json
 from collections import defaultdict
 import support_service
 from datetime import datetime, timezone, timedelta
@@ -1857,10 +1859,225 @@ async def delete_lead(lead_id: str, admin: dict = Depends(require_admin)):
     return await _delete("leads", lead_id)
 
 
+# ---------------- briefing evento ----------------
+def _briefing_hash(data: dict) -> str:
+    payload = json.dumps(data.get("sections", {}), sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+async def _build_briefing(event_id: str) -> dict:
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+
+    persons = {p["id"]: p for p in await db.persons.find({}, {"_id": 0}).to_list(10000)}
+    teams = await db.teams.find({"evento_id": event_id}, {"_id": 0}).to_list(1000)
+    links = await db.staff.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
+    shifts = await db.shifts.find({"evento_id": event_id}, {"_id": 0}).sort([("data", 1), ("ora_inizio", 1)]).to_list(5000)
+    maps = await db.event_maps.find({"evento_id": event_id}, {"_id": 0}).to_list(1000)
+    lodgings = await db.lodgings.find({"evento_id": event_id}, {"_id": 0}).to_list(5000)
+    meals = await db.meals.find({"evento_id": event_id}, {"_id": 0}).to_list(20000)
+    deals = await db.deals.find({"evento_id": event_id}, {"_id": 0}).to_list(2000)
+    companies = {c["id"]: c for c in await db.companies.find({}, {"_id": 0}).to_list(10000)}
+
+    team_map = {t["id"]: t for t in teams}
+
+    def pfull(pid):
+        p = persons.get(pid)
+        if not p:
+            return None
+        return {"id": p["id"], "nome": p.get("nome"), "cognome": p.get("cognome"),
+                "telefono": p.get("cellulare") or p.get("telefono"), "email": p.get("email"),
+                "ruolo": p.get("ruolo")}
+
+    staff_out = []
+    for l in links:
+        p = persons.get(l["persona_id"])
+        if not p:
+            continue
+        staff_out.append({
+            "persona_id": p["id"], "nome": p.get("nome"), "cognome": p.get("cognome"),
+            "categoria": l.get("categoria"), "ruolo": l.get("ruolo") or p.get("ruolo"),
+            "team_id": l.get("team_id"), "team_nome": team_map.get(l.get("team_id"), {}).get("nome"),
+            "responsabile": l.get("responsabile"),
+            "telefono": p.get("cellulare") or p.get("telefono"), "email": p.get("email"),
+            "area": l.get("area"), "punto_ritrovo": l.get("punto_ritrovo"), "luogo_operativo": l.get("luogo_operativo"),
+            "data_arrivo": l.get("data_arrivo"), "ora_arrivo": l.get("ora_arrivo"),
+            "data_partenza": l.get("data_partenza"), "ora_partenza": l.get("ora_partenza"),
+            "stato": l.get("stato"),
+        })
+    staff_out.sort(key=lambda x: ((x.get("cognome") or "").lower(), (x.get("nome") or "").lower()))
+
+    members_by_team = defaultdict(list)
+    for s in staff_out:
+        if s.get("team_id"):
+            members_by_team[s["team_id"]].append(s)
+    teams_out = []
+    for t in teams:
+        resp = pfull(t.get("responsabile_id")) if t.get("responsabile_id") else None
+        mem = members_by_team.get(t["id"], [])
+        teams_out.append({
+            "id": t["id"], "nome": t.get("nome"), "area": t.get("area"),
+            "descrizione": t.get("descrizione"), "luogo_operativo": t.get("luogo_operativo"),
+            "punto_ritrovo": t.get("punto_ritrovo"), "responsabile": resp, "membri": mem,
+            "staff_count": len([m for m in mem if m.get("categoria") != "volontario"]),
+            "volontari_count": len([m for m in mem if m.get("categoria") == "volontario"]),
+        })
+    teams_out.sort(key=lambda x: (x.get("nome") or "").lower())
+
+    shifts_out = []
+    for s in shifts:
+        p = persons.get(s.get("persona_id")) if s.get("persona_id") else None
+        shifts_out.append({
+            "id": s["id"], "data": s.get("data"), "ora_inizio": s.get("ora_inizio"), "ora_fine": s.get("ora_fine"),
+            "area": s.get("area"), "ruolo": s.get("ruolo"),
+            "team_nome": team_map.get(s.get("team_id"), {}).get("nome"),
+            "luogo": s.get("luogo"), "punto_ritrovo": s.get("punto_ritrovo"),
+            "persona_nome": (f"{p.get('nome', '')} {p.get('cognome') or ''}".strip() if p else None),
+            "coperto": bool(s.get("persona_id")),
+        })
+
+    lod_by, meal_by = defaultdict(list), defaultdict(list)
+    for x in lodgings:
+        for f in COST_FIELDS:
+            x.pop(f, None)
+        lod_by[x["persona_id"]].append(x)
+    for x in meals:
+        for f in COST_FIELDS:
+            x.pop(f, None)
+        meal_by[x["persona_id"]].append(x)
+    hosp_persons = []
+    for l in links:
+        p = persons.get(l["persona_id"])
+        if not p:
+            continue
+        plod, pmeal = lod_by.get(l["persona_id"], []), meal_by.get(l["persona_id"], [])
+        if not plod and not pmeal:
+            continue
+        eff_esig = l.get("esigenze_alimentari") if l.get("esigenze_alimentari") is not None else p.get("esigenze_alimentari")
+        hosp_persons.append({
+            "nome": p.get("nome"), "cognome": p.get("cognome"),
+            "esigenze_alimentari": eff_esig or [], "lodgings": plod, "meals": pmeal,
+        })
+    hosp_persons.sort(key=lambda x: ((x.get("cognome") or "").lower(), (x.get("nome") or "").lower()))
+
+    sponsors_out = []
+    for d in deals:
+        c = companies.get(d.get("azienda_id"))
+        if not c:
+            continue
+        sponsors_out.append({
+            "azienda": c.get("nome"), "tipo": d.get("tipo"), "fase": d.get("fase"),
+            "livello": d.get("livello"), "valore_confermato": d.get("valore_confermato"), "stato": d.get("stato"),
+        })
+
+    tl = defaultdict(list)
+    for s in shifts_out:
+        if s.get("data"):
+            tl[s["data"]].append(s)
+    timeline = [{"data": d, "turni": tl[d]} for d in sorted(tl.keys())]
+
+    staff_count = len([s for s in staff_out if s.get("categoria") in ("staff", "collaboratore")])
+    volontari_count = len([s for s in staff_out if s.get("categoria") == "volontario"])
+    turni_scoperti = len([s for s in shifts_out if not s["coperto"]])
+    stats = {
+        "persone_count": len(staff_out), "staff_count": staff_count, "volontari_count": volontari_count,
+        "teams_count": len(teams_out), "turni_count": len(shifts_out), "turni_scoperti": turni_scoperti,
+        "mappe_count": len(maps), "sponsor_count": len(sponsors_out),
+        "pernottamenti": len(lodgings), "pasti": len(meals),
+    }
+
+    sections = {
+        "teams": teams_out, "staff": staff_out, "shifts": shifts_out,
+        "hospitality": hosp_persons, "maps": maps, "sponsors": sponsors_out, "timeline": timeline,
+    }
+
+    checks = []
+
+    def add(key, label, ok, detail=""):
+        checks.append({"key": key, "label": label, "status": "ok" if ok else "warning", "detail": detail})
+
+    add("evento_date", "Date evento definite", bool(event.get("data_inizio")),
+        "" if event.get("data_inizio") else "Manca la data di inizio evento")
+    add("evento_luogo", "Località / venue definita", bool(event.get("localita") or event.get("citta")),
+        "" if (event.get("localita") or event.get("citta")) else "Manca la località dell'evento")
+    add("staff_presente", "Staff/volontari collegati", len(staff_out) > 0,
+        "" if staff_out else "Nessuna persona collegata all'evento")
+    teams_no_resp = [t["nome"] for t in teams_out if not t["responsabile"]]
+    add("team_responsabili", "Team con responsabile", len(teams_out) > 0 and not teams_no_resp,
+        ("Team senza responsabile: " + ", ".join(teams_no_resp)) if teams_no_resp else ("Nessun team creato" if not teams_out else ""))
+    add("turni_coperti", "Turni tutti coperti", turni_scoperti == 0,
+        f"{turni_scoperti} turni scoperti da coprire" if turni_scoperti else "")
+    add("mappe", "Mappe / percorsi presenti", len(maps) > 0,
+        "Nessuna mappa o percorso caricato" if not maps else "")
+    vol_no_resp = [f"{s['nome']} {s.get('cognome') or ''}".strip() for s in staff_out
+                   if not s.get("responsabile") and s.get("categoria") == "volontario"]
+    add("referenti", "Volontari con referente", not vol_no_resp,
+        (f"{len(vol_no_resp)} volontari senza referente assegnato") if vol_no_resp else "")
+    add("ospitalita", "Ospitalità / pasti gestiti", len(hosp_persons) > 0,
+        "Nessuna ospitalità o pasto assegnato" if not hosp_persons else "")
+
+    passed = len([c for c in checks if c["status"] == "ok"])
+    percent = round(passed / len(checks) * 100) if checks else 0
+    completeness = {"percent": percent, "passed": passed, "total": len(checks), "checks": checks}
+
+    return {"event": event, "sections": sections, "stats": stats,
+            "completeness": completeness, "generated_at": now_iso()}
+
+
+@api.get("/events/{event_id}/briefing-live")
+async def briefing_live(event_id: str, admin: dict = Depends(require_admin)):
+    data = await _build_briefing(event_id)
+    versions = await db.briefing_versions.find({"evento_id": event_id}, {"content": 0, "_id": 0}).sort("versione", -1).to_list(200)
+    live_hash = _briefing_hash(data)
+    latest = versions[0] if versions else None
+    data["live_hash"] = live_hash
+    data["latest_version"] = latest
+    data["is_stale"] = bool(latest and latest.get("content_hash") != live_hash)
+    return data
+
+
+class BriefingPublishIn(BaseModel):
+    titolo: Optional[str] = None
+    note: Optional[str] = None
+
+
+@api.post("/events/{event_id}/briefing-versions")
+async def publish_briefing(event_id: str, body: BriefingPublishIn, admin: dict = Depends(require_admin)):
+    data = await _build_briefing(event_id)
+    last = await db.briefing_versions.find_one({"evento_id": event_id}, sort=[("versione", -1)])
+    versione = (last.get("versione", 0) + 1) if last else 1
+    doc = {"id": new_id(), "evento_id": event_id, "versione": versione,
+           "titolo": body.titolo or f"Versione {versione}", "note": body.note,
+           "content": data, "content_hash": _briefing_hash(data),
+           "published_by": admin.get("name") or admin.get("email"), "created_at": now_iso()}
+    await db.briefing_versions.insert_one(doc)
+    return {"id": doc["id"], "versione": versione, "titolo": doc["titolo"], "created_at": doc["created_at"]}
+
+
+@api.get("/events/{event_id}/briefing-versions")
+async def list_briefing_versions(event_id: str, admin: dict = Depends(require_admin)):
+    return await db.briefing_versions.find({"evento_id": event_id}, {"content": 0, "_id": 0}).sort("versione", -1).to_list(200)
+
+
+@api.get("/briefing-versions/{version_id}")
+async def get_briefing_version(version_id: str, admin: dict = Depends(require_admin)):
+    v = await db.briefing_versions.find_one({"id": version_id}, {"_id": 0})
+    if not v:
+        raise HTTPException(status_code=404, detail="Versione non trovata")
+    return v
+
+
+@api.delete("/briefing-versions/{version_id}")
+async def delete_briefing_version(version_id: str, admin: dict = Depends(require_admin)):
+    await db.briefing_versions.delete_one({"id": version_id})
+    return {"ok": True}
+
+
 # ---------------- admin reset ----------------
 OPERATIONAL = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
                "event_maps", "activities", "followups", "calendar_event_links", "files",
-               "calendar_connections", "person_companies", "lodgings", "meals"]
+               "calendar_connections", "person_companies", "lodgings", "meals", "briefing_versions"]
 
 
 @api.post("/admin/reset-data")

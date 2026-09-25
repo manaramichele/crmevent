@@ -10,7 +10,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -234,6 +235,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
 
 export default function Events() {
   const settings = useSettings();
+  const navigate = useNavigate();
   const [mapsFor, setMapsFor] = useState(null);
   if (!settings) return <div className="text-slate-400">Caricamento...</div>;
 
@@ -278,6 +280,7 @@ export default function Events() {
 
   const rowActions = (row) => (
     <>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Briefing evento" onClick={() => navigate(`/eventi/${row.id}/briefing`)} data-testid={`briefing-${row.id}`}><FileText className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Mappe & Percorsi" onClick={() => setMapsFor(row.id)} data-testid={`maps-${row.id}`}><MapIcon className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Aggiungi a Google Calendar" onClick={() => syncCal(row)} data-testid={`calsync-${row.id}`}><CalendarPlus className="w-4 h-4" /></Button>
     </>
