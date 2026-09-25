@@ -1875,13 +1875,22 @@ async def seed_admin():
     pw = os.environ["ADMIN_PASSWORD"]
     existing = await db.users.find_one({"email": email})
     if not existing:
+        # First-time bootstrap only. ADMIN_PASSWORD is used solely to create the
+        # initial account; it is never re-applied afterwards.
         await db.users.insert_one({"user_id": f"user_{uuid.uuid4().hex[:12]}", "email": email, "name": "Michele Manara",
                                    "password_hash": hash_password(pw), "role": "admin", "auth_provider": "password",
                                    "picture": "", "active": True, "created_at": now_iso()})
-    else:
-        upd = {"role": "admin", "active": True}
-        if existing.get("password_hash") and not verify_password(pw, existing["password_hash"]):
-            upd["password_hash"] = hash_password(pw)
+        logger.info("Admin account bootstrapped")
+        return
+    # Existing account: ensure it keeps admin role and stays enabled, but NEVER
+    # modify the password_hash. A deploy/restart must not reset a password the
+    # owner has changed via change-password or reset-password.
+    upd = {}
+    if existing.get("role") != "admin":
+        upd["role"] = "admin"
+    if existing.get("active") is False:
+        upd["active"] = True
+    if upd:
         await db.users.update_one({"email": email}, {"$set": upd})
 
 

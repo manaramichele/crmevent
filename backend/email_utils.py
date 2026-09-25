@@ -15,6 +15,13 @@ EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "CRMEvent")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
 EMAIL_LOGO_URL = "https://customer-assets-jai6qajn.emergentagent.net/job_manage-events-12/artifacts/6flsyynu_ChatGPT%20Image%2023%20set%202026%2C%2014_52_43.png"
 
+# Dedicated provider (Resend, own verified domain crmevent.it). When RESEND_API_KEY
+# is set the app sends FROM "CRMEvent <noreply@crmevent.it>". Until then it falls
+# back to the managed sender so password-reset/invite emails keep working.
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM_ADDRESS = os.environ.get("EMAIL_FROM_ADDRESS", "")
+RESEND_BASE_URL = "https://api.resend.com"
+
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 _CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
              "send us your password", "enter your password below", "confirm your card number",
@@ -88,8 +95,19 @@ def _assert_safe_email(subject: str, html: str) -> None:
                 raise ValueError(f"Anchor text {m.group(1)!r} != real link host {real!r} (G3)")
 
 
-async def send_email(*, to: str, subject: str, html: str) -> str | None:
-    _assert_safe_email(subject, html)
+async def _send_via_resend(to: str, subject: str, html: str) -> str | None:
+    sender = f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDRESS}>"
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{RESEND_BASE_URL}/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            json={"from": sender, "to": [to], "subject": subject, "html": html},
+        )
+    resp.raise_for_status()
+    return resp.json().get("id")
+
+
+async def _send_via_managed(to: str, subject: str, html: str) -> str | None:
     payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
     if EMAIL_REPLY_TO:
         payload["contact_email"] = EMAIL_REPLY_TO
@@ -98,6 +116,13 @@ async def send_email(*, to: str, subject: str, html: str) -> str | None:
                                  headers={"X-Email-Key": EMAIL_KEY}, json=payload)
     resp.raise_for_status()
     return resp.json().get("id")
+
+
+async def send_email(*, to: str, subject: str, html: str) -> str | None:
+    _assert_safe_email(subject, html)
+    if RESEND_API_KEY and EMAIL_FROM_ADDRESS:
+        return await _send_via_resend(to, subject, html)
+    return await _send_via_managed(to, subject, html)
 
 
 def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: str) -> str:

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://crmevent.emergent.host/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>https://crmevent.emergent.host/privacy</loc><priority>0.3</priority></url>
-  <url><loc>https://crmevent.emergent.host/cookie</loc><priority>0.3</priority></url>
-  <url><loc>https://crmevent.emergent.host/termini</loc><priority>0.3</priority></url>
+  <url><loc>https://crmevent.it/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://crmevent.it/privacy-policy</loc><priority>0.3</priority></url>
+  <url><loc>https://crmevent.it/cookie</loc><priority>0.3</priority></url>
+  <url><loc>https://crmevent.it/termini</loc><priority>0.3</priority></url>
 </urlset>
