@@ -3,6 +3,7 @@ import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import SettingSelect from "@/components/SettingSelect";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -186,6 +187,11 @@ function Field({ field, value, onChange, options }) {
   }
   if (field.type === "textarea") {
     return <Textarea {...common} value={value || ""} onChange={(e) => onChange(field.name, e.target.value)} placeholder={field.placeholder} />;
+  }
+  if (field.type === "select" && field.settingKey) {
+    return <SettingSelect settingKey={field.settingKey} value={value} onChange={(v) => onChange(field.name, v)}
+      options={options?.[field.source] || field.options || []} placeholder={field.placeholder}
+      addLabel={field.addLabel || "Aggiungi nuovo"} testid={`field-${field.name}`} />;
   }
   if (field.type === "select") {
     const opts = field.options || options?.[field.source] || [];

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import SettingSelect from "@/components/SettingSelect";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -61,8 +62,7 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
           <div className="sm:col-span-2 space-y-1.5"><Label className="text-xs">Ragione sociale*</Label><Input value={f.nome || ""} onChange={(e) => ch("nome", e.target.value)} data-testid="field-nome" /></div>
           <div className="space-y-1.5"><Label className="text-xs">Settore</Label>
-            <Select value={f.settore || ""} onValueChange={(v) => ch("settore", v)}><SelectTrigger data-testid="field-settore"><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-              <SelectContent>{settoreOpts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
+            <SettingSelect settingKey="settori" value={f.settore} onChange={(v) => ch("settore", v)} options={settings?.settori || []} addLabel="Aggiungi nuovo settore" testid="field-settore" /></div>
           <div className="space-y-1.5"><Label className="text-xs">Tipo</Label>
             <Select value={f.tipo || "azienda"} onValueChange={(v) => ch("tipo", v)}><SelectTrigger data-testid="field-tipo"><SelectValue /></SelectTrigger>
               <SelectContent>{Object.keys(TIPO).map((k) => <SelectItem key={k} value={k}>{TIPO[k]}</SelectItem>)}</SelectContent></Select></div>
