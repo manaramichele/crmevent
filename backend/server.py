@@ -741,6 +741,7 @@ class Followup(BaseModel):
 class Lodging(BaseModel):  # collection: lodgings — pernottamento (persona <-> evento)
     evento_id: str
     persona_id: str
+    struttura_id: Optional[str] = None
     struttura_nome: Optional[str] = None
     tipo_struttura: Optional[str] = None  # hotel/bnb/appartamento/foresteria/altro
     indirizzo: Optional[str] = None
@@ -762,6 +763,7 @@ class Lodging(BaseModel):  # collection: lodgings — pernottamento (persona <->
 class Meal(BaseModel):  # collection: meals — colazione/pranzo/cena (persona <-> evento)
     evento_id: str
     persona_id: str
+    struttura_id: Optional[str] = None
     data: Optional[str] = None
     tipo_pasto: Optional[str] = None  # colazione/pranzo/cena
     tipologia_servizio: Optional[str] = None
@@ -862,6 +864,46 @@ crud_routes("lodgings", "lodgings", Lodging)
 crud_routes("meals", "meals", Meal)
 
 
+class Structure(BaseModel):  # collection: structures — anagrafica strutture riutilizzabile (org)
+    nome: str
+    tipologia: Optional[str] = None
+    indirizzo: Optional[str] = None
+    cap: Optional[str] = None
+    citta: Optional[str] = None
+    provincia: Optional[str] = None
+    telefono: Optional[str] = None
+    email: Optional[str] = None
+    sito_web: Optional[str] = None
+    referente: Optional[str] = None
+    telefono_referente: Optional[str] = None
+    google_maps_url: Optional[str] = None
+    note: Optional[str] = None
+
+
+crud_routes("structures", "structures", Structure)
+
+
+async def _attach_structures(records: list, org_id: str) -> None:
+    """Enrich lodgings/meals with the linked Structure (name, address, maps link)
+    read once from the reusable anagraphic — no data duplication on the assignment."""
+    ids = list({r.get("struttura_id") for r in records if r.get("struttura_id")})
+    if not ids:
+        return
+    smap = {}
+    for s in await db.structures.find({"org_id": org_id, "id": {"$in": ids}}, {"_id": 0}).to_list(2000):
+        smap[s["id"]] = s
+    for r in records:
+        s = smap.get(r.get("struttura_id"))
+        if not s:
+            continue
+        r["struttura"] = {"id": s["id"], "nome": s.get("nome"), "tipologia": s.get("tipologia"),
+                          "indirizzo": s.get("indirizzo"), "citta": s.get("citta"), "provincia": s.get("provincia"),
+                          "telefono": s.get("telefono"), "referente": s.get("referente"),
+                          "google_maps_url": s.get("google_maps_url")}
+        if not r.get("struttura_nome"):
+            r["struttura_nome"] = s.get("nome")
+
+
 # ---------------- ospitalità & pasti ----------------
 COST_FIELDS = ("costo", "stato_pagamento", "note_amministrative")
 
@@ -935,6 +977,7 @@ async def event_hospitality(event_id: str, admin: dict = Depends(require_admin))
         for x in lodgings + meals:
             for f in COST_FIELDS:
                 x.pop(f, None)
+    await _attach_structures(lodgings + meals, admin["org_id"])
     teams = {t["id"]: t for t in await db.teams.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(1000)}
     lod_by, meal_by = {}, {}
     for l in lodgings:
@@ -2625,6 +2668,7 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
     maps = await db.event_maps.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(1000)
     lodgings = await db.lodgings.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(5000)
     meals = await db.meals.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(20000)
+    await _attach_structures(lodgings + meals, org_id)
     deals = await db.deals.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(2000)
     companies = {c["id"]: c for c in await db.companies.find({"org_id": org_id}, {"_id": 0}).to_list(10000)}
 

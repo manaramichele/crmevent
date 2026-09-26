@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
-import { PageHeader, StatusBadge, useCollection } from "@/components/crm";
+import { PageHeader, StatusBadge, useCollection, useSettings } from "@/components/crm";
+import SettingSelect from "@/components/SettingSelect";
+import StructureSelect from "@/components/StructureSelect";
+import MapsLink from "@/components/MapsLink";
 import { useAuth } from "@/context/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -73,7 +76,9 @@ function EsigenzeEditor({ value, onChange, testid }) {
 function LodgingForm({ form, set, canCosts }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <Field label="Struttura"><Input value={form.struttura_nome || ""} onChange={(e) => set("struttura_nome", e.target.value)} data-testid="lodging-struttura" /></Field>
+      <Field label="Struttura (da anagrafica)" full>
+        <StructureSelect value={form.struttura_id} onChange={(id, s) => { set("struttura_id", id); if (s) set("struttura_nome", s.nome); }} testid="lodging" />
+      </Field>
       <SelectField label="Tipologia struttura" value={form.tipo_struttura} onChange={(v) => set("tipo_struttura", v)} options={TIPO_STRUTTURA} testid="lodging-tipo" />
       <Field label="Indirizzo" full><Input value={form.indirizzo || ""} onChange={(e) => set("indirizzo", e.target.value)} /></Field>
       <Field label="Check-in"><Input type="date" value={form.check_in || ""} onChange={(e) => set("check_in", e.target.value)} data-testid="lodging-checkin" /></Field>
@@ -99,7 +104,9 @@ function MealForm({ form, set, canCosts, lockType }) {
       <Field label="Data"><Input type="date" value={form.data || ""} onChange={(e) => set("data", e.target.value)} data-testid="meal-data" /></Field>
       <SelectField label="Tipo pasto" value={form.tipo_pasto} onChange={(v) => set("tipo_pasto", v)} options={MEAL_TYPE} testid="meal-tipo" />
       <SelectField label="Tipologia servizio" value={form.tipologia_servizio} onChange={(v) => set("tipologia_servizio", v)} options={MEAL_SERVICE} testid="meal-servizio" />
-      <Field label="Struttura / Fornitore"><Input value={form.struttura_nome || ""} onChange={(e) => set("struttura_nome", e.target.value)} data-testid="meal-struttura" /></Field>
+      <Field label="Struttura / Fornitore (da anagrafica)" full>
+        <StructureSelect value={form.struttura_id} onChange={(id, s) => { set("struttura_id", id); if (s) set("struttura_nome", s.nome); }} testid="meal" />
+      </Field>
       <Field label="Luogo"><Input value={form.luogo || ""} onChange={(e) => set("luogo", e.target.value)} /></Field>
       <Field label="Indirizzo"><Input value={form.indirizzo || ""} onChange={(e) => set("indirizzo", e.target.value)} /></Field>
       <Field label="Orario / fascia"><Input value={form.orario || ""} onChange={(e) => set("orario", e.target.value)} placeholder="es. 13:00 o 12:30–14:00" /></Field>
@@ -182,6 +189,8 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
                 <div className="text-sm">
                   <div className="font-medium text-slate-800">{l.struttura_nome || "Struttura da definire"}{l.tipo_struttura ? ` · ${TIPO_STRUTTURA[l.tipo_struttura]}` : ""}</div>
                   <div className="text-xs text-slate-500">{[l.check_in && `in ${l.check_in}`, l.check_out && `out ${l.check_out}`, l.tipo_camera && TIPO_CAMERA[l.tipo_camera], l.compagni_camera].filter(Boolean).join(" · ") || "—"}</div>
+                  {l.struttura?.indirizzo && <div className="text-xs text-slate-400">{[l.struttura.indirizzo, l.struttura.citta].filter(Boolean).join(", ")}</div>}
+                  {l.struttura?.google_maps_url && <div className="text-xs mt-0.5"><MapsLink url={l.struttura.google_maps_url} testid={`lod-maps-${l.id}`} /></div>}
                   <div className="text-xs mt-0.5"><StatusBadge color={l.a_carico_di === "da_definire" || !l.a_carico_di ? "orange" : "tiffany"}>{CARICO[l.a_carico_di] || "A carico: da definire"}</StatusBadge>{canCosts && l.costo != null && <span className="ml-2 text-slate-500">€ {l.costo}{l.stato_pagamento ? ` · ${PAY_STATE[l.stato_pagamento]}` : ""}</span>}</div>
                 </div>
                 <div className="flex gap-1">
@@ -205,6 +214,7 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
                 <div className="text-sm">
                   <div className="font-medium text-slate-800 flex items-center gap-1.5"><I className="w-4 h-4 text-tiffany-active" />{MEAL_TYPE[m.tipo_pasto] || "Pasto"}{m.data ? ` · ${m.data}` : ""}{m.orario ? ` · ${m.orario}` : ""}</div>
                   <div className="text-xs text-slate-500">{[m.tipologia_servizio && MEAL_SERVICE[m.tipologia_servizio], m.struttura_nome, m.luogo].filter(Boolean).join(" · ") || "—"}</div>
+                  {m.struttura?.google_maps_url && <div className="text-xs mt-0.5"><MapsLink url={m.struttura.google_maps_url} testid={`meal-maps-${m.id}`} /></div>}
                   <div className="text-xs mt-0.5"><StatusBadge color={m.a_carico_di === "da_definire" || !m.a_carico_di ? "orange" : "tiffany"}>{CARICO[m.a_carico_di] || "A carico: da definire"}</StatusBadge></div>
                 </div>
                 <div className="flex gap-1">
@@ -315,6 +325,71 @@ function Summary({ s }) {
   );
 }
 
+// ---- Structures manager (org anagraphic) ----
+function StructuresManager({ open, onOpenChange }) {
+  const [list, setList] = useState([]);
+  const [ed, setEd] = useState(null);
+  const settings = useSettings();
+  const empty = { nome: "", tipologia: "", indirizzo: "", cap: "", citta: "", provincia: "", telefono: "", email: "", sito_web: "", referente: "", telefono_referente: "", google_maps_url: "", note: "" };
+  const load = useCallback(() => api.get("/structures").then(({ data }) => setList(data)).catch(() => {}), []);
+  useEffect(() => { if (open) load(); }, [open, load]);
+  const set = (k, v) => setEd((f) => ({ ...f, [k]: v }));
+  const save = async () => {
+    if (!ed.nome?.trim()) return toast.error("Nome obbligatorio");
+    try {
+      if (ed.id) await api.put(`/structures/${ed.id}`, ed); else await api.post("/structures", ed);
+      toast.success("Struttura salvata"); setEd(null); load();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const del = async (id) => { if (!window.confirm("Eliminare la struttura?")) return; try { await api.delete(`/structures/${id}`); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto" data-testid="structures-manager">
+        <DialogHeader><DialogTitle className="font-display">Strutture</DialogTitle>
+          <DialogDescription>Anagrafica riutilizzabile di hotel, ristoranti, catering ecc. per tutti gli eventi dell'organizzazione.</DialogDescription></DialogHeader>
+        {ed ? (
+          <div className="space-y-2">
+            <Input placeholder="Nome*" value={ed.nome || ""} onChange={(e) => set("nome", e.target.value)} data-testid="struct-mgr-nome" />
+            <div className="space-y-1"><Label className="text-[11px] text-slate-500">Tipologia</Label>
+              <SettingSelect settingKey="tipologie_struttura" value={ed.tipologia} onChange={(v) => set("tipologia", v)} options={settings?.tipologie_struttura || ["Hotel", "B&B", "Residence", "Agriturismo", "Ristorante", "Pizzeria", "Bar", "Catering", "Mensa", "Altro"]} addLabel="Aggiungi tipologia" testid="struct-mgr-tipologia" /></div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input placeholder="Indirizzo" value={ed.indirizzo || ""} onChange={(e) => set("indirizzo", e.target.value)} />
+              <Input placeholder="CAP" value={ed.cap || ""} onChange={(e) => set("cap", e.target.value)} />
+              <Input placeholder="Città" value={ed.citta || ""} onChange={(e) => set("citta", e.target.value)} />
+              <Input placeholder="Provincia" value={ed.provincia || ""} onChange={(e) => set("provincia", e.target.value)} />
+              <Input placeholder="Telefono" value={ed.telefono || ""} onChange={(e) => set("telefono", e.target.value)} />
+              <Input placeholder="Email" value={ed.email || ""} onChange={(e) => set("email", e.target.value)} />
+              <Input placeholder="Sito web" value={ed.sito_web || ""} onChange={(e) => set("sito_web", e.target.value)} />
+              <Input placeholder="Referente" value={ed.referente || ""} onChange={(e) => set("referente", e.target.value)} />
+              <Input placeholder="Tel. referente" value={ed.telefono_referente || ""} onChange={(e) => set("telefono_referente", e.target.value)} />
+            </div>
+            <Input placeholder="Link Google Maps" value={ed.google_maps_url || ""} onChange={(e) => set("google_maps_url", e.target.value)} data-testid="struct-mgr-maps" />
+            <Input placeholder="Note" value={ed.note || ""} onChange={(e) => set("note", e.target.value)} />
+            <div className="flex gap-2"><Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={save} data-testid="struct-mgr-save">Salva</Button><Button variant="outline" onClick={() => setEd(null)}>Annulla</Button></div>
+          </div>
+        ) : (
+          <>
+            <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold mb-2 w-fit" onClick={() => setEd({ ...empty })} data-testid="struct-mgr-add"><Plus className="w-4 h-4 mr-1" />Nuova struttura</Button>
+            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-80 overflow-y-auto">
+              {list.length === 0 ? <p className="p-4 text-sm text-slate-400">Nessuna struttura in anagrafica.</p> :
+                list.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between px-3 py-2 text-sm" data-testid={`struct-mgr-row-${s.id}`}>
+                    <div><div className="font-medium text-slate-800">{s.nome}{s.tipologia ? ` · ${s.tipologia}` : ""}</div>
+                      <div className="text-xs text-slate-500">{[s.indirizzo, s.citta].filter(Boolean).join(", ")}{s.google_maps_url ? " · 📍 Maps" : ""}</div></div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEd(s)} data-testid={`struct-mgr-edit-${s.id}`}><Pencil className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => del(s.id)} data-testid={`struct-mgr-del-${s.id}`}><Trash2 className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Hospitality() {
   const { user } = useAuth();
   const canCosts = user?.role === "admin";
@@ -325,6 +400,7 @@ export default function Hospitality() {
   const [loading, setLoading] = useState(false);
   const [openPerson, setOpenPerson] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [structOpen, setStructOpen] = useState(false);
   const [q, setQ] = useState("");
   const [fRuolo, setFRuolo] = useState("");
   const [fStato, setFStato] = useState("");
@@ -388,6 +464,7 @@ export default function Hospitality() {
     <div className="animate-fade-up">
       <PageHeader title="Ospitalità & Pasti" subtitle="Pernottamenti, colazioni, pranzi e cene per ogni persona dell'evento"
         action={<div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setStructOpen(true)} data-testid="open-structures"><Building2 className="w-4 h-4 mr-1.5" />Strutture</Button>
           <Select value={eventId} onValueChange={setEventId}><SelectTrigger className="w-52" data-testid="hosp-event-select"><SelectValue placeholder="Seleziona evento" /></SelectTrigger>
             <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
           <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={() => setBulkOpen(true)} disabled={!persons.length} data-testid="open-bulk-assign"><UserPlus className="w-4 h-4 mr-1.5" />Assegna a più persone</Button>
@@ -495,6 +572,7 @@ export default function Hospitality() {
 
       {selectedPerson && <PersonPlanDialog person={selectedPerson} eventId={eventId} canCosts={canCosts} open={!!openPerson} onOpenChange={(o) => !o && setOpenPerson(null)} onChanged={load} />}
       <BulkAssignDialog eventId={eventId} persons={persons} teams={eventTeams} canCosts={canCosts} open={bulkOpen} onOpenChange={setBulkOpen} onDone={load} />
+      <StructuresManager open={structOpen} onOpenChange={setStructOpen} />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import MapsLink from "@/components/MapsLink";
 import {
   ArrowLeft, RefreshCw, FileDown, History, Presentation, CheckCircle2, AlertTriangle,
   Users, Map as MapIcon, CalendarClock, Utensils, Handshake, Shield, UploadCloud,
@@ -225,7 +226,19 @@ function BriefingBody({ data }) {
                   <span className="text-xs text-slate-500">{h.lodgings.length} pernott. · {h.meals.length} pasti</span>
                 </div>
                 {h.esigenze_alimentari?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{h.esigenze_alimentari.map((e) => <StatusBadge key={e} color="orange">{e}</StatusBadge>)}</div>}
-                {h.lodgings.map((l, j) => <div key={j} className="text-xs text-slate-500 mt-1">🏨 {l.struttura_nome || "Struttura"} {l.check_in ? `· ${l.check_in}→${l.check_out || ""}` : ""} {l.tipo_camera ? `· ${l.tipo_camera}` : ""}</div>)}
+                {h.lodgings.map((l, j) => (
+                  <div key={j} className="text-xs text-slate-600 mt-1">
+                    🏨 {l.struttura?.nome || l.struttura_nome || "Struttura"} {l.check_in ? `· ${l.check_in}→${l.check_out || ""}` : ""} {l.tipo_camera ? `· ${l.tipo_camera}` : ""}
+                    {l.struttura?.indirizzo && <span className="text-slate-400"> · {[l.struttura.indirizzo, l.struttura.citta].filter(Boolean).join(", ")}</span>}
+                    {l.struttura?.google_maps_url && <span className="ml-2"><MapsLink url={l.struttura.google_maps_url} testid={`bhosp-lod-${i}-${j}`} /></span>}
+                  </div>
+                ))}
+                {h.meals.map((m, j) => (
+                  <div key={`m${j}`} className="text-xs text-slate-600 mt-1">
+                    🍽️ {m.tipo_pasto || "Pasto"} {m.data ? `· ${m.data}` : ""} {m.orario ? `· ${m.orario}` : ""} · {m.struttura?.nome || m.struttura_nome || "Struttura"}
+                    {m.struttura?.google_maps_url && <span className="ml-2"><MapsLink url={m.struttura.google_maps_url} testid={`bhosp-meal-${i}-${j}`} /></span>}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
