@@ -19,7 +19,6 @@ import Account from "@/pages/Account";
 import Platform from "@/pages/Platform";
 import OrgDetail from "@/pages/OrgDetail";
 import Invite from "@/pages/Invite";
-import CookieConsent from "@/components/CookieConsent";
 import { trackPageView } from "@/lib/analytics";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
@@ -84,7 +83,6 @@ function Shell() {
     <>
       <CalendarToast />
       <RouteTracker />
-      <CookieConsent />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/prezzi" element={<Pricing />} />

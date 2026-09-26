@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="en">
     <head>
+        <!-- iubenda Unified Embedding Code — MUST be the first element in <head> so its
+             preventive blocking + Google Consent Mode v2 run before any cookie-setting script. -->
+        <script type="text/javascript" src="https://embeds.iubenda.com/widgets/a411033f-bef4-4836-94d4-8a0d2697f51f.js"></script>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#81D8D0" />
@@ -36,18 +39,13 @@
         Learn how to configure a non-root public URL by running `npm run build`.
         -->
         <title>CRMEvent | Il CRM per organizzare eventi</title>
-        <!-- Google Analytics 4 + Consent Mode v2 (defaults denied; script loads on production only) -->
+        <!-- Google Analytics 4. Consent (Consent Mode v2) is managed exclusively by iubenda
+             above — CRMEvent no longer sets consent defaults/updates to avoid a double system.
+             The GA library loads on production only to keep the property clean. -->
         <script>
             window.dataLayer = window.dataLayer || [];
             function gtag() { dataLayer.push(arguments); }
             window.gtag = gtag;
-            gtag('consent', 'default', {
-                ad_storage: 'denied',
-                ad_user_data: 'denied',
-                ad_personalization: 'denied',
-                analytics_storage: 'denied',
-                wait_for_update: 500
-            });
             gtag('js', new Date());
             gtag('config', 'G-PZK7J854DS', { send_page_view: false, anonymize_ip: true });
             if (location.hostname === 'crmevent.it') {
