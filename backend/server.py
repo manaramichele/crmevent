@@ -3094,6 +3094,34 @@ async def create_checkout(body: CheckoutIn, user: dict = Depends(require_admin))
     return {"checkout_url": session.url, "session_id": session.id}
 
 
+@api.get("/account/checkout-confirmation")
+async def checkout_confirmation(session_id: str, user: dict = Depends(require_admin)):
+    """Verify a Stripe checkout session was really paid. Returns ONLY non-personal
+    data so the frontend can emit a GA4 `purchase` event (no PII, no customer id)."""
+    try:
+        sess = stripe_sdk.checkout.Session.retrieve(session_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Sessione di checkout non trovata")
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    # Ensure the session belongs to this org's Stripe customer (isolation).
+    cust = (org.get("subscription") or {}).get("stripe_customer_id")
+    if cust and sess.get("customer") and sess.get("customer") != cust:
+        raise HTTPException(status_code=403, detail="Sessione non associata all'organizzazione")
+    paid = sess.get("payment_status") == "paid"
+    if not paid:
+        return {"paid": False}
+    # Unique, non-personal transaction reference (Stripe invoice > payment_intent > session id).
+    transaction_id = sess.get("invoice") or sess.get("payment_intent") or sess.get("id")
+    billing_cycle = (sess.get("metadata") or {}).get("billing_cycle")
+    return {
+        "paid": True,
+        "transaction_id": transaction_id,
+        "value": round((sess.get("amount_total") or 0) / 100.0, 2),
+        "currency": (sess.get("currency") or "eur").upper(),
+        "billing_cycle": billing_cycle,
+    }
+
+
 @api.post("/account/portal")
 async def billing_portal(body: dict, user: dict = Depends(require_admin)):
     org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})

@@ -111,3 +111,10 @@
 ### NOT done (awaiting user)
 - LIVE mode: not activated (still test). Fatture in Cloud integration: scaffold only.
 - Tax handling: Stripe "DIY" (no Stripe tax) — VAT/e-invoicing handled by CRMEvent via FIC. Prices shown "+ IVA".
+
+## 2026-09-26 — GA4 Stripe subscription funnel tracking
+- Added GA4 e-commerce events: `begin_checkout` (fired in Account.jsx before Stripe redirect) and `purchase` (fired only after Stripe confirms payment_status=paid).
+- New backend endpoint `GET /api/account/checkout-confirmation?session_id=` verifies the checkout session is really paid and returns ONLY non-personal data (transaction_id, value, currency, billing_cycle).
+- purchase deduplicated by Stripe transaction_id stored in localStorage (survives refresh/revisit/re-open).
+- All events go through existing trackEvent -> respect Consent Mode v2 + cookie prefs. No PII sent to GA4.
+- Did NOT modify: GA4 impl, Measurement ID G-PZK7J854DS, Consent Mode v2, cookie banner, auth, Stripe logic, FIC billing.

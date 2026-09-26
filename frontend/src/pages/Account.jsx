@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CreditCard, CalendarClock, CheckCircle2, AlertTriangle, Building2, Save, Settings2, ReceiptText } from "lucide-react";
+import { trackBeginCheckout, trackPurchaseOnce } from "@/lib/analytics";
 
 const STATUS_LABEL = { trial: "Prova gratuita", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pagamento non riuscito", suspended: "Sospeso" };
 const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange" };
@@ -40,8 +41,15 @@ export default function Account() {
   useEffect(() => {
     const c = params.get("checkout");
     if (c === "success") {
+      const sessionId = params.get("session_id");
       toast.success("Pagamento ricevuto! Sincronizzo l'abbonamento...");
       api.post("/account/sync-subscription").then(() => load()).catch(() => {});
+      // GA4 `purchase` only after Stripe confirms the payment (deduplicated by transaction_id).
+      if (sessionId) {
+        api.get(`/account/checkout-confirmation?session_id=${encodeURIComponent(sessionId)}`)
+          .then(({ data }) => { if (data?.paid) trackPurchaseOnce(data); })
+          .catch(() => {});
+      }
       params.delete("checkout"); params.delete("session_id"); setParams(params, { replace: true });
     } else if (c === "cancel") {
       toast.info("Checkout annullato.");
@@ -66,6 +74,7 @@ export default function Account() {
   const checkout = async () => {
     setBusy(true);
     try {
+      trackBeginCheckout(cycle);
       const { data } = await api.post("/account/checkout", { billing_cycle: cycle, origin_url: window.location.origin });
       window.location.href = data.checkout_url;
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setBusy(false); }
