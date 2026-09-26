@@ -86,6 +86,9 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 
 
 ## Backlog (P1/P2)
+- IN ATTESA UTENTE: URL reali iubenda per Cookie/Privacy (l'utente fornirà i link definitivi).
+- SOSPESO su richiesta utente: refactoring `server.py` (rimandato fino a stabilizzazione funzionalità pre-lancio).
+- Audit Log estendibile: predisposto per registrare azioni future (modifica stato abbonamento, interventi su account cliente) tramite `AUDIT_ACTION_LABELS` + `record_audit()`.
 - P1: Drag&drop reale nel Kanban; scheda dettaglio evento con tab dedicata; Briefing in area personale staff/volontari (vista read-only per ruolo).
 - P1: Cascade delete `briefing_versions` (+ staff/shifts/maps/lodgings/meals) all'eliminazione di un evento.
 - P2: Export CSV/PDF altri moduli; calendario turni visuale; foto persona upload in anagrafica; notifiche email automatiche follow-up; pagina Prezzi/Piani SaaS; banner Cookie/CMP funzionante; completare dati legali `[DA COMPLETARE]` in Privacy Policy.

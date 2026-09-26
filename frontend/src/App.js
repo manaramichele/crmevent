@@ -17,6 +17,7 @@ import Activate from "@/pages/Activate";
 import Profile from "@/pages/Profile";
 import Account from "@/pages/Account";
 import Platform from "@/pages/Platform";
+import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
 import Companies from "@/pages/Companies";
@@ -94,6 +95,7 @@ function Shell() {
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
         <Route path="/account" element={<Protected><AdminOnly><Account /></AdminOnly></Protected>} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
+        <Route path="/audit" element={<Protected><SuperAdminOnly><AuditLog /></SuperAdminOnly></Protected>} />
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />
         <Route path="/eventi" element={<Protected><AdminOnly><Events /></AdminOnly></Protected>} />
         <Route path="/eventi/:id/briefing" element={<Protected><AdminOnly><Briefing /></AdminOnly></Protected>} />

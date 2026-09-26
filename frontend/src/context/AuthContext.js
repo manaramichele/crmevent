@@ -8,10 +8,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [actingOrgId, setActingOrgId] = useState(() => localStorage.getItem("acting_org_id") || "");
 
-  const setActingOrg = useCallback((id, reload = true) => {
+  const setActingOrg = useCallback(async (id, reload = true, previousId = "") => {
     if (id) localStorage.setItem("acting_org_id", id);
     else localStorage.removeItem("acting_org_id");
     setActingOrgId(id || "");
+    if (id) {
+      try { await api.post("/platform/audit/org-access", { org_id: id, previous_org_id: previousId || null }); } catch {}
+    }
     if (reload && id) window.location.reload();
   }, []);
 

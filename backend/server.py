@@ -2319,6 +2319,76 @@ async def platform_organizations(admin: dict = Depends(require_superadmin)):
     return out
 
 
+# ---------------- platform audit log (extensible) ----------------
+# Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
+# NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
+AUDIT_ACTION_LABELS = {
+    "org_access": "Accesso organizzazione",
+    "org_switch": "Cambio organizzazione",
+    # future: "subscription_change": "Modifica abbonamento",
+    #         "account_intervention": "Intervento su account cliente",
+}
+
+
+async def record_audit(actor: dict, action: str, org_id: Optional[str] = None,
+                        org_name: Optional[str] = None, meta: Optional[dict] = None) -> dict:
+    doc = {"id": new_id(), "created_at": now_iso(),
+           "actor_user_id": actor.get("user_id"), "actor_email": actor.get("email"),
+           "actor_name": actor.get("name"), "actor_role": actor.get("role"),
+           "action": action, "action_label": AUDIT_ACTION_LABELS.get(action, action),
+           "org_id": org_id, "org_name": org_name, "meta": meta or {}}
+    await db.audit_logs.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+class OrgAccessIn(BaseModel):
+    org_id: str
+    previous_org_id: Optional[str] = None
+
+
+@api.post("/platform/audit/org-access")
+async def audit_org_access(body: OrgAccessIn, admin: dict = Depends(require_superadmin)):
+    org = await db.organizations.find_one({"id": body.org_id}, {"_id": 0})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    action, meta = "org_access", {}
+    if body.previous_org_id and body.previous_org_id != body.org_id:
+        prev = await db.organizations.find_one({"id": body.previous_org_id}, {"_id": 0})
+        action = "org_switch"
+        meta = {"previous_org_id": body.previous_org_id, "previous_org_name": (prev or {}).get("nome")}
+    doc = await record_audit(admin, action, org_id=org["id"], org_name=org.get("nome"), meta=meta)
+    return {"ok": True, "id": doc["id"]}
+
+
+@api.get("/platform/audit")
+async def audit_list(org_id: Optional[str] = None, actor_user_id: Optional[str] = None,
+                     date_from: Optional[str] = None, date_to: Optional[str] = None,
+                     action: Optional[str] = None, limit: int = 300,
+                     admin: dict = Depends(require_superadmin)):
+    q: dict = {}
+    if org_id:
+        q["org_id"] = org_id
+    if actor_user_id:
+        q["actor_user_id"] = actor_user_id
+    if action:
+        q["action"] = action
+    if date_from or date_to:
+        rng = {}
+        if date_from:
+            rng["$gte"] = date_from
+        if date_to:
+            rng["$lte"] = date_to + "T23:59:59.999999"
+        q["created_at"] = rng
+    rows = await db.audit_logs.find(q, {"_id": 0}).sort("created_at", -1).limit(min(max(limit, 1), 1000)).to_list(1000)
+    actor_ids = await db.audit_logs.distinct("actor_user_id")
+    actors = []
+    for aid in actor_ids:
+        u = await db.users.find_one({"user_id": aid}, {"_id": 0, "user_id": 1, "email": 1, "name": 1})
+        if u:
+            actors.append({"user_id": u["user_id"], "email": u.get("email"), "name": u.get("name")})
+    return {"items": rows, "actors": actors}
+
+
 # ---------------- stripe billing ----------------
 import stripe as stripe_sdk
 stripe_sdk.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"

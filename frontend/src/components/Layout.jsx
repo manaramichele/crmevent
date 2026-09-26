@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
@@ -30,9 +30,10 @@ const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
   { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
+  { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];
 
-const PLATFORM_PATHS = ["/piattaforma", "/lead", "/supporto"];
+const PLATFORM_PATHS = ["/piattaforma", "/lead", "/supporto", "/audit"];
 
 function OrgSwitcher({ orgs, actingOrgId, onChange }) {
   return (
@@ -187,6 +188,7 @@ export default function Layout({ children }) {
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !actingOrgId && !isPlatformRoute;
+  const activeOrgName = orgs.find((o) => o.id === actingOrgId)?.nome;
 
   const renderLink = (n, onClick) => (
     <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`}
@@ -248,7 +250,7 @@ export default function Layout({ children }) {
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="h-16 sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 px-4 lg:px-6">
           <button className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button"><Menu className="w-5 h-5" /></button>
-          {isSuper && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId} onChange={(id) => setActingOrg(id)} />}
+          {isSuper && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId} onChange={(id) => setActingOrg(id, true, actingOrgId)} />}
           <div className="flex-1"><GlobalSearch /></div>
           <Notifications />
           <div className="relative">
@@ -273,6 +275,12 @@ export default function Layout({ children }) {
           </div>
         </header>
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/account")} />}
+        {isSuper && actingOrgId && !isPlatformRoute && (
+          <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-amber-100 text-amber-900 border-b border-amber-300" data-testid="super-acting-banner">
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">Stai operando come Super Admin in: {activeOrgName || "…"}</span>
+          </div>
+        )}
         <main className="flex-1 p-4 lg:p-8 bg-slate-50/40">
           {gateForOrg ? (
             <div className="text-center text-slate-500 py-24" data-testid="no-org-selected">
