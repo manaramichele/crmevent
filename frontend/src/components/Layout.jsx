@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
@@ -22,11 +22,35 @@ const ORG_NAV = [
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni" },
 ];
 
-const SUPER_NAV = [
-  { to: "/piattaforma", label: "Organizzazioni", icon: Building2, id: "piattaforma" },
+// Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing.
+const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account");
+
+// Extra platform-administration group, only for Super Admin.
+const PLATFORM_NAV = [
+  { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
   { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
 ];
+
+const PLATFORM_PATHS = ["/piattaforma", "/lead", "/supporto"];
+
+function OrgSwitcher({ orgs, actingOrgId, onChange }) {
+  return (
+    <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-amber-200 bg-amber-50" data-testid="org-switcher">
+      <Building2 className="w-4 h-4 text-amber-600 shrink-0" />
+      <span className="hidden md:block text-xs text-amber-700 font-medium whitespace-nowrap">Org attiva</span>
+      <select
+        data-testid="org-switcher-select"
+        value={actingOrgId || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-transparent text-sm font-semibold text-amber-900 outline-none max-w-[180px] cursor-pointer"
+      >
+        {orgs.length === 0 && <option value="">Nessuna organizzazione</option>}
+        {orgs.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
+      </select>
+    </div>
+  );
+}
 
 function TrialBanner({ sub, onCta }) {
   if (!sub || sub.status === "active") return null;
@@ -141,11 +165,42 @@ function Notifications() {
 export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, actingOrgId, setActingOrg } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [orgs, setOrgs] = useState([]);
 
-  const navItems = user?.role === "superadmin" ? SUPER_NAV : ORG_NAV;
+  const isSuper = user?.role === "superadmin";
+
+  useEffect(() => {
+    if (!isSuper) return;
+    api.get("/platform/organizations").then(({ data }) => {
+      setOrgs(data);
+      if (!actingOrgId && data.length) setActingOrg(data[0].id, false);
+    }).catch(() => {});
+  }, [isSuper]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const navGroups = isSuper
+    ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }]
+    : [{ items: ORG_NAV }];
+
+  const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
+  const gateForOrg = isSuper && !actingOrgId && !isPlatformRoute;
+
+  const renderLink = (n, onClick) => (
+    <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`}
+      className={({ isActive }) =>
+        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          isActive ? "bg-tiffany-light text-tiffany-fg" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+        }`}>
+      {({ isActive }) => (<>
+        <n.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-tiffany-active" : ""}`} />
+        {!(collapsed && !onClick) && <span className="truncate">{n.label}</span>}
+      </>)}
+    </NavLink>
+  );
+
   const sidebar = (
     <aside className={`${collapsed ? "w-20" : "w-64"} shrink-0 bg-white border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col transition-all duration-300`}>
       <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100">
@@ -154,17 +209,13 @@ export default function Layout({ children }) {
         </button>
       </div>
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {navItems.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} data-testid={`sidebar-link-${n.id}`}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                isActive ? "bg-tiffany-light text-tiffany-fg" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}>
-            {({ isActive }) => (<>
-              <n.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-tiffany-active" : ""}`} />
-              {!collapsed && <span className="truncate">{n.label}</span>}
-            </>)}
-          </NavLink>
+        {navGroups.map((g, gi) => (
+          <div key={gi} className={gi > 0 ? "pt-4 mt-3 border-t border-slate-100" : ""}>
+            {g.title && !collapsed && (
+              <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400" data-testid="nav-group-platform">{g.title}</div>
+            )}
+            <div className="space-y-1">{g.items.map((n) => renderLink(n))}</div>
+          </div>
         ))}
       </nav>
       <button onClick={() => setCollapsed((c) => !c)} data-testid="sidebar-toggle"
@@ -184,11 +235,11 @@ export default function Layout({ children }) {
           <aside className="absolute left-0 top-0 h-full w-64 bg-white p-3 shadow-xl">
             <div className="h-14 flex items-center justify-between mb-2"><button onClick={() => { setMobileOpen(false); navigate("/"); }} data-testid="mobile-logo-home" className="flex items-center"><Logo /></button><button onClick={() => setMobileOpen(false)}><X className="w-6 h-6" /></button></div>
             <nav className="space-y-1">
-              {navItems.map((n) => (
-                <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${isActive ? "bg-tiffany-light text-tiffany-fg" : "text-slate-600 hover:bg-slate-50"}`}>
-                  <n.icon className="w-5 h-5" /><span>{n.label}</span>
-                </NavLink>
+              {navGroups.map((g, gi) => (
+                <div key={gi} className={gi > 0 ? "pt-3 mt-2 border-t border-slate-100" : ""}>
+                  {g.title && <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.title}</div>}
+                  <div className="space-y-1">{g.items.map((n) => renderLink(n, () => setMobileOpen(false)))}</div>
+                </div>
               ))}
             </nav>
           </aside>
@@ -197,6 +248,7 @@ export default function Layout({ children }) {
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="h-16 sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 px-4 lg:px-6">
           <button className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button"><Menu className="w-5 h-5" /></button>
+          {isSuper && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId} onChange={(id) => setActingOrg(id)} />}
           <div className="flex-1"><GlobalSearch /></div>
           <Notifications />
           <div className="relative">
@@ -221,7 +273,15 @@ export default function Layout({ children }) {
           </div>
         </header>
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/account")} />}
-        <main className="flex-1 p-4 lg:p-8 bg-slate-50/40">{children}</main>
+        <main className="flex-1 p-4 lg:p-8 bg-slate-50/40">
+          {gateForOrg ? (
+            <div className="text-center text-slate-500 py-24" data-testid="no-org-selected">
+              {orgs.length === 0
+                ? "Nessuna organizzazione presente sulla piattaforma."
+                : "Seleziona un'organizzazione attiva dal menu in alto per continuare."}
+            </div>
+          ) : children}
+        </main>
       </div>
       <SupportChat />
     </div>

@@ -116,7 +116,17 @@ async def get_current_user(request: Request) -> dict:
     return user
 
 
-async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+async def require_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    # Super Admin may operate inside a selected organization (audited impersonation via
+    # an explicit, server-validated header). Data stays org-scoped through oq() — no bypass.
+    if user.get("role") == "superadmin":
+        acting = request.headers.get("X-Org-Id")
+        if not acting:
+            raise HTTPException(status_code=428, detail="Seleziona un'organizzazione attiva")
+        org = await db.organizations.find_one({"id": acting}, {"_id": 0})
+        if not org:
+            raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+        return {**user, "org_id": acting, "acting_org": acting}
     if user.get("role") not in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Accesso riservato agli amministratori")
     if not user.get("org_id"):

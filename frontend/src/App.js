@@ -56,7 +56,7 @@ function Protected({ children }) {
 
 function AdminOnly({ children }) {
   const { user } = useAuth();
-  if (isSuper(user)) return <Navigate to="/piattaforma" replace />;
+  // Super Admin can operate inside a selected org (scoped server-side).
   if (isVol(user)) return <Navigate to="/app" replace />;
   return children;
 }
@@ -69,7 +69,6 @@ function SuperAdminOnly({ children }) {
 
 function HomeRoute() {
   const { user } = useAuth();
-  if (isSuper(user)) return <Navigate to="/piattaforma" replace />;
   return isVol(user) ? <VolunteerDashboard /> : <Dashboard />;
 }
 

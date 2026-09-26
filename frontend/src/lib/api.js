@@ -8,6 +8,14 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// Super Admin "active organization" context — sent only when explicitly selected.
+// Backend validates it and ignores it for non-superadmin accounts.
+api.interceptors.request.use((config) => {
+  const org = localStorage.getItem("acting_org_id");
+  if (org) config.headers["X-Org-Id"] = org;
+  return config;
+});
+
 export function formatApiError(detail) {
   if (detail == null) return "Si è verificato un errore. Riprova.";
   if (typeof detail === "string") return detail;
