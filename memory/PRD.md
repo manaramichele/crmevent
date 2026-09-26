@@ -77,6 +77,14 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - [x] Fix z-index: `AlertDialog` overlay/content portati a z-[110] (sopra `Dialog` z-[100]) — la conferma eliminazione versione dentro il dialog Storico era bloccata dall'overlay.
 - Note: `briefing_versions` aggiunta a OPERATIONAL (reset). Briefing non ancora esposto in area personale staff/volontari (scelta rimandata).
 
+### 2026-06-26 (Super Admin navigation + active-org scoping — verificato: backend 13/13 pytest 100%, frontend e2e 100%)
+- [x] Super Admin vede il menu operativo CRMEvent completo + gruppo separato "Amministrazione piattaforma" (Dashboard piattaforma, Lead, Supporto).
+- [x] Selettore "Org attiva" in header: frontend invia header `X-Org-Id`; `require_admin` lo valida SOLO per superadmin (428 senza header, 404 org inesistente) e restituisce principal effimero con `org_id` → `oq()` mantiene lo scoping per organizzazione (nessun bypass multi-tenant).
+- [x] `AdminOnly` consente superadmin (blocca solo volontari); `HomeRoute` porta il superadmin alla Dashboard operativa; `SuperAdminOnly` continua a proteggere /piattaforma, /lead, /supporto.
+- [x] Organizzatore: vede solo il menu operativo, nessun gruppo piattaforma/selettore, bloccato (redirect + 403) da rotte/API superadmin.
+- [x] Nessuna modifica a Stripe/FIC. File: server.py, frontend/src/{lib/api.js, context/AuthContext.js, components/Layout.jsx, App.js}.
+
+
 ## Backlog (P1/P2)
 - P1: Drag&drop reale nel Kanban; scheda dettaglio evento con tab dedicata; Briefing in area personale staff/volontari (vista read-only per ruolo).
 - P1: Cascade delete `briefing_versions` (+ staff/shifts/maps/lodgings/meals) all'eliminazione di un evento.

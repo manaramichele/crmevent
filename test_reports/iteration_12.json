@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 12 - Super Admin operational navigation with X-Org-Id multi-tenant scoping. Backend: 13/13 pytest tests PASS (428 no header, 404 invalid org, 200 valid org on /api/dashboard and operational endpoints; organizer gets 403 on /api/platform/* and /api/fic/status; scoping isolation verified). Frontend UI: full end-to-end verified - Super Admin (manara.michele.pro) lands on /app, sees BOTH operational sidebar (dashboard, eventi, aziende, persone, ospitalita, sponsor, attivita, followup, impostazioni) AND 'Amministrazione piattaforma' group (piattaforma, lead, supporto) with org-switcher-select showing 'Eventi Milano SRL'; all 8 operational sections open without errors; /piattaforma renders global platform dashboard with FIC card. Organizer (organizer.test@crmevent.it) sees ONLY operational menu, no platform group, no org switcher; manual navigation to /piattaforma, /lead, /supporto all redirect to /app.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_superadmin_nav.py",
+    "/app/test_reports/pytest/iter12.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "require_admin correctly enforces X-Org-Id for superadmin (428/404 semantics) and returns ephemeral principal with org_id set for oq() scoping - no cross-tenant bypass.",
+    "server.py is now 2895 lines - still a candidate for module split (auth/org/crm/briefing/platform/fic).",
+    "Frontend Layout gates operational pages until an org is active via no-org-selected testid - good UX safety net.",
+    "AdminOnly + SuperAdminOnly split in App.js correctly separates operational vs platform routes for the two role classes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter12_superadmin_nav.py (new)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100%"},
+  "test_credentials": "Super Admin: manara.michele.pro@gmail.com / CrmEvent2026!. Organizer: organizer.test@crmevent.it / Organizer2026! (Eventi Milano SRL).",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Super Admin navigation and multi-tenant scoping via X-Org-Id are fully working. Backend tests in test_iter12_superadmin_nav.py cover the header-scoping contract - reuse/extend for future endpoints that add require_admin. All data-testid selectors from the review request are present in the UI."
+}
