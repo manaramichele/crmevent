@@ -37,6 +37,29 @@ SYSTEM = (
     "Restituisci SOLO un oggetto JSON valido, senza testo aggiuntivo."
 )
 
+# Used when live operational data of the user's active organization is available.
+# The assistant answers "how-to" questions from the KB and "what/how many/who" questions
+# about the user's real events/people/etc. from the DATI ORGANIZZAZIONE block.
+SYSTEM_DATA = (
+    "Sei \"Assistente CRMEvent\", l'assistente integrato in CRMEvent, un CRM SaaS B2B per "
+    "organizzatori di eventi. Rispondi SEMPRE in italiano, in tono professionale e conciso.\n"
+    "Hai a disposizione DUE fonti:\n"
+    "A) KNOWLEDGE BASE: documentazione su COME funziona CRMEvent (procedure, funzionalità).\n"
+    "B) DATI ORGANIZZAZIONE: dati operativi REALI e aggiornati dell'organizzazione attiva "
+    "dell'utente (eventi, staff, volontari, team, turni, sponsor/pipeline, attività, follow-up, "
+    "ospitalità, pasti, criticità). Questi dati appartengono ESCLUSIVAMENTE all'organizzazione "
+    "dell'utente autenticato e sono già filtrati: non fanno mai riferimento ad altre organizzazioni.\n"
+    "REGOLE FONDAMENTALI:\n"
+    "1. Se la domanda riguarda COME si fa qualcosa in CRMEvent → usa la KNOWLEDGE BASE.\n"
+    "2. Se la domanda riguarda i DATI reali dell'organizzazione (quanti, quali, chi, quanto vale, "
+    "elenchi, riepiloghi, criticità) → usa ESCLUSIVAMENTE il blocco DATI ORGANIZZAZIONE.\n"
+    "3. NON inventare mai numeri, nomi o dati non presenti nel blocco DATI ORGANIZZAZIONE. "
+    "Se un dato non è presente, dillo chiaramente e imposta \"answered\": false.\n"
+    "4. Non citare né dedurre MAI dati di altre organizzazioni.\n"
+    "5. Quando elenchi persone/team/turni riporta i valori esattamente come presenti nei dati.\n"
+    "6. Il prodotto si chiama sempre 'CRMEvent'. Restituisci SOLO un oggetto JSON valido."
+)
+
 
 def _parse_json(text: str) -> dict:
     t = (text or "").strip()
@@ -56,7 +79,7 @@ async def _run(system: str, prompt: str) -> str:
     return await chat.send_message(UserMessage(text=prompt))
 
 
-async def answer_question(question: str, kb_context: str, page_context: str = None, history=None, role: str = "admin") -> dict:
+async def answer_question(question: str, kb_context: str, page_context: str = None, history=None, role: str = "admin", org_data: str = None) -> dict:
     """Return {answer, answered, category, confidence, is_feature_request, feature_request_summary}."""
     role_labels = {"admin": "Organizzatore/Amministratore", "staff": "Staff", "volontario": "Volontario"}
     role_label = role_labels.get(role, "Organizzatore/Amministratore")
@@ -84,7 +107,8 @@ async def answer_question(question: str, kb_context: str, page_context: str = No
         + admin_note
         + (f"CONTESTO PAGINA (sezione da cui l'utente scrive): {page_context}\n\n" if page_context else "")
         + (f"CRONOLOGIA CONVERSAZIONE:\n{hist_txt}\n\n" if hist_txt else "")
-        + "KNOWLEDGE BASE (unica fonte consentita):\n"
+        + (f"DATI ORGANIZZAZIONE (dati operativi reali dell'organizzazione attiva dell'utente, già filtrati e appartenenti solo a essa — usali per le domande sui dati reali):\n{org_data}\n\n" if org_data else "")
+        + ("KNOWLEDGE BASE (documentazione su come funziona CRMEvent):\n" if org_data else "KNOWLEDGE BASE (unica fonte consentita):\n")
         + (kb_context if kb_context else "(nessun contenuto pertinente trovato nella knowledge base)")
         + f"\n\nDOMANDA UTENTE:\n{question}\n\n"
         + "Rispondi con un JSON con questa struttura esatta:\n"
@@ -94,7 +118,7 @@ async def answer_question(question: str, kb_context: str, page_context: str = No
         + '"feature_request_summary": "sintesi breve della funzionalità richiesta oppure null"}'
     )
     try:
-        raw = await _run(SYSTEM, prompt)
+        raw = await _run(SYSTEM_DATA if org_data else SYSTEM, prompt)
         data = _parse_json(raw)
         cat = data.get("category")
         if cat not in CATEGORIES:

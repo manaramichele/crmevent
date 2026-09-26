@@ -1588,6 +1588,196 @@ async def _record_feature_request(title: str, question: str, conv_id: str, user:
                                                        "conversation_id": conv_id, "user_id": user["user_id"], "question": question})
 
 
+async def _resolve_org_for_support(request: Request, user: dict):
+    """Resolve the active org for the assistant AND whether this user may see operational
+    data for it. STRICT isolation: never returns an org the user is not authorized for.
+    Returns (org_id | None, is_manager: bool)."""
+    role = user.get("role")
+    if role == "superadmin":
+        acting = request.headers.get("X-Org-Id")
+        if not acting:
+            return None, False
+        org = await db.organizations.find_one({"id": acting}, {"_id": 0})
+        return (acting, True) if org else (None, False)
+    mems = await db.memberships.find({"user_id": user["user_id"], "active": True}, {"_id": 0}).to_list(200)
+    header = request.headers.get("X-Org-Id")
+    chosen = None
+    if mems:
+        if header:
+            chosen = next((m for m in mems if m["org_id"] == header), None)
+            if not chosen:
+                return None, False  # asked for an org they are not a member of
+        if not chosen:
+            chosen = next((m for m in mems if m["org_id"] == user.get("org_id")), None) or mems[0]
+        org = await db.organizations.find_one({"id": chosen["org_id"], "status": {"$ne": "disabled"}}, {"_id": 0})
+        if not org:
+            return None, False
+        is_mgr = chosen.get("role") == "admin_org" or role == "admin"
+        return chosen["org_id"], is_mgr
+    # No memberships: fall back to the user's own org (org admin/owner only).
+    oid = user.get("org_id")
+    if oid and role == "admin":
+        return oid, True
+    return None, False
+
+
+def _fmt_person(p: dict) -> str:
+    return f"{(p.get('nome') or '').strip()} {(p.get('cognome') or '').strip()}".strip()
+
+
+async def build_org_data_context(org_id: str, question: str = "") -> str:
+    """Build a compact, human-readable snapshot of the org's operational data for the AI
+    assistant. EVERY query is filtered by org_id — no cross-tenant data can appear here."""
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0})
+    if not org:
+        return ""
+    today = datetime.now(timezone.utc).date().isoformat()
+    events = await db.events.find({"org_id": org_id}, {"_id": 0}).to_list(2000)
+    persons = {p["id"]: p for p in await db.persons.find({"org_id": org_id}, {"_id": 0}).to_list(20000)}
+    companies = {c["id"]: c for c in await db.companies.find({"org_id": org_id}, {"_id": 0}).to_list(20000)}
+    structures = {s["id"]: s for s in await db.structures.find({"org_id": org_id}, {"_id": 0}).to_list(5000)}
+
+    lines = [f"ORGANIZZAZIONE: {org.get('nome')} (tipo: {org.get('type', 'cliente')}).",
+             f"Data odierna: {today}.",
+             f"EVENTI TOTALI: {len(events)}.", f"PERSONE IN ANAGRAFICA: {len(persons)}.",
+             f"AZIENDE IN ANAGRAFICA: {len(companies)}.", ""]
+
+    for ev in sorted(events, key=lambda e: (e.get("data_inizio") or "")):
+        eid = ev["id"]
+        staff = await db.staff.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
+        teams = await db.teams.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(5000)
+        shifts = await db.shifts.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
+        deals = await db.deals.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(5000)
+        acts = await db.activities.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
+        fups = await db.followups.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
+        lodgings = await db.lodgings.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
+        meals = await db.meals.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(50000)
+        maps = await db.event_maps.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(5000)
+
+        team_map = {t["id"]: t for t in teams}
+        n_staff = len([s for s in staff if s.get("categoria") in ("staff", "collaboratore")])
+        n_vol = len([s for s in staff if s.get("categoria") == "volontario"])
+
+        lines.append("=" * 60)
+        lines.append(f"EVENTO: {ev.get('nome')} — stato: {ev.get('stato')} — data: {ev.get('data_inizio') or 'n/d'}"
+                     + (f"→{ev.get('data_fine')}" if ev.get('data_fine') else "")
+                     + f" — luogo: {ev.get('localita') or ev.get('citta') or 'n/d'}"
+                     + (f" — partecipanti previsti: {ev.get('partecipanti_previsti')}" if ev.get('partecipanti_previsti') else ""))
+        if ev.get("responsabile"):
+            lines.append(f"  Responsabile evento: {ev.get('responsabile')} | contatti: {ev.get('email') or ''} {ev.get('telefono') or ''}".rstrip())
+        lines.append(f"  PERSONE COLLEGATE: {len(staff)} (staff: {n_staff}, volontari: {n_vol}).")
+
+        if teams:
+            lines.append(f"  TEAM ({len(teams)}):")
+            for t in teams:
+                resp = persons.get(t.get("responsabile_id"))
+                membri = [s for s in staff if s.get("team_id") == t["id"]]
+                lines.append(f"    - {t.get('nome')} (area: {t.get('area') or 'n/d'}) — Team Leader: "
+                             f"{_fmt_person(resp) if resp else 'NON ASSEGNATO'} — membri: {len(membri)}"
+                             + (f" — ritrovo: {t.get('punto_ritrovo')}" if t.get('punto_ritrovo') else ""))
+
+        if staff:
+            lines.append("  ELENCO STAFF/VOLONTARI:")
+            for s in staff[:100]:
+                p = persons.get(s.get("persona_id"))
+                if not p:
+                    continue
+                tnome = team_map.get(s.get("team_id"), {}).get("nome")
+                arr = f"arrivo {s.get('data_arrivo')} {s.get('ora_arrivo') or ''}".strip() if s.get("data_arrivo") else ""
+                lines.append(f"    - {_fmt_person(p)} — {s.get('categoria') or 'staff'} — ruolo: {s.get('ruolo') or p.get('ruolo') or 'n/d'}"
+                             f" — team: {tnome or 'n/d'} — area: {s.get('area') or 'n/d'} — stato: {s.get('stato') or 'n/d'}"
+                             + (f" — {arr}" if arr else "")
+                             + (f" — referente: {s.get('responsabile')}" if s.get('responsabile') else ""))
+
+        scoperti = [s for s in shifts if not s.get("persona_id")]
+        lines.append(f"  TURNI: {len(shifts)} totali, {len(scoperti)} SCOPERTI.")
+        for s in shifts[:120]:
+            p = persons.get(s.get("persona_id")) if s.get("persona_id") else None
+            lines.append(f"    - {s.get('data') or 'n/d'} {s.get('ora_inizio') or ''}-{s.get('ora_fine') or ''}"
+                         f" | area: {s.get('area') or 'n/d'} | team: {team_map.get(s.get('team_id'), {}).get('nome') or 'n/d'}"
+                         f" | {'COPERTO da ' + _fmt_person(p) if p else 'SCOPERTO'}")
+
+        if deals:
+            pipeline = sum(float(d.get("valore") or 0) for d in deals if d.get("fase") != "perso")
+            confermato = sum(float(d.get("valore_confermato") or d.get("valore") or 0) for d in deals if d.get("fase") == "confermato")
+            lines.append(f"  SPONSOR/PIPELINE: {len(deals)} trattative — VALORE PIPELINE (escluse perse): "
+                         f"€{pipeline:,.0f} — VALORE CONFERMATO: €{confermato:,.0f}.".replace(",", "."))
+            for d in deals:
+                c = companies.get(d.get("azienda_id"))
+                lines.append(f"    - {c.get('nome') if c else 'azienda n/d'} — tipo: {d.get('tipo')} — fase: {d.get('fase')}"
+                             f" — livello: {d.get('livello') or 'n/d'} — valore: €{float(d.get('valore') or 0):,.0f}"
+                             f" — confermato: €{float(d.get('valore_confermato') or 0):,.0f}".replace(",", "."))
+
+        if acts:
+            def _act_bucket(a):
+                if a.get("stato") == "completata":
+                    return "completata"
+                if a.get("stato") == "in_corso":
+                    return "in_corso"
+                if (a.get("data") or "") and (a.get("data") or "")[:10] < today:
+                    return "scaduta"
+                return "da_fare"
+            buckets = {"completata": 0, "in_corso": 0, "da_fare": 0, "scaduta": 0}
+            scadute = []
+            for a in acts:
+                b = _act_bucket(a)
+                buckets[b] += 1
+                if b == "scaduta":
+                    scadute.append(a)
+            lines.append(f"  ATTIVITÀ: {len(acts)} — completate: {buckets['completata']}, in corso: {buckets['in_corso']}, "
+                         f"da iniziare: {buckets['da_fare']}, SCADUTE: {buckets['scaduta']}.")
+            for a in scadute:
+                lines.append(f"    - SCADUTA: {a.get('titolo')} (scadenza {a.get('data')})")
+
+        if fups:
+            fscad = [f for f in fups if (f.get("scadenza") or "9999")[:10] < today and f.get("stato") != "completato"]
+            lines.append(f"  FOLLOW-UP: {len(fups)} — scaduti: {len(fscad)}.")
+            for f in fups[:40]:
+                c = companies.get(f.get("azienda_id"))
+                lines.append(f"    - {f.get('titolo')} — scadenza: {f.get('scadenza') or 'n/d'} — stato: {f.get('stato')}"
+                             f" — priorità: {f.get('priorita') or 'n/d'}" + (f" — azienda: {c.get('nome')}" if c else ""))
+
+        if lodgings or meals:
+            lines.append(f"  OSPITALITÀ: {len(lodgings)} pernottamenti, {len(meals)} pasti.")
+            for l in lodgings[:60]:
+                p = persons.get(l.get("persona_id"))
+                st = structures.get(l.get("struttura_id"))
+                sname = (st or {}).get("nome") or l.get("struttura_nome") or "struttura n/d"
+                lines.append(f"    - PERNOTTAMENTO: {_fmt_person(p) if p else 'n/d'} @ {sname}"
+                             f" — check-in {l.get('check_in') or 'n/d'} / check-out {l.get('check_out') or 'n/d'}"
+                             f" — a carico di: {l.get('a_carico_di') or 'n/d'}")
+            mcount = {}
+            for m in meals:
+                key = (m.get("data"), m.get("tipo_pasto"))
+                mcount[key] = mcount.get(key, 0) + 1
+            for (d, tp), n in sorted(mcount.items(), key=lambda x: (x[0][0] or "")):
+                lines.append(f"    - PASTI {d or 'n/d'} {tp or ''}: {n} persone")
+
+        if maps:
+            lines.append(f"  MAPPE/PERCORSI: " + ", ".join(f"{m.get('nome')}" + (f" ({m.get('distanza')}km)" if m.get('distanza') else "") for m in maps))
+
+        # Criticità sintetiche
+        crit = []
+        if scoperti:
+            crit.append(f"{len(scoperti)} turni scoperti")
+        teams_no_resp = [t.get("nome") for t in teams if not t.get("responsabile_id")]
+        if teams_no_resp:
+            crit.append("team senza responsabile: " + ", ".join(teams_no_resp))
+        act_scad = len([a for a in acts if a.get("stato") != "completata" and (a.get("data") or "")[:10] < today and a.get("data")])
+        if act_scad:
+            crit.append(f"{act_scad} attività scadute")
+        fup_scad = len([f for f in fups if (f.get("scadenza") or "9999")[:10] < today and f.get("stato") != "completato"])
+        if fup_scad:
+            crit.append(f"{fup_scad} follow-up scaduti")
+        vol_no_ref = len([s for s in staff if s.get("categoria") == "volontario" and not s.get("responsabile")])
+        if vol_no_ref:
+            crit.append(f"{vol_no_ref} volontari senza referente")
+        lines.append("  CRITICITÀ: " + ("; ".join(crit) if crit else "nessuna rilevata."))
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 class ChatIn(BaseModel):
     question: str
     conversation_id: Optional[str] = None
@@ -1596,7 +1786,7 @@ class ChatIn(BaseModel):
 
 
 @api.post("/support/chat")
-async def support_chat(body: ChatIn, user: dict = Depends(get_current_user)):
+async def support_chat(body: ChatIn, request: Request, user: dict = Depends(get_current_user)):
     org = DEFAULT_ORG
     if body.conversation_id:
         conv = await db.support_conversations.find_one({"id": body.conversation_id}, {"_id": 0})
@@ -1612,9 +1802,19 @@ async def support_chat(body: ChatIn, user: dict = Depends(get_current_user)):
     hist = await db.support_messages.find({"conversation_id": conv["id"]}, {"_id": 0}).sort("created_at", 1).to_list(50)
     role = _support_role(user)
     ctx, sources, _ = await build_kb_context(body.question, role=role)
+    # Live operational data of the user's active org (STRICTLY isolated by org_id).
+    # Only managers (org admin / super admin acting on an org) receive it.
+    org_data = None
+    try:
+        oid, is_mgr = await _resolve_org_for_support(request, user)
+        if oid and is_mgr:
+            org_data = await build_org_data_context(oid, body.question)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Contesto dati assistente non disponibile: %s", e)
+        org_data = None
     result = await support_service.answer_question(body.question, ctx, page_context=body.page_context,
                                                    history=[{"role": m["role"], "content": m["content"]} for m in hist[:-1]],
-                                                   role=role)
+                                                   role=role, org_data=org_data)
     amsg = await _create("support_messages", {"org_id": org, "conversation_id": conv["id"], "role": "assistant",
                                               "content": result["answer"], "category": result.get("category"),
                                               "confidence": result.get("confidence"), "answered": result.get("answered", True),
