@@ -65,11 +65,14 @@ async def get_or_create_demo_org():
 
 
 async def upsert(coll, doc, org_id):
-    """Upsert by deterministic id, always pinned to the Demo org_id."""
+    """Idempotent upsert scoped by (id, org_id). Matching on org_id too guarantees that
+    seeding a second test org creates its OWN records instead of stealing (reassigning)
+    the deterministic-id records of another org. Full multi-org isolation."""
     d = {**doc, "org_id": org_id, "updated_at": now_iso()}
-    existing = await db[coll].find_one({"id": d["id"]}, {"_id": 0, "created_at": 1})
+    key = {"id": d["id"], "org_id": org_id}
+    existing = await db[coll].find_one(key, {"_id": 0, "created_at": 1})
     d["created_at"] = (existing or {}).get("created_at") or now_iso()
-    await db[coll].update_one({"id": d["id"]}, {"$set": d}, upsert=True)
+    await db[coll].update_one(key, {"$set": d}, upsert=True)
 
 
 # ------------------------------------------------------------------ PERSONS

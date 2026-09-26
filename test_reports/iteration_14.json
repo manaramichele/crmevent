@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 14 - SuperAdmin platform admin (global user list, account guards, hard-delete org with confirm_name, seed-demo on type=test only, isolated Demobot). Backend: 8/8 pytest PASS (test_iter14_platform_admin.py): /platform/users lists all accounts with expected fields; DELETE su superadmin/organizer.test bloccati (400 con messaggio 'Super Admin non puo essere eliminato' e 'unico Admin Organizzazione'); DELETE org con nome errato 400; seed-demo su org type=cliente 400; seed-demo idempotente su QA Throwaway (stessi counts alla riesecuzione, {events:3,persons:34,teams:7,staff:42,shifts:14,companies:17,deals:12,activities:22,followups:11,structures:4,lodgings:8,meals:12,event_maps:3}); DELETE org con nome corretto rimuove QA Throwaway; /api/support/chat con X-Org-Id=Demo risponde con '18' volontari per Bologna City Run. Frontend Playwright: /piattaforma carica platform-accounts, superadmin row senza azioni, dialog user-delete testo esatto verificato ('Stai per eliminare definitivamente l'account <email>. L'utente non potra piu accedere a CRMEvent. I dati appartenenti all'organizzazione non verranno eliminati.'), guardia UI blocca elimina organizer.test con toast 'unico Admin Organizzazione' e l'account rimane in tabella; creazione QA Throwaway Test (type=test) via new-org-dialog naviga a org detail; tab Dati mostra seed-demo-btn + org-delete-card; seed-demo-dialog + seed-confirm eseguono con toast, riesecuzione idempotente; org-delete-btn correttamente disabilitato con nome vuoto/errato e abilitato solo con 'QA Throwaway Test'; click Elimina cancella org e torna a /piattaforma senza la voce; su 'Eventi Milano SRL' (cliente) seed-demo-btn assente e org-delete-card presente. Demobot su /app con acting_org_id=Demo risponde 'Per Bologna City Run 2026 risultano 18 volontari.'; risposta procedurale KB su 'Come assegno un volontario' e' completa e coerente. NB: durante il test in UI, il seed su QA Throwaway ha MIGRATO i record demo dall'org Demo (ID fissi, upsert per solo id) svuotandola; ho dovuto re-seedare l'org Demo prima del check Demobot.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "seed_demo.upsert (chiamato da POST /api/platform/organizations/{org_id}/seed-demo)",
+        "issue": "upsert() matcha per 'id' soltanto e riscrive org_id: seedare la stessa demo su una seconda org test SPOSTA i record demo dall'org precedente alla nuova (ID fissi come demo_evt_bcr sono globalmente unici). Dopo il seed di 'QA Throwaway Test', l'org 'Demo' e' rimasta con 0 eventi/persone/etc, e la delete di QA Throwaway ha poi cancellato definitivamente quei record via cascade. Idempotenza rispettata solo se il seed viene sempre eseguito sulla STESSA org.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CookieConsent (cookie-banner)",
+        "issue": "Il banner cookie z-[200] intercetta i click su bottoni nella colonna destra (es. org-delete-btn) finche' l'utente non chiude/accetta. Non blocca funzionalita' (fix accettando cookie), ma causa flaky clicks nei test e potenzialmente in flussi reali con banner ancora visibile.",
+        "selector": "[data-testid=\"cookie-banner\"]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Caricamento /piattaforma senza acting_org_id",
+        "issue": "Platform.jsx loadAll usa Promise.all([stats,orgs,subs,users]).catch — se una qualsiasi chiamata fallisce (es. /platform/stats), NESSUN dato viene renderizzato (tutte le tabelle mostrano 'Nessuno ...'). Osservato in un test session dove le 4 GET hanno risposto in modo incoerente. Idealmente usare Promise.allSettled e settare i dati che riescono.",
+        "affected_selectors": ["platform-accounts", "platform-org-*", "platform-subscriptions"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_platform_admin.py",
+    "/app/test_reports/pytest/iter14.xml"
+  ],
+  "action_items": [
+    "FIX seed_demo.upsert: matchare per {id, org_id} e mai riscrivere org_id di un doc esistente; oppure prefissare gli ID demo con l'org_id (es. f\"{org_id[:8]}_demo_evt_bcr\"). Aggiungere test regressione: seed su org A -> seed su org B -> counts(A) invariato.",
+    "Considerare Promise.allSettled in Platform.jsx loadAll per evitare che un errore singolo azzeri tutte le tabelle.",
+    "Assicurare che il cookie-banner (z-[200]) non copra la 'Zona pericolosa' su schermi tipici; oppure ridurre z-index del banner una volta scrollato."
+  ],
+  "critical_code_review_comments": [
+    "seed_demo.upsert(coll, doc, org_id) usa filtro {id: d.id} come update-selector: qualsiasi documento con stesso id viene sovrascritto e riassegnato al nuovo org_id. Bug di isolamento multi-org critico.",
+    "Le guardie account/org lato backend sono corrette (superadmin non eliminabile/disabilitabile, no self-delete, blocking admin_orgs, confirm_name su delete org).",
+    "Platform.jsx loadAll: preferire Promise.allSettled per resilienza; l'attuale .catch globale nasconde le tabelle su singolo failure.",
+    "OrgDetail.jsx: seed-demo-btn correttamente condizionato a org.type==='test'; org-delete-btn disabilitato finche' delName.trim()!==org.nome — corretto.",
+    "Il testo del user-delete-dialog e' esattamente conforme alla spec richiesta."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_platform_admin.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "~90% (tutti i check funzionali OK; 1 integration risk in loadAll + 1 cookie-banner overlay durante test)"},
+  "test_credentials": "SuperAdmin: manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Creata e successivamente ELIMINATA l'org 'QA Throwaway Test' (type=test) come da spec. Ho RE-SEEDATO manualmente l'org Demo (b7f40862230441b9a0bedabefe8dab49) tramite seed_demo.seed() perche' il bug sopra descritto aveva svuotato i suoi record demo durante il test di seeding su QA Throwaway.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Backend endpoints /api/platform/users, PATCH/DELETE users, DELETE org (confirm_name), POST seed-demo funzionano come da spec. Il PROBLEMA critico e' l'upsert non-scoped in seed_demo.py: fixare prima di rilasciare, altrimenti seedare due org test in sequenza distrugge la prima. Dopo il fix, verificare test regressione: seed A -> seed B -> report_counts(A) deve rimanere invariato; delete B -> report_counts(A) invariato. Frontend testids: platform-accounts, user-toggle-<id>, user-delete-<id>, user-delete-dialog/confirm/cancel, new-org-btn, seed-demo-btn/dialog/confirm/cancel, seed-wipe-check, org-delete-card/confirm-input/btn — tutti presenti.",
+  "rca of the issue": "seed_demo.upsert(coll, doc, org_id) fa await db[coll].update_one({'id': d['id']}, {'$set': d}, upsert=True) dove d contiene org_id sovrascritto. Poiche' gli ID demo (demo_evt_bcr, demo_pers_*, ecc.) sono deterministici, un record gia' presente in Org A con quell'id viene 'rubato' dal seed su Org B (org_id viene riassegnato a B). Riproduzione: 1) seed su org test A -> events(A)=3; 2) seed su org test B -> events(A)=0, events(B)=3; 3) DELETE org B con cascade -> events(B)=0 permanentemente. Fix: cambiare update-selector a {'id': d['id'], 'org_id': org_id} cosi' il seed su B crea un NUOVO documento (id duplicato per org diverse) o prefissare gli id con l'org_id."
+}

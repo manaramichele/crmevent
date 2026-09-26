@@ -39,9 +39,15 @@ export default function Platform() {
 
   const loadFic = () => api.get("/fic/status").then(({ data }) => setFic(data)).catch(() => {});
   const loadUsers = () => api.get("/platform/users").then(({ data }) => setUsers(data)).catch(() => {});
-  const loadAll = () => Promise.all([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions"), api.get("/platform/users")])
-    .then(([a, b, c, d]) => { setStats(a.data); setOrgs(b.data); setSubs(c.data); setUsers(d.data); })
-    .catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
+  const loadAll = () => Promise.allSettled([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions"), api.get("/platform/users")])
+    .then(([a, b, c, d]) => {
+      if (a.status === "fulfilled") setStats(a.value.data);
+      if (b.status === "fulfilled") setOrgs(b.value.data);
+      if (c.status === "fulfilled") setSubs(c.value.data);
+      if (d.status === "fulfilled") setUsers(d.value.data);
+      const failed = [a, b, c, d].find((r) => r.status === "rejected");
+      if (failed) toast.error(formatApiError(failed.reason?.response?.data?.detail));
+    });
 
   useEffect(() => { loadAll(); loadFic(); }, []);
   useEffect(() => {
