@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 13 - Frontend E2E of Organizations/Users/Invites/Leads/Audit/Org-Switcher for Super Admin. 17/17 Playwright checks PASS. Verified: Super Admin login, operational sidebar + 'Amministrazione piattaforma' group (Dashboard piattaforma, Lead, Supporto, Audit Log), 'Org attiva' switcher visible; /piattaforma loads with new-org-btn; created Interna org 'QA Interna Test <ts>' via new-org-dialog (nome/type=interna/status=active), auto-navigated to /piattaforma/org/<id>; all 4 tabs render (dati/utenti/eventi/audit); Dati save works; Utenti tab: added organizer.test@crmevent.it as member, changed role (user↔admin_org), toggled active/disable, then removed; Invite: sent qa.invitato@example.com (email_sent=false expected for @example.com), invite row appears in invites-table, resend and revoke both work; /invito?token=INVALID renders invite-error 'Invito non valido'; /audit page renders audit-log-page with audit-table, all 4 filter testids present, filtering by the new org_id returns 10 audit rows covering org_created/member_added/role_change/toggle/remove/invite lifecycle; /lead page loads, 1 lead present, opening lead-row-<id> shows lead-detail with lead-no-account state, stato change (lead-stato) persists; Org switcher: on /eventi the org-switcher-select + super-acting-banner render, switching to the new org updates banner to 'Stai operando come Super Admin in: QA Interna Test <ts>'.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Platform.jsx createOrg uses window.location.href for hard navigation (line 60) — intentional so Layout re-fetches /my/organizations and the new org shows in org-switcher. Works, but a soft nav + explicit refresh of orgs in AuthContext would be smoother.",
+    "OrgDetail.jsx removeMember uses window.confirm — fine for now but consider replacing with the shadcn AlertDialog for consistency.",
+    "Invite.jsx: the useRef 'done' guard prevents re-running effect on StrictMode double invoke — good. Google redirect uses hardcoded auth.emergentagent.com URL; acceptable for Emergent auth.",
+    "server.py file size flagged in previous iterations still applies (module split candidate)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (17/17)"},
+  "test_credentials": "Super Admin: manara.michele.pro@gmail.com / CrmEvent2026!  |  Organizer: organizer.test@crmevent.it / Organizer2026!",
+  "seed_data_creation": "Created one test org via UI: 'QA Interna Test <timestamp>' (type=interna, status=active). Member add/remove and one invite were exercised then revoked/removed; org itself is left in place (safe, Interna type).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All Super Admin platform flows are green end-to-end. The 428/401 console errors seen briefly during login/pre-org-selection are expected (require_admin returns 428 when no X-Org-Id yet). Invite emails to @example.com correctly warn 'email non inviata'. If retesting invite acceptance flow requires a real token, fetch it from the Mongo 'invites' collection instead of relying on email delivery."
+}
