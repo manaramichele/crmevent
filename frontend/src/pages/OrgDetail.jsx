@@ -204,7 +204,9 @@ export default function OrgDetail() {
                       <td className="px-4 py-2.5 font-medium text-slate-800">{m.name || "—"}{m.is_superadmin && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-tiffany/20 text-tiffany-fg align-middle">Super Admin</span>}</td>
                       <td className="px-4 py-2.5 text-slate-600">{m.email}</td>
                       <td className="px-4 py-2.5">
-                        <select disabled={m.is_superadmin} className="h-9 px-2 rounded-lg border border-slate-200 text-sm disabled:opacity-50" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`member-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
+                        {m.is_superadmin
+                          ? <StatusBadge color="tiffany">{m.role_label || "Super Admin"}</StatusBadge>
+                          : <select className="h-9 px-2 rounded-lg border border-slate-200 text-sm" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`member-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}
                       </td>
                       <td className="px-4 py-2.5"><StatusBadge color={m.account_active ? "green" : "red"}>{m.account_active ? "Attivo" : "Disabilitato"}</StatusBadge></td>
                       <td className="px-4 py-2.5"><StatusBadge color={m.active ? "green" : "gray"}>{m.active ? "Consentito" : "Disabilitato"}</StatusBadge></td>

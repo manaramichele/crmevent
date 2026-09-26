@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 15 - Frontend-only test of OrgDetail Fase B (Utenti vs Inviti separati + guardie). Login SuperAdmin OK. Navigato /piattaforma/org/{demo}: tab distinti presenti (org-tab-dati, org-tab-utenti, org-tab-inviti, org-tab-eventi, org-tab-audit). Tab Utenti (Demo): org-utenti-tab + members-table renderizzati, header ESATTAMENTE ['Nome','Email','Ruolo','Stato account','Accesso org','Metodo','Registrazione','Ultimo accesso','Azioni']; su Demo non ci sono account con accesso, quindi il dialog e' stato testato su 'Nova Events' che ha 1 membro non-super (organizer.test@crmevent.it). API /platform/organizations/{id}/members restituisce i campi arricchiti richiesti: user_id, email, name, role, role_label, active, account_active, created_at, last_login_at, auth_provider, is_superadmin. Riga UI mostra 'Marco Rossi | organizer.test@crmevent.it | Admin Organizzazione | Attivo | Consentito | Email e password | 26/09/2026 | 26/09/2026 | Disabilita accesso + cestino'. Click member-delete-<uid> apre member-delete-dialog con testo esatto: 'Stai per eliminare definitivamente l'account organizer.test@crmevent.it. L'utente non potra' piu' accedere a CRMEvent. L'anagrafica Persona, gli eventi, le attivita', i turni e gli altri dati dell'organizzazione NON verranno eliminati.' Tutti i termini richiesti (Persona, eventi, attivita', turni, NON verranno eliminati) presenti. Click member-delete-cancel chiude il dialog e la riga rimane presente (nessuna eliminazione). Tab Inviti (Demo): org-inviti-tab + invites-table renderizzati, invites-cleanup-btn presente; 0 inviti al momento (nessun invite-delete-* da esercitare, ma il template renderizza il bottone per ogni riga come verificato nel codice). Guardia SuperAdmin: nessun utente SuperAdmin figura come membro di Demo/Nova/Eventi Milano quindi non e' stato possibile validare visivamente 'nessun pulsante member-delete-* sulla riga SuperAdmin' su una riga reale; tuttavia il codice OrgDetail.jsx L215 mostra chiaramente: '{m.is_superadmin ? span '—' : (<toggle+delete>)}' — la guardia UI e' corretta. Badge 'Super Admin' presente accanto al nome se m.is_superadmin=true. Nessuna azione distruttiva eseguita.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Utenti tab", "issues": ["La colonna Ruolo mostra una <select> per ciascuna riga: nel caso is_superadmin la select e' disabilitata ma continua a esporre tutte le opzioni; sarebbe piu' pulito mostrare un badge readonly per il SuperAdmin invece della select disabilitata (piccolo issue estetico, non funzionale)."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Nessuno bloccante. Considerare: (a) su Utenti tab per il SuperAdmin sostituire la <select> disabilitata con un badge readonly; (b) rimuovere il banner iubenda/cookie-banner dagli overlay che intercettano click nella pagina admin (residuo iterazione 14).",
+    "Verifica manuale consigliata su un'org con SuperAdmin come membro esplicito (attualmente non presente in nessuna org) per confermare visivamente l'assenza dei pulsanti member-toggle/member-delete sulla riga super."
+  ],
+  "critical_code_review_comments": [
+    "OrgDetail.jsx: header e campi tabella Utenti conformi 1:1 alla spec (Nome, Email, Ruolo, Stato account, Accesso org, Metodo, Registrazione, Ultimo accesso, Azioni).",
+    "OrgDetail.jsx L215-221: guardia render azioni {m.is_superadmin ? '—' : <toggle+delete>} corretta; select ruolo disabilitata quando is_superadmin.",
+    "member-delete-dialog: testo esattamente allineato alla spec ('Persona/eventi/attivita'/turni NON verranno eliminati').",
+    "Tab Inviti: presenti invites-cleanup-btn e invite-delete-{id} per riga; nessuna regressione rispetto a iterazione 14.",
+    "Backend _member_view restituisce tutti i campi richiesti (auth_provider, account_active, created_at, last_login_at, is_superadmin, active, role_label) — verificato via fetch nel browser autenticato."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skip)", "frontend": "100% dei check richiesti (tabs distinti, header tabella Utenti, dialog testo+cancel, cleanup-btn/delete-btn Inviti, campi arricchiti API)"},
+  "test_credentials": "SuperAdmin: manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Nessuna. Nessuna org di test creata; testato in modalita' NON distruttiva su Demo (tabs vuoti) e su Nova Events (solo apertura+cancel del dialog per organizer.test@crmevent.it).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fase B Utenti/Inviti verificata frontend-only. Tutti i data-testid attesi presenti: org-tab-utenti/inviti, org-utenti-tab, org-inviti-tab, members-table, member-row-<uid>, member-role-<uid>, member-toggle-<uid>, member-delete-<uid>, member-delete-dialog/confirm/cancel, invites-table, invite-row-<id>, invites-cleanup-btn, invite-delete-<id>. Non e' stato possibile testare la guardia UI 'niente pulsanti delete sulla riga SuperAdmin' perche' nessun SuperAdmin risulta membro di alcuna organizzazione — la logica sorgente e' pero' verificata. Bug seed_demo.upsert (iter14) non rilevante in questo giro. Persiste minor UX: cookie-banner z-[200] puo' sovrapporsi.",
+  "rca of the issue": "N/A - nessun bug rilevato in questa iterazione."
+}
