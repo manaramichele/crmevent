@@ -158,7 +158,7 @@ export default function Platform() {
         <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !creating && setShowCreate(false)}>
           <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4" onClick={(e) => e.stopPropagation()} data-testid="new-org-dialog">
             <div className="flex items-center justify-between"><h2 className="text-lg font-bold text-slate-900">Nuova organizzazione</h2><button onClick={() => setShowCreate(false)}><X className="w-5 h-5 text-slate-400" /></button></div>
-            <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Nome organizzazione</label><Input value={nf.nome} onChange={(e) => setNf((f) => ({ ...f, nome: e.target.value }))} placeholder="Es. TriO Events" data-testid="new-org-nome" /></div>
+            <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Nome organizzazione</label><Input value={nf.nome} onChange={(e) => setNf((f) => ({ ...f, nome: e.target.value }))} placeholder="Es. Nova Events" data-testid="new-org-nome" /></div>
             <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Tipo</label>
               <select className="h-10 px-3 w-full rounded-lg border border-slate-200 text-sm" value={nf.type} onChange={(e) => setNf((f) => ({ ...f, type: e.target.value }))} data-testid="new-org-type">
                 <option value="cliente">Cliente (trial + abbonamento)</option><option value="interna">Interna (nessun abbonamento)</option><option value="test">Test</option>

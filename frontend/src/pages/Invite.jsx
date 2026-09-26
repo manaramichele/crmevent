@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Building2, ShieldCheck, AlertTriangle } from "lucide-react";
+import { ShieldCheck, AlertTriangle } from "lucide-react";
 
 const Card = ({ children }) => (
   <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
@@ -81,7 +81,7 @@ export default function Invite() {
 
   return (
     <Card>
-      <div className="flex items-center gap-2 text-tiffany-active mb-4"><Building2 className="w-5 h-5" /><span className="text-sm font-semibold">CRMEvent</span></div>
+      <img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-9 w-auto mb-4" />
       <h1 className="text-2xl font-bold text-slate-900">Invito a {invite.org_name}</h1>
       <p className="text-sm text-slate-500 mt-1">Sei stato invitato con il ruolo <span className="font-semibold text-slate-700">{invite.role_label}</span> per l'indirizzo <span className="font-semibold text-slate-700">{invite.email}</span>.</p>
 
