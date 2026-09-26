@@ -173,14 +173,23 @@ export default function Layout({ children }) {
   const [orgs, setOrgs] = useState([]);
 
   const isSuper = user?.role === "superadmin";
+  const multiOrg = !isSuper && (user?.organizations?.length || 0) > 1;
+  const showSwitcher = isSuper || multiOrg;
 
   useEffect(() => {
-    if (!isSuper) return;
-    api.get("/platform/organizations").then(({ data }) => {
-      setOrgs(data);
-      if (!actingOrgId && data.length) setActingOrg(data[0].id, false);
-    }).catch(() => {});
-  }, [isSuper]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isSuper) {
+      api.get("/platform/organizations").then(({ data }) => {
+        setOrgs(data);
+        if (!actingOrgId && data.length) setActingOrg(data[0].id, false);
+      }).catch(() => {});
+    } else if (multiOrg) {
+      api.get("/my/organizations").then(({ data }) => {
+        setOrgs(data);
+        const activeId = user?.active_org_id || user?.org_id;
+        if (!actingOrgId && activeId) setActingOrg(activeId, false);
+      }).catch(() => {});
+    }
+  }, [isSuper, multiOrg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const navGroups = isSuper
     ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }]
@@ -188,7 +197,7 @@ export default function Layout({ children }) {
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !actingOrgId && !isPlatformRoute;
-  const activeOrgName = orgs.find((o) => o.id === actingOrgId)?.nome;
+  const activeOrgName = orgs.find((o) => o.id === actingOrgId)?.nome || user?.org_name;
 
   const renderLink = (n, onClick) => (
     <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`}
@@ -250,7 +259,7 @@ export default function Layout({ children }) {
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="h-16 sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 px-4 lg:px-6">
           <button className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button"><Menu className="w-5 h-5" /></button>
-          {isSuper && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId} onChange={(id) => setActingOrg(id, true, actingOrgId)} />}
+          {showSwitcher && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} />}
           <div className="flex-1"><GlobalSearch /></div>
           <Notifications />
           <div className="relative">

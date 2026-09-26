@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { ScrollText, Filter, X } from "lucide-react";
 
-const ACTION_COLOR = { org_access: "tiffany", org_switch: "orange" };
+const ACTION_COLOR = { org_access: "tiffany", org_switch: "orange", org_created: "green", org_updated: "blue", member_added: "green", member_removed: "red", member_role_changed: "orange", member_enabled: "green", member_disabled: "red", invite_sent: "tiffany", invite_resent: "tiffany", invite_revoked: "red", invite_accepted: "green", lead_linked: "blue" };
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -86,13 +86,15 @@ export default function AuditLog() {
                 <th className="text-left font-semibold px-4 py-3">Super Admin</th>
                 <th className="text-left font-semibold px-4 py-3">Organizzazione</th>
                 <th className="text-left font-semibold px-4 py-3">Azione</th>
+                <th className="text-left font-semibold px-4 py-3">Interessato</th>
+                <th className="text-left font-semibold px-4 py-3">Dettaglio</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-400">Caricamento…</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Caricamento…</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-400" data-testid="audit-empty">Nessuna voce nel registro.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400" data-testid="audit-empty">Nessuna voce nel registro.</td></tr>
               ) : items.map((it) => (
                 <tr key={it.id} className="border-t border-slate-100 hover:bg-slate-50/60" data-testid={`audit-row-${it.id}`}>
                   <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtDate(it.created_at)}</td>
@@ -107,6 +109,8 @@ export default function AuditLog() {
                     )}
                   </td>
                   <td className="px-4 py-3"><StatusBadge color={ACTION_COLOR[it.action] || "gray"}>{it.action_label}</StatusBadge></td>
+                  <td className="px-4 py-3 text-slate-600">{it.target_name || it.target_email || "—"}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs max-w-[280px]">{it.detail || "—"}</td>
                 </tr>
               ))}
             </tbody>

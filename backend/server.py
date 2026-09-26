@@ -116,9 +116,12 @@ async def get_current_user(request: Request) -> dict:
     return user
 
 
-async def require_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
-    # Super Admin may operate inside a selected organization (audited impersonation via
-    # an explicit, server-validated header). Data stays org-scoped through oq() — no bypass.
+async def _resolve_active_org(request: Request, user: dict):
+    """Resolve the effective (org_id, org_role) for this request.
+    - Super Admin: any org via server-validated X-Org-Id header (audited impersonation).
+    - Operational user: only an org for which an ACTIVE membership exists; the optional
+      X-Org-Id header must match one of those memberships, else 403. Defaults to primary.
+    Data always stays org-scoped through oq() — no cross-tenant bypass."""
     if user.get("role") == "superadmin":
         acting = request.headers.get("X-Org-Id")
         if not acting:
@@ -126,12 +129,34 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
         org = await db.organizations.find_one({"id": acting}, {"_id": 0})
         if not org:
             raise HTTPException(status_code=404, detail="Organizzazione non trovata")
-        return {**user, "org_id": acting, "acting_org": acting}
-    if user.get("role") not in ADMIN_ROLES:
-        raise HTTPException(status_code=403, detail="Accesso riservato agli amministratori")
-    if not user.get("org_id"):
+        return acting, "superadmin"
+    mems = await db.memberships.find({"user_id": user["user_id"], "active": True}, {"_id": 0}).to_list(200)
+    if not mems:
         raise HTTPException(status_code=403, detail="Nessuna organizzazione associata all'account")
-    return user
+    header = request.headers.get("X-Org-Id")
+    chosen = None
+    if header:
+        chosen = next((m for m in mems if m["org_id"] == header), None)
+        if not chosen:
+            raise HTTPException(status_code=403, detail="Accesso all'organizzazione non consentito")
+    if not chosen:
+        chosen = next((m for m in mems if m["org_id"] == user.get("org_id")), None) or mems[0]
+    org = await db.organizations.find_one({"id": chosen["org_id"]}, {"_id": 0})
+    if not org or org.get("status") == "disabled":
+        raise HTTPException(status_code=403, detail="Organizzazione non disponibile")
+    return chosen["org_id"], chosen["role"]
+
+
+async def require_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    org_id, org_role = await _resolve_active_org(request, user)
+    return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id}
+
+
+async def require_org_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    org_id, org_role = await _resolve_active_org(request, user)
+    if org_role not in ("admin_org", "superadmin"):
+        raise HTTPException(status_code=403, detail="Riservato agli amministratori dell'organizzazione")
+    return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id}
 
 
 async def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
@@ -166,7 +191,14 @@ def _days_left(iso_dt: Optional[str]) -> int:
 
 
 def _sub_summary(org: dict) -> dict:
+    otype = (org or {}).get("type", "cliente")
     sub = (org or {}).get("subscription", {}) or {}
+    if otype != "cliente":
+        # Internal/Test organizations: no trial, no Stripe, no CRMEvent billing.
+        return {"status": otype, "plan": sub.get("plan", "crmevent"), "billing_cycle": None,
+                "trial_end": None, "current_period_end": None, "days_left": None,
+                "access": "full", "price_monthly": PRICE_MONTHLY, "price_yearly": PRICE_YEARLY,
+                "org_type": otype}
     status = sub.get("status", "trial")
     trial_end = sub.get("trial_end")
     period_end = sub.get("current_period_end")
@@ -179,20 +211,56 @@ def _sub_summary(org: dict) -> dict:
             "billing_cycle": sub.get("billing_cycle"), "trial_end": trial_end,
             "current_period_end": period_end, "days_left": days_left,
             "access": "full" if active else "limited",
-            "price_monthly": PRICE_MONTHLY, "price_yearly": PRICE_YEARLY}
+            "price_monthly": PRICE_MONTHLY, "price_yearly": PRICE_YEARLY, "org_type": "cliente"}
 
 
-async def _create_organization(name: str, owner_user_id: str) -> dict:
+async def _create_organization(name: str, owner_user_id: Optional[str] = None,
+                               org_type: str = "cliente", status: str = "active") -> dict:
     now = datetime.now(timezone.utc)
-    org = {"id": new_id(), "nome": name, "owner_user_id": owner_user_id,
-           "subscription": {"status": "trial", "plan": "crmevent", "billing_cycle": None,
-                            "trial_start": now.isoformat(),
-                            "trial_end": (now + timedelta(days=TRIAL_DAYS)).isoformat(),
-                            "current_period_end": None, "stripe_customer_id": None,
-                            "stripe_subscription_id": None},
+    if org_type == "cliente":
+        sub = {"status": "trial", "plan": "crmevent", "billing_cycle": None,
+               "trial_start": now.isoformat(),
+               "trial_end": (now + timedelta(days=TRIAL_DAYS)).isoformat(),
+               "current_period_end": None, "stripe_customer_id": None, "stripe_subscription_id": None}
+    else:
+        # Internal / Test orgs never enter a trial or Stripe flow.
+        sub = {"status": org_type, "plan": "crmevent", "billing_cycle": None, "trial_start": None,
+               "trial_end": None, "current_period_end": None, "stripe_customer_id": None,
+               "stripe_subscription_id": None}
+    org = {"id": new_id(), "nome": name, "type": org_type, "status": status,
+           "owner_user_id": owner_user_id, "subscription": sub,
            "created_at": now_iso(), "updated_at": now_iso()}
     await db.organizations.insert_one(org)
     return org
+
+
+async def _ensure_membership(user_id: str, org_id: str, role: str, added_by: Optional[str] = None):
+    existing = await db.memberships.find_one({"user_id": user_id, "org_id": org_id})
+    if existing:
+        return existing, False
+    doc = {"id": new_id(), "user_id": user_id, "org_id": org_id, "role": role,
+           "active": True, "permissions": {}, "added_by": added_by,
+           "created_at": now_iso(), "updated_at": now_iso(), "last_login_at": None}
+    await db.memberships.insert_one(doc)
+    return doc, True
+
+
+async def _can_manage_org(user: dict, org_id: str) -> bool:
+    if user.get("role") == "superadmin":
+        return True
+    m = await db.memberships.find_one({"user_id": user["user_id"], "org_id": org_id, "active": True})
+    return bool(m and m.get("role") == "admin_org")
+
+
+async def _guard_last_admin(org: dict, exclude_user_id: str) -> None:
+    """A Client org must always keep at least one active Admin Organizzazione."""
+    if org.get("type") != "cliente":
+        return
+    admins = await db.memberships.find(
+        {"org_id": org["id"], "role": "admin_org", "active": True}, {"_id": 0}).to_list(500)
+    if not [m for m in admins if m["user_id"] != exclude_user_id]:
+        raise HTTPException(status_code=400,
+                            detail="L'organizzazione Cliente deve mantenere almeno un Admin Organizzazione. Assegnane un altro prima di procedere.")
 
 
 # ---------------- generic crud ----------------
@@ -267,17 +335,40 @@ def public_user(u: dict) -> dict:
             "org_id": u.get("org_id")}
 
 
-async def user_payload(u: dict) -> dict:
+async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base = public_user(u)
-    if u.get("role") == "superadmin":
+    role = u.get("role")
+    if role == "superadmin":
         base["needs_org"] = False
         return base
-    if not u.get("org_id"):
+    if role in ("volunteer", "staff"):
+        base["needs_org"] = not bool(u.get("org_id"))
+        if u.get("org_id"):
+            org = await db.organizations.find_one({"id": u["org_id"]}, {"_id": 0})
+            base["org_name"] = (org or {}).get("nome")
+        return base
+    # Operational member (global role admin/user/member) — access via memberships.
+    mems = await db.memberships.find({"user_id": u["user_id"], "active": True}, {"_id": 0}).to_list(200)
+    orgs_out = []
+    for m in mems:
+        org = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0})
+        if not org or org.get("status") == "disabled":
+            continue
+        orgs_out.append({"org_id": org["id"], "nome": org.get("nome"), "type": org.get("type", "cliente"),
+                         "role": m["role"], "status": org.get("status", "active")})
+    base["organizations"] = orgs_out
+    if not orgs_out:
         base["needs_org"] = True
         return base
-    org = await db.organizations.find_one({"id": u["org_id"]}, {"_id": 0})
-    base["needs_org"] = org is None
-    base["org_name"] = (org or {}).get("nome")
+    chosen = next((o for o in orgs_out if o["org_id"] == active_org_id), None) \
+        or next((o for o in orgs_out if o["org_id"] == u.get("org_id")), None) or orgs_out[0]
+    org = await db.organizations.find_one({"id": chosen["org_id"]}, {"_id": 0})
+    base["needs_org"] = False
+    base["org_id"] = chosen["org_id"]
+    base["active_org_id"] = chosen["org_id"]
+    base["org_name"] = chosen["nome"]
+    base["org_role"] = chosen["role"]
+    base["org_type"] = chosen["type"]
     base["subscription"] = _sub_summary(org)
     return base
 
@@ -316,6 +407,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
                                "password_hash": hash_password(body.password), "role": "admin",
                                "auth_provider": "password", "org_id": org["id"], "telefono": body.telefono,
                                "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso()})
+    await _ensure_membership(uid, org["id"], "admin_org", uid)
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
@@ -336,6 +428,7 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
     await db.users.update_one({"user_id": user["user_id"]},
                               {"$set": {"org_id": org["id"], "role": "admin", "telefono": body.telefono,
                                         "accepted_terms_at": now_iso()}})
+    await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return await user_payload(u)
 
@@ -350,6 +443,7 @@ async def login(body: LoginIn, response: Response):
         raise HTTPException(status_code=403, detail="Accesso disabilitato")
     token = create_access_token(user["user_id"], email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login_at": now_iso()}})
     return await user_payload(user)
 
 
@@ -378,13 +472,14 @@ async def google_session(request: Request, response: Response):
                                        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
                                        "created_at": now_iso()})
     set_auth_cookie(response, "session_token", session_token, 7 * 24 * 3600)
+    await db.users.update_one({"user_id": uid}, {"$set": {"last_login_at": now_iso()}})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
     return await user_payload(u)
 
 
 @api.get("/auth/me")
-async def me(user: dict = Depends(get_current_user)):
-    return await user_payload(user)
+async def me(request: Request, user: dict = Depends(get_current_user)):
+    return await user_payload(user, request.headers.get("X-Org-Id"))
 
 
 @api.post("/auth/logout")
@@ -2048,6 +2143,470 @@ async def delete_lead(lead_id: str, admin: dict = Depends(require_superadmin)):
     return await _delete("leads", lead_id)
 
 
+# ==================== Organizations, memberships & invites management ====================
+ORG_ROLE_LABELS = {"admin_org": "Admin Organizzazione", "user": "Utente"}
+
+
+def _norm_role(r: str) -> str:
+    return "admin_org" if r == "admin_org" else "user"
+
+
+async def _org_or_404(org_id: str) -> dict:
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    return org
+
+
+async def _require_manage(user: dict, org_id: str) -> None:
+    if not await _can_manage_org(user, org_id):
+        raise HTTPException(status_code=403, detail="Non autorizzato a gestire questa organizzazione")
+
+
+async def _member_view(m: dict) -> dict:
+    u = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0, "password_hash": 0})
+    return {"user_id": m["user_id"], "email": (u or {}).get("email"), "name": (u or {}).get("name"),
+            "role": m["role"], "role_label": ORG_ROLE_LABELS.get(m["role"], m["role"]),
+            "active": m.get("active", True), "last_login_at": (u or {}).get("last_login_at"),
+            "auth_provider": (u or {}).get("auth_provider")}
+
+
+async def _org_detail(org_id: str) -> dict:
+    org = await _org_or_404(org_id)
+    members = await db.memberships.count_documents({"org_id": org_id, "active": True})
+    events = await db.events.count_documents({"org_id": org_id})
+    return {"id": org["id"], "nome": org.get("nome"), "type": org.get("type", "cliente"),
+            "status": org.get("status", "active"), "created_at": org.get("created_at"),
+            "members": members, "events": events, "subscription": _sub_summary(org)}
+
+
+class OrgCreateIn(BaseModel):
+    nome: str
+    type: str = "cliente"
+    status: str = "active"
+
+
+class OrgUpdateIn(BaseModel):
+    nome: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
+
+
+class MemberAddIn(BaseModel):
+    email: EmailStr
+    role: str = "user"
+
+
+class MemberUpdateIn(BaseModel):
+    role: Optional[str] = None
+    active: Optional[bool] = None
+
+
+class InviteCreateIn(BaseModel):
+    email: EmailStr
+    role: str = "user"
+
+
+@api.post("/platform/organizations")
+async def create_organization_admin(body: OrgCreateIn, admin: dict = Depends(require_superadmin)):
+    if not body.nome.strip():
+        raise HTTPException(status_code=400, detail="Nome organizzazione obbligatorio")
+    otype = body.type if body.type in ("cliente", "interna", "test") else "cliente"
+    status = body.status if body.status in ("active", "disabled") else "active"
+    org = await _create_organization(body.nome.strip(), owner_user_id=None, org_type=otype, status=status)
+    await record_audit(admin, "org_created", org_id=org["id"], org_name=org["nome"],
+                       detail=f"Tipo: {otype} · Stato: {status}")
+    return await _org_detail(org["id"])
+
+
+@api.patch("/platform/organizations/{org_id}")
+async def update_organization_admin(org_id: str, body: OrgUpdateIn, admin: dict = Depends(require_superadmin)):
+    org = await _org_or_404(org_id)
+    upd, changes = {}, []
+    if body.nome and body.nome.strip() != org.get("nome"):
+        upd["nome"] = body.nome.strip(); changes.append(f"nome: {org.get('nome')} → {body.nome.strip()}")
+    if body.type and body.type in ("cliente", "interna", "test") and body.type != org.get("type"):
+        upd["type"] = body.type; changes.append(f"tipo: {org.get('type')} → {body.type}")
+    if body.status and body.status in ("active", "disabled") and body.status != org.get("status"):
+        upd["status"] = body.status; changes.append(f"stato: {org.get('status')} → {body.status}")
+    if upd:
+        upd["updated_at"] = now_iso()
+        await db.organizations.update_one({"id": org_id}, {"$set": upd})
+        await record_audit(admin, "org_updated", org_id=org_id, org_name=upd.get("nome", org.get("nome")),
+                           detail="; ".join(changes))
+    return await _org_detail(org_id)
+
+
+@api.get("/platform/organizations/{org_id}/detail")
+async def get_organization_detail(org_id: str, admin: dict = Depends(require_superadmin)):
+    return await _org_detail(org_id)
+
+
+@api.get("/platform/organizations/{org_id}/members")
+async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
+    await _require_manage(user, org_id)
+    mems = await db.memberships.find({"org_id": org_id}, {"_id": 0}).to_list(500)
+    return [await _member_view(m) for m in mems]
+
+
+@api.post("/platform/organizations/{org_id}/members")
+async def add_org_member(org_id: str, body: MemberAddIn, user: dict = Depends(get_current_user)):
+    await _require_manage(user, org_id)
+    org = await _org_or_404(org_id)
+    email = body.email.lower()
+    target = await db.users.find_one({"email": email}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Nessun account CRMEvent con questa email. Usa «Invita utente» per invitarlo.")
+    if target.get("role") in ("volunteer", "staff"):
+        raise HTTPException(status_code=400, detail="Questo account è un membro staff/volontario e non può essere aggiunto come utente dell'organizzazione.")
+    role = _norm_role(body.role)
+    existing = await db.memberships.find_one({"user_id": target["user_id"], "org_id": org_id})
+    if existing and existing.get("active"):
+        raise HTTPException(status_code=400, detail="L'utente è già associato a questa organizzazione")
+    if existing:
+        await db.memberships.update_one({"id": existing["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
+    else:
+        await _ensure_membership(target["user_id"], org_id, role, user["user_id"])
+    await record_audit(user, "member_added", org_id=org_id, org_name=org.get("nome"),
+                       target_email=email, target_name=target.get("name"), detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
+    return {"ok": True}
+
+
+@api.patch("/platform/organizations/{org_id}/members/{target_id}")
+async def update_org_member(org_id: str, target_id: str, body: MemberUpdateIn, user: dict = Depends(get_current_user)):
+    await _require_manage(user, org_id)
+    org = await _org_or_404(org_id)
+    m = await db.memberships.find_one({"org_id": org_id, "user_id": target_id})
+    if not m:
+        raise HTTPException(status_code=404, detail="Associazione non trovata")
+    tgt = await db.users.find_one({"user_id": target_id}, {"_id": 0})
+    upd, changes, action = {}, [], None
+    if body.role and _norm_role(body.role) != m["role"]:
+        new_role = _norm_role(body.role)
+        if m["role"] == "admin_org" and new_role != "admin_org":
+            await _guard_last_admin(org, target_id)
+        upd["role"] = new_role; changes.append(f"ruolo: {ORG_ROLE_LABELS[m['role']]} → {ORG_ROLE_LABELS[new_role]}"); action = "member_role_changed"
+    if body.active is not None and body.active != m.get("active", True):
+        if not body.active and m["role"] == "admin_org":
+            await _guard_last_admin(org, target_id)
+        upd["active"] = body.active; changes.append(f"accesso: {'attivo' if body.active else 'disabilitato'}")
+        action = action or ("member_enabled" if body.active else "member_disabled")
+    if upd:
+        upd["updated_at"] = now_iso()
+        await db.memberships.update_one({"id": m["id"]}, {"$set": upd})
+        await record_audit(user, action, org_id=org_id, org_name=org.get("nome"),
+                           target_email=(tgt or {}).get("email"), target_name=(tgt or {}).get("name"),
+                           detail="; ".join(changes))
+    return {"ok": True}
+
+
+@api.delete("/platform/organizations/{org_id}/members/{target_id}")
+async def remove_org_member(org_id: str, target_id: str, user: dict = Depends(get_current_user)):
+    await _require_manage(user, org_id)
+    org = await _org_or_404(org_id)
+    m = await db.memberships.find_one({"org_id": org_id, "user_id": target_id})
+    if not m:
+        raise HTTPException(status_code=404, detail="Associazione non trovata")
+    if m["role"] == "admin_org" and m.get("active", True):
+        await _guard_last_admin(org, target_id)
+    tgt = await db.users.find_one({"user_id": target_id}, {"_id": 0})
+    await db.memberships.delete_one({"id": m["id"]})
+    await record_audit(user, "member_removed", org_id=org_id, org_name=org.get("nome"),
+                       target_email=(tgt or {}).get("email"), target_name=(tgt or {}).get("name"),
+                       detail="Associazione rimossa · dati dell'organizzazione conservati")
+    return {"ok": True}
+
+
+# ------- invites -------
+def _invite_status(inv: dict) -> str:
+    if inv.get("status") in ("accepted", "revoked"):
+        return inv["status"]
+    exp = inv.get("expires_at")
+    if exp:
+        try:
+            e = datetime.fromisoformat(exp)
+            if e.tzinfo is None:
+                e = e.replace(tzinfo=timezone.utc)
+            if e < datetime.now(timezone.utc):
+                return "expired"
+        except Exception:
+            pass
+    return "pending"
+
+
+def _invite_view(inv: dict) -> dict:
+    return {"id": inv["id"], "email": inv["email"], "role": inv["role"],
+            "role_label": ORG_ROLE_LABELS.get(inv["role"], inv["role"]),
+            "status": _invite_status(inv), "created_at": inv.get("created_at"), "expires_at": inv.get("expires_at")}
+
+
+async def _send_invite_email(email: str, org_name: str, token: str, role: str) -> None:
+    link = f"{APP_URL}/invito?token={token}"
+    await email_utils.send_email(
+        to=email, subject=f"Invito ad accedere a {org_name} su CRMEvent",
+        html=email_utils.link_email(
+            name=email.split("@")[0],
+            intro=f"Sei stato invitato ad accedere all'organizzazione «{org_name}» su CRMEvent con il ruolo {ORG_ROLE_LABELS.get(role, role)}. Clicca per accettare l'invito e accedere.",
+            cta_label="Accetta l'invito", url=link,
+            footer_note="L'invito scade tra 7 giorni ed è utilizzabile una sola volta."))
+
+
+async def _create_invite(org: dict, email: str, role: str, invited_by: str, lead_id: Optional[str] = None) -> dict:
+    await db.org_invites.update_many({"org_id": org["id"], "email": email, "status": "pending"},
+                                     {"$set": {"status": "revoked", "updated_at": now_iso()}})
+    token = secrets.token_urlsafe(32)
+    inv = {"id": new_id(), "org_id": org["id"], "email": email, "role": role, "token": token,
+           "status": "pending", "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+           "invited_by": invited_by, "lead_id": lead_id, "created_at": now_iso(), "updated_at": now_iso()}
+    await db.org_invites.insert_one(inv)
+    return inv
+
+
+@api.get("/platform/organizations/{org_id}/invites")
+async def list_org_invites(org_id: str, user: dict = Depends(get_current_user)):
+    await _require_manage(user, org_id)
+    invs = await db.org_invites.find({"org_id": org_id}, {"_id": 0, "token": 0}).sort("created_at", -1).to_list(500)
+    return [_invite_view(i) for i in invs]
+
+
+@api.post("/platform/organizations/{org_id}/invites")
+async def create_org_invite(org_id: str, body: InviteCreateIn, user: dict = Depends(get_current_user)):
+    await _require_manage(user, org_id)
+    org = await _org_or_404(org_id)
+    email, role = body.email.lower(), _norm_role(body.role)
+    eu = await db.users.find_one({"email": email}, {"_id": 0})
+    if eu and await db.memberships.find_one({"user_id": eu["user_id"], "org_id": org_id, "active": True}):
+        raise HTTPException(status_code=400, detail="Questo utente è già associato all'organizzazione")
+    inv = await _create_invite(org, email, role, user["user_id"])
+    sent = True
+    try:
+        await _send_invite_email(email, org.get("nome"), inv["token"], role)
+    except Exception as e:
+        logger.error(f"invite email failed: {e}"); sent = False
+    await record_audit(user, "invite_sent", org_id=org_id, org_name=org.get("nome"),
+                       target_email=email, detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
+    return {"ok": True, "email_sent": sent, "id": inv["id"]}
+
+
+@api.post("/platform/invites/{invite_id}/resend")
+async def resend_org_invite(invite_id: str, user: dict = Depends(get_current_user)):
+    inv = await db.org_invites.find_one({"id": invite_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invito non trovato")
+    await _require_manage(user, inv["org_id"])
+    org = await _org_or_404(inv["org_id"])
+    token = secrets.token_urlsafe(32)
+    await db.org_invites.update_one({"id": invite_id}, {"$set": {"token": token, "status": "pending",
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(), "updated_at": now_iso()}})
+    sent = True
+    try:
+        await _send_invite_email(inv["email"], org.get("nome"), token, inv["role"])
+    except Exception as e:
+        logger.error(f"invite resend failed: {e}"); sent = False
+    await record_audit(user, "invite_resent", org_id=inv["org_id"], org_name=org.get("nome"), target_email=inv["email"])
+    return {"ok": True, "email_sent": sent}
+
+
+@api.delete("/platform/invites/{invite_id}")
+async def revoke_org_invite(invite_id: str, user: dict = Depends(get_current_user)):
+    inv = await db.org_invites.find_one({"id": invite_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invito non trovato")
+    await _require_manage(user, inv["org_id"])
+    await db.org_invites.update_one({"id": invite_id}, {"$set": {"status": "revoked", "updated_at": now_iso()}})
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+    await record_audit(user, "invite_revoked", org_id=inv["org_id"], org_name=(org or {}).get("nome"), target_email=inv["email"])
+    return {"ok": True}
+
+
+# ------- invite acceptance (public / auth) -------
+class InviteRegisterIn(BaseModel):
+    name: Optional[str] = None
+    password: str
+
+
+async def _get_valid_invite(token: str) -> dict:
+    inv = await db.org_invites.find_one({"token": token}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invito non valido")
+    st = _invite_status(inv)
+    if st != "pending":
+        raise HTTPException(status_code=400, detail={"expired": "Invito scaduto", "accepted": "Invito già utilizzato",
+                            "revoked": "Invito revocato"}.get(st, "Invito non valido"))
+    return inv
+
+
+async def _accept_invite(inv: dict, target_user: dict) -> None:
+    role = _norm_role(inv["role"])
+    m = await db.memberships.find_one({"user_id": target_user["user_id"], "org_id": inv["org_id"]})
+    if m:
+        await db.memberships.update_one({"id": m["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
+    else:
+        await _ensure_membership(target_user["user_id"], inv["org_id"], role, inv.get("invited_by"))
+    await db.org_invites.update_one({"id": inv["id"]}, {"$set": {"status": "accepted", "accepted_at": now_iso(),
+        "accepted_user_id": target_user["user_id"], "updated_at": now_iso()}})
+    if inv.get("lead_id"):
+        await db.leads.update_one({"id": inv["lead_id"]}, {"$set": {"user_id": target_user["user_id"], "updated_at": now_iso()}})
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+    await record_audit(target_user, "invite_accepted", org_id=inv["org_id"], org_name=(org or {}).get("nome"),
+                       target_email=target_user.get("email"), target_name=target_user.get("name"),
+                       detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
+
+
+@api.get("/invites/{token}")
+async def get_invite(token: str):
+    inv = await db.org_invites.find_one({"token": token}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invito non valido")
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+    exists = bool(await db.users.find_one({"email": inv["email"].lower()}))
+    return {"email": inv["email"], "role": inv["role"], "role_label": ORG_ROLE_LABELS.get(inv["role"], inv["role"]),
+            "org_name": (org or {}).get("nome"), "status": _invite_status(inv), "account_exists": exists}
+
+
+@api.post("/invites/{token}/register")
+async def register_via_invite(token: str, body: InviteRegisterIn, response: Response):
+    inv = await _get_valid_invite(token)
+    email = inv["email"].lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Esiste già un account con questa email. Accedi e accetta l'invito.")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="La password deve avere almeno 8 caratteri")
+    uid = f"user_{uuid.uuid4().hex[:12]}"
+    await db.users.insert_one({"user_id": uid, "email": email, "name": (body.name or email.split("@")[0]).strip(),
+        "password_hash": hash_password(body.password), "role": "member", "auth_provider": "password",
+        "org_id": inv["org_id"], "picture": "", "active": True, "last_login_at": now_iso(), "created_at": now_iso()})
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0})
+    await _accept_invite(inv, u)
+    tok = create_access_token(uid, email)
+    set_auth_cookie(response, "access_token", tok, 7 * 24 * 3600)
+    return await user_payload(u, inv["org_id"])
+
+
+@api.post("/invites/{token}/accept")
+async def accept_invite(token: str, user: dict = Depends(get_current_user)):
+    inv = await _get_valid_invite(token)
+    if (user.get("email") or "").lower() != inv["email"].lower():
+        raise HTTPException(status_code=403, detail=f"L'invito è indirizzato a {inv['email']}. Accedi con quell'indirizzo email per accettarlo.")
+    await _accept_invite(inv, user)
+    return {"ok": True, "org_id": inv["org_id"]}
+
+
+# ------- user's own organizations (active-org switcher) -------
+@api.get("/my/organizations")
+async def my_organizations(user: dict = Depends(get_current_user)):
+    if user.get("role") == "superadmin":
+        return []
+    mems = await db.memberships.find({"user_id": user["user_id"], "active": True}, {"_id": 0}).to_list(200)
+    out = []
+    for m in mems:
+        org = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0})
+        if not org or org.get("status") == "disabled":
+            continue
+        out.append({"id": org["id"], "nome": org.get("nome"), "type": org.get("type", "cliente"), "role": m["role"]})
+    return out
+
+
+# ------- lead <-> user linking / org assignment -------
+async def _account_for_email(email: Optional[str]) -> Optional[dict]:
+    if not email:
+        return None
+    u = await db.users.find_one({"email": email.lower()}, {"_id": 0, "password_hash": 0})
+    if not u:
+        return None
+    mems = await db.memberships.find({"user_id": u["user_id"]}, {"_id": 0}).to_list(200)
+    orgs = []
+    for m in mems:
+        o = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0})
+        if o:
+            orgs.append({"org_id": o["id"], "nome": o.get("nome"), "role": m["role"],
+                         "role_label": ORG_ROLE_LABELS.get(m["role"], m["role"]), "active": m.get("active", True)})
+    return {"user_id": u["user_id"], "email": u["email"], "name": u.get("name"),
+            "active": u.get("active", True), "role": u.get("role"), "organizations": orgs}
+
+
+class LeadAssignIn(BaseModel):
+    org_id: str
+    role: str = "user"
+
+
+@api.get("/leads/{lead_id}")
+async def get_lead(lead_id: str, admin: dict = Depends(require_superadmin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead non trovato")
+    account = None
+    if lead.get("user_id"):
+        u = await db.users.find_one({"user_id": lead["user_id"]}, {"_id": 0})
+        if u:
+            account = await _account_for_email(u.get("email"))
+    if not account:
+        account = await _account_for_email(lead.get("email"))
+    return {"lead": lead, "account": account, "linked": bool(lead.get("user_id"))}
+
+
+@api.post("/leads/{lead_id}/link-account")
+async def link_lead_account(lead_id: str, admin: dict = Depends(require_superadmin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead non trovato")
+    u = await db.users.find_one({"email": (lead.get("email") or "").lower()}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Nessun account CRMEvent con l'email del lead")
+    await db.leads.update_one({"id": lead_id}, {"$set": {"user_id": u["user_id"], "updated_at": now_iso()}})
+    await record_audit(admin, "lead_linked", target_email=u["email"], target_name=u.get("name"),
+                       detail=f"Lead «{lead.get('nome', '')} {lead.get('cognome', '') or ''}» collegato all'account")
+    return {"ok": True}
+
+
+@api.post("/leads/{lead_id}/assign-org")
+async def assign_lead_org(lead_id: str, body: LeadAssignIn, admin: dict = Depends(require_superadmin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead non trovato")
+    org = await _org_or_404(body.org_id)
+    u = None
+    if lead.get("user_id"):
+        u = await db.users.find_one({"user_id": lead["user_id"]}, {"_id": 0})
+    if not u:
+        u = await db.users.find_one({"email": (lead.get("email") or "").lower()}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Nessun account CRMEvent per questo lead. Usa «Invita in CRMEvent».")
+    role = _norm_role(body.role)
+    m = await db.memberships.find_one({"user_id": u["user_id"], "org_id": body.org_id})
+    if m:
+        await db.memberships.update_one({"id": m["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
+    else:
+        await _ensure_membership(u["user_id"], body.org_id, role, admin["user_id"])
+    if not lead.get("user_id"):
+        await db.leads.update_one({"id": lead_id}, {"$set": {"user_id": u["user_id"], "updated_at": now_iso()}})
+    await record_audit(admin, "member_added", org_id=body.org_id, org_name=org.get("nome"),
+                       target_email=u["email"], target_name=u.get("name"),
+                       detail=f"Assegnato da Lead · Ruolo: {ORG_ROLE_LABELS[role]}")
+    return {"ok": True}
+
+
+@api.post("/leads/{lead_id}/invite")
+async def invite_lead(lead_id: str, body: LeadAssignIn, admin: dict = Depends(require_superadmin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead non trovato")
+    org = await _org_or_404(body.org_id)
+    email = (lead.get("email") or "").lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Il lead non ha un'email")
+    role = _norm_role(body.role)
+    inv = await _create_invite(org, email, role, admin["user_id"], lead_id=lead_id)
+    sent = True
+    try:
+        await _send_invite_email(email, org.get("nome"), inv["token"], role)
+    except Exception as e:
+        logger.error(f"lead invite failed: {e}"); sent = False
+    await record_audit(admin, "invite_sent", org_id=body.org_id, org_name=org.get("nome"), target_email=email,
+                       detail=f"Invito da Lead · Ruolo: {ORG_ROLE_LABELS[role]}")
+    return {"ok": True, "email_sent": sent}
+
+
 # ---------------- briefing evento ----------------
 def _briefing_hash(data: dict) -> str:
     payload = json.dumps(data.get("sections", {}), sort_keys=True, default=str)
@@ -2311,9 +2870,10 @@ async def platform_organizations(admin: dict = Depends(require_superadmin)):
     out = []
     for o in orgs:
         owner = await db.users.find_one({"user_id": o.get("owner_user_id")}, {"_id": 0, "password_hash": 0})
-        members = await db.users.count_documents({"org_id": o["id"]})
+        members = await db.memberships.count_documents({"org_id": o["id"], "active": True})
         events = await db.events.count_documents({"org_id": o["id"]})
-        out.append({"id": o["id"], "nome": o.get("nome"), "created_at": o.get("created_at"),
+        out.append({"id": o["id"], "nome": o.get("nome"), "type": o.get("type", "cliente"),
+                    "status": o.get("status", "active"), "created_at": o.get("created_at"),
                     "owner_email": (owner or {}).get("email"), "owner_name": (owner or {}).get("name"),
                     "members": members, "events": events, "subscription": _sub_summary(o)})
     return out
@@ -2325,18 +2885,32 @@ async def platform_organizations(admin: dict = Depends(require_superadmin)):
 AUDIT_ACTION_LABELS = {
     "org_access": "Accesso organizzazione",
     "org_switch": "Cambio organizzazione",
-    # future: "subscription_change": "Modifica abbonamento",
-    #         "account_intervention": "Intervento su account cliente",
+    "org_created": "Creazione organizzazione",
+    "org_updated": "Modifica organizzazione",
+    "member_added": "Associazione utente",
+    "member_removed": "Rimozione utente",
+    "member_role_changed": "Modifica ruolo",
+    "member_enabled": "Riattivazione accesso",
+    "member_disabled": "Disabilitazione accesso",
+    "invite_sent": "Invio invito",
+    "invite_resent": "Reinvio invito",
+    "invite_revoked": "Revoca invito",
+    "invite_accepted": "Accettazione invito",
+    "lead_linked": "Collegamento account a Lead",
 }
 
 
 async def record_audit(actor: dict, action: str, org_id: Optional[str] = None,
-                        org_name: Optional[str] = None, meta: Optional[dict] = None) -> dict:
+                        org_name: Optional[str] = None, meta: Optional[dict] = None,
+                        target_email: Optional[str] = None, target_name: Optional[str] = None,
+                        detail: Optional[str] = None) -> dict:
     doc = {"id": new_id(), "created_at": now_iso(),
            "actor_user_id": actor.get("user_id"), "actor_email": actor.get("email"),
            "actor_name": actor.get("name"), "actor_role": actor.get("role"),
            "action": action, "action_label": AUDIT_ACTION_LABELS.get(action, action),
-           "org_id": org_id, "org_name": org_name, "meta": meta or {}}
+           "org_id": org_id, "org_name": org_name,
+           "target_email": target_email, "target_name": target_name, "detail": detail,
+           "meta": meta or {}}
     await db.audit_logs.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
@@ -2347,16 +2921,21 @@ class OrgAccessIn(BaseModel):
 
 
 @api.post("/platform/audit/org-access")
-async def audit_org_access(body: OrgAccessIn, admin: dict = Depends(require_superadmin)):
+async def audit_org_access(body: OrgAccessIn, user: dict = Depends(get_current_user)):
     org = await db.organizations.find_one({"id": body.org_id}, {"_id": 0})
     if not org:
         raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    if user.get("role") != "superadmin":
+        m = await db.memberships.find_one({"user_id": user["user_id"], "org_id": body.org_id, "active": True})
+        if not m:
+            raise HTTPException(status_code=403, detail="Accesso all'organizzazione non consentito")
+        await db.memberships.update_one({"id": m["id"]}, {"$set": {"last_login_at": now_iso()}})
     action, meta = "org_access", {}
     if body.previous_org_id and body.previous_org_id != body.org_id:
         prev = await db.organizations.find_one({"id": body.previous_org_id}, {"_id": 0})
         action = "org_switch"
         meta = {"previous_org_id": body.previous_org_id, "previous_org_name": (prev or {}).get("nome")}
-    doc = await record_audit(admin, action, org_id=org["id"], org_name=org.get("nome"), meta=meta)
+    doc = await record_audit(user, action, org_id=org["id"], org_name=org.get("nome"), meta=meta)
     return {"ok": True, "id": doc["id"]}
 
 
@@ -2925,10 +3504,34 @@ async def migrate_person_companies():
         logger.info(f"Migrated {created} person-company relations")
 
 
+async def migrate_memberships():
+    """Idempotent: give org type/status defaults and create memberships for existing
+    operational users (admin/user/member). Volunteers/staff are intentionally excluded."""
+    await db.organizations.update_many({"type": {"$exists": False}}, {"$set": {"type": "cliente"}})
+    await db.organizations.update_many({"status": {"$exists": False}}, {"$set": {"status": "active"}})
+    users = await db.users.find({"org_id": {"$nin": [None, ""]}, "role": {"$in": ["admin", "user", "member"]}}, {"_id": 0}).to_list(10000)
+    created = 0
+    for u in users:
+        role = "admin_org" if u.get("role") == "admin" else "user"
+        _, made = await _ensure_membership(u["user_id"], u["org_id"], role, u["user_id"])
+        if made:
+            created += 1
+    if created:
+        logger.info(f"Migrated {created} memberships")
+
+
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
+    try:
+        await db.memberships.create_index([("user_id", 1), ("org_id", 1)], unique=True)
+        await db.memberships.create_index("org_id")
+        await db.org_invites.create_index("token")
+        await db.org_invites.create_index("org_id")
+        await db.audit_logs.create_index("created_at")
+    except Exception:
+        pass
     for c in ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
               "event_maps", "activities", "followups", "lodgings", "meals",
               "person_companies", "briefing_versions", "files"]:
@@ -2943,6 +3546,7 @@ async def startup():
         logger.error(f"Storage init failed: {e}")
     await seed_admin()
     await migrate_person_companies()
+    await migrate_memberships()
     await seed_support()
     creds = ROOT_DIR.parent / "memory" / "test_credentials.md"
     try:

@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
-import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X } from "lucide-react";
 
-const STATUS_LABEL = { trial: "Trial", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pag. fallito", suspended: "Sospeso" };
-const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange" };
+const STATUS_LABEL = { trial: "Trial", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pag. fallito", suspended: "Sospeso", interna: "Interna", test: "Test" };
+const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange", interna: "green", test: "orange" };
+const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
+const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
 
 function Stat({ icon: Icon, label, value, tone = "slate" }) {
   const tones = { slate: "bg-slate-100 text-slate-700", tiffany: "bg-tiffany-light text-tiffany-fg", green: "bg-emerald-50 text-emerald-700", red: "bg-red-50 text-red-600", blue: "bg-sky-50 text-sky-700" };
@@ -21,42 +24,52 @@ function Stat({ icon: Icon, label, value, tone = "slate" }) {
 }
 
 export default function Platform() {
+  const nav = useNavigate();
   const [stats, setStats] = useState(null);
   const [orgs, setOrgs] = useState([]);
   const [subs, setSubs] = useState([]);
   const [fic, setFic] = useState(null);
   const [params, setParams] = useSearchParams();
+  const [showCreate, setShowCreate] = useState(false);
+  const [nf, setNf] = useState({ nome: "", type: "cliente", status: "active" });
+  const [creating, setCreating] = useState(false);
 
   const loadFic = () => api.get("/fic/status").then(({ data }) => setFic(data)).catch(() => {});
+  const loadAll = () => Promise.all([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions")])
+    .then(([a, b, c]) => { setStats(a.data); setOrgs(b.data); setSubs(c.data); })
+    .catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
 
-  useEffect(() => {
-    Promise.all([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions")])
-      .then(([a, b, c]) => { setStats(a.data); setOrgs(b.data); setSubs(c.data); })
-      .catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
-    loadFic();
-  }, []);
-
+  useEffect(() => { loadAll(); loadFic(); }, []);
   useEffect(() => {
     const f = params.get("fic");
     if (!f) return;
-    if (f === "connected") toast.success("Fatture in Cloud collegato");
-    else toast.error("Collegamento Fatture in Cloud non riuscito");
+    if (f === "connected") toast.success("Fatture in Cloud collegato"); else toast.error("Collegamento Fatture in Cloud non riuscito");
     params.delete("fic"); setParams(params, { replace: true }); loadFic();
   }, [params, setParams]);
 
-  const connectFic = async () => {
-    try { const { data } = await api.get("/fic/oauth/start"); window.location.href = data.authorize_url; }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
-  const disconnectFic = async () => {
-    try { await api.post("/fic/disconnect"); toast.success("Fatture in Cloud scollegato"); loadFic(); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  const connectFic = async () => { try { const { data } = await api.get("/fic/oauth/start"); window.location.href = data.authorize_url; } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  const disconnectFic = async () => { try { await api.post("/fic/disconnect"); toast.success("Fatture in Cloud scollegato"); loadFic(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+
+  const createOrg = async () => {
+    if (!nf.nome.trim()) { toast.error("Inserisci il nome"); return; }
+    setCreating(true);
+    try {
+      const { data } = await api.post("/platform/organizations", nf);
+      toast.success("Organizzazione creata");
+      // Full navigation so the new org immediately appears in the "Org attiva" switcher.
+      window.location.href = `/piattaforma/org/${data.id}`;
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setCreating(false); }
   };
 
   return (
     <div className="animate-fade-up" data-testid="platform-page">
-      <h1 className="font-display text-3xl font-bold text-slate-900">Piattaforma CRMEvent</h1>
-      <p className="text-slate-500 mt-1 mb-6">Panoramica delle organizzazioni registrate e dello stato degli abbonamenti.</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-slate-900">Piattaforma CRMEvent</h1>
+          <p className="text-slate-500 mt-1 mb-6">Panoramica delle organizzazioni registrate e dello stato degli abbonamenti.</p>
+        </div>
+        <Button onClick={() => setShowCreate(true)} data-testid="new-org-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Plus className="w-4 h-4 mr-1.5" />Nuova organizzazione</Button>
+      </div>
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-8">
@@ -70,14 +83,12 @@ export default function Platform() {
         </div>
       )}
 
-      {/* Fatture in Cloud */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8 flex items-center gap-4" data-testid="fic-card">
         <div className="w-10 h-10 rounded-lg bg-tiffany-light text-tiffany-fg flex items-center justify-center"><ReceiptText className="w-5 h-5" /></div>
         <div className="min-w-0">
           <div className="font-semibold text-slate-800">Fatturazione elettronica · Fatture in Cloud</div>
           <div className="text-xs text-slate-500 mt-0.5">
-            {!fic ? "…" : !fic.configured ? "Non configurato: imposta FIC_CLIENT_ID / SECRET / REDIRECT_URI nei Secrets" :
-              fic.connected ? <>Collegato · company_id {fic.company_id || "—"}</> : "Configurato — non ancora collegato"}
+            {!fic ? "…" : !fic.configured ? "Non configurato: imposta FIC_CLIENT_ID / SECRET / REDIRECT_URI nei Secrets" : fic.connected ? <>Collegato · company_id {fic.company_id || "—"}</> : "Configurato — non ancora collegato"}
           </div>
         </div>
         <div className="ml-auto">
@@ -92,20 +103,17 @@ export default function Platform() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 text-left text-slate-500">
-              <th className="py-2.5 px-4 font-semibold">Organizzazione</th><th className="py-2.5 px-4 font-semibold">Titolare</th>
-              <th className="py-2.5 px-4 font-semibold">Stato</th><th className="py-2.5 px-4 font-semibold">Trial/Rinnovo</th>
-              <th className="py-2.5 px-4 font-semibold text-center">Utenti</th><th className="py-2.5 px-4 font-semibold text-center">Eventi</th>
-              <th className="py-2.5 px-4 font-semibold">Registrata</th>
+              <th className="py-2.5 px-4 font-semibold">Nome</th><th className="py-2.5 px-4 font-semibold">Tipo</th><th className="py-2.5 px-4 font-semibold">Stato</th>
+              <th className="py-2.5 px-4 font-semibold text-center">Utenti</th><th className="py-2.5 px-4 font-semibold text-center">Eventi</th><th className="py-2.5 px-4 font-semibold">Creazione</th>
             </tr></thead>
             <tbody>
               {orgs.length === 0 ? (
-                <tr><td colSpan={7} className="py-8 text-center text-slate-400">Nessuna organizzazione registrata.</td></tr>
+                <tr><td colSpan={6} className="py-8 text-center text-slate-400">Nessuna organizzazione registrata.</td></tr>
               ) : orgs.map((o) => (
-                <tr key={o.id} className="border-b border-slate-100" data-testid={`platform-org-${o.id}`}>
+                <tr key={o.id} onClick={() => nav(`/piattaforma/org/${o.id}`)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50" data-testid={`platform-org-${o.id}`}>
                   <td className="py-2.5 px-4 font-medium text-slate-800">{o.nome}</td>
-                  <td className="py-2.5 px-4 text-slate-600"><div>{o.owner_name}</div><div className="text-xs text-slate-400">{o.owner_email}</div></td>
-                  <td className="py-2.5 px-4"><StatusBadge color={STATUS_COLOR[o.subscription.status] || "gray"}>{STATUS_LABEL[o.subscription.status] || o.subscription.status}</StatusBadge></td>
-                  <td className="py-2.5 px-4 text-slate-600">{o.subscription.status === "trial" ? `${o.subscription.days_left} gg rimanenti` : (o.subscription.current_period_end ? new Date(o.subscription.current_period_end).toLocaleDateString("it-IT") : "—")}</td>
+                  <td className="py-2.5 px-4"><StatusBadge color={TYPE_COLOR[o.type] || "gray"}>{TYPE_LABEL[o.type] || o.type}</StatusBadge></td>
+                  <td className="py-2.5 px-4"><StatusBadge color={o.status === "active" ? "green" : "red"}>{o.status === "active" ? "Attiva" : "Disattivata"}</StatusBadge></td>
                   <td className="py-2.5 px-4 text-center text-slate-600">{o.members}</td>
                   <td className="py-2.5 px-4 text-center text-slate-600">{o.events}</td>
                   <td className="py-2.5 px-4 text-slate-500">{o.created_at ? new Date(o.created_at).toLocaleDateString("it-IT") : "—"}</td>
@@ -116,7 +124,6 @@ export default function Platform() {
         </div>
       </div>
 
-      {/* Abbonamenti */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-8" data-testid="platform-subscriptions">
         <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Abbonamenti</div>
         <div className="overflow-x-auto">
@@ -146,6 +153,24 @@ export default function Platform() {
           </table>
         </div>
       </div>
+
+      {showCreate && (
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !creating && setShowCreate(false)}>
+          <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4" onClick={(e) => e.stopPropagation()} data-testid="new-org-dialog">
+            <div className="flex items-center justify-between"><h2 className="text-lg font-bold text-slate-900">Nuova organizzazione</h2><button onClick={() => setShowCreate(false)}><X className="w-5 h-5 text-slate-400" /></button></div>
+            <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Nome organizzazione</label><Input value={nf.nome} onChange={(e) => setNf((f) => ({ ...f, nome: e.target.value }))} placeholder="Es. TriO Events" data-testid="new-org-nome" /></div>
+            <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Tipo</label>
+              <select className="h-10 px-3 w-full rounded-lg border border-slate-200 text-sm" value={nf.type} onChange={(e) => setNf((f) => ({ ...f, type: e.target.value }))} data-testid="new-org-type">
+                <option value="cliente">Cliente (trial + abbonamento)</option><option value="interna">Interna (nessun abbonamento)</option><option value="test">Test</option>
+              </select></div>
+            <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Stato</label>
+              <select className="h-10 px-3 w-full rounded-lg border border-slate-200 text-sm" value={nf.status} onChange={(e) => setNf((f) => ({ ...f, status: e.target.value }))} data-testid="new-org-status">
+                <option value="active">Attiva</option><option value="disabled">Disattivata</option>
+              </select></div>
+            <Button onClick={createOrg} disabled={creating} data-testid="new-org-create" className="w-full bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">{creating ? "Creazione…" : "Crea organizzazione"}</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

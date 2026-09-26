@@ -17,6 +17,8 @@ import Activate from "@/pages/Activate";
 import Profile from "@/pages/Profile";
 import Account from "@/pages/Account";
 import Platform from "@/pages/Platform";
+import OrgDetail from "@/pages/OrgDetail";
+import Invite from "@/pages/Invite";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
@@ -91,10 +93,12 @@ function Shell() {
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/attiva" element={<Activate />} />
+        <Route path="/invito" element={<Invite />} />
         <Route path="/app" element={<Protected><HomeRoute /></Protected>} />
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
         <Route path="/account" element={<Protected><AdminOnly><Account /></AdminOnly></Protected>} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/org/:id" element={<Protected><SuperAdminOnly><OrgDetail /></SuperAdminOnly></Protected>} />
         <Route path="/audit" element={<Protected><SuperAdminOnly><AuditLog /></SuperAdminOnly></Protected>} />
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />
         <Route path="/eventi" element={<Protected><AdminOnly><Events /></AdminOnly></Protected>} />
