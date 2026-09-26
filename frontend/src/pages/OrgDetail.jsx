@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Building2, Users, CalendarDays, ScrollText, UserPlus, Mail, Trash2, RefreshCw, XCircle, Save } from "lucide-react";
+import { ArrowLeft, Building2, Users, CalendarDays, ScrollText, UserPlus, Mail, Trash2, RefreshCw, XCircle, Save, Database, AlertTriangle } from "lucide-react";
 
 const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
 const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
@@ -36,6 +36,8 @@ export default function OrgDetail() {
   const [audit, setAudit] = useState([]);
   const [addEmail, setAddEmail] = useState(""); const [addRole, setAddRole] = useState("user");
   const [invEmail, setInvEmail] = useState(""); const [invRole, setInvRole] = useState("user");
+  const [delName, setDelName] = useState(""); const [deleting, setDeleting] = useState(false);
+  const [showSeed, setShowSeed] = useState(false); const [seedWipe, setSeedWipe] = useState(false); const [seeding, setSeeding] = useState(false);
 
   const loadOrg = useCallback(() => api.get(`/platform/organizations/${id}/detail`).then(({ data }) => {
     setOrg(data); setForm({ nome: data.nome, type: data.type, status: data.status });
@@ -79,6 +81,27 @@ export default function OrgDetail() {
   const resendInvite = async (iid) => { try { await api.post(`/platform/invites/${iid}/resend`); toast.success("Invito reinviato"); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const revokeInvite = async (iid) => { try { await api.delete(`/platform/invites/${iid}`); toast.success("Invito revocato"); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
 
+  const runSeed = async () => {
+    setSeeding(true);
+    try {
+      const { data } = await api.post(`/platform/organizations/${id}/seed-demo`, { wipe: seedWipe });
+      const tot = Object.values(data.counts).reduce((a, b) => a + b, 0);
+      toast.success(`Dataset Demo ${data.wiped ? "ripristinato" : "popolato"}: ${tot} record`);
+      setShowSeed(false); setSeedWipe(false);
+      if (tab === "eventi") api.get("/events", { headers: { "X-Org-Id": id } }).then(({ data }) => setEvents(data)).catch(() => {});
+      loadOrg();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setSeeding(false); }
+  };
+  const deleteOrg = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/platform/organizations/${id}`, { data: { confirm_name: delName } });
+      toast.success("Organizzazione eliminata definitivamente");
+      window.location.href = "/piattaforma";
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setDeleting(false); }
+  };
+
   if (!org) return <div className="py-20 text-center text-slate-400">Caricamento…</div>;
 
   return (
@@ -115,6 +138,38 @@ export default function OrgDetail() {
             </select></div>
           <div className="text-xs text-slate-500">Abbonamento: {org.subscription.status === "cliente" || org.type === "cliente" ? `${org.subscription.status}${org.subscription.days_left != null ? ` · ${org.subscription.days_left} gg` : ""}` : "Non applicabile (organizzazione " + TYPE_LABEL[org.type] + ")"}</div>
           <Button onClick={saveOrg} data-testid="org-save-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Save className="w-4 h-4 mr-1.5" />Salva modifiche</Button>
+        </div>
+      )}
+
+      {tab === "dati" && (
+        <div className="max-w-lg space-y-6" data-testid="org-danger-zone">
+          {org.type === "test" && (
+            <div className="bg-white border border-amber-200 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm"><Database className="w-4 h-4" />Dataset dimostrativo</div>
+              <p className="text-xs text-slate-500">Popola questa organizzazione di test con il dataset demo completo (eventi, persone, team, turni, sponsor, attività, ospitalità). Operazione idempotente: rieseguendola non crea duplicati. Nessuna email, trial, Stripe o fatturazione viene attivata.</p>
+              <Button onClick={() => setShowSeed(true)} data-testid="seed-demo-btn" className="bg-slate-900 hover:bg-slate-800 text-white"><Database className="w-4 h-4 mr-1.5" />Popola / Ripristina dati Demo</Button>
+            </div>
+          )}
+          <div className="bg-white border border-red-200 rounded-xl p-5 space-y-3" data-testid="org-delete-card">
+            <div className="flex items-center gap-2 text-red-600 font-semibold text-sm"><AlertTriangle className="w-4 h-4" />Zona pericolosa · Elimina organizzazione</div>
+            <p className="text-xs text-slate-500">L'eliminazione è definitiva e cancella tutti i dati appartenenti esclusivamente a questa organizzazione (eventi, persone, aziende, team, turni, sponsor, attività, ospitalità, inviti, account staff/volontari). Nessun'altra organizzazione viene toccata. Per confermare, digita il nome esatto: <span className="font-semibold text-slate-700">{org.nome}</span></p>
+            <Input value={delName} onChange={(e) => setDelName(e.target.value)} placeholder="Digita il nome esatto dell'organizzazione" data-testid="org-delete-confirm-input" />
+            <Button disabled={delName.trim() !== org.nome || deleting} onClick={deleteOrg} data-testid="org-delete-btn" className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-40"><Trash2 className="w-4 h-4 mr-1.5" />{deleting ? "Eliminazione…" : "Elimina definitivamente"}</Button>
+          </div>
+        </div>
+      )}
+
+      {showSeed && (
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !seeding && setShowSeed(false)}>
+          <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4" onClick={(e) => e.stopPropagation()} data-testid="seed-demo-dialog">
+            <div className="flex items-center gap-2 text-slate-900"><Database className="w-6 h-6 text-tiffany-fg" /><h2 className="text-lg font-bold">Popola / Ripristina dati Demo</h2></div>
+            <p className="text-sm text-slate-600">Verrà popolata l'organizzazione di test <span className="font-semibold">{org.nome}</span> con il dataset dimostrativo. L'operazione è idempotente e non invia email né attiva pagamenti.</p>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={seedWipe} onChange={(e) => setSeedWipe(e.target.checked)} data-testid="seed-wipe-check" />Rimuovi prima i record demo esistenti (ripristino pulito)</label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowSeed(false)} disabled={seeding} data-testid="seed-cancel">Annulla</Button>
+              <Button onClick={runSeed} disabled={seeding} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="seed-confirm">{seeding ? "Esecuzione…" : "Conferma ed esegui"}</Button>
+            </div>
+          </div>
         </div>
       )}
 

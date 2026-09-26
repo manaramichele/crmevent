@@ -2475,8 +2475,15 @@ async def update_organization_admin(org_id: str, body: OrgUpdateIn, admin: dict 
     if upd:
         upd["updated_at"] = now_iso()
         await db.organizations.update_one({"id": org_id}, {"$set": upd})
-        await record_audit(admin, "org_updated", org_id=org_id, org_name=upd.get("nome", org.get("nome")),
-                           detail="; ".join(changes))
+        if "status" in upd and set(upd.keys()) <= {"status", "updated_at"}:
+            await record_audit(admin, "org_disabled" if upd["status"] == "disabled" else "org_enabled",
+                               org_id=org_id, org_name=org.get("nome"), detail="; ".join(changes))
+        else:
+            await record_audit(admin, "org_updated", org_id=org_id, org_name=upd.get("nome", org.get("nome")),
+                               detail="; ".join(changes))
+            if "status" in upd:
+                await record_audit(admin, "org_disabled" if upd["status"] == "disabled" else "org_enabled",
+                                   org_id=org_id, org_name=org.get("nome"), detail="Stato aggiornato")
     return await _org_detail(org_id)
 
 
@@ -2558,6 +2565,164 @@ async def remove_org_member(org_id: str, target_id: str, user: dict = Depends(ge
                        target_email=(tgt or {}).get("email"), target_name=(tgt or {}).get("name"),
                        detail="Associazione rimossa · dati dell'organizzazione conservati")
     return {"ok": True}
+
+
+# ---------------- platform: account & org management (superadmin) ----------------
+# Collections whose documents belong EXCLUSIVELY to a single organization (org_id scoped).
+ORG_CASCADE_COLLECTIONS = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
+                           "event_maps", "activities", "followups", "calendar_event_links", "files",
+                           "person_companies", "lodgings", "meals", "briefing_versions", "invoices",
+                           "structures", "fic_settings", "org_invites", "leads", "memberships"]
+ROLE_LABELS_USER = {"superadmin": "Super Admin", "admin": "Admin Organizzazione",
+                    "member": "Utente", "staff": "Staff", "volunteer": "Volontario"}
+
+
+async def _blocking_admin_orgs(user_id: str) -> list:
+    """Client orgs where this user is the ONLY active Admin Organizzazione (would be left
+    without any admin). Returns list of org names — used to block disable/delete."""
+    blocking = []
+    mems = await db.memberships.find({"user_id": user_id, "role": "admin_org", "active": True}, {"_id": 0}).to_list(500)
+    for m in mems:
+        org = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0})
+        if not org or org.get("type") != "cliente":
+            continue
+        others = await db.memberships.count_documents(
+            {"org_id": m["org_id"], "role": "admin_org", "active": True, "user_id": {"$ne": user_id}})
+        if others == 0:
+            blocking.append(org.get("nome") or m["org_id"])
+    return blocking
+
+
+async def _user_row(u: dict) -> dict:
+    mems = await db.memberships.find({"user_id": u["user_id"]}, {"_id": 0}).to_list(200)
+    org_names = []
+    memberships = []
+    for m in mems:
+        o = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0, "nome": 1, "id": 1})
+        memberships.append({"org_id": m["org_id"], "org_nome": (o or {}).get("nome"),
+                            "role": m.get("role"), "active": m.get("active", True)})
+        if o:
+            org_names.append(o.get("nome"))
+    primary = None
+    if u.get("org_id"):
+        po = await db.organizations.find_one({"id": u["org_id"]}, {"_id": 0, "nome": 1, "id": 1})
+        primary = {"id": u["org_id"], "nome": (po or {}).get("nome")} if po else None
+    return {"user_id": u["user_id"], "name": u.get("name"), "email": u.get("email"),
+            "role": u.get("role"), "role_label": ROLE_LABELS_USER.get(u.get("role"), u.get("role")),
+            "active": u.get("active", True), "created_at": u.get("created_at"),
+            "last_login_at": u.get("last_login_at"), "auth_provider": u.get("auth_provider"),
+            "person_id": u.get("person_id"), "primary_org": primary,
+            "org_names": sorted(set(n for n in org_names if n)), "memberships": memberships,
+            "is_superadmin": u.get("role") == "superadmin"}
+
+
+@api.get("/platform/users")
+async def platform_users(q: Optional[str] = None, admin: dict = Depends(require_superadmin)):
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(10000)
+    rows = [await _user_row(u) for u in users]
+    if q:
+        ql = q.lower()
+        rows = [r for r in rows if ql in (r.get("email") or "").lower() or ql in (r.get("name") or "").lower()]
+    return rows
+
+
+class UserUpdateIn(BaseModel):
+    active: bool
+
+
+@api.patch("/platform/users/{user_id}")
+async def platform_user_update(user_id: str, body: UserUpdateIn, admin: dict = Depends(require_superadmin)):
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Account non trovato")
+    if u.get("role") == "superadmin":
+        raise HTTPException(status_code=400, detail="L'account Super Admin non può essere disabilitato")
+    if not body.active:
+        blocking = await _blocking_admin_orgs(user_id)
+        if blocking:
+            raise HTTPException(status_code=400, detail=f"È l'unico Admin Organizzazione di: {', '.join(blocking)}. Assegna un altro Admin prima di disabilitare l'account.")
+    await db.users.update_one({"user_id": user_id}, {"$set": {"active": body.active, "updated_at": now_iso()}})
+    await record_audit(admin, "account_enabled" if body.active else "account_disabled",
+                       org_id=u.get("org_id"), target_email=u.get("email"), target_name=u.get("name"),
+                       detail="Accesso " + ("riattivato" if body.active else "disabilitato"))
+    return {"ok": True}
+
+
+@api.delete("/platform/users/{user_id}")
+async def platform_user_delete(user_id: str, admin: dict = Depends(require_superadmin)):
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Account non trovato")
+    if u.get("role") == "superadmin":
+        raise HTTPException(status_code=400, detail="L'account Super Admin non può essere eliminato")
+    if user_id == admin.get("user_id"):
+        raise HTTPException(status_code=400, detail="Non puoi eliminare il tuo stesso account")
+    blocking = await _blocking_admin_orgs(user_id)
+    if blocking:
+        raise HTTPException(status_code=400, detail=f"È l'unico Admin Organizzazione di: {', '.join(blocking)}. Assegna il ruolo Admin Organizzazione a un altro account prima di eliminare questo.")
+    # Preserve organization data. Only the login account and its personal links are removed.
+    await db.memberships.delete_many({"user_id": user_id})
+    await db.organizations.update_many({"owner_user_id": user_id}, {"$set": {"owner_user_id": None, "updated_at": now_iso()}})
+    # Keep the Persona anagraphic — only unlink it from the deleted login account.
+    if u.get("person_id"):
+        await db.persons.update_one({"id": u["person_id"]},
+                                    {"$set": {"invite_status": None, "user_role": None, "updated_at": now_iso()}})
+    for coll in ("user_sessions", "password_reset_tokens", "calendar_connections", "calendar_event_links"):
+        await db[coll].delete_many({"user_id": user_id})
+    await db.users.delete_one({"user_id": user_id})
+    await record_audit(admin, "account_deleted", org_id=u.get("org_id"),
+                       target_email=u.get("email"), target_name=u.get("name"),
+                       detail="Account eliminato · anagrafica Persona e dati organizzazione conservati")
+    return {"ok": True}
+
+
+class OrgDeleteIn(BaseModel):
+    confirm_name: str
+
+
+@api.delete("/platform/organizations/{org_id}")
+async def platform_org_delete(org_id: str, body: OrgDeleteIn, admin: dict = Depends(require_superadmin)):
+    org = await _org_or_404(org_id)
+    if (body.confirm_name or "").strip() != (org.get("nome") or "").strip():
+        raise HTTPException(status_code=400, detail="Il nome digitato non corrisponde al nome dell'organizzazione")
+    counts = {}
+    for coll in ORG_CASCADE_COLLECTIONS:
+        res = await db[coll].delete_many({"org_id": org_id})
+        if res.deleted_count:
+            counts[coll] = res.deleted_count
+    # settings are keyed by id == org_id
+    await db.settings.delete_many({"id": org_id})
+    # Org-specific accounts (staff/volunteer) exist only within this org → remove them.
+    sv = await db.users.delete_many({"org_id": org_id, "role": {"$in": ["staff", "volunteer"]}})
+    if sv.deleted_count:
+        counts["users_staff_volontari"] = sv.deleted_count
+    # Other accounts: detach from this org without deleting the account.
+    await db.users.update_many({"org_id": org_id, "role": {"$nin": ["staff", "volunteer"]}},
+                               {"$set": {"org_id": None, "updated_at": now_iso()}})
+    await db.organizations.delete_one({"id": org_id})
+    await record_audit(admin, "org_deleted", org_id=org_id, org_name=org.get("nome"),
+                       detail="Eliminazione definitiva · " + (", ".join(f"{k}: {v}" for k, v in counts.items()) or "nessun dato collegato"))
+    return {"ok": True, "counts": counts}
+
+
+class SeedDemoIn(BaseModel):
+    wipe: bool = False
+
+
+@api.post("/platform/organizations/{org_id}/seed-demo")
+async def platform_seed_demo(org_id: str, body: SeedDemoIn, admin: dict = Depends(require_superadmin)):
+    org = await _org_or_404(org_id)
+    if org.get("type") != "test":
+        raise HTTPException(status_code=400, detail="Il popolamento del dataset Demo è consentito SOLO su organizzazioni di tipo Test.")
+    import seed_demo
+    seed_demo.db = db  # inject the running server DB handle (same isolation, org_id scoped)
+    if body.wipe:
+        await seed_demo.wipe(org_id)
+    await seed_demo.seed(org_id)
+    counts = await seed_demo.report_counts(org_id)
+    await record_audit(admin, "demo_seeded", org_id=org_id, org_name=org.get("nome"),
+                       detail=("Ripristino (wipe+seed)" if body.wipe else "Popolamento") + f" · {sum(counts.values())} record demo")
+    return {"ok": True, "counts": counts, "wiped": body.wipe}
 
 
 # ------- invites -------
@@ -3141,6 +3306,13 @@ AUDIT_ACTION_LABELS = {
     "invite_revoked": "Revoca invito",
     "invite_accepted": "Accettazione invito",
     "lead_linked": "Collegamento account a Lead",
+    "account_disabled": "Disabilitazione account",
+    "account_enabled": "Riattivazione account",
+    "account_deleted": "Eliminazione account",
+    "org_disabled": "Disabilitazione organizzazione",
+    "org_enabled": "Riattivazione organizzazione",
+    "org_deleted": "Eliminazione organizzazione",
+    "demo_seeded": "Popolamento dati Demo",
 }
 
 

@@ -18,8 +18,10 @@ from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 
 load_dotenv()
-client = AsyncIOMotorClient(os.environ["MONGO_URL"])
-db = client[os.environ["DB_NAME"]]
+# `db` is injected by the caller (the backend sets `seed_demo.db = <server db>` before use).
+# For CLI runs it is created in main(). Never created at import to avoid dangling clients.
+client = None
+db = None
 
 TODAY = date.today()
 
@@ -29,7 +31,7 @@ def now_iso():
 
 
 def rel(days):
-    return (TODAY + timedelta(days=days)).isoformat()
+    return (date.today() + timedelta(days=days)).isoformat()
 
 
 # Fixed event dates (as per requirements)
@@ -487,25 +489,32 @@ async def seed(org_id):
         }, org_id)
 
 
+DEMO_COLLECTIONS = ["events", "persons", "teams", "staff", "shifts", "companies", "deals",
+                    "activities", "followups", "structures", "lodgings", "meals", "event_maps"]
+
+
 async def wipe(org_id):
-    colls = ["events", "persons", "teams", "staff", "shifts", "companies", "deals",
-             "activities", "followups", "structures", "lodgings", "meals", "event_maps"]
-    for c in colls:
+    for c in DEMO_COLLECTIONS:
         res = await db[c].delete_many({"org_id": org_id, "id": {"$regex": "^demo_"}})
         if res.deleted_count:
             print(f"[-] {c}: rimossi {res.deleted_count} record demo_*")
 
 
+async def report_counts(org_id):
+    return {c: await db[c].count_documents({"org_id": org_id, "id": {"$regex": "^demo_"}})
+            for c in DEMO_COLLECTIONS}
+
+
 async def report(org_id):
-    colls = ["events", "persons", "teams", "staff", "shifts", "companies", "deals",
-             "activities", "followups", "structures", "lodgings", "meals", "event_maps"]
     print("\n=== RIEPILOGO RECORD DEMO (org_id=%s) ===" % org_id)
-    for c in colls:
-        n = await db[c].count_documents({"org_id": org_id, "id": {"$regex": "^demo_"}})
+    for c, n in (await report_counts(org_id)).items():
         print(f"  {c:14s}: {n}")
 
 
 async def main():
+    global client, db
+    client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+    db = client[os.environ["DB_NAME"]]
     org = await get_or_create_demo_org()
     org_id = org["id"]
     if "--wipe" in sys.argv:

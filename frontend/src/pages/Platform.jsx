@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X } from "lucide-react";
+import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert } from "lucide-react";
 
 const STATUS_LABEL = { trial: "Trial", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pag. fallito", suspended: "Sospeso", interna: "Interna", test: "Test" };
 const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange", interna: "green", test: "orange" };
@@ -33,10 +33,14 @@ export default function Platform() {
   const [showCreate, setShowCreate] = useState(false);
   const [nf, setNf] = useState({ nome: "", type: "cliente", status: "active" });
   const [creating, setCreating] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [delUser, setDelUser] = useState(null);
+  const [working, setWorking] = useState(false);
 
   const loadFic = () => api.get("/fic/status").then(({ data }) => setFic(data)).catch(() => {});
-  const loadAll = () => Promise.all([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions")])
-    .then(([a, b, c]) => { setStats(a.data); setOrgs(b.data); setSubs(c.data); })
+  const loadUsers = () => api.get("/platform/users").then(({ data }) => setUsers(data)).catch(() => {});
+  const loadAll = () => Promise.all([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions"), api.get("/platform/users")])
+    .then(([a, b, c, d]) => { setStats(a.data); setOrgs(b.data); setSubs(c.data); setUsers(d.data); })
     .catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
 
   useEffect(() => { loadAll(); loadFic(); }, []);
@@ -59,6 +63,18 @@ export default function Platform() {
       // Full navigation so the new org immediately appears in the "Org attiva" switcher.
       window.location.href = `/piattaforma/org/${data.id}`;
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setCreating(false); }
+  };
+
+  const toggleUser = async (u) => {
+    try { await api.patch(`/platform/users/${u.user_id}`, { active: !u.active }); toast.success(u.active ? "Account disabilitato" : "Account riattivato"); loadUsers(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const confirmDeleteUser = async () => {
+    if (!delUser) return;
+    setWorking(true);
+    try { await api.delete(`/platform/users/${delUser.user_id}`); toast.success("Account eliminato definitivamente"); setDelUser(null); loadAll(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setWorking(false); }
   };
 
   return (
@@ -124,7 +140,45 @@ export default function Platform() {
         </div>
       </div>
 
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-8" data-testid="platform-accounts">
+        <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800 flex items-center gap-2"><Users className="w-4 h-4" />Account utenti <span className="text-slate-400 font-normal">({users.length})</span></div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-slate-200 text-left text-slate-500">
+              <th className="py-2.5 px-4 font-semibold">Nome</th><th className="py-2.5 px-4 font-semibold">Email</th>
+              <th className="py-2.5 px-4 font-semibold">Organizzazione</th><th className="py-2.5 px-4 font-semibold">Ruolo</th>
+              <th className="py-2.5 px-4 font-semibold">Stato</th><th className="py-2.5 px-4 font-semibold">Creazione</th>
+              <th className="py-2.5 px-4 font-semibold">Ultimo accesso</th><th className="py-2.5 px-4 font-semibold text-right">Azioni</th>
+            </tr></thead>
+            <tbody>
+              {users.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-slate-400">Nessun account registrato.</td></tr>
+              ) : users.map((u) => (
+                <tr key={u.user_id} className="border-b border-slate-100 hover:bg-slate-50" data-testid={`platform-user-${u.user_id}`}>
+                  <td className="py-2.5 px-4 font-medium text-slate-800">{u.name || "—"}</td>
+                  <td className="py-2.5 px-4 text-slate-600">{u.email}</td>
+                  <td className="py-2.5 px-4 text-slate-600">{u.primary_org?.nome || (u.org_names || []).join(", ") || "—"}</td>
+                  <td className="py-2.5 px-4"><StatusBadge color={u.is_superadmin ? "tiffany" : "gray"}>{u.role_label}</StatusBadge></td>
+                  <td className="py-2.5 px-4"><StatusBadge color={u.active ? "green" : "red"}>{u.active ? "Attivo" : "Disabilitato"}</StatusBadge></td>
+                  <td className="py-2.5 px-4 text-slate-500">{u.created_at ? new Date(u.created_at).toLocaleDateString("it-IT") : "—"}</td>
+                  <td className="py-2.5 px-4 text-slate-500">{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString("it-IT") : "—"}</td>
+                  <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                    {u.is_superadmin ? <span className="text-xs text-slate-400">—</span> : (
+                      <>
+                        <Button variant="outline" size="sm" className="mr-1" onClick={() => toggleUser(u)} data-testid={`user-toggle-${u.user_id}`}><Power className="w-4 h-4 mr-1" />{u.active ? "Disabilita" : "Riattiva"}</Button>
+                        <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDelUser(u)} data-testid={`user-delete-${u.user_id}`}><Trash2 className="w-4 h-4" /></Button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-8" data-testid="platform-subscriptions">
+        <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Abbonamenti</div>
         <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Abbonamenti</div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -153,6 +207,19 @@ export default function Platform() {
           </table>
         </div>
       </div>
+
+      {delUser && (
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !working && setDelUser(null)}>
+          <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4" onClick={(e) => e.stopPropagation()} data-testid="user-delete-dialog">
+            <div className="flex items-center gap-2 text-red-600"><ShieldAlert className="w-6 h-6" /><h2 className="text-lg font-bold text-slate-900">Elimina account definitivamente</h2></div>
+            <p className="text-sm text-slate-600">Stai per eliminare definitivamente l'account <span className="font-semibold text-slate-900">{delUser.email}</span>. L'utente non potrà più accedere a CRMEvent. I dati appartenenti all'organizzazione non verranno eliminati.</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setDelUser(null)} disabled={working} data-testid="user-delete-cancel">Annulla</Button>
+              <Button onClick={confirmDeleteUser} disabled={working} className="bg-red-600 hover:bg-red-700 text-white" data-testid="user-delete-confirm">{working ? "Eliminazione…" : "Elimina definitivamente"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCreate && (
         <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !creating && setShowCreate(false)}>
