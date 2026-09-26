@@ -12,6 +12,7 @@ const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
 const INV_LABEL = { pending: "In attesa", accepted: "Accettato", expired: "Scaduto", revoked: "Revocato" };
 const INV_COLOR = { pending: "orange", accepted: "green", expired: "gray", revoked: "red" };
 const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }];
+const AUTH_LABEL = (p) => (p === "google" ? "Google" : p ? "Email e password" : "—");
 
 const inputCls = "h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-tiffany focus:ring-2 focus:ring-tiffany/30";
 
@@ -19,7 +20,8 @@ function fmt(iso) { if (!iso) return "—"; try { return new Date(iso).toLocaleD
 
 const TABS = [
   { id: "dati", label: "Dati organizzazione", icon: Building2 },
-  { id: "utenti", label: "Utenti e accessi", icon: Users },
+  { id: "utenti", label: "Utenti", icon: Users },
+  { id: "inviti", label: "Inviti", icon: Mail },
   { id: "eventi", label: "Eventi", icon: CalendarDays },
   { id: "audit", label: "Audit Log", icon: ScrollText },
 ];
@@ -38,6 +40,7 @@ export default function OrgDetail() {
   const [invEmail, setInvEmail] = useState(""); const [invRole, setInvRole] = useState("user");
   const [delName, setDelName] = useState(""); const [deleting, setDeleting] = useState(false);
   const [showSeed, setShowSeed] = useState(false); const [seedWipe, setSeedWipe] = useState(false); const [seeding, setSeeding] = useState(false);
+  const [delUser, setDelUser] = useState(null); const [working, setWorking] = useState(false); const [cleaning, setCleaning] = useState(false);
 
   const loadOrg = useCallback(() => api.get(`/platform/organizations/${id}/detail`).then(({ data }) => {
     setOrg(data); setForm({ nome: data.nome, type: data.type, status: data.status });
@@ -68,10 +71,11 @@ export default function OrgDetail() {
     try { await api.patch(`/platform/organizations/${id}/members/${uid}`, { active }); toast.success(active ? "Accesso riattivato" : "Accesso disabilitato"); loadMembers(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
-  const removeMember = async (uid) => {
-    if (!window.confirm("Rimuovere l'utente da questa organizzazione? I dati dell'organizzazione restano intatti.")) return;
-    try { await api.delete(`/platform/organizations/${id}/members/${uid}`); toast.success("Utente rimosso"); loadMembers(); }
+  const deleteUserAccount = async () => {
+    if (!delUser) return; setWorking(true);
+    try { await api.delete(`/platform/users/${delUser.user_id}`); toast.success("Account eliminato definitivamente"); setDelUser(null); loadMembers(); loadInvites(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setWorking(false); }
   };
   const sendInvite = async () => {
     if (!invEmail) return;
@@ -80,6 +84,8 @@ export default function OrgDetail() {
   };
   const resendInvite = async (iid) => { try { await api.post(`/platform/invites/${iid}/resend`); toast.success("Invito reinviato"); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const revokeInvite = async (iid) => { try { await api.delete(`/platform/invites/${iid}`); toast.success("Invito revocato"); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  const deleteInvite = async (iid) => { if (!window.confirm("Eliminare definitivamente questo invito? L'account eventualmente già registrato NON verrà eliminato.")) return; try { await api.delete(`/platform/invites/${iid}?hard=true`); toast.success("Invito eliminato"); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  const cleanInvites = async () => { if (!window.confirm("Rimuovere gli inviti duplicati e non più necessari? Gli account già registrati non verranno toccati.")) return; setCleaning(true); try { const { data } = await api.post(`/platform/organizations/${id}/invites/cleanup`); toast.success(`Inviti ripuliti: ${data.removed} rimossi`); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setCleaning(false); } };
 
   const runSeed = async () => {
     setSeeding(true);
@@ -177,6 +183,7 @@ export default function OrgDetail() {
         <div className="space-y-6" data-testid="org-utenti-tab">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
             <div className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><UserPlus className="w-4 h-4" />Aggiungi utente esistente</div>
+            <p className="text-xs text-slate-500 mb-3">Associa un account CRMEvent già registrato a questa organizzazione. Per un nuovo utente usa la scheda <span className="font-medium">Inviti</span>.</p>
             <div className="flex flex-wrap gap-2">
               <input className={`${inputCls} flex-1 min-w-[200px]`} placeholder="email@utente.it" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} data-testid="member-add-email" />
               <select className={inputCls} value={addRole} onChange={(e) => setAddRole(e.target.value)} data-testid="member-add-role">{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
@@ -185,32 +192,43 @@ export default function OrgDetail() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Utenti associati</div>
+            <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Utenti registrati con accesso ({members.length})</div>
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="members-table">
               <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                <th className="text-left px-4 py-2.5">Nome</th><th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Ruolo</th><th className="text-left px-4 py-2.5">Stato</th><th className="text-left px-4 py-2.5">Ultimo accesso</th><th className="text-right px-4 py-2.5">Azioni</th>
+                <th className="text-left px-4 py-2.5">Nome</th><th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Ruolo</th><th className="text-left px-4 py-2.5">Stato account</th><th className="text-left px-4 py-2.5">Accesso org</th><th className="text-left px-4 py-2.5">Metodo</th><th className="text-left px-4 py-2.5">Registrazione</th><th className="text-left px-4 py-2.5">Ultimo accesso</th><th className="text-right px-4 py-2.5">Azioni</th>
               </tr></thead>
               <tbody>
-                {members.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nessun utente associato.</td></tr> :
+                {members.length === 0 ? <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">Nessun utente registrato con accesso.</td></tr> :
                   members.map((m) => (
                     <tr key={m.user_id} className="border-t border-slate-100" data-testid={`member-row-${m.user_id}`}>
-                      <td className="px-4 py-2.5 font-medium text-slate-800">{m.name || "—"}</td>
+                      <td className="px-4 py-2.5 font-medium text-slate-800">{m.name || "—"}{m.is_superadmin && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-tiffany/20 text-tiffany-fg align-middle">Super Admin</span>}</td>
                       <td className="px-4 py-2.5 text-slate-600">{m.email}</td>
                       <td className="px-4 py-2.5">
-                        <select className="h-9 px-2 rounded-lg border border-slate-200 text-sm" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`member-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
+                        <select disabled={m.is_superadmin} className="h-9 px-2 rounded-lg border border-slate-200 text-sm disabled:opacity-50" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`member-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
                       </td>
-                      <td className="px-4 py-2.5"><StatusBadge color={m.active ? "green" : "gray"}>{m.active ? "Attivo" : "Disabilitato"}</StatusBadge></td>
+                      <td className="px-4 py-2.5"><StatusBadge color={m.account_active ? "green" : "red"}>{m.account_active ? "Attivo" : "Disabilitato"}</StatusBadge></td>
+                      <td className="px-4 py-2.5"><StatusBadge color={m.active ? "green" : "gray"}>{m.active ? "Consentito" : "Disabilitato"}</StatusBadge></td>
+                      <td className="px-4 py-2.5 text-slate-500">{AUTH_LABEL(m.auth_provider)}</td>
+                      <td className="px-4 py-2.5 text-slate-500">{fmt(m.created_at)}</td>
                       <td className="px-4 py-2.5 text-slate-500">{fmt(m.last_login_at)}</td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                        <Button variant="outline" size="sm" className="mr-1" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`member-toggle-${m.user_id}`}>{m.active ? "Disabilita" : "Riattiva"}</Button>
-                        <Button variant="outline" size="sm" className="text-red-600" onClick={() => removeMember(m.user_id)} data-testid={`member-remove-${m.user_id}`}><Trash2 className="w-4 h-4" /></Button>
+                        {m.is_superadmin ? <span className="text-xs text-slate-400">—</span> : (
+                          <>
+                            <Button variant="outline" size="sm" className="mr-1" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`member-toggle-${m.user_id}`}>{m.active ? "Disabilita accesso" : "Riattiva accesso"}</Button>
+                            <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDelUser(m)} data-testid={`member-delete-${m.user_id}`}><Trash2 className="w-4 h-4" /></Button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
               </tbody>
             </table></div>
           </div>
+        </div>
+      )}
 
+      {tab === "inviti" && (
+        <div className="space-y-6" data-testid="org-inviti-tab">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
             <div className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><Mail className="w-4 h-4" />Invita nuovo utente</div>
             <div className="flex flex-wrap gap-2">
@@ -221,7 +239,10 @@ export default function OrgDetail() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Inviti</div>
+            <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800 flex items-center justify-between">
+              <span>Inviti ({invites.length})</span>
+              <Button variant="outline" size="sm" onClick={cleanInvites} disabled={cleaning} data-testid="invites-cleanup-btn"><RefreshCw className="w-4 h-4 mr-1.5" />{cleaning ? "Pulizia…" : "Pulisci duplicati"}</Button>
+            </div>
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="invites-table">
               <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Ruolo</th><th className="text-left px-4 py-2.5">Data invito</th><th className="text-left px-4 py-2.5">Scadenza</th><th className="text-left px-4 py-2.5">Stato</th><th className="text-right px-4 py-2.5">Azioni</th>
@@ -236,13 +257,27 @@ export default function OrgDetail() {
                       <td className="px-4 py-2.5 text-slate-500">{fmt(iv.expires_at)}</td>
                       <td className="px-4 py-2.5"><StatusBadge color={INV_COLOR[iv.status]}>{INV_LABEL[iv.status]}</StatusBadge></td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                        {iv.status !== "accepted" && <Button variant="outline" size="sm" className="mr-1" onClick={() => resendInvite(iv.id)} data-testid={`invite-resend-${iv.id}`}><RefreshCw className="w-4 h-4" /></Button>}
-                        {iv.status === "pending" && <Button variant="outline" size="sm" className="text-red-600" onClick={() => revokeInvite(iv.id)} data-testid={`invite-revoke-${iv.id}`}><XCircle className="w-4 h-4" /></Button>}
+                        {iv.status !== "accepted" && <Button variant="outline" size="sm" className="mr-1" onClick={() => resendInvite(iv.id)} data-testid={`invite-resend-${iv.id}`} title="Reinvia"><RefreshCw className="w-4 h-4" /></Button>}
+                        {iv.status === "pending" && <Button variant="outline" size="sm" className="mr-1" onClick={() => revokeInvite(iv.id)} data-testid={`invite-revoke-${iv.id}`} title="Revoca"><XCircle className="w-4 h-4" /></Button>}
+                        <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => deleteInvite(iv.id)} data-testid={`invite-delete-${iv.id}`} title="Elimina invito"><Trash2 className="w-4 h-4" /></Button>
                       </td>
                     </tr>
                   ))}
               </tbody>
             </table></div>
+          </div>
+        </div>
+      )}
+
+      {delUser && (
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !working && setDelUser(null)}>
+          <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4" onClick={(e) => e.stopPropagation()} data-testid="member-delete-dialog">
+            <div className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-6 h-6" /><h2 className="text-lg font-bold text-slate-900">Elimina utente definitivamente</h2></div>
+            <p className="text-sm text-slate-600">Stai per eliminare definitivamente l'account <span className="font-semibold text-slate-900">{delUser.email}</span>. L'utente non potrà più accedere a CRMEvent. L'anagrafica Persona, gli eventi, le attività, i turni e gli altri dati dell'organizzazione NON verranno eliminati.</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setDelUser(null)} disabled={working} data-testid="member-delete-cancel">Annulla</Button>
+              <Button onClick={deleteUserAccount} disabled={working} className="bg-red-600 hover:bg-red-700 text-white" data-testid="member-delete-confirm">{working ? "Eliminazione…" : "Elimina definitivamente"}</Button>
+            </div>
           </div>
         </div>
       )}

@@ -2410,8 +2410,10 @@ async def _member_view(m: dict) -> dict:
     u = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0, "password_hash": 0})
     return {"user_id": m["user_id"], "email": (u or {}).get("email"), "name": (u or {}).get("name"),
             "role": m["role"], "role_label": ORG_ROLE_LABELS.get(m["role"], m["role"]),
-            "active": m.get("active", True), "last_login_at": (u or {}).get("last_login_at"),
-            "auth_provider": (u or {}).get("auth_provider")}
+            "active": m.get("active", True), "account_active": (u or {}).get("active", True),
+            "created_at": (u or {}).get("created_at"), "last_login_at": (u or {}).get("last_login_at"),
+            "auth_provider": (u or {}).get("auth_provider"),
+            "is_superadmin": (u or {}).get("role") == "superadmin"}
 
 
 async def _org_detail(org_id: str) -> dict:
@@ -2816,15 +2818,55 @@ async def resend_org_invite(invite_id: str, user: dict = Depends(get_current_use
 
 
 @api.delete("/platform/invites/{invite_id}")
-async def revoke_org_invite(invite_id: str, user: dict = Depends(get_current_user)):
+async def revoke_org_invite(invite_id: str, hard: bool = False, user: dict = Depends(get_current_user)):
     inv = await db.org_invites.find_one({"id": invite_id}, {"_id": 0})
     if not inv:
         raise HTTPException(status_code=404, detail="Invito non trovato")
     await _require_manage(user, inv["org_id"])
-    await db.org_invites.update_one({"id": invite_id}, {"$set": {"status": "revoked", "updated_at": now_iso()}})
     org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
-    await record_audit(user, "invite_revoked", org_id=inv["org_id"], org_name=(org or {}).get("nome"), target_email=inv["email"])
+    if hard:
+        # Hard-delete removes the invite row entirely (cleanup). The linked account, if it already
+        # accepted, is NEVER touched — only the invite record is removed.
+        await db.org_invites.delete_one({"id": invite_id})
+        detail = "Invito eliminato"
+    else:
+        await db.org_invites.update_one({"id": invite_id}, {"$set": {"status": "revoked", "updated_at": now_iso()}})
+        detail = "Invito revocato"
+    await record_audit(user, "invite_revoked", org_id=inv["org_id"], org_name=(org or {}).get("nome"),
+                       target_email=inv["email"], detail=detail)
     return {"ok": True}
+
+
+@api.post("/platform/organizations/{org_id}/invites/cleanup")
+async def cleanup_org_invites(org_id: str, user: dict = Depends(get_current_user)):
+    """Remove redundant/duplicate invite rows (revoked, expired, duplicate accepted, or pending
+    invites for emails that already have an active membership). Never touches accounts/memberships."""
+    await _require_manage(user, org_id)
+    org = await _org_or_404(org_id)
+    invs = await db.org_invites.find({"org_id": org_id}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    by_email = {}
+    for i in invs:
+        by_email.setdefault(i["email"], []).append(i)
+    removed = 0
+    for email, items in by_email.items():
+        eu = await db.users.find_one({"email": email.lower()}, {"_id": 0})
+        has_member = bool(eu and await db.memberships.find_one(
+            {"user_id": eu["user_id"], "org_id": org_id, "active": True}))
+        accepted = [x for x in items if x.get("status") == "accepted"]
+        keep_id = None
+        if accepted:
+            keep_id = accepted[0]["id"]  # newest accepted (list is desc by created_at)
+        elif not has_member:
+            pend = [x for x in items if _invite_status(x) == "pending"]
+            keep_id = pend[0]["id"] if pend else items[0]["id"]
+        # if has_member and no accepted -> keep_id stays None -> all redundant pending removed
+        for x in items:
+            if x["id"] != keep_id:
+                await db.org_invites.delete_one({"id": x["id"]})
+                removed += 1
+    await record_audit(user, "invites_cleaned", org_id=org_id, org_name=org.get("nome"),
+                       detail=f"Pulizia inviti · {removed} rimossi")
+    return {"ok": True, "removed": removed}
 
 
 # ------- invite acceptance (public / auth) -------
@@ -2853,6 +2895,9 @@ async def _accept_invite(inv: dict, target_user: dict) -> None:
         await _ensure_membership(target_user["user_id"], inv["org_id"], role, inv.get("invited_by"))
     await db.org_invites.update_one({"id": inv["id"]}, {"$set": {"status": "accepted", "accepted_at": now_iso(),
         "accepted_user_id": target_user["user_id"], "updated_at": now_iso()}})
+    # Dedupe: once accepted, remove any other invite rows for the same email in this org so the
+    # same account can never show up twice in the invite list (fixes duplicate accepted rows).
+    await db.org_invites.delete_many({"org_id": inv["org_id"], "email": inv["email"], "id": {"$ne": inv["id"]}})
     if inv.get("lead_id"):
         await db.leads.update_one({"id": inv["lead_id"]}, {"$set": {"user_id": target_user["user_id"], "updated_at": now_iso()}})
     org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
@@ -3004,6 +3049,9 @@ async def invite_lead(lead_id: str, body: LeadAssignIn, admin: dict = Depends(re
     if not email:
         raise HTTPException(status_code=400, detail="Il lead non ha un'email")
     role = _norm_role(body.role)
+    eu = await db.users.find_one({"email": email}, {"_id": 0})
+    if eu and await db.memberships.find_one({"user_id": eu["user_id"], "org_id": body.org_id, "active": True}):
+        raise HTTPException(status_code=400, detail="Questo utente è già associato all'organizzazione")
     inv = await _create_invite(org, email, role, admin["user_id"], lead_id=lead_id)
     sent = True
     try:
@@ -3313,6 +3361,7 @@ AUDIT_ACTION_LABELS = {
     "org_enabled": "Riattivazione organizzazione",
     "org_deleted": "Eliminazione organizzazione",
     "demo_seeded": "Popolamento dati Demo",
+    "invites_cleaned": "Pulizia inviti",
 }
 
 
