@@ -36,6 +36,27 @@
         Learn how to configure a non-root public URL by running `npm run build`.
         -->
         <title>CRMEvent | Il CRM per organizzare eventi</title>
+        <!-- Google Analytics 4 + Consent Mode v2 (defaults denied; script loads on production only) -->
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag() { dataLayer.push(arguments); }
+            window.gtag = gtag;
+            gtag('consent', 'default', {
+                ad_storage: 'denied',
+                ad_user_data: 'denied',
+                ad_personalization: 'denied',
+                analytics_storage: 'denied',
+                wait_for_update: 500
+            });
+            gtag('js', new Date());
+            gtag('config', 'G-PZK7J854DS', { send_page_view: false, anonymize_ip: true });
+            if (location.hostname === 'crmevent.it') {
+                var gaS = document.createElement('script');
+                gaS.async = true;
+                gaS.src = 'https://www.googletagmanager.com/gtag/js?id=G-PZK7J854DS';
+                document.head.appendChild(gaS);
+            }
+        </script>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
     </head>

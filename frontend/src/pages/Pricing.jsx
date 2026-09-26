@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
+import { trackEvent } from "@/lib/analytics";
 import { Check, Sparkles, ShieldCheck, RefreshCw, CreditCard, Menu, X } from "lucide-react";
 
 const FEATURES = [
@@ -23,6 +24,7 @@ export default function Pricing() {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   const monthly = cycle === "monthly";
+  useEffect(() => { trackEvent("pricing_view"); }, []);
 
   return (
     <div className="bg-white text-slate-900" data-testid="pricing-page">

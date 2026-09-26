@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import {
@@ -122,7 +123,7 @@ function DemoForm() {
     e.preventDefault();
     if (!f.privacy) return toast.error("Accetta la privacy policy per continuare");
     setBusy(true);
-    try { await api.post("/leads", f); setSent(true); toast.success("Richiesta inviata! Ti contatteremo a breve."); }
+    try { await api.post("/leads", f); setSent(true); toast.success("Richiesta inviata! Ti contatteremo a breve."); trackEvent("demo_request_submit"); trackEvent("contact_submit"); }
     catch (err) { toast.error(formatApiError(err.response?.data?.detail)); } finally { setBusy(false); }
   };
   const inp = "w-full h-11 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
@@ -201,7 +202,7 @@ export default function LandingPage() {
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">Organizza il tuo evento. <span className="text-tiffany-active">Tutto in un'unica piattaforma.</span></h1>
             <p className="text-lg text-slate-500 mt-6 max-w-xl"><strong className="font-semibold text-slate-700">CRMEvent</strong> riunisce contatti, sponsor, staff, volontari, turni e attività in un'unica piattaforma semplice da usare.</p>
             <div className="flex flex-wrap gap-3 mt-8">
-              <button onClick={() => scrollTo("demo")} className="h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Richiedi una demo <ArrowRight className="w-4 h-4" /></button>
+              <button onClick={() => { trackEvent("demo_request_click"); scrollTo("demo"); }} className="h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Richiedi una demo <ArrowRight className="w-4 h-4" /></button>
               <button onClick={() => scrollTo("come-funziona")} className="h-12 px-6 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-800 font-semibold transition-colors">Scopri come funziona</button>
             </div>
           </div>

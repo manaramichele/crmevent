@@ -27,6 +27,7 @@ export default function Footer() {
           <ul className="space-y-2 text-sm">
             <li><Link to="/privacy-policy" data-testid="footer-privacy-link" className="hover:text-white">Privacy Policy</Link></li>
             <li><Link to="/cookie" data-testid="footer-cookie-link" className="hover:text-white">Cookie Policy</Link></li>
+            <li><button onClick={() => window.dispatchEvent(new Event("open-cookie-preferences"))} data-testid="footer-cookie-prefs" className="hover:text-white text-left">Preferenze cookie</button></li>
             <li><Link to="/termini" data-testid="footer-terms-link" className="hover:text-white">Termini e Condizioni</Link></li>
           </ul>
         </div>

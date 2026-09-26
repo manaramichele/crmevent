@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
 
 export default function Login() {
   const { setUser } = useAuth();
@@ -26,6 +27,7 @@ export default function Login() {
       } else {
         const { data } = await api.post("/auth/login", { email: form.email, password: form.password });
         setUser(data);
+        trackEvent("login", { method: "email" });
         nav(data.needs_org ? "/completa-organizzazione" : "/app");
       }
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }

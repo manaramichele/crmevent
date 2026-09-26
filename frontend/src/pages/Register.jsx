@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiError } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ export default function Register() {
   const [accept, setAccept] = useState(false);
   const [loading, setLoading] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  useEffect(() => { trackEvent("sign_up_start"); }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -25,6 +27,7 @@ export default function Register() {
     try {
       const { data } = await api.post("/auth/register-organization", { ...form, accept_terms: accept });
       setUser(data);
+      trackEvent("sign_up", { method: "email" });
       toast.success("Benvenuto in CRMEvent! Prova gratuita di 14 giorni attivata.");
       nav("/app");
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }

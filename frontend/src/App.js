@@ -19,6 +19,8 @@ import Account from "@/pages/Account";
 import Platform from "@/pages/Platform";
 import OrgDetail from "@/pages/OrgDetail";
 import Invite from "@/pages/Invite";
+import CookieConsent from "@/components/CookieConsent";
+import { trackPageView } from "@/lib/analytics";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
@@ -81,6 +83,8 @@ function Shell() {
   return (
     <>
       <CalendarToast />
+      <RouteTracker />
+      <CookieConsent />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/prezzi" element={<Pricing />} />
@@ -116,6 +120,12 @@ function Shell() {
       </Routes>
     </>
   );
+}
+
+function RouteTracker() {
+  const location = useLocation();
+  useEffect(() => { trackPageView(location.pathname + location.search); }, [location.pathname, location.search]);
+  return null;
 }
 
 export default function App() {
