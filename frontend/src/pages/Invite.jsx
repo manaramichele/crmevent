@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Building2, ShieldCheck, AlertTriangle } from "lucide-react";
 
+const Card = ({ children }) => (
+  <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+    <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-sm" data-testid="invite-page">{children}</div>
+  </div>
+);
+
 export default function Invite() {
   const nav = useNavigate();
   const { setUser } = useAuth();
@@ -67,12 +73,6 @@ export default function Invite() {
     const redirectUrl = `${window.location.origin}/invito?token=${token}`;
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
-
-  const Card = ({ children }) => (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-sm" data-testid="invite-page">{children}</div>
-    </div>
-  );
 
   if (error && !invite) return <Card><div className="text-center"><AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" /><h1 className="text-xl font-bold text-slate-900">Invito non valido</h1><p className="text-sm text-slate-500 mt-2" data-testid="invite-error">{error}</p><Button className="mt-6" variant="outline" onClick={() => nav("/login")}>Vai al login</Button></div></Card>;
   if (!invite) return <Card><div className="text-center text-slate-400">Caricamento invito…</div></Card>;
