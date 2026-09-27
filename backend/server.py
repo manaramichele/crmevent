@@ -2767,6 +2767,39 @@ async def platform_seed_demo(org_id: str, body: SeedDemoIn, admin: dict = Depend
     return {"ok": True, "counts": counts, "wiped": body.wipe}
 
 
+# ------- Brevo integration (connection check only — no email/campaign is ever sent here) -------
+@api.get("/integrations/brevo/check")
+async def brevo_connection_check(admin: dict = Depends(require_superadmin)):
+    """Validate the Brevo API key (GET /v3/account). Backend-only, superadmin-only.
+    Reads BREVO_API_KEY from the environment; the key is never returned, logged, or stored,
+    and NO email/campaign is sent. Only a safe {configured, valid, status, message} is returned."""
+    key = os.environ.get("BREVO_API_KEY", "").strip()
+    if not key:
+        return {"configured": False, "valid": False, "status": None,
+                "message": "BREVO_API_KEY non configurata. Inseriscila nei Secrets di produzione."}
+    try:
+        async with httpx.AsyncClient(base_url="https://api.brevo.com",
+                                     timeout=httpx.Timeout(10.0, connect=5.0),
+                                     follow_redirects=False) as client:
+            resp = await client.get("/v3/account", headers={"api-key": key})
+    except httpx.TimeoutException:
+        return {"configured": True, "valid": False, "status": None, "message": "Timeout nella richiesta a Brevo"}
+    except httpx.HTTPError:
+        return {"configured": True, "valid": False, "status": None, "message": "Impossibile raggiungere Brevo"}
+    sc = resp.status_code
+    if sc == 200:
+        # Do NOT expose Brevo's account payload; return only a safe confirmation.
+        return {"configured": True, "valid": True, "status": 200, "message": "Chiave API Brevo valida: connessione riuscita."}
+    if sc == 401:
+        return {"configured": True, "valid": False, "status": 401, "message": "Chiave API Brevo non valida o mancante."}
+    if sc == 403:
+        return {"configured": True, "valid": False, "status": 403, "message": "Brevo ha rifiutato la richiesta: verifica IP security o permessi della chiave."}
+    if sc == 429:
+        return {"configured": True, "valid": False, "status": 429, "message": "Limite di rate Brevo raggiunto: riprova più tardi."}
+    logger.warning("Brevo check: risposta inattesa status=%s", sc)
+    return {"configured": True, "valid": False, "status": sc, "message": "Brevo ha restituito un errore inatteso."}
+
+
 # ------- invites -------
 def _invite_status(inv: dict) -> str:
     if inv.get("status") in ("accepted", "revoked"):
