@@ -160,3 +160,10 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ## Google Calendar OAuth — PKCE fix (2026-06)
 - RCA prod: invalid_grant "Missing code verifier." → verifier non inviato (google-auth-oauthlib autogenera challenge). Risolto con PKCE server-side (verifier in Mongo calendar_oauth_pkce, monouso, TTL 10min). Solo codice; nessun cambio Google Cloud/secret.
 - In attesa: verifica utente in produzione con "Collega Google Calendar" dopo il redeploy.
+
+## E2E test cliente (2026-06) — predisposizione
+- FIC: modalità SIMULAZIONE TEST implementata (POST /api/fic/simulate/{id}, org-scoped) — nessun documento FIC reale, nessun SDI. Flusso reale /fic/issue invariato.
+- UI Account: sezione Fatture + pulsante "Simula fattura (TEST)".
+- Stripe resta TEST (STRIPE_MODE=test verificato in prod).
+- Funnel Demo: autorizzata attivazione TEMPORANEA per il test (B1), poi ripristino BOZZA (azioni SuperAdmin lato utente in prod).
+- Pre-step SuperAdmin in prod (l'agente non ha auth SuperAdmin Google in prod): 1) Verifica/crea lista Brevo, 2) Collega template, 3) Attiva Funnel, poi test, poi Funnel→BOZZA.

@@ -4510,6 +4510,62 @@ async def fic_issue(invoice_id: str, admin: dict = Depends(require_superadmin)):
     return await _fic_issue_document(inv, dry_run=True)
 
 
+# ---- FIC SIMULATION (TEST): builds the payload internally, makes NO FIC call, NO SDI. ----
+def _fic_build_payload(org: dict, inv: dict, vat_percent: float = 22.0) -> dict:
+    """Build the exact FIC issued_document payload that WOULD be sent — without sending it.
+    Contains only the org's own billing data; no secrets/tokens."""
+    net = inv.get("imponibile") or inv.get("totale") or 0
+    line = {"name": f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1,
+            "net_price": net, "vat": {"value": vat_percent}}
+    return {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
+                     "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"}}}
+
+
+async def _fic_simulate(inv: dict) -> dict:
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    payload = _fic_build_payload(org, inv)
+    imponibile = inv.get("imponibile")
+    if imponibile is None:
+        imponibile = inv.get("totale") or 0
+    iva = inv.get("iva")
+    if iva is None:
+        iva = round(imponibile * 0.22, 2)
+    totale = inv.get("totale") or round(imponibile + iva, 2)
+    numero = f"SIM/{datetime.now(timezone.utc).year}/{str(inv.get('id', ''))[:6].upper()}"
+    data_doc = datetime.now(timezone.utc).date().isoformat()
+    upd = {"fic_document_id": None, "fic_numero": numero, "fic_data": data_doc,
+           "fic_stato_documento": "simulato_test", "fic_stato_sdi": "simulato_test",
+           "fic_simulated": True, "fic_payload_preview": payload,
+           "imponibile": imponibile, "iva": iva, "totale": totale, "updated_at": now_iso()}
+    await db.invoices.update_one({"id": inv["id"]}, {"$set": upd})
+    logger.info("FIC SIMULATION (TEST — no FIC call, no SDI) inv=%s numero=%s entity=%s totale=%s",
+                inv.get("id"), numero, payload["data"]["entity"].get("name"), totale)
+    return {"simulated": True, "mode": "SIMULAZIONE_TEST",
+            "cliente": payload["data"]["entity"],
+            "intestazione": payload["data"]["entity"].get("name"),
+            "numero_simulato": numero, "data_simulata": data_doc,
+            "imponibile": imponibile, "iva": iva, "totale": totale,
+            "piano": inv.get("piano") or (org.get("subscription") or {}).get("plan"),
+            "riferimento_stripe": {"stripe_invoice_id": inv.get("stripe_invoice_id"),
+                                   "numero_stripe": inv.get("numero_stripe"),
+                                   "payment_intent": inv.get("stripe_payment_intent")},
+            "stato_fattura": inv.get("payment_status"),
+            "fic_payload_preview": payload,
+            "note": "SIMULAZIONE INTERNA: nessun documento reale creato su Fatture in Cloud, nessuna numerazione fiscale, nessun invio SDI."}
+
+
+@api.post("/fic/simulate/{invoice_id}")
+async def fic_simulate(invoice_id: str, user: dict = Depends(require_admin)):
+    """TEST-only internal simulation of the FIC invoice. Org-scoped; makes NO call to FIC
+    and NEVER transmits to SDI. Kept fully separate from the real /fic/issue LIVE flow."""
+    inv = await db.invoices.find_one({"id": invoice_id, "org_id": user["org_id"]}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Fattura non trovata")
+    return await _fic_simulate(inv)
+
+
 # ---------------- seed ----------------
 async def seed_admin():
     email = os.environ["ADMIN_EMAIL"].lower()

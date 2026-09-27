@@ -26,13 +26,24 @@ export default function Account() {
   const [cycle, setCycle] = useState("yearly");
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [invoices, setInvoices] = useState([]);
+  const [simBusy, setSimBusy] = useState(null);
+  const [sim, setSim] = useState(null);
   const [params, setParams] = useSearchParams();
 
   const load = useCallback(async () => {
-    const [a, b] = await Promise.all([api.get("/account/subscription"), api.get("/account/billing")]);
+    const [a, b, inv] = await Promise.all([api.get("/account/subscription"), api.get("/account/billing"), api.get("/account/invoices")]);
     setData(a.data);
     setBilling({ tipo: "azienda", paese: "IT", ...(b.data || {}) });
+    setInvoices(inv.data || []);
   }, []);
+
+  const simulateInvoice = async (id) => {
+    setSimBusy(id); setSim(null);
+    try { const { data } = await api.post(`/fic/simulate/${id}`); setSim(data); toast.success("Fattura simulata (TEST) — nessun documento reale su Fatture in Cloud"); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setSimBusy(null); }
+  };
 
   useEffect(() => {
     load().catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
@@ -159,6 +170,46 @@ export default function Account() {
             <div><Button onClick={checkout} disabled={busy || !canPay} data-testid="account-activate-btn" className="h-11 px-6 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><CreditCard className="w-4 h-4 mr-2" />{busy ? "Reindirizzamento..." : "Attiva CRMEvent"}</Button></div>
             <p className="text-xs text-slate-400 mt-2">Pagamenti sicuri gestiti tramite Stripe · Rinnovo automatico · Cancella quando vuoi.</p>
           </>
+        )}
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4" data-testid="invoices-card">
+        <div className="flex items-center gap-2 mb-1"><ReceiptText className="w-4 h-4 text-tiffany-active" /><h2 className="font-semibold text-slate-800">Fatture</h2></div>
+        <p className="text-xs text-slate-400 mb-4">La <b>simulazione (TEST)</b> verifica il documento internamente: <b>nessun</b> documento reale su Fatture in Cloud e <b>nessun</b> invio SDI.</p>
+        {invoices.length === 0 ? (
+          <p className="text-sm text-slate-500" data-testid="invoices-empty">Nessuna fattura ancora. Dopo un pagamento Stripe TEST comparirà qui.</p>
+        ) : (
+          <div className="space-y-2">
+            {invoices.map((iv) => (
+              <div key={iv.id} className="flex items-center justify-between border border-slate-100 rounded-lg px-3 py-2" data-testid={`invoice-row-${iv.id}`}>
+                <div className="min-w-0 text-sm">
+                  <div className="font-medium text-slate-800">{iv.numero_stripe || iv.fic_numero || iv.id.slice(0, 8)} · {(iv.totale ?? 0).toFixed(2)} {(iv.valuta || "eur").toUpperCase()}</div>
+                  <div className="text-xs text-slate-500">{(iv.data || "").slice(0, 10)} · {iv.payment_status || "—"} · FIC: {iv.fic_stato_documento || "da_emettere"}</div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => simulateInvoice(iv.id)} disabled={simBusy === iv.id} data-testid={`invoice-simulate-${iv.id}`}>{simBusy === iv.id ? "Simulo…" : "Simula fattura (TEST)"}</Button>
+              </div>
+            ))}
+          </div>
+        )}
+        {sim && (
+          <div className="mt-4 rounded-lg border border-tiffany-border bg-tiffany-light/40 p-4 text-sm" data-testid="sim-result">
+            <div className="font-semibold text-slate-800 mb-2">SIMULAZIONE TEST · nessun documento FIC / nessun SDI</div>
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-slate-700">
+              <div><span className="text-slate-500">Intestazione:</span> {sim.intestazione || "—"}</div>
+              <div><span className="text-slate-500">Numero simulato:</span> {sim.numero_simulato}</div>
+              <div><span className="text-slate-500">Data simulata:</span> {sim.data_simulata}</div>
+              <div><span className="text-slate-500">Piano:</span> {sim.piano || "—"}</div>
+              <div><span className="text-slate-500">Imponibile:</span> {Number(sim.imponibile ?? 0).toFixed(2)} €</div>
+              <div><span className="text-slate-500">IVA:</span> {Number(sim.iva ?? 0).toFixed(2)} €</div>
+              <div><span className="text-slate-500">Totale:</span> {Number(sim.totale ?? 0).toFixed(2)} €</div>
+              <div><span className="text-slate-500">Stato:</span> {sim.stato_fattura || "—"}</div>
+              <div className="sm:col-span-2"><span className="text-slate-500">Rif. Stripe:</span> {sim.riferimento_stripe?.numero_stripe || sim.riferimento_stripe?.stripe_invoice_id || "—"}</div>
+            </div>
+            <details className="mt-2">
+              <summary className="text-xs text-tiffany-active cursor-pointer">Payload FIC che sarebbe stato inviato (sicuro, senza secret)</summary>
+              <pre className="mt-2 text-[11px] bg-white border border-slate-200 rounded p-2 overflow-x-auto" data-testid="sim-payload">{JSON.stringify(sim.fic_payload_preview, null, 2)}</pre>
+            </details>
+          </div>
         )}
       </div>
     </div>

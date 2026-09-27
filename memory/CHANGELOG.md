@@ -209,3 +209,9 @@
   - /oauth/calendar/callback: recupero monouso (find_one_and_delete), rifiuto se mancante/riusato/scaduto, poi invio al token exchange. Logging diagnostico sicuro mantenuto.
   - Indice TTL su expires_at (expireAfterSeconds=0) + indice {jti,uid}.
 - Test preview (6/6 PASS): authorize genera challenge+verifier; callback recupera il verifier corretto; mancante/errato→rifiutato; riusato→non riutilizzabile; scaduto→non utilizzabile; nessun verifier/token/secret nei log. Test file: /app/backend/tests/test_gcal_pkce.py
+
+### 2026-06 (Fatture in Cloud — modalità SIMULAZIONE TEST, separata dal LIVE)
+- Nuovo endpoint org-scoped POST /api/fic/simulate/{invoice_id}: costruisce internamente il payload FIC e i valori (cliente, intestazione, numero/data SIMULATI, imponibile/IVA/totale, piano, rif. Stripe, stato, payload preview) SENZA chiamare POST /issued_documents e SENZA alcun invio SDI. Marca la fattura come fic_stato_documento="simulato_test"/fic_stato_sdi="simulato_test".
+- Il flusso reale /fic/issue (dry_run, superadmin) resta invariato per il futuro LIVE → separazione netta simulazione vs emissione.
+- UI Account (org admin): sezione "Fatture" con pulsante "Simula fattura (TEST)" e dettaglio + payload FIC sicuro (nessun secret/token).
+- Nessun documento reale FIC, nessuna numerazione fiscale, nessun SDI durante il test.
