@@ -2800,6 +2800,100 @@ async def brevo_connection_check(admin: dict = Depends(require_superadmin)):
     return {"configured": True, "valid": False, "status": sc, "message": "Brevo ha restituito un errore inatteso."}
 
 
+@api.get("/integrations/brevo/senders")
+async def brevo_list_senders(admin: dict = Depends(require_superadmin)):
+    """List Brevo account senders (GET /v3/senders), superadmin-only.
+    Returns a safe normalized view: name, email, active (verified/usable), email domain.
+    The API key is never returned or logged; no email is sent."""
+    key = os.environ.get("BREVO_API_KEY", "").strip()
+    if not key:
+        return {"configured": False, "senders": [], "message": "BREVO_API_KEY non configurata. Inseriscila nei Secrets di produzione."}
+    try:
+        async with httpx.AsyncClient(base_url="https://api.brevo.com",
+                                     timeout=httpx.Timeout(10.0, connect=5.0),
+                                     follow_redirects=False) as client:
+            resp = await client.get("/v3/senders", headers={"api-key": key})
+    except httpx.TimeoutException:
+        return {"configured": True, "senders": [], "message": "Timeout nella richiesta a Brevo"}
+    except httpx.HTTPError:
+        return {"configured": True, "senders": [], "message": "Impossibile raggiungere Brevo"}
+    if resp.status_code != 200:
+        logger.warning("Brevo senders: risposta inattesa status=%s", resp.status_code)
+        return {"configured": True, "senders": [], "message": f"Brevo ha restituito un errore (HTTP {resp.status_code})."}
+    raw = resp.json().get("senders", []) or []
+    senders = [{
+        "id": s.get("id"),
+        "name": s.get("name"),
+        "email": s.get("email"),
+        "active": bool(s.get("active")),
+        "domain": (s.get("email") or "").rsplit("@", 1)[-1].lower() if s.get("email") else None,
+    } for s in raw]
+    return {"configured": True, "senders": senders, "message": "OK"}
+
+
+class BrevoTestEmail(BaseModel):
+    to: EmailStr
+    sender_email: EmailStr
+    sender_name: str = "CRMEvent"
+    subject: str = "CRMEvent · Test collegamento Brevo"
+    content: str = ("CRMEvent è correttamente collegato a Brevo.\n"
+                    "Questa è un'email di test inviata tramite l'integrazione API CRMEvent → Brevo.")
+
+
+@api.post("/integrations/brevo/send-test")
+async def brevo_send_test(body: BrevoTestEmail, admin: dict = Depends(require_superadmin)):
+    """Send a single transactional test email via Brevo (POST /v3/smtp/email), superadmin-only.
+    Returns {success, status, messageId, timestamp, message}. The API key is never exposed."""
+    key = os.environ.get("BREVO_API_KEY", "").strip()
+    ts = datetime.now(timezone.utc).isoformat()
+    if not key:
+        return {"success": False, "status": None, "messageId": None, "timestamp": ts,
+                "message": "BREVO_API_KEY non configurata. Inseriscila nei Secrets di produzione."}
+    text = body.content
+    html = "<p>" + text.replace("\n", "<br>") + "</p>"
+    payload = {
+        "sender": {"email": str(body.sender_email), "name": body.sender_name},
+        "to": [{"email": str(body.to)}],
+        "subject": body.subject,
+        "textContent": text,
+        "htmlContent": html,
+    }
+    try:
+        async with httpx.AsyncClient(base_url="https://api.brevo.com",
+                                     timeout=httpx.Timeout(15.0, connect=5.0),
+                                     follow_redirects=False) as client:
+            resp = await client.post("/v3/smtp/email",
+                                     headers={"api-key": key, "Content-Type": "application/json"},
+                                     json=payload)
+    except httpx.TimeoutException:
+        return {"success": False, "status": None, "messageId": None, "timestamp": ts, "message": "Timeout nella richiesta a Brevo"}
+    except httpx.HTTPError:
+        return {"success": False, "status": None, "messageId": None, "timestamp": ts, "message": "Impossibile raggiungere Brevo"}
+    sc = resp.status_code
+    if sc == 201:
+        mid = None
+        try:
+            mid = resp.json().get("messageId")
+        except Exception:
+            pass
+        return {"success": True, "status": 201, "messageId": mid, "timestamp": ts,
+                "message": "Email di test inviata correttamente."}
+    detail = None
+    try:
+        j = resp.json()
+        detail = j.get("message") or j.get("code")
+    except Exception:
+        pass
+    logger.warning("Brevo send-test: errore status=%s code=%s", sc, detail)
+    friendly = {
+        400: f"Richiesta rifiutata da Brevo: {detail or 'dati non validi'}. Verifica che il mittente sia verificato.",
+        401: "Chiave API Brevo non valida o mancante.",
+        403: "Brevo ha rifiutato la richiesta: verifica IP security o permessi della chiave.",
+        429: "Limite di rate Brevo raggiunto: riprova più tardi.",
+    }.get(sc, f"Brevo ha restituito un errore (HTTP {sc}){': ' + detail if detail else ''}.")
+    return {"success": False, "status": sc, "messageId": None, "timestamp": ts, "message": friendly}
+
+
 # ------- invites -------
 def _invite_status(inv: dict) -> str:
     if inv.get("status") in ("accepted", "revoked"):

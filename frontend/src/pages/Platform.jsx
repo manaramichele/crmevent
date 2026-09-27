@@ -30,6 +30,9 @@ export default function Platform() {
   const [subs, setSubs] = useState([]);
   const [fic, setFic] = useState(null);
   const [brevo, setBrevo] = useState(null); const [brevoBusy, setBrevoBusy] = useState(false);
+  const [senders, setSenders] = useState(null); const [sendersBusy, setSendersBusy] = useState(false);
+  const [testTo, setTestTo] = useState(""); const [testSender, setTestSender] = useState("");
+  const [testBusy, setTestBusy] = useState(false); const [testResult, setTestResult] = useState(null);
   const [params, setParams] = useSearchParams();
   const [showCreate, setShowCreate] = useState(false);
   const [nf, setNf] = useState({ nome: "", type: "cliente", status: "active" });
@@ -61,6 +64,8 @@ export default function Platform() {
   const connectFic = async () => { try { const { data } = await api.get("/fic/oauth/start"); window.location.href = data.authorize_url; } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const disconnectFic = async () => { try { await api.post("/fic/disconnect"); toast.success("Fatture in Cloud scollegato"); loadFic(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const checkBrevo = async () => { setBrevoBusy(true); try { const { data } = await api.get("/integrations/brevo/check"); setBrevo(data); toast[data.valid ? "success" : "warning"](data.message); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBrevoBusy(false); } };
+  const loadSenders = async () => { setSendersBusy(true); try { const { data } = await api.get("/integrations/brevo/senders"); setSenders(data.senders || []); if (!data.configured) toast.warning(data.message); else if (data.message !== "OK") toast.warning(data.message); else { const active = (data.senders || []).find((s) => s.active); if (active && !testSender) setTestSender(active.email); } } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setSendersBusy(false); } };
+  const sendTestEmail = async () => { if (!testTo.trim()) { toast.error("Inserisci l'indirizzo destinatario"); return; } if (!testSender) { toast.error("Seleziona un mittente verificato"); return; } setTestBusy(true); setTestResult(null); try { const { data } = await api.post("/integrations/brevo/send-test", { to: testTo.trim(), sender_email: testSender }); setTestResult(data); toast[data.success ? "success" : "error"](data.message); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setTestBusy(false); } };
 
   const createOrg = async () => {
     if (!nf.nome.trim()) { toast.error("Inserisci il nome"); return; }
@@ -122,19 +127,81 @@ export default function Platform() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8 flex items-center gap-4" data-testid="brevo-card">
-        <div className="w-10 h-10 rounded-lg bg-tiffany-light text-tiffany-fg flex items-center justify-center"><Mail className="w-5 h-5" /></div>
-        <div className="min-w-0">
-          <div className="font-semibold text-slate-800">Email marketing · Brevo</div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            {!brevo ? "Verifica la connessione API a Brevo (nessuna email viene inviata)."
-              : brevo.valid ? <span className="text-emerald-600 font-medium">Connesso · chiave API valida (HTTP {brevo.status})</span>
-              : <span className="text-amber-600 font-medium">{brevo.message}{brevo.status ? ` (HTTP ${brevo.status})` : ""}</span>}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8" data-testid="brevo-card">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-tiffany-light text-tiffany-fg flex items-center justify-center"><Mail className="w-5 h-5" /></div>
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-800">Email marketing · Brevo</div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              {!brevo ? "Verifica la connessione API a Brevo (nessuna email viene inviata)."
+                : brevo.valid ? <span className="text-emerald-600 font-medium">Connesso · chiave API valida (HTTP {brevo.status})</span>
+                : <span className="text-amber-600 font-medium">{brevo.message}{brevo.status ? ` (HTTP ${brevo.status})` : ""}</span>}
+            </div>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" variant="outline" onClick={checkBrevo} disabled={brevoBusy} data-testid="brevo-check-btn"><Link2 className="w-4 h-4 mr-1.5" />{brevoBusy ? "Verifica…" : "Verifica connessione Brevo"}</Button>
+            <Button size="sm" variant="outline" onClick={loadSenders} disabled={sendersBusy} data-testid="brevo-senders-btn"><Users className="w-4 h-4 mr-1.5" />{sendersBusy ? "Carico…" : "Carica mittenti"}</Button>
           </div>
         </div>
-        <div className="ml-auto">
-          <Button size="sm" variant="outline" onClick={checkBrevo} disabled={brevoBusy} data-testid="brevo-check-btn"><Link2 className="w-4 h-4 mr-1.5" />{brevoBusy ? "Verifica…" : "Verifica connessione Brevo"}</Button>
-        </div>
+
+        {senders !== null && (
+          <div className="mt-4 border-t border-slate-100 pt-4" data-testid="brevo-senders-section">
+            <div className="text-sm font-semibold text-slate-800 mb-2">Mittenti configurati su Brevo</div>
+            {senders.length === 0 ? (
+              <div className="text-xs text-slate-500">Nessun mittente trovato. Configura e verifica un mittente <span className="font-medium">CRMEvent</span> con casella <span className="font-medium">@crmevent.it</span> nel pannello Brevo (Mittenti, domini e IP dedicati).</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="brevo-senders-table">
+                  <thead><tr className="border-b border-slate-200 text-left text-slate-500">
+                    <th className="py-2 px-3 font-semibold">Nome</th><th className="py-2 px-3 font-semibold">Email</th><th className="py-2 px-3 font-semibold">Dominio</th><th className="py-2 px-3 font-semibold">Stato</th>
+                  </tr></thead>
+                  <tbody>
+                    {senders.map((s) => (
+                      <tr key={s.id} className="border-b border-slate-100" data-testid={`brevo-sender-row-${s.id}`}>
+                        <td className="py-2 px-3 text-slate-800">{s.name || "—"}</td>
+                        <td className="py-2 px-3 text-slate-600">{s.email}</td>
+                        <td className="py-2 px-3 text-slate-600">{s.domain || "—"}</td>
+                        <td className="py-2 px-3">{s.active ? <span className="text-emerald-600 font-medium">Verificato</span> : <span className="text-amber-600 font-medium">Non verificato</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {senders.some((s) => s.active) && (
+              <div className="mt-5 border-t border-slate-100 pt-4" data-testid="brevo-test-section">
+                <div className="text-sm font-semibold text-slate-800 mb-2">Invia email di test</div>
+                <div className="text-xs text-slate-500 mb-3">Oggetto: <span className="font-medium">CRMEvent · Test collegamento Brevo</span>. Nessuna CTA commerciale, nessuna automazione.</div>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                  <div className="sm:w-64">
+                    <label className="text-xs text-slate-500">Mittente verificato</label>
+                    <select className="w-full mt-1 border border-slate-200 rounded-md px-2 py-2 text-sm bg-white" value={testSender} onChange={(e) => setTestSender(e.target.value)} data-testid="brevo-test-sender-select">
+                      {senders.filter((s) => s.active).map((s) => <option key={s.id} value={s.email}>{s.name ? `${s.name} — ${s.email}` : s.email}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-500">Destinatario</label>
+                    <Input type="email" placeholder="destinatario@esempio.it" value={testTo} onChange={(e) => setTestTo(e.target.value)} className="mt-1" data-testid="brevo-test-to-input" />
+                  </div>
+                  <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={sendTestEmail} disabled={testBusy} data-testid="brevo-send-test-btn"><Mail className="w-4 h-4 mr-1.5" />{testBusy ? "Invio…" : "Invia email di test"}</Button>
+                </div>
+
+                {testResult && (
+                  <div className={`mt-3 rounded-lg border p-3 text-xs ${testResult.success ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`} data-testid="brevo-test-result">
+                    <div className={`font-semibold ${testResult.success ? "text-emerald-700" : "text-red-700"}`}>{testResult.success ? "Invio riuscito" : "Invio fallito"}</div>
+                    <div className="text-slate-600 mt-1 space-y-0.5">
+                      <div>Esito: {testResult.message}</div>
+                      {testResult.status != null && <div>HTTP status: {testResult.status}</div>}
+                      {testResult.messageId && <div>messageId: <span className="font-mono">{testResult.messageId}</span></div>}
+                      <div>Timestamp: {testResult.timestamp}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
