@@ -1,0 +1,8 @@
+crons:
+  - name: brevo-funnel-tick
+    description: "Processes due Demo funnel emails every 15 min, re-checking stop conditions before each send"
+    cron: "*/15 * * * *"
+    endpoint: "{{BASE_URL}}/api/cron/brevo-funnel-tick"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

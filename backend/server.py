@@ -19,15 +19,17 @@ from typing import List, Optional
 import jwt
 import bcrypt
 import httpx
-from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depends, UploadFile, File, Header
 from fastapi.responses import RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr
 
+import asyncio
 import email_utils
 import storage_utils
 import gcal_utils
+import brevo_funnel
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -2387,15 +2389,29 @@ async def create_lead(body: Lead):
                                                                  footer_note="Gestisci il lead nella sezione Lead."))
     except Exception as e:
         logger.error(f"lead notify failed: {e}")
-    # Confirmation email TO the lead with the demo link (uses existing mailing system only).
+    # Sync the contact to Brevo (best-effort; this call never sends an email).
     try:
-        await email_utils.send_email(to=body.email, subject="La tua demo di CRMEvent",
-                                     html=email_utils.link_email(name=body.nome,
-                                                                 intro="Grazie per il tuo interesse in CRMEvent! Puoi guardare la demo interattiva quando vuoi cliccando qui sotto. Quando sei pronto, attiva la prova gratuita di 14 giorni.",
-                                                                 cta_label="Guarda la demo", url=f"{APP_URL}/demo",
-                                                                 footer_note="Hai ricevuto questa email perché hai richiesto una demo su crmevent.it."))
+        await brevo_funnel.upsert_contact(email=body.email, nome=body.nome, cognome=body.cognome,
+                                          organizzazione=body.organizzazione, tipologia_eventi=body.tipologia_eventi,
+                                          source=body.source or "richiedi-demo", funnel_status="demo_requested")
     except Exception as e:
-        logger.error(f"lead demo email failed: {e}")
+        logger.error(f"brevo contact upsert failed: {e}")
+    # Demo funnel: when ACTIVE, EMAIL 1 replaces the legacy confirmation email (avoid double emails).
+    enrolled = False
+    try:
+        enrolled = (await _enroll_lead(doc)).get("enrolled", False)
+    except Exception as e:
+        logger.error(f"funnel enroll failed: {e}")
+    if not enrolled:
+        # Legacy single confirmation email (used when the funnel is not active).
+        try:
+            await email_utils.send_email(to=body.email, subject="La tua demo di CRMEvent",
+                                         html=email_utils.link_email(name=body.nome,
+                                                                     intro="Grazie per il tuo interesse in CRMEvent! Puoi guardare la demo interattiva quando vuoi cliccando qui sotto. Quando sei pronto, attiva la prova gratuita di 14 giorni.",
+                                                                     cta_label="Guarda la demo", url=f"{APP_URL}/demo",
+                                                                     footer_note="Hai ricevuto questa email perché hai richiesto una demo su crmevent.it."))
+        except Exception as e:
+            logger.error(f"lead demo email failed: {e}")
     return {"ok": True, "id": doc["id"]}
 
 
@@ -2894,6 +2910,369 @@ async def brevo_send_test(body: BrevoTestEmail, admin: dict = Depends(require_su
     return {"success": False, "status": sc, "messageId": None, "timestamp": ts, "message": friendly}
 
 
+# ==================== Brevo Demo Funnel (email automation) ====================
+# CRMEvent is the source of truth for lead/funnel state. Brevo handles contacts, delivery, stats.
+BREVO_WEBHOOK_TOKEN = os.environ.get("BREVO_WEBHOOK_TOKEN", "")
+WEBHOOK_CRON_SECRET = os.environ.get("WEBHOOK_CRON_SECRET", "")
+BACKEND_PUBLIC_URL = os.environ.get("BACKEND_PUBLIC_URL") or APP_URL
+PUBLIC_SITE_URL = "https://crmevent.it"
+DEMO_URL = f"{PUBLIC_SITE_URL}/demo"
+TRIAL_URL = f"{PUBLIC_SITE_URL}/registrati"
+
+
+async def _get_demo_funnel() -> dict:
+    f = await db.email_funnels.find_one({"key": brevo_funnel.FUNNEL_KEY}, {"_id": 0})
+    if not f:
+        f = {"id": new_id(), "key": brevo_funnel.FUNNEL_KEY, "name": brevo_funnel.FUNNEL_NAME,
+             "status": "draft", "created_at": now_iso(), "updated_at": now_iso()}
+        await db.email_funnels.insert_one(dict(f))
+    return f
+
+
+async def _template_map() -> dict:
+    rows = await db.brevo_templates.find({}, {"_id": 0}).to_list(50)
+    return {r["template_key"]: r["brevo_id"] for r in rows if r.get("brevo_id")}
+
+
+async def _lead_unsub_url(lead: dict) -> str:
+    token = lead.get("unsub_token")
+    if not token:
+        token = secrets.token_urlsafe(24)
+        await db.leads.update_one({"id": lead["id"]}, {"$set": {"unsub_token": token}})
+        lead["unsub_token"] = token
+    return f"{BACKEND_PUBLIC_URL}/api/brevo/unsubscribe?token={token}"
+
+
+async def _send_params(lead: dict) -> dict:
+    return {"NOME": lead.get("nome") or "", "DEMO_URL": DEMO_URL, "TRIAL_URL": TRIAL_URL,
+            "UNSUB_URL": await _lead_unsub_url(lead)}
+
+
+def _stop_reason(lead: dict):
+    if lead.get("marketing_opt_out"):
+        return "unsubscribed"
+    if lead.get("email_bounced"):
+        return "hard_bounce"
+    if lead.get("email_spam"):
+        return "spam"
+    if lead.get("funnel_status") in brevo_funnel.STOP_FUNNEL_STATUSES:
+        return lead.get("funnel_status")
+    return None
+
+
+async def _cancel_enrollment(enr: dict, reason: str):
+    steps = enr.get("steps", [])
+    for s in steps:
+        if s["status"] == "scheduled":
+            s["status"] = "canceled"
+    await db.funnel_enrollments.update_one({"id": enr["id"]}, {"$set": {
+        "status": "stopped", "stop_reason": reason, "steps": steps, "updated_at": now_iso()}})
+
+
+async def _send_step(lead: dict, step_cfg: dict, tmpl_map: dict) -> dict:
+    tid = tmpl_map.get(step_cfg["template_key"])
+    if not tid:
+        return {"ok": False, "error": "Template non sincronizzato su Brevo", "status": None, "messageId": None}
+    params = await _send_params(lead)
+    res = await brevo_funnel.send_template(template_id=tid, to_email=lead["email"],
+                                           to_name=(lead.get("nome") or None), params=params)
+    return res
+
+
+async def _enroll_lead(lead: dict):
+    """Enroll a fresh lead into the demo funnel: send EMAIL 1 immediately, schedule EMAIL 2-4.
+    Only runs when the funnel is ACTIVE and the lead is contactable. Never duplicates."""
+    funnel = await _get_demo_funnel()
+    if funnel.get("status") != "active":
+        return {"enrolled": False, "reason": "funnel_not_active"}
+    if _stop_reason(lead):
+        return {"enrolled": False, "reason": "not_contactable"}
+    existing = await db.funnel_enrollments.find_one({"funnel_key": brevo_funnel.FUNNEL_KEY, "lead_id": lead["id"]})
+    if existing:
+        return {"enrolled": False, "reason": "already_enrolled"}
+    tmpl_map = await _template_map()
+    if not tmpl_map.get("demo_1"):
+        return {"enrolled": False, "reason": "templates_not_synced"}
+    entered = datetime.now(timezone.utc)
+    steps = []
+    for cfg in brevo_funnel.FUNNEL_STEPS:
+        steps.append({"step": cfg["step"], "template_key": cfg["template_key"],
+                      "scheduled_at": (entered + timedelta(days=cfg["delay_days"])).isoformat(),
+                      "sent_at": None, "status": "scheduled", "brevo_message_id": None, "error": None})
+    enr = {"id": new_id(), "funnel_key": brevo_funnel.FUNNEL_KEY, "lead_id": lead["id"],
+           "email": lead["email"], "status": "active", "stop_reason": None,
+           "entered_at": entered.isoformat(), "steps": steps,
+           "created_at": now_iso(), "updated_at": now_iso()}
+    # Send EMAIL 1 immediately.
+    res = await _send_step(lead, brevo_funnel.FUNNEL_STEPS[0], tmpl_map)
+    steps[0]["status"] = "sent" if res.get("ok") else "failed"
+    steps[0]["sent_at"] = now_iso()
+    steps[0]["brevo_message_id"] = res.get("messageId")
+    steps[0]["error"] = None if res.get("ok") else res.get("error")
+    await db.funnel_enrollments.insert_one(dict(enr))
+    return {"enrolled": True, "email1_ok": res.get("ok"), "error": res.get("error")}
+
+
+async def process_due_funnel_steps() -> dict:
+    """Cron worker: re-checks stop conditions before EVERY send. Idempotent."""
+    funnel = await _get_demo_funnel()
+    if funnel.get("status") != "active":
+        return {"processed": 0, "reason": "funnel_not_active"}
+    tmpl_map = await _template_map()
+    now = datetime.now(timezone.utc)
+    processed = 0
+    stopped = 0
+    cursor = db.funnel_enrollments.find({"funnel_key": brevo_funnel.FUNNEL_KEY, "status": "active"}, {"_id": 0})
+    enrollments = await cursor.to_list(5000)
+    for enr in enrollments:
+        lead = await db.leads.find_one({"id": enr["lead_id"]}, {"_id": 0})
+        if not lead:
+            await db.funnel_enrollments.update_one({"id": enr["id"]},
+                {"$set": {"status": "stopped", "stop_reason": "lead_deleted", "updated_at": now_iso()}})
+            continue
+        reason = _stop_reason(lead)
+        if reason:
+            await _cancel_enrollment(enr, reason)
+            stopped += 1
+            continue
+        steps = enr["steps"]
+        changed = False
+        for cfg in brevo_funnel.FUNNEL_STEPS:
+            s = next((x for x in steps if x["step"] == cfg["step"]), None)
+            if not s or s["status"] != "scheduled":
+                continue
+            if datetime.fromisoformat(s["scheduled_at"]) > now:
+                continue
+            # Re-check stop conditions immediately before this send.
+            reason = _stop_reason(lead)
+            if reason:
+                await _cancel_enrollment(enr, reason)
+                stopped += 1
+                changed = False
+                break
+            res = await _send_step(lead, cfg, tmpl_map)
+            s["status"] = "sent" if res.get("ok") else "failed"
+            s["sent_at"] = now_iso()
+            s["brevo_message_id"] = res.get("messageId")
+            s["error"] = None if res.get("ok") else res.get("error")
+            processed += 1
+            changed = True
+        if changed:
+            all_done = all(x["status"] != "scheduled" for x in steps)
+            upd = {"steps": steps, "updated_at": now_iso()}
+            if all_done:
+                upd["status"] = "completed"
+            await db.funnel_enrollments.update_one({"id": enr["id"]}, {"$set": upd})
+    return {"processed": processed, "stopped": stopped, "enrollments": len(enrollments)}
+
+
+async def _funnel_stats() -> dict:
+    leads_total = await db.leads.count_documents({})
+    demo_requested = await db.leads.count_documents({"funnel_ts_demo_requested": {"$exists": True}})
+    demo_started = await db.leads.count_documents({"$or": [
+        {"funnel_ts_demo_started": {"$exists": True}},
+        {"funnel_status": {"$in": ["demo_started", "demo_completed", "trial_started", "cliente"]}}]})
+    trial_started = await db.leads.count_documents({"$or": [
+        {"funnel_ts_trial_started": {"$exists": True}}, {"funnel_status": "trial_started"}]})
+    clienti = await db.leads.count_documents({"funnel_status": "cliente"})
+    enrolled = await db.funnel_enrollments.count_documents({"funnel_key": brevo_funnel.FUNNEL_KEY})
+    # Emails sent from enrollment step records.
+    emails_sent = 0
+    async for e in db.funnel_enrollments.find({"funnel_key": brevo_funnel.FUNNEL_KEY}, {"_id": 0, "steps": 1}):
+        emails_sent += sum(1 for s in e.get("steps", []) if s.get("status") == "sent")
+    ev = {}
+    for name in ["delivered", "opened", "clicked", "hard_bounce", "unsubscribed", "spam"]:
+        ev[name] = await db.brevo_events.count_documents({"event": name})
+    return {"lead_entrati": enrolled, "demo_richieste": demo_requested, "demo_avviate": demo_started,
+            "trial_avviati": trial_started, "clienti": clienti, "lead_totali": leads_total,
+            "email_inviate": emails_sent, "email_consegnate": ev["delivered"], "aperture": ev["opened"],
+            "click": ev["clicked"], "bounce": ev["hard_bounce"], "unsubscribe": ev["unsubscribed"],
+            "spam": ev["spam"]}
+
+
+@api.get("/platform/funnels")
+async def list_funnels(admin: dict = Depends(require_superadmin)):
+    funnel = await _get_demo_funnel()
+    tmpl_map = await _template_map()
+    stats = await _funnel_stats()
+    return [{"key": funnel["key"], "name": funnel["name"], "status": funnel["status"],
+             "templates_synced": bool(tmpl_map.get("demo_1")), "brevo_configured": brevo_funnel.is_configured(),
+             "stats": stats}]
+
+
+@api.get("/platform/funnels/{key}")
+async def get_funnel(key: str, admin: dict = Depends(require_superadmin)):
+    if key != brevo_funnel.FUNNEL_KEY:
+        raise HTTPException(status_code=404, detail="Funnel non trovato")
+    funnel = await _get_demo_funnel()
+    tmpl_map = await _template_map()
+    steps = [{"step": c["step"], "template_key": c["template_key"], "name": c["name"],
+              "subject": c["subject"], "delay_days": c["delay_days"],
+              "timing": ("Immediata" if c["delay_days"] == 0 else f"+{c['delay_days']} giorni"),
+              "require_not_engaged": c["require_not_engaged"],
+              "brevo_template_id": tmpl_map.get(c["template_key"]),
+              "synced": bool(tmpl_map.get(c["template_key"]))} for c in brevo_funnel.FUNNEL_STEPS]
+    return {"key": funnel["key"], "name": funnel["name"], "status": funnel["status"],
+            "brevo_configured": brevo_funnel.is_configured(),
+            "templates_synced": all(s["synced"] for s in steps),
+            "sender": brevo_funnel.SENDER, "demo_url": DEMO_URL, "trial_url": TRIAL_URL,
+            "stop_conditions": ["Prova gratuita avviata (trial_started)", "Diventa cliente",
+                                "Disiscrizione", "Hard bounce", "Spam complaint"],
+            "steps": steps, "stats": await _funnel_stats()}
+
+
+class FunnelStatusIn(BaseModel):
+    status: str
+
+
+@api.post("/platform/funnels/{key}/status")
+async def set_funnel_status(key: str, body: FunnelStatusIn, admin: dict = Depends(require_superadmin)):
+    if key != brevo_funnel.FUNNEL_KEY:
+        raise HTTPException(status_code=404, detail="Funnel non trovato")
+    if body.status not in {"draft", "active", "paused"}:
+        raise HTTPException(status_code=400, detail="Stato non valido")
+    await _get_demo_funnel()
+    if body.status == "active":
+        tmpl_map = await _template_map()
+        if not brevo_funnel.is_configured():
+            raise HTTPException(status_code=400, detail="Brevo non configurato: impossibile attivare.")
+        if not tmpl_map.get("demo_1"):
+            raise HTTPException(status_code=400, detail="Sincronizza prima i template su Brevo.")
+    await db.email_funnels.update_one({"key": key}, {"$set": {"status": body.status, "updated_at": now_iso()}})
+    await record_audit(admin, "funnel_status", detail=f"Funnel {key} impostato su {body.status}")
+    return {"ok": True, "status": body.status}
+
+
+@api.post("/platform/funnels/{key}/sync-templates")
+async def sync_funnel_templates(key: str, admin: dict = Depends(require_superadmin)):
+    if key != brevo_funnel.FUNNEL_KEY:
+        raise HTTPException(status_code=404, detail="Funnel non trovato")
+    if not brevo_funnel.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata.")
+    await brevo_funnel.ensure_attributes()
+    results = []
+    for cfg in brevo_funnel.FUNNEL_STEPS:
+        existing = await db.brevo_templates.find_one({"template_key": cfg["template_key"]}, {"_id": 0})
+        res = await brevo_funnel.create_or_update_template(cfg, existing_id=(existing or {}).get("brevo_id"))
+        if res.get("ok") and res.get("id"):
+            await db.brevo_templates.update_one({"template_key": cfg["template_key"]},
+                {"$set": {"template_key": cfg["template_key"], "brevo_id": res["id"], "name": cfg["name"],
+                          "subject": cfg["subject"], "updated_at": now_iso()}}, upsert=True)
+        results.append({"template_key": cfg["template_key"], "name": cfg["name"],
+                        "brevo_template_id": res.get("id"), "ok": res.get("ok"),
+                        "created": res.get("created"), "error": res.get("error")})
+    ok = all(r["ok"] for r in results)
+    return {"ok": ok, "results": results}
+
+
+class FunnelTestIn(BaseModel):
+    email: EmailStr
+
+
+@api.post("/platform/funnels/{key}/test")
+async def test_funnel(key: str, body: FunnelTestIn, admin: dict = Depends(require_superadmin)):
+    """Send all funnel emails immediately to a test address WITHOUT touching real leads or waiting."""
+    if key != brevo_funnel.FUNNEL_KEY:
+        raise HTTPException(status_code=404, detail="Funnel non trovato")
+    if not brevo_funnel.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata.")
+    tmpl_map = await _template_map()
+    if not tmpl_map.get("demo_1"):
+        raise HTTPException(status_code=400, detail="Sincronizza prima i template su Brevo.")
+    params = {"NOME": "Test", "DEMO_URL": DEMO_URL, "TRIAL_URL": TRIAL_URL,
+              "UNSUB_URL": f"{BACKEND_PUBLIC_URL}/api/brevo/unsubscribe?token=test"}
+    results = []
+    for cfg in brevo_funnel.FUNNEL_STEPS:
+        tid = tmpl_map.get(cfg["template_key"])
+        res = await brevo_funnel.send_template(template_id=tid, to_email=str(body.email),
+                                               to_name="Test", params=params)
+        results.append({"step": cfg["step"], "template_key": cfg["template_key"], "subject": cfg["subject"],
+                        "ok": res.get("ok"), "status": res.get("status"),
+                        "messageId": res.get("messageId"), "error": res.get("error"),
+                        "timestamp": now_iso()})
+    return {"ok": all(r["ok"] for r in results), "sent_to": str(body.email), "results": results}
+
+
+# ---------------- Brevo webhook & unsubscribe (public) ----------------
+@api.post("/brevo/webhook/{token}")
+async def brevo_webhook(token: str, request: Request):
+    if not BREVO_WEBHOOK_TOKEN or not secrets.compare_digest(token, BREVO_WEBHOOK_TOKEN):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid body")
+    events = payload if isinstance(payload, list) else [payload]
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        email = (e.get("email") or "").strip().lower()
+        norm = brevo_funnel.normalize_event(e.get("event", ""))
+        message_id = e.get("message-id") or e.get("messageId")
+        dedupe = hashlib.sha256(f"{email}|{norm}|{message_id}|{e.get('ts') or e.get('date') or ''}".encode()).hexdigest()
+        existing = await db.brevo_events.find_one({"dedupe": dedupe}, {"_id": 0, "dedupe": 1})
+        if existing:
+            continue
+        await db.brevo_events.insert_one({"id": new_id(), "dedupe": dedupe, "event": norm, "email": email,
+                                          "message_id": message_id, "created_at": now_iso()})
+        if not email:
+            continue
+        flag = None
+        if norm == "unsubscribed":
+            flag = {"marketing_opt_out": True}
+        elif norm == "hard_bounce":
+            flag = {"email_bounced": True}
+        elif norm == "spam":
+            flag = {"email_spam": True}
+        if flag:
+            await db.leads.update_many({"email": email}, {"$set": {**flag, "updated_at": now_iso()}})
+            enrs = await db.funnel_enrollments.find({"email": email, "status": "active"}, {"_id": 0}).to_list(100)
+            reason = "unsubscribed" if norm == "unsubscribed" else ("hard_bounce" if norm == "hard_bounce" else "spam")
+            for enr in enrs:
+                await _cancel_enrollment(enr, reason)
+    return {"received": len(events)}
+
+
+@app.get("/api/brevo/unsubscribe")
+async def brevo_unsubscribe(token: str):
+    page = ("<!doctype html><html lang='it'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>CRMEvent</title></head><body style='font-family:Arial,sans-serif;background:#f1f5f9;"
+            "margin:0;padding:48px 16px;text-align:center'>"
+            "<div style='max-width:460px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;"
+            "border-radius:16px;padding:32px'>"
+            "<div style='height:4px;width:60px;background:#81D8D0;margin:0 auto 20px;border-radius:2px'></div>"
+            "<h1 style='font-size:20px;color:#0f172a;margin:0 0 12px'>{title}</h1>"
+            "<p style='color:#475569;font-size:14px;line-height:1.6;margin:0'>{msg}</p></div></body></html>")
+    lead = await db.leads.find_one({"unsub_token": token}, {"_id": 0}) if token else None
+    if not lead:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(page.format(title="Link non valido",
+                            msg="Questo link di disiscrizione non è valido o è scaduto."), status_code=404)
+    await db.leads.update_one({"id": lead["id"]}, {"$set": {"marketing_opt_out": True, "updated_at": now_iso()}})
+    enrs = await db.funnel_enrollments.find({"email": lead["email"], "status": "active"}, {"_id": 0}).to_list(100)
+    for enr in enrs:
+        await _cancel_enrollment(enr, "unsubscribed")
+    try:
+        await brevo_funnel.blocklist_contact(lead["email"])
+    except Exception as ex:
+        logger.error(f"brevo blocklist failed: {ex}")
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(page.format(title="Disiscrizione completata",
+                        msg="Non riceverai più email marketing da CRMEvent. Puoi chiudere questa pagina."))
+
+
+# ---------------- cron ----------------
+@api.post("/cron/brevo-funnel-tick")
+async def cron_brevo_funnel_tick(request: Request, authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    expected = f"Bearer {WEBHOOK_CRON_SECRET}"
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(process_due_funnel_steps())
+    return {"accepted": True}
+
+
 # ------- invites -------
 def _invite_status(inv: dict) -> str:
     if inv.get("status") in ("accepted", "revoked"):
@@ -3162,7 +3541,10 @@ async def get_lead(lead_id: str, admin: dict = Depends(require_superadmin)):
             account = await _account_for_email(u.get("email"))
     if not account:
         account = await _account_for_email(lead.get("email"))
-    return {"lead": lead, "account": account, "linked": bool(lead.get("user_id"))}
+    enrollment = await db.funnel_enrollments.find_one(
+        {"funnel_key": brevo_funnel.FUNNEL_KEY, "lead_id": lead_id}, {"_id": 0})
+    return {"lead": lead, "account": account, "linked": bool(lead.get("user_id")),
+            "funnel": enrollment}
 
 
 @api.post("/leads/{lead_id}/link-account")
@@ -4199,6 +4581,15 @@ async def startup():
             await db[c].create_index("org_id")
         except Exception:
             pass
+    try:
+        await db.funnel_enrollments.create_index([("funnel_key", 1), ("lead_id", 1)])
+        await db.funnel_enrollments.create_index("status")
+        await db.brevo_events.create_index("dedupe", unique=True)
+        await db.brevo_events.create_index("event")
+        await db.leads.create_index("unsub_token")
+        await db.brevo_templates.create_index("template_key", unique=True)
+    except Exception:
+        pass
     try:
         storage_utils.init_storage()
         logger.info("Storage initialized")

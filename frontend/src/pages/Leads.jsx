@@ -3,11 +3,14 @@ import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
-import { X, UserCheck, Link2, Mail, Building2 } from "lucide-react";
+import { X, UserCheck, Link2, Mail, Building2, Workflow } from "lucide-react";
 
 const STATO = { nuovo: "blue", da_contattare: "orange", contattato: "tiffany", demo_fissata: "tiffany", interessato: "green", cliente: "green", non_interessato: "red" };
 const STATO_LABEL = { nuovo: "Nuovo", da_contattare: "Da contattare", contattato: "Contattato", demo_fissata: "Demo fissata", interessato: "Interessato", cliente: "Cliente", non_interessato: "Non interessato" };
 const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }];
+const FUNNEL_ST = { active: { label: "attivo", cls: "text-emerald-700 bg-emerald-50 border-emerald-200" }, stopped: { label: "interrotto", cls: "text-amber-700 bg-amber-50 border-amber-200" }, completed: { label: "completato", cls: "text-slate-600 bg-slate-50 border-slate-200" } };
+const STEP_ST = { scheduled: "Programmata", sent: "Inviata", failed: "Fallita", canceled: "Annullata", skipped: "Saltata" };
+const STOP_LABEL = { trial_started: "prova gratuita avviata", cliente: "diventato cliente", unsubscribed: "disiscritto", hard_bounce: "hard bounce", spam: "spam", lead_deleted: "lead eliminato" };
 const inputCls = "h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-tiffany focus:ring-2 focus:ring-tiffany/30";
 
 export default function Leads() {
@@ -81,6 +84,32 @@ export default function Leads() {
             ) : (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500" data-testid="lead-no-account">Nessun account CRMEvent con questa email. Puoi invitare questa persona in un'organizzazione.</div>
             )}
+
+            <div className="rounded-lg border border-slate-200 p-4 space-y-2" data-testid="lead-funnel">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm"><Workflow className="w-4 h-4" />Funnel Demo email</div>
+              {!sel.funnel ? (
+                <div className="text-xs text-slate-500">Nessun invio automatico per questo lead.</div>
+              ) : (
+                <>
+                  <div className="text-xs">
+                    <span className={`inline-block px-2 py-0.5 rounded-full border font-medium ${(FUNNEL_ST[sel.funnel.status] || FUNNEL_ST.completed).cls}`}>Funnel {(FUNNEL_ST[sel.funnel.status] || {}).label || sel.funnel.status}</span>
+                    {sel.funnel.stop_reason && <span className="text-slate-500 ml-2">— {STOP_LABEL[sel.funnel.stop_reason] || sel.funnel.stop_reason}</span>}
+                  </div>
+                  <div className="space-y-1">
+                    {sel.funnel.steps.map((s) => (
+                      <div key={s.step} className="flex items-center justify-between text-xs" data-testid={`lead-funnel-step-${s.step}`}>
+                        <span className="text-slate-600">Email {s.step}</span>
+                        <span className={s.status === "sent" ? "text-emerald-600" : s.status === "failed" ? "text-red-600" : "text-slate-500"}>
+                          {STEP_ST[s.status] || s.status}
+                          {s.status === "scheduled" && s.scheduled_at ? ` · ${s.scheduled_at.slice(0, 10)}` : ""}
+                          {s.status === "sent" && s.sent_at ? ` · ${s.sent_at.slice(0, 10)}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
 
             <div className="rounded-lg border border-slate-200 p-4 space-y-3">
               <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm"><Building2 className="w-4 h-4" />Assegna a organizzazione</div>
