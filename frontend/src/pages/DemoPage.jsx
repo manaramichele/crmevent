@@ -83,8 +83,8 @@ export default function DemoPage() {
         {/* Persistent conversion CTA */}
         <div className="mt-10 rounded-2xl bg-slate-900 text-white p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
           <div>
-            <div className="font-display text-xl sm:text-2xl font-bold">Pronto a provarlo sul tuo evento?</div>
-            <p className="text-slate-300 text-sm mt-1.5">14 giorni di prova gratuita, nessuna carta richiesta.</p>
+            <div className="font-display text-xl sm:text-2xl font-bold">Ora porta il tuo evento su CRMEvent</div>
+            <p className="text-slate-300 text-sm mt-1.5">Inizia la prova gratuita e scopri quanto è semplice gestire il tuo evento da un'unica piattaforma.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Link to="/login" className="h-11 px-5 rounded-lg border border-white/25 hover:bg-white/10 text-white text-sm font-semibold inline-flex items-center">Accedi</Link>
