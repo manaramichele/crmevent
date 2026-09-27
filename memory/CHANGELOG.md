@@ -174,3 +174,15 @@
 - [x] Backend superadmin-only: POST /api/integrations/brevo/send-test (invio singola transazionale via POST /v3/smtp/email; oggetto "CRMEvent · Test collegamento Brevo"; ritorna success/status/messageId/timestamp/messaggio errore chiaro). Nessun invio automatico.
 - [x] Frontend Platform.jsx: pulsante "Carica mittenti" + tabella mittenti; sezione "Invia email di test" (solo se esiste mittente verificato) con select mittente, campo destinatario, log esito (esito/HTTP/messageId/timestamp).
 - Vincoli rispettati: nessuna automazione/campagna/template/sequenza; secret invariati (BREVO_API_KEY persistente). Chiave presente solo in produzione → mittenti reali visibili solo in prod.
+
+### 2026-06 (Funnel Demo CRMEvent — automazione email Brevo — BOZZA, verificato in preview)
+- Architettura: CRMEvent è la fonte di verità dello stato lead/funnel; Brevo gestisce contatti, invio, statistiche. Nuovo modulo backend `brevo_funnel.py` + endpoint in `server.py`.
+- Ingresso funnel: alla richiesta demo (`demo_requested`) il contatto viene upsertato su Brevo (updateEnabled, no duplicati) con attributi NOME/COGNOME/ORGANIZZAZIONE/TIPOLOGIA_EVENTI/SOURCE/FUNNEL_STATUS. L'iscrizione al funnel avviene SOLO se il funnel è ATTIVO; altrimenti resta la vecchia email singola (nessuna doppia email).
+- 4 email (template Brevo brandizzati, mittente CRMEvent hello@crmevent.it): E1 immediata, E2 +1g, E3 +3g, E4 +6g. E2-E4 solo se il lead NON ha trial_started e NON è cliente.
+- Scheduling: platform cron `.emergent/crons.yml` (`*/15`) → `POST /api/cron/brevo-funnel-tick` (bearer WEBHOOK_CRON_SECRET), ri-controlla le condizioni di stop PRIMA di ogni invio.
+- Condizioni di stop: trial_started, cliente, disiscrizione, hard bounce, spam → interrompe subito le email residue.
+- Webhook `POST /api/brevo/webhook/{token}` (token segreto, idempotente): delivered/opened/clicked/hard_bounce/unsubscribe/spam → aggiorna lead + interrompe enrollment.
+- Disiscrizione: `GET /api/brevo/unsubscribe?token=` pubblico → marketing_opt_out + blocklist Brevo + stop enrollment; link nel footer + params UNSUB_URL.
+- SuperAdmin UI: Piattaforma → "Automazioni email · Funnel Demo" (badge Bozza/Attivo/In pausa, Sincronizza template, cambio stato con guardie, "Invia test funnel", dashboard 12 metriche, sequenza email, condizioni di stop). Lead detail → stato funnel per-lead con storico step.
+- Sicurezza: al primo deploy il funnel è BOZZA (non parte su lead reali). BREVO_API_KEY mai esposta. Nuovi secret backend: BREVO_WEBHOOK_TOKEN, WEBHOOK_CRON_SECRET.
+- Preview: BREVO_API_KEY vuota → sync/test/invii reali non eseguibili in preview (ritornano errore gestito). Logica funnel/guardie/webhook/unsub/cron/UI verificata via curl+screenshot.

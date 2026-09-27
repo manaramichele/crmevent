@@ -1,0 +1,29 @@
+{
+  "summary": "Iter17 — Brevo Demo Funnel end-to-end testing (backend + frontend). All 20 backend test cases behave correctly (19 pass, 1 legitimate skip because a DRAFT-funnel lead has no unsub_token yet — which is by design in preview). Frontend renders the Funnel panel with Bozza badge, 12-metric dashboard, 4 steps, correct status select value 'draft'. Leads drawer correctly shows 'Nessun invio automatico per questo lead.' for a newly created lead while funnel is DRAFT. Draft-protection guard, cron auth, webhook auth, and unsubscribe HTML all behave as specified. No BREVO_API_KEY leakage detected. Preview graceful 400s treated as PASS per instructions.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter17_brevo_funnel.py",
+    "/app/test_reports/pytest/iter17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now ~4620 lines — recommend splitting into routers (funnel, brevo, cron, leads) per DRY/maintainability guideline (>700 lines).",
+    "brevo_unsubscribe route is registered on the raw @app.get('/api/brevo/unsubscribe') instead of the @api router — works, but inconsistent with the rest of the codebase.",
+    "get_lead returns funnel enrollment inline; consider excluding _id explicitly with projection (currently uses {'_id': 0} — good). No leaks observed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter17_brevo_funnel.py"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "SuperAdmin manara.michele.pro@gmail.com / CrmEvent2026! (cookie-based)",
+  "seed_data_creation": "Two test leads (test_iter17_*, test_ui_*) created for lifecycle tests then cleaned up from db.leads/funnel_enrollments/brevo_events.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_iter17_brevo_funnel.py. Uses cookie-auth via requests.Session; reads WEBHOOK_CRON_SECRET/BREVO_WEBHOOK_TOKEN from backend/.env. Public POST /api/leads REQUIRES {\"privacy\": true} else returns 400. Funnel key is 'demo'. To activate funnel in real env, BREVO_API_KEY must be set and templates synced first (current guard returns 400 in preview by design). The unsub_token is only generated during enrollment (funnel active) — so unsubscribe-with-valid-token cannot be exercised in preview.",
+  "rca of the issue": "N/A — no bugs. All specified guards behave correctly: draft->active blocked in preview (400), sync/test return 400 without BREVO key, cron/webhook enforce bearer/token, unsubscribe returns HTML 404 for invalid token, DRAFT funnel skips enrollment on new leads and get_lead returns funnel:null."
+}

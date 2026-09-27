@@ -150,3 +150,9 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - [x] Footer condiviso (`components/Footer.jsx`) usato su landing + pagine legali; logo fondo nero, link Privacy Policy/Cookie Policy/Termini; riga legale "© 2026 CRMEvent – P. IVA 02671780340" (nome titolare NON mostrato).
 - [x] Nuova rotta `/privacy-policy` (Privacy Policy completa per SaaS CRM eventi); `/privacy` reindirizza a `/privacy-policy`.
 - [x] `Legal.jsx` riscritta: Privacy Policy (13 sezioni GDPR), Cookie Policy (tecnici + analitici + marketing, con banner/CMP), Termini. Titolare nel testo: MANARA MICHELE – P.IVA 02671780340. Dati non configurati (indirizzo, email privacy, data center, durate conservazione, fornitori analytics/marketing, CMP) marcati [DA COMPLETARE], nessuna info legale inventata.
+
+## Funnel Demo CRMEvent (Brevo email automation) — stato: BOZZA (2026-06)
+- Implementato e verificato in preview (testing iter 17: backend 100%, frontend 100%). Vedi CHANGELOG per dettaglio.
+- IN ATTESA: test reale delle 4 email (richiede BREVO_API_KEY, vuota in preview) + attivazione esplicita dell'utente.
+- Deploy: aggiungere in produzione i secret BREVO_WEBHOOK_TOKEN e WEBHOOK_CRON_SECRET; configurare webhook Brevo su /api/brevo/webhook/{BREVO_WEBHOOK_TOKEN}. Il funnel resta BOZZA dopo il deploy.
+- Nuovi file: backend/brevo_funnel.py, frontend/src/components/FunnelPanel.jsx. Cron: .emergent/crons.yml (brevo-funnel-tick */15).
