@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert } from "lucide-react";
+import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert, Mail } from "lucide-react";
 
 const STATUS_LABEL = { trial: "Trial", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pag. fallito", suspended: "Sospeso", interna: "Interna", test: "Test" };
 const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange", interna: "green", test: "orange" };
@@ -29,6 +29,7 @@ export default function Platform() {
   const [orgs, setOrgs] = useState([]);
   const [subs, setSubs] = useState([]);
   const [fic, setFic] = useState(null);
+  const [brevo, setBrevo] = useState(null); const [brevoBusy, setBrevoBusy] = useState(false);
   const [params, setParams] = useSearchParams();
   const [showCreate, setShowCreate] = useState(false);
   const [nf, setNf] = useState({ nome: "", type: "cliente", status: "active" });
@@ -59,6 +60,7 @@ export default function Platform() {
 
   const connectFic = async () => { try { const { data } = await api.get("/fic/oauth/start"); window.location.href = data.authorize_url; } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const disconnectFic = async () => { try { await api.post("/fic/disconnect"); toast.success("Fatture in Cloud scollegato"); loadFic(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  const checkBrevo = async () => { setBrevoBusy(true); try { const { data } = await api.get("/integrations/brevo/check"); setBrevo(data); toast[data.valid ? "success" : "warning"](data.message); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBrevoBusy(false); } };
 
   const createOrg = async () => {
     if (!nf.nome.trim()) { toast.error("Inserisci il nome"); return; }
@@ -117,6 +119,21 @@ export default function Platform() {
           {fic && fic.configured && (fic.connected
             ? <Button variant="outline" size="sm" onClick={disconnectFic} data-testid="fic-disconnect"><Unlink className="w-4 h-4 mr-1.5" />Scollega</Button>
             : <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={connectFic} data-testid="fic-connect"><Link2 className="w-4 h-4 mr-1.5" />Collega Fatture in Cloud</Button>)}
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8 flex items-center gap-4" data-testid="brevo-card">
+        <div className="w-10 h-10 rounded-lg bg-tiffany-light text-tiffany-fg flex items-center justify-center"><Mail className="w-5 h-5" /></div>
+        <div className="min-w-0">
+          <div className="font-semibold text-slate-800">Email marketing · Brevo</div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {!brevo ? "Verifica la connessione API a Brevo (nessuna email viene inviata)."
+              : brevo.valid ? <span className="text-emerald-600 font-medium">Connesso · chiave API valida (HTTP {brevo.status})</span>
+              : <span className="text-amber-600 font-medium">{brevo.message}{brevo.status ? ` (HTTP ${brevo.status})` : ""}</span>}
+          </div>
+        </div>
+        <div className="ml-auto">
+          <Button size="sm" variant="outline" onClick={checkBrevo} disabled={brevoBusy} data-testid="brevo-check-btn"><Link2 className="w-4 h-4 mr-1.5" />{brevoBusy ? "Verifica…" : "Verifica connessione Brevo"}</Button>
         </div>
       </div>
 
