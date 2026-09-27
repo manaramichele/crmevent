@@ -40,6 +40,8 @@ FUNNEL_STEPS = [
 
 SENDER = {"name": "CRMEvent", "email": "hello@crmevent.it"}
 CONTACT_ATTRIBUTES = ["NOME", "COGNOME", "ORGANIZZAZIONE", "TIPOLOGIA_EVENTI", "SOURCE", "FUNNEL_STATUS"]
+LIST_NAME = "CRMEvent · Lead"
+FOLDER_NAME = "CRMEvent"
 
 
 def _key() -> str:
@@ -88,15 +90,61 @@ async def ensure_attributes():
 
 
 async def upsert_contact(*, email, nome=None, cognome=None, organizzazione=None,
-                         tipologia_eventi=None, source=None, funnel_status=None):
-    """Create or update a Brevo contact by email (no duplicates)."""
+                         tipologia_eventi=None, source=None, funnel_status=None, list_ids=None):
+    """Create or update a Brevo contact by email (no duplicates). Optionally add to lists."""
     attrs = {k: v for k, v in {
         "NOME": nome, "COGNOME": cognome, "ORGANIZZAZIONE": organizzazione,
         "TIPOLOGIA_EVENTI": tipologia_eventi, "SOURCE": source, "FUNNEL_STATUS": funnel_status,
     }.items() if v}
     body = {"email": email, "updateEnabled": True, "attributes": attrs}
+    if list_ids:
+        body["listIds"] = [int(x) for x in list_ids]
     sc, data, err = await _request("POST", "/v3/contacts", json=body)
     return {"ok": sc in (200, 201, 204), "status": sc, "error": err}
+
+
+# ---------------- lists ----------------
+async def _ensure_folder():
+    sc, data, err = await _request("GET", "/v3/contacts/folders", params={"limit": 50, "offset": 0})
+    if sc == 200 and isinstance(data, dict):
+        folders = data.get("folders") or []
+        for f in folders:
+            if (f.get("name") or "") == FOLDER_NAME:
+                return f.get("id")
+        if folders:
+            return folders[0].get("id")
+    sc2, d2, e2 = await _request("POST", "/v3/contacts/folders", json={"name": FOLDER_NAME})
+    return (d2 or {}).get("id") if isinstance(d2, dict) else None
+
+
+async def _find_list_by_name(name):
+    offset = 0
+    while True:
+        sc, data, err = await _request("GET", "/v3/contacts/lists", params={"limit": 50, "offset": offset})
+        if sc != 200 or not isinstance(data, dict):
+            return None
+        lists = data.get("lists") or []
+        for lst in lists:
+            if (lst.get("name") or "") == name:
+                return lst.get("id")
+        count = data.get("count", 0)
+        offset += len(lists)
+        if not lists or offset >= count:
+            return None
+
+
+async def ensure_list():
+    """Find or create the 'CRMEvent · Lead' list. Returns {ok, id, name, created, error}."""
+    lid = await _find_list_by_name(LIST_NAME)
+    if lid:
+        return {"ok": True, "id": lid, "name": LIST_NAME, "created": False, "error": None}
+    folder_id = await _ensure_folder()
+    if not folder_id:
+        return {"ok": False, "id": None, "name": LIST_NAME, "created": False,
+                "error": "Impossibile creare/trovare la cartella su Brevo"}
+    sc, data, err = await _request("POST", "/v3/contacts/lists", json={"name": LIST_NAME, "folderId": folder_id})
+    nid = (data or {}).get("id") if isinstance(data, dict) else None
+    return {"ok": sc in (200, 201) and bool(nid), "id": nid, "name": LIST_NAME, "created": True, "error": err}
 
 
 async def blocklist_contact(email):
@@ -243,18 +291,22 @@ async def _find_template_id_by_name(name: str):
             return None
 
 
-async def create_or_update_template(step: dict, existing_id=None):
-    """Idempotently create/update a Brevo transactional template for a funnel step.
-    Returns {ok, id, status, error, created}."""
+async def create_or_update_template(step: dict, existing_id=None, force=False):
+    """Link an existing Brevo template (by name) or create it if missing.
+    IMPORTANT: existing templates are NOT overwritten unless force=True — this protects
+    manual graphic edits made directly in Brevo. Returns {ok, id, status, error, created, skipped}."""
     name = step["name"]
     subject = step["subject"]
-    html = build_html(step["template_key"])
     tid = existing_id or await _find_template_id_by_name(name)
+    if tid and not force:
+        # Non-destructive: just confirm/link the existing template, keep its Brevo HTML intact.
+        return {"ok": True, "id": tid, "status": 200, "error": None, "created": False, "skipped": True}
+    html = build_html(step["template_key"])
     payload = {"templateName": name, "subject": subject, "sender": SENDER,
                "htmlContent": html, "tag": BREVO_TAG, "isActive": True}
     if tid:
         sc, data, err = await _request("PUT", f"/v3/smtp/templates/{tid}", json=payload)
-        return {"ok": sc in (200, 204), "id": tid, "status": sc, "error": err, "created": False}
+        return {"ok": sc in (200, 204), "id": tid, "status": sc, "error": err, "created": False, "skipped": False}
     sc, data, err = await _request("POST", "/v3/smtp/templates", json=payload)
     new_id = (data or {}).get("id") if isinstance(data, dict) else None
     return {"ok": sc in (200, 201) and bool(new_id), "id": new_id, "status": sc, "error": err, "created": True}

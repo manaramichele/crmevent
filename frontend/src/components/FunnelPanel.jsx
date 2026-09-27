@@ -25,6 +25,7 @@ export const FunnelPanel = () => {
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [webhookBusy, setWebhookBusy] = useState(false);
+  const [listBusy, setListBusy] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [testBusy, setTestBusy] = useState(false);
   const [testResults, setTestResults] = useState(null);
@@ -43,7 +44,7 @@ export const FunnelPanel = () => {
 
   const syncTemplates = async () => {
     setSyncing(true);
-    try { const { data } = await api.post("/platform/funnels/demo/sync-templates"); toast[data.ok ? "success" : "warning"](data.ok ? "Template sincronizzati su Brevo" : "Sincronizzazione parziale: controlla i dettagli"); load(); }
+    try { const { data } = await api.post("/platform/funnels/demo/sync-templates"); toast[data.ok ? "success" : "warning"](data.ok ? "Template collegati (HTML in Brevo non modificato)" : "Collegamento parziale: controlla i dettagli"); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     finally { setSyncing(false); }
   };
@@ -53,6 +54,13 @@ export const FunnelPanel = () => {
     try { const { data } = await api.post("/platform/funnels/demo/register-webhook"); toast[data.ok ? "success" : "warning"](data.ok ? `Webhook Brevo configurato${data.webhook_id ? ` (#${data.webhook_id})` : ""}` : `Webhook non configurato${data.error ? `: ${data.error}` : ""}`); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     finally { setWebhookBusy(false); }
+  };
+
+  const ensureList = async () => {
+    setListBusy(true);
+    try { const { data } = await api.post("/platform/funnels/demo/ensure-list"); toast[data.ok ? "success" : "warning"](data.ok ? `Lista «${data.name}» ${data.created ? "creata" : "già presente"} (#${data.list_id})` : `Lista non configurata${data.error ? `: ${data.error}` : ""}`); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setListBusy(false); }
   };
 
   const sendTest = async () => {
@@ -76,7 +84,7 @@ export const FunnelPanel = () => {
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${badge.cls}`} data-testid="funnel-status-badge">{badge.label}</span>
           </div>
           <div className="text-xs text-slate-500 mt-0.5">
-            Mittente {f.sender?.name} — {f.sender?.email}. {f.brevo_configured ? "Brevo connesso" : <span className="text-amber-600">Brevo non configurato</span>}. {f.templates_synced ? "Template sincronizzati" : <span className="text-amber-600">Template da sincronizzare</span>}.
+            Mittente {f.sender?.name} — {f.sender?.email}. {f.brevo_configured ? "Brevo connesso" : <span className="text-amber-600">Brevo non configurato</span>}. {f.templates_synced ? "Template collegati" : <span className="text-amber-600">Template da sincronizzare</span>}. {f.lead_list?.configured ? <span className="text-emerald-600">Lista «{f.lead_list.name}» #{f.lead_list.id}</span> : <span className="text-amber-600">Lista lead non configurata</span>}
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -85,7 +93,8 @@ export const FunnelPanel = () => {
             <option value="paused">In pausa</option>
             <option value="active">Attivo</option>
           </select>
-          <Button size="sm" variant="outline" onClick={syncTemplates} disabled={syncing || !f.brevo_configured} data-testid="funnel-sync-btn"><RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />{syncing ? "Sincronizzo…" : "Sincronizza template"}</Button>
+          <Button size="sm" variant="outline" onClick={ensureList} disabled={listBusy || !f.brevo_configured} data-testid="funnel-list-btn"><Mail className="w-4 h-4 mr-1.5" />{listBusy ? "Verifico…" : "Verifica/crea lista Brevo"}</Button>
+          <Button size="sm" variant="outline" onClick={syncTemplates} disabled={syncing || !f.brevo_configured} data-testid="funnel-sync-btn"><RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />{syncing ? "Sincronizzo…" : "Collega template"}</Button>
           <Button size="sm" variant="outline" onClick={registerWebhook} disabled={webhookBusy || !f.brevo_configured} data-testid="funnel-webhook-btn"><Link2 className="w-4 h-4 mr-1.5" />{webhookBusy ? "Configuro…" : "Configura webhook Brevo"}</Button>
         </div>
       </div>

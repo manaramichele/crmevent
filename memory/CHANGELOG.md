@@ -186,3 +186,10 @@
 - SuperAdmin UI: Piattaforma → "Automazioni email · Funnel Demo" (badge Bozza/Attivo/In pausa, Sincronizza template, cambio stato con guardie, "Invia test funnel", dashboard 12 metriche, sequenza email, condizioni di stop). Lead detail → stato funnel per-lead con storico step.
 - Sicurezza: al primo deploy il funnel è BOZZA (non parte su lead reali). BREVO_API_KEY mai esposta. Nuovi secret backend: BREVO_WEBHOOK_TOKEN, WEBHOOK_CRON_SECRET.
 - Preview: BREVO_API_KEY vuota → sync/test/invii reali non eseguibili in preview (ritornano errore gestito). Logica funnel/guardie/webhook/unsub/cron/UI verificata via curl+screenshot.
+
+### 2026-06 (Brevo · Lista lead + sync contatti + protezione template HTML)
+- Lista Brevo "CRMEvent · Lead": nuovo `ensure_list()` (trova o crea la lista, cartella "CRMEvent"); id cachato in `db.settings`. Endpoint SuperAdmin `POST /api/platform/funnels/demo/ensure-list` + pulsante "Verifica/crea lista Brevo".
+- Nuovo lead (Richiedi demo): upsert contatto Brevo per email (no duplicati) + inserimento nella lista + attributi NOME/COGNOME/ORGANIZZAZIONE/TIPOLOGIA_EVENTI/SOURCE/FUNNEL_STATUS.
+- Cambio stato lead: `POST /leads/{id}/funnel` e continuità trial in register-organization aggiornano FUNNEL_STATUS su Brevo (CRMEvent resta fonte di verità).
+- PROTEZIONE TEMPLATE: `create_or_update_template` ora è NON distruttivo di default — collega i template esistenti per nome SENZA sovrascrivere l'HTML modificato manualmente in Brevo. Sovrascrittura solo con `?force=true` (non usato dalla UI). Pulsante rinominato "Collega template".
+- Nessuna importazione automatica di lead storici.
