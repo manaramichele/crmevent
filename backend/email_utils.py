@@ -13,7 +13,10 @@ EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "CRMEvent")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
-EMAIL_LOGO_URL = "https://customer-assets-jai6qajn.emergentagent.net/job_manage-events-12/artifacts/6flsyynu_ChatGPT%20Image%2023%20set%202026%2C%2014_52_43.png"
+# Official CRMEvent site logo (public asset served by the deployed frontend). Derived from
+# APP_URL so it is always a publicly reachable https URL (preview and production), never a local asset.
+_APP_URL = (os.environ.get("APP_URL") or os.environ.get("FRONTEND_URL") or "").rstrip("/")
+EMAIL_LOGO_URL = f"{_APP_URL}/logo-crmevent.png" if _APP_URL else "https://crmevent.it/logo-crmevent.png"
 
 # Dedicated provider (Resend, own verified domain crmevent.it). When RESEND_API_KEY
 # is set the app sends FROM "CRMEvent <noreply@crmevent.it>". Until then it falls
@@ -125,20 +128,38 @@ async def send_email(*, to: str, subject: str, html: str) -> str | None:
     return await _send_via_managed(to, subject, html)
 
 
-def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: str) -> str:
+def _shell(content_html: str) -> str:
+    """Shared base layout for CRMEvent internal/transactional emails: white header with the
+    centered official logo, dark text, Tiffany accents, client-compatible (Gmail/Outlook/Apple/mobile)."""
     return (
-        f'<table role="presentation" width="100%" style="background:#f8fafc;padding:24px"><tr><td>'
-        f'<table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;'
-        f'border-radius:12px;border:1px solid #e2e8f0;font-family:Arial,sans-serif"><tr><td style="padding:28px">'
-        f'<img src="{EMAIL_LOGO_URL}" alt="CRMEvent" width="160" style="display:block;height:auto;border:0;margin-bottom:8px" />'
-        f'<p style="color:#0f172a;font-size:15px">Ciao {escape(name)},</p>'
-        f'<p style="color:#475569;font-size:14px;line-height:1.6">{escape(intro)}</p>'
-        f'<p style="text-align:center;margin:28px 0"><a href="{escape(url)}" '
-        f'style="background:#81D8D0;color:#0f172a;font-weight:700;text-decoration:none;'
-        f'padding:12px 22px;border-radius:8px;display:inline-block">{escape(cta_label)}</a></p>'
-        f'<p style="color:#94a3b8;font-size:12px;line-height:1.6">Se il pulsante non funziona copia questo link:<br>'
-        f'<span style="color:#59C1B7">{escape(url)}</span></p>'
-        f'<p style="color:#94a3b8;font-size:12px;border-top:1px solid #edf2f7;padding-top:12px">'
-        f'{escape(footer_note)} Inviato da CRMEvent. Non chiediamo mai password o dati di pagamento via email.</p>'
-        f'</td></tr></table></td></tr></table>'
+        '<!--[if mso]><style>body,table,td,a{font-family:Arial,Helvetica,sans-serif !important}</style><![endif]-->'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="background:#f4f6f8;margin:0;padding:24px 12px">'
+        '<tr><td align="center">'
+        '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" '
+        'style="width:560px;max-width:100%;background:#ffffff;border:1px solid #e6eaef;border-radius:14px">'
+        '<tr><td align="center" style="background:#ffffff;padding:30px 32px 10px;border-radius:14px 14px 0 0">'
+        f'<img src="{EMAIL_LOGO_URL}" alt="CRMEvent" width="200" '
+        'style="display:block;width:200px;max-width:62%;height:auto;border:0;margin:0 auto;outline:none;text-decoration:none" /></td></tr>'
+        f'<tr><td style="padding:18px 32px 6px;font-family:Arial,Helvetica,sans-serif">{content_html}</td></tr>'
+        '<tr><td style="padding:16px 32px 26px;border-top:1px solid #eef1f5;font-family:Arial,Helvetica,sans-serif">'
+        '<p style="color:#9aa4b2;font-size:12px;line-height:1.6;margin:0">Inviato da CRMEvent · Non chiediamo mai password o dati di pagamento via email.</p>'
+        '</td></tr></table></td></tr></table>'
     )
+
+
+def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: str) -> str:
+    safe_url = escape(url)
+    content = (
+        f'<p style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 12px">Ciao {escape(name)},</p>'
+        f'<p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 22px">{escape(intro)}</p>'
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:8px auto 22px">'
+        '<tr><td align="center" bgcolor="#81D8D0" style="border-radius:8px">'
+        f'<a href="{safe_url}" style="display:inline-block;padding:13px 28px;font-family:Arial,Helvetica,sans-serif;'
+        f'font-size:15px;font-weight:700;color:#0f172a;text-decoration:none;border-radius:8px">{escape(cta_label)}</a>'
+        '</td></tr></table>'
+        '<p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0 0 4px">Se il pulsante non funziona, copia e incolla questo link nel browser:</p>'
+        f'<p style="margin:0 0 18px;word-break:break-all"><span style="color:#59C1B7;font-size:12px">{safe_url}</span></p>'
+        f'<p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0">{escape(footer_note)}</p>'
+    )
+    return _shell(content)

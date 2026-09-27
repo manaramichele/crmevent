@@ -193,3 +193,9 @@
 - Cambio stato lead: `POST /leads/{id}/funnel` e continuità trial in register-organization aggiornano FUNNEL_STATUS su Brevo (CRMEvent resta fonte di verità).
 - PROTEZIONE TEMPLATE: `create_or_update_template` ora è NON distruttivo di default — collega i template esistenti per nome SENZA sovrascrivere l'HTML modificato manualmente in Brevo. Sovrascrittura solo con `?force=true` (non usato dalla UI). Pulsante rinominato "Collega template".
 - Nessuna importazione automatica di lead storici.
+
+### 2026-06 (Email interne/transazionali — nuovo layout base condiviso)
+- Ridisegnato `email_utils.link_email` (base comune usata da TUTTE le email interne): header bianco con logo ufficiale CRMEvent centrato, testo scuro, pulsanti/link Tiffany (#81D8D0/#59C1B7), footer essenziale, pulsante "bulletproof" table-based per Outlook. Nuovo helper `_shell()`.
+- Logo: da icona/artifact → logo ufficiale del sito, servito via URL pubblico `{APP_URL}/logo-crmevent.png` (niente asset locali). Verificata raggiungibilità (200 image/png) e resa nei preview.
+- Coperte: invito utente, reset password, conferma/registrazione, notifica nuova richiesta demo (admin), email demo legacy. Contenuti, link, token, scadenze e logica di invio invariati.
+- NESSUNA modifica ai template Brevo / Funnel Demo / lista / contatti (come richiesto). Anteprime verificate in preview per invito, reset, conferma; safety check email superato.
