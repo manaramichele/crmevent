@@ -3,11 +3,9 @@ import { Link } from "react-router-dom";
 import { ArrowRight, ExternalLink, LogIn, PlayCircle } from "lucide-react";
 import { trackOnce } from "@/lib/analytics";
 
-// Official Demosmith embed URL. Get it from Demosmith → Share → Embed Settings
-// (format: https://public.demosmith.ai/<shortid>/embed.html). The app URL below CANNOT be
-// embedded (X-Frame-Options), so until a public embed URL is set we show a launcher instead.
-const DEMO_EMBED_URL = "https://app.demosmith.ai/demos/22c9bd1b-f525-497c-8eac-81d749f219b4";
-const EMBED_IS_PUBLIC = /public\.demosmith\.ai\/.+\/embed/i.test(DEMO_EMBED_URL);
+// Official Demosmith public embed URL (Share → Embed Settings). Inline embed, no autoplay.
+const DEMO_EMBED_URL = "https://public.demosmith.ai/f97202d5/embed.html";
+const EMBED_IS_PUBLIC = true;
 
 function leadId() {
   try { return (JSON.parse(localStorage.getItem("crmevent_lead")) || {}).id || null; } catch { return null; }
