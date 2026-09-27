@@ -199,3 +199,13 @@
 - Logo: da icona/artifact → logo ufficiale del sito, servito via URL pubblico `{APP_URL}/logo-crmevent.png` (niente asset locali). Verificata raggiungibilità (200 image/png) e resa nei preview.
 - Coperte: invito utente, reset password, conferma/registrazione, notifica nuova richiesta demo (admin), email demo legacy. Contenuti, link, token, scadenze e logica di invio invariati.
 - NESSUNA modifica ai template Brevo / Funnel Demo / lista / contatti (come richiesto). Anteprime verificate in preview per invito, reset, conferma; safety check email superato.
+
+### 2026-06 (Google Calendar OAuth — fix PKCE, invalid_grant "Missing code verifier.")
+- Diagnosi prod (via deployer, log reali): fallimento a stage=code_to_token, HTTP 400 invalid_grant "Missing code verifier." → google-auth-oauthlib 1.4.1 autogenera code_challenge all'authorize ma il code_verifier veniva scartato e non inviato al token endpoint.
+- Fix PKCE (solo codice, nessun cambio a Client ID/Secret/redirect URI/scope/Google Cloud):
+  - gcal_utils.authorization_url→(url, code_verifier); exchange_code(code, code_verifier) invia il verifier.
+  - _cal_state→(state, jti) con jti univoco nello state (protezione state mantenuta).
+  - /calendar/connect: genera e salva il verifier in Mongo `calendar_oauth_pkce` {jti,uid}, TTL 10 min (multi-pod safe, mai esposto/loggato).
+  - /oauth/calendar/callback: recupero monouso (find_one_and_delete), rifiuto se mancante/riusato/scaduto, poi invio al token exchange. Logging diagnostico sicuro mantenuto.
+  - Indice TTL su expires_at (expireAfterSeconds=0) + indice {jti,uid}.
+- Test preview (6/6 PASS): authorize genera challenge+verifier; callback recupera il verifier corretto; mancante/errato→rifiutato; riusato→non riutilizzabile; scaduto→non utilizzabile; nessun verifier/token/secret nei log. Test file: /app/backend/tests/test_gcal_pkce.py

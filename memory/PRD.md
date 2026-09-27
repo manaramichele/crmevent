@@ -156,3 +156,7 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - IN ATTESA: test reale delle 4 email (richiede BREVO_API_KEY, vuota in preview) + attivazione esplicita dell'utente.
 - Deploy: aggiungere in produzione i secret BREVO_WEBHOOK_TOKEN e WEBHOOK_CRON_SECRET; configurare webhook Brevo su /api/brevo/webhook/{BREVO_WEBHOOK_TOKEN}. Il funnel resta BOZZA dopo il deploy.
 - Nuovi file: backend/brevo_funnel.py, frontend/src/components/FunnelPanel.jsx. Cron: .emergent/crons.yml (brevo-funnel-tick */15).
+
+## Google Calendar OAuth — PKCE fix (2026-06)
+- RCA prod: invalid_grant "Missing code verifier." → verifier non inviato (google-auth-oauthlib autogenera challenge). Risolto con PKCE server-side (verifier in Mongo calendar_oauth_pkce, monouso, TTL 10min). Solo codice; nessun cambio Google Cloud/secret.
+- In attesa: verifica utente in produzione con "Collega Google Calendar" dopo il redeploy.

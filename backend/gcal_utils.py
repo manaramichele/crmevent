@@ -23,17 +23,21 @@ def _client_config():
                     "token_uri": "https://oauth2.googleapis.com/token"}}
 
 
-def authorization_url(state: str) -> str:
+def authorization_url(state: str):
+    """Return (authorization_url, code_verifier). PKCE code_verifier is generated here and
+    must be stored server-side by the caller and passed back to exchange_code()."""
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=REDIRECT_URI)
     url, _ = flow.authorization_url(access_type="offline", prompt="consent", state=state,
                                     include_granted_scopes="true")
-    return url
+    return url, flow.code_verifier
 
 
-def exchange_code(code: str) -> dict:
-    resp = requests.post("https://oauth2.googleapis.com/token", data={
-        "code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
-        "redirect_uri": REDIRECT_URI, "grant_type": "authorization_code"}, timeout=30)
+def exchange_code(code: str, code_verifier: str | None = None) -> dict:
+    data = {"code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+            "redirect_uri": REDIRECT_URI, "grant_type": "authorization_code"}
+    if code_verifier:
+        data["code_verifier"] = code_verifier
+    resp = requests.post("https://oauth2.googleapis.com/token", data=data, timeout=30)
     try:
         data = resp.json()
     except ValueError:

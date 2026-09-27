@@ -2139,8 +2139,13 @@ async def seed_support():
 
 
 # ---------------- Google Calendar ----------------
-def _cal_state(user_id: str) -> str:
-    return jwt.encode({"uid": user_id, "exp": datetime.now(timezone.utc) + timedelta(minutes=15)}, JWT_SECRET, algorithm=JWT_ALG)
+def _cal_state(user_id: str):
+    """Return (state_jwt, jti). The jti ties the PKCE verifier to this specific OAuth request."""
+    jti = secrets.token_urlsafe(24)
+    state = jwt.encode({"uid": user_id, "jti": jti,
+                        "exp": datetime.now(timezone.utc) + timedelta(minutes=15)},
+                       JWT_SECRET, algorithm=JWT_ALG)
+    return state, jti
 
 
 @api.get("/calendar/status")
@@ -2158,8 +2163,14 @@ async def calendar_status(user: dict = Depends(get_current_user)):
 async def calendar_connect(user: dict = Depends(get_current_user)):
     if not gcal_utils.is_configured():
         raise HTTPException(status_code=400, detail="Google Calendar non è configurato. Aggiungi GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET nei Secrets.")
+    state, jti = _cal_state(user["user_id"])
+    auth_url, code_verifier = gcal_utils.authorization_url(state)
+    # Store the PKCE verifier server-side (Mongo → multi-pod safe), single-use, short TTL.
+    await db.calendar_oauth_pkce.update_one({"jti": jti}, {"$set": {
+        "jti": jti, "uid": user["user_id"], "code_verifier": code_verifier,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10), "created_at": now_iso()}}, upsert=True)
     logger.info("gcal connect: redirect_uri=%s scopes=%s", gcal_utils.REDIRECT_URI, gcal_utils.SCOPES)
-    return {"authorization_url": gcal_utils.authorization_url(_cal_state(user["user_id"]))}
+    return {"authorization_url": auth_url}
 
 
 @api.get("/oauth/calendar/callback")
@@ -2172,11 +2183,24 @@ async def calendar_callback(code: str = "", state: str = "", error: str = "", er
     try:
         payload = jwt.decode(state, JWT_SECRET, algorithms=[JWT_ALG])
         uid = payload["uid"]
+        jti = payload.get("jti")
     except jwt.PyJWTError as e:
         logger.warning("gcal callback: invalid state jwt stage=state_decode (%s)", type(e).__name__)
         return RedirectResponse(f"{APP_URL}/app?calendar=error")
+    # Retrieve the single-use PKCE verifier (delete on read); must match this uid + jti.
+    pkce = await db.calendar_oauth_pkce.find_one_and_delete({"jti": jti, "uid": uid}) if jti else None
+    if not pkce:
+        logger.warning("gcal callback: pkce verifier missing or already used stage=pkce_lookup")
+        return RedirectResponse(f"{APP_URL}/app?calendar=error")
+    exp = pkce.get("expires_at")
+    if isinstance(exp, datetime):
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            logger.warning("gcal callback: pkce verifier expired stage=pkce_expired")
+            return RedirectResponse(f"{APP_URL}/app?calendar=error")
     try:
-        tokens = gcal_utils.exchange_code(code)
+        tokens = gcal_utils.exchange_code(code, pkce.get("code_verifier"))
     except Exception as e:
         logger.error("gcal callback: exchange_code exception stage=code_to_token %s: %s",
                      type(e).__name__, str(e)[:200])
@@ -4683,6 +4707,8 @@ async def startup():
         await db.brevo_events.create_index("event")
         await db.leads.create_index("unsub_token")
         await db.brevo_templates.create_index("template_key", unique=True)
+        await db.calendar_oauth_pkce.create_index("expires_at", expireAfterSeconds=0)
+        await db.calendar_oauth_pkce.create_index([("jti", 1), ("uid", 1)])
     except Exception:
         pass
     try:
