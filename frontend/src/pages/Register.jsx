@@ -18,6 +18,9 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   useEffect(() => { trackEvent("sign_up_start"); }, []);
+  useEffect(() => {
+    try { const l = JSON.parse(localStorage.getItem("crmevent_lead")); if (l) setForm((f) => ({ ...f, email: l.email || f.email, nome: l.nome || f.nome, cognome: l.cognome || f.cognome })); } catch {}
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -28,6 +31,8 @@ export default function Register() {
       const { data } = await api.post("/auth/register-organization", { ...form, accept_terms: accept });
       setUser(data);
       trackEvent("sign_up", { method: "email" });
+      trackEvent("trial_started", { method: "email" });
+      try { localStorage.removeItem("crmevent_lead"); } catch {}
       toast.success("Benvenuto in CRMEvent! Prova gratuita di 14 giorni attivata.");
       nav("/app");
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }

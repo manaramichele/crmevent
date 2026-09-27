@@ -19,6 +19,16 @@ export function trackEvent(name, params = {}) {
   g("event", name, params);
 }
 
+// Fire an event at most once per dedupKey (survives refresh/revisit). No PII in keys.
+export function trackOnce(dedupKey, name, params = {}) {
+  const K = "crmevent_ga4_once";
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(K)) || []; } catch { seen = []; }
+  if (seen.includes(dedupKey)) return;
+  trackEvent(name, params);
+  try { localStorage.setItem(K, JSON.stringify([...seen, dedupKey].slice(-100))); } catch {}
+}
+
 // ---------- Stripe subscription funnel (GA4 recommended e-commerce events) ----------
 // Plan catalog used to build the `items` array. No personal data ever leaves here.
 const PLAN_ITEMS = {

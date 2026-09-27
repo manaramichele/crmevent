@@ -408,6 +408,12 @@ async def register_organization(body: OrgRegisterIn, response: Response):
                                "auth_provider": "password", "org_id": org["id"], "telefono": body.telefono,
                                "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso()})
     await _ensure_membership(uid, org["id"], "admin_org", uid)
+    # Lead continuity: if this email already requested a demo, link that lead to the new account
+    # (no duplicate contact) and advance the funnel — preserving the lead → demo → trial history.
+    lead = await db.leads.find_one({"email": email})
+    if lead:
+        await db.leads.update_one({"id": lead["id"]}, {"$set": {"user_id": uid,
+            "funnel_status": "trial_started", "funnel_ts_trial_started": now_iso(), "updated_at": now_iso()}})
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
@@ -2348,6 +2354,7 @@ class Lead(BaseModel):
     eventi_anno: Optional[str] = None
     messaggio: Optional[str] = None
     privacy: Optional[bool] = False
+    source: Optional[str] = None
 
 
 class LeadUpdate(BaseModel):
@@ -2355,20 +2362,53 @@ class LeadUpdate(BaseModel):
     note: Optional[str] = None
 
 
+# Marketing funnel stages (ready for future email automations). Kept separate from the manual
+# CRM `stato`. No PII is ever needed to move these stages.
+ALLOWED_FUNNEL = {"nuovo", "demo_requested", "demo_started", "demo_completed", "trial_started", "cliente", "perso"}
+
+
+class FunnelIn(BaseModel):
+    status: str
+
+
 @api.post("/leads")
 async def create_lead(body: Lead):
     if not body.privacy:
         raise HTTPException(status_code=400, detail="È necessario accettare la privacy policy")
-    doc = await _create("leads", {**body.model_dump(), "stato": "nuovo", "note": ""})
+    now = now_iso()
+    doc = await _create("leads", {**body.model_dump(), "stato": "nuovo", "note": "",
+                                  "funnel_status": "demo_requested", "requested_at": now,
+                                  "funnel_ts_demo_requested": now})
     try:
         await email_utils.send_email(to=os.environ["ADMIN_EMAIL"], subject="Nuova richiesta demo CRMEvent",
                                      html=email_utils.link_email(name="Michele",
-                                                                 intro=f"Nuova richiesta demo da {body.nome} {body.cognome or ''} ({body.organizzazione or '-'}) — email {body.email}, tel {body.telefono or '-'}. Tipologia: {body.tipologia_eventi or '-'}, eventi/anno: {body.eventi_anno or '-'}.",
+                                                                 intro=f"Nuova richiesta demo da {body.nome} {body.cognome or ''} ({body.organizzazione or '-'}) — email {body.email}, tel {body.telefono or '-'}. Tipologia: {body.tipologia_eventi or '-'}, eventi/anno: {body.eventi_anno or '-'}. Provenienza: {body.source or '-'}.",
                                                                  cta_label="Apri CRMEvent", url=f"{APP_URL}/lead",
                                                                  footer_note="Gestisci il lead nella sezione Lead."))
     except Exception as e:
         logger.error(f"lead notify failed: {e}")
+    # Confirmation email TO the lead with the demo link (uses existing mailing system only).
+    try:
+        await email_utils.send_email(to=body.email, subject="La tua demo di CRMEvent",
+                                     html=email_utils.link_email(name=body.nome,
+                                                                 intro="Grazie per il tuo interesse in CRMEvent! Puoi guardare la demo interattiva quando vuoi cliccando qui sotto. Quando sei pronto, attiva la prova gratuita di 14 giorni.",
+                                                                 cta_label="Guarda la demo", url=f"{APP_URL}/demo",
+                                                                 footer_note="Hai ricevuto questa email perché hai richiesto una demo su crmevent.it."))
+    except Exception as e:
+        logger.error(f"lead demo email failed: {e}")
     return {"ok": True, "id": doc["id"]}
+
+
+@api.post("/leads/{lead_id}/funnel")
+async def lead_funnel(lead_id: str, body: FunnelIn):
+    """Advance a lead through the marketing funnel. Public (moved by a random lead id, no PII)."""
+    if body.status not in ALLOWED_FUNNEL:
+        raise HTTPException(status_code=400, detail="Stato funnel non valido")
+    r = await db.leads.update_one({"id": lead_id}, {"$set": {"funnel_status": body.status,
+        f"funnel_ts_{body.status}": now_iso(), "updated_at": now_iso()}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lead non trovato")
+    return {"ok": True}
 
 
 @api.get("/leads")

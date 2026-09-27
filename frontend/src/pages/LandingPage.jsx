@@ -123,7 +123,13 @@ function DemoForm() {
     e.preventDefault();
     if (!f.privacy) return toast.error("Accetta la privacy policy per continuare");
     setBusy(true);
-    try { await api.post("/leads", f); setSent(true); toast.success("Richiesta inviata! Ti contatteremo a breve."); trackEvent("demo_request_submit"); trackEvent("contact_submit"); }
+    try {
+      const { data } = await api.post("/leads", { ...f, source: "richiedi_demo_form" });
+      try { localStorage.setItem("crmevent_lead", JSON.stringify({ id: data.id, email: f.email, nome: f.nome, cognome: f.cognome, ts: Date.now() })); } catch {}
+      trackEvent("generate_lead");
+      toast.success("Richiesta inviata! Apriamo la demo interattiva…");
+      window.location.assign("/demo");
+    }
     catch (err) { toast.error(formatApiError(err.response?.data?.detail)); } finally { setBusy(false); }
   };
   const inp = "w-full h-11 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";

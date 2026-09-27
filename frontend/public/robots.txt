@@ -2,4 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /app
 Disallow: /login
+Disallow: /demo
+Disallow: /registrati
 Sitemap: https://crmevent.it/sitemap.xml

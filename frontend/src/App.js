@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import VolunteerLayout from "@/components/VolunteerLayout";
 import LandingPage from "@/pages/LandingPage";
+import DemoPage from "@/pages/DemoPage";
 import Pricing from "@/pages/Pricing";
 import Register from "@/pages/Register";
 import CompleteOrg from "@/pages/CompleteOrg";
@@ -85,6 +86,7 @@ function Shell() {
       <RouteTracker />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/demo" element={<DemoPage />} />
         <Route path="/prezzi" element={<Pricing />} />
         <Route path="/registrati" element={<Register />} />
         <Route path="/completa-organizzazione" element={<CompleteOrg />} />
