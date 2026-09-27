@@ -168,3 +168,9 @@
 - Nuovo endpoint backend GET /api/integrations/brevo/check (solo Super Admin): valida la chiave via GET https://api.brevo.com/v3/account (header api-key). Ritorna solo {configured, valid, status, message}; nessun invio email/campagna; con chiave vuota short-circuita prima di contattare Brevo. Sistema email esistente (Resend/managed) invariato.
 - Testato iteration_16.json (backend 100%): 401 senza auth, configured:false con chiave vuota, nessuna fuga di chiave/payload, /v3/smtp/email mai chiamato, login regressione ok.
 - IN ATTESA che l'utente inserisca BREVO_API_KEY nei Secrets di produzione; nessuna automazione/sequenza email creata (come richiesto).
+
+### 2026-06 (Brevo · Mittenti + Email di test — verificato in preview: auth + code path)
+- [x] Backend superadmin-only: GET /api/integrations/brevo/senders (elenca mittenti Brevo via GET /v3/senders → nome, email, dominio, active/verificato; chiave mai esposta).
+- [x] Backend superadmin-only: POST /api/integrations/brevo/send-test (invio singola transazionale via POST /v3/smtp/email; oggetto "CRMEvent · Test collegamento Brevo"; ritorna success/status/messageId/timestamp/messaggio errore chiaro). Nessun invio automatico.
+- [x] Frontend Platform.jsx: pulsante "Carica mittenti" + tabella mittenti; sezione "Invia email di test" (solo se esiste mittente verificato) con select mittente, campo destinatario, log esito (esito/HTTP/messageId/timestamp).
+- Vincoli rispettati: nessuna automazione/campagna/template/sequenza; secret invariati (BREVO_API_KEY persistente). Chiave presente solo in produzione → mittenti reali visibili solo in prod.
