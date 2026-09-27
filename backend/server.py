@@ -4288,16 +4288,55 @@ async def _sync_subscription(sub: dict, org_id: Optional[str] = None):
         "updated_at": now_iso()}})
 
 
+def _stripe_vat_cents(inv: dict) -> Optional[int]:
+    """Robustly extract the VAT amount (in cents) from a Stripe Invoice object.
+    The legacy top-level `tax` field is deprecated/removed in recent API versions;
+    modern invoices expose per-rate amounts under `total_taxes`/`total_tax_amounts`."""
+    tax = inv.get("tax")
+    if tax is not None:
+        return int(tax)
+    arr = inv.get("total_taxes") or inv.get("total_tax_amounts") or []
+    try:
+        total = 0
+        found = False
+        for t in arr:
+            amt = t.get("amount") if isinstance(t, dict) else None
+            if amt is not None:
+                total += int(amt)
+                found = True
+        return total if found else None
+    except Exception:
+        return None
+
+
 async def _record_invoice(inv: dict, payment_status: str):
     o = await db.organizations.find_one({"subscription.stripe_customer_id": inv.get("customer")}, {"_id": 0})
     if not o:
         return
     created = inv.get("created")
+    subtotal = round((inv.get("subtotal") or 0) / 100.0, 2)
+    totale = round((inv.get("total") or 0) / 100.0, 2)
+    vat_cents = _stripe_vat_cents(inv)
+    # Prefer Stripe's own tax amount; fall back to (total - subtotal) so imponibile+IVA==totale.
+    iva = round(vat_cents / 100.0, 2) if vat_cents is not None else round(totale - subtotal, 2)
+    if iva < 0:
+        iva = 0.0
+    aliquota_iva = round(iva / subtotal * 100.0) if subtotal > 0 else 0.0
+    billing = o.get("billing") or {}
+    dati_fiscali_cliente = {
+        "ragione_sociale": billing.get("ragione_sociale") or (f"{billing.get('nome','')} {billing.get('cognome','')}".strip() or o.get("nome")),
+        "partita_iva": billing.get("partita_iva"), "codice_fiscale": billing.get("codice_fiscale"),
+        "codice_sdi": billing.get("codice_sdi"), "pec": billing.get("pec"),
+        "paese": (billing.get("paese") or "IT").upper(),
+    }
+    riferimento_stripe = {"stripe_invoice_id": inv.get("id"), "payment_intent": inv.get("payment_intent"),
+                          "numero_stripe": inv.get("number"), "customer": inv.get("customer")}
     doc = {"org_id": o["id"], "stripe_invoice_id": inv.get("id"), "stripe_payment_intent": inv.get("payment_intent"),
            "numero_stripe": inv.get("number"),
            "data": datetime.fromtimestamp(created, timezone.utc).isoformat() if created else now_iso(),
-           "imponibile": (inv.get("subtotal") or 0) / 100.0, "iva": (inv.get("tax") or 0) / 100.0,
-           "totale": (inv.get("total") or 0) / 100.0, "valuta": inv.get("currency"),
+           "imponibile": subtotal, "aliquota_iva": float(aliquota_iva), "importo_iva": iva, "iva": iva,
+           "totale": totale, "valuta": (inv.get("currency") or "eur"),
+           "dati_fiscali_cliente": dati_fiscali_cliente, "riferimento_stripe": riferimento_stripe,
            "hosted_invoice_url": inv.get("hosted_invoice_url"), "stripe_pdf": inv.get("invoice_pdf"),
            "payment_status": payment_status, "updated_at": now_iso()}
     existing = await db.invoices.find_one({"stripe_invoice_id": inv.get("id")})
@@ -4512,10 +4551,13 @@ async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
     if not cid:
         raise HTTPException(status_code=400, detail="company_id FIC mancante")
     vat_id = await _fic_vat_id(cid, token)
-    net = inv.get("imponibile") or inv.get("totale") or 0
+    a = _derive_amounts(inv)
+    net = a["imponibile"] if a["imponibile"] is not None else 0
     line = {"name": f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1, "net_price": net}
     if vat_id is not None:
         line["vat"] = {"id": vat_id}
+    else:
+        line["vat"] = {"value": a["aliquota_iva"]}
     body = {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
                      "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"}}}
     async with httpx.AsyncClient(timeout=30) as c:
@@ -4555,47 +4597,88 @@ async def fic_issue(invoice_id: str, admin: dict = Depends(require_superadmin)):
     return await _fic_issue_document(inv, dry_run=True)
 
 
+def _derive_amounts(inv: dict) -> dict:
+    """Robustly derive & reconcile fiscal amounts from a CRMEvent invoice record.
+    Guarantees imponibile + importo_iva == totale (rounded to cents) and a coherent VAT rate.
+    Never trusts a bare stored VAT of 0 when net/total imply otherwise."""
+    def f2(x):
+        return round(float(x), 2) if x is not None else None
+
+    imponibile = f2(inv.get("imponibile"))
+    totale = f2(inv.get("totale"))
+    iva = f2(inv.get("importo_iva"))
+    if iva is None:
+        iva = f2(inv.get("iva"))
+    aliquota = inv.get("aliquota_iva")
+
+    # Reconcile using whichever pair is present, preferring explicit net + total.
+    if imponibile is not None and totale is not None:
+        expected = round(totale - imponibile, 2)
+        if iva is None or abs((imponibile + iva) - totale) > 0.01:
+            iva = expected
+    elif imponibile is not None and iva is not None:
+        totale = round(imponibile + iva, 2)
+    elif totale is not None and iva is not None:
+        imponibile = round(totale - iva, 2)
+    elif imponibile is not None:
+        rate = float(aliquota) if aliquota else 22.0
+        iva = round(imponibile * rate / 100.0, 2)
+        totale = round(imponibile + iva, 2)
+
+    if imponibile is not None and imponibile > 0 and iva is not None:
+        aliquota = round(iva / imponibile * 100.0)
+    elif aliquota is None:
+        aliquota = 22.0
+
+    coerente = (imponibile is not None and iva is not None and totale is not None
+                and abs((imponibile + iva) - totale) <= 0.01)
+    return {"imponibile": imponibile, "aliquota_iva": float(aliquota), "importo_iva": iva,
+            "totale": totale, "valuta": (inv.get("valuta") or "eur"), "coerente": coerente}
+
+
 # ---- FIC SIMULATION (TEST): builds the payload internally, makes NO FIC call, NO SDI. ----
-def _fic_build_payload(org: dict, inv: dict, vat_percent: float = 22.0) -> dict:
+def _fic_build_payload(org: dict, amounts: dict) -> dict:
     """Build the exact FIC issued_document payload that WOULD be sent — without sending it.
-    Contains only the org's own billing data; no secrets/tokens."""
-    net = inv.get("imponibile") or inv.get("totale") or 0
+    Uses the reconciled net price and REAL VAT rate; contains only the org's own billing data."""
+    net = amounts["imponibile"] if amounts["imponibile"] is not None else 0
     line = {"name": f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1,
-            "net_price": net, "vat": {"value": vat_percent}}
+            "net_price": net, "vat": {"value": amounts["aliquota_iva"]}}
     return {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
-                     "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"}}}
+                     "items_list": [line], "currency": {"id": (amounts.get("valuta") or "eur").upper()},
+                     "language": {"code": "it"}}}
 
 
 async def _fic_simulate(inv: dict) -> dict:
     org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
     if not org:
         raise HTTPException(status_code=404, detail="Organizzazione non trovata")
-    payload = _fic_build_payload(org, inv)
-    imponibile = inv.get("imponibile")
-    if imponibile is None:
-        imponibile = inv.get("totale") or 0
-    iva = inv.get("iva")
-    if iva is None:
-        iva = round(imponibile * 0.22, 2)
-    totale = inv.get("totale") or round(imponibile + iva, 2)
+    a = _derive_amounts(inv)
+    payload = _fic_build_payload(org, a)
     numero = f"SIM/{datetime.now(timezone.utc).year}/{str(inv.get('id', ''))[:6].upper()}"
     data_doc = datetime.now(timezone.utc).date().isoformat()
+    # Persist the reconciled fiscal fields so the stored test invoice is repaired in place.
     upd = {"fic_document_id": None, "fic_numero": numero, "fic_data": data_doc,
            "fic_stato_documento": "simulato_test", "fic_stato_sdi": "simulato_test",
            "fic_simulated": True, "fic_payload_preview": payload,
-           "imponibile": imponibile, "iva": iva, "totale": totale, "updated_at": now_iso()}
+           "imponibile": a["imponibile"], "aliquota_iva": a["aliquota_iva"],
+           "importo_iva": a["importo_iva"], "iva": a["importo_iva"],
+           "totale": a["totale"], "valuta": a["valuta"], "updated_at": now_iso()}
     await db.invoices.update_one({"id": inv["id"]}, {"$set": upd})
-    logger.info("FIC SIMULATION (TEST — no FIC call, no SDI) inv=%s numero=%s entity=%s totale=%s",
-                inv.get("id"), numero, payload["data"]["entity"].get("name"), totale)
+    logger.info("FIC SIMULATION (TEST — no FIC call, no SDI) inv=%s numero=%s entity=%s imponibile=%s iva=%s(%s%%) totale=%s coerente=%s",
+                inv.get("id"), numero, payload["data"]["entity"].get("name"),
+                a["imponibile"], a["importo_iva"], a["aliquota_iva"], a["totale"], a["coerente"])
     return {"simulated": True, "mode": "SIMULAZIONE_TEST",
             "cliente": payload["data"]["entity"],
             "intestazione": payload["data"]["entity"].get("name"),
             "numero_simulato": numero, "data_simulata": data_doc,
-            "imponibile": imponibile, "iva": iva, "totale": totale,
+            "imponibile": a["imponibile"], "aliquota_iva": a["aliquota_iva"],
+            "importo_iva": a["importo_iva"], "iva": a["importo_iva"],
+            "totale": a["totale"], "valuta": a["valuta"], "coerente": a["coerente"],
             "piano": inv.get("piano") or (org.get("subscription") or {}).get("plan"),
-            "riferimento_stripe": {"stripe_invoice_id": inv.get("stripe_invoice_id"),
-                                   "numero_stripe": inv.get("numero_stripe"),
-                                   "payment_intent": inv.get("stripe_payment_intent")},
+            "riferimento_stripe": inv.get("riferimento_stripe") or {
+                "stripe_invoice_id": inv.get("stripe_invoice_id"),
+                "numero_stripe": inv.get("numero_stripe"),
+                "payment_intent": inv.get("stripe_payment_intent")},
             "stato_fattura": inv.get("payment_status"),
             "fic_payload_preview": payload,
             "note": "SIMULAZIONE INTERNA: nessun documento reale creato su Fatture in Cloud, nessuna numerazione fiscale, nessun invio SDI."}

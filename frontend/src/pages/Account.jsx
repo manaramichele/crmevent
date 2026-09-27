@@ -199,10 +199,12 @@ export default function Account() {
               <div><span className="text-slate-500">Numero simulato:</span> {sim.numero_simulato}</div>
               <div><span className="text-slate-500">Data simulata:</span> {sim.data_simulata}</div>
               <div><span className="text-slate-500">Piano:</span> {sim.piano || "—"}</div>
-              <div><span className="text-slate-500">Imponibile:</span> {Number(sim.imponibile ?? 0).toFixed(2)} €</div>
-              <div><span className="text-slate-500">IVA:</span> {Number(sim.iva ?? 0).toFixed(2)} €</div>
-              <div><span className="text-slate-500">Totale:</span> {Number(sim.totale ?? 0).toFixed(2)} €</div>
+              <div><span className="text-slate-500">Imponibile:</span> {Number(sim.imponibile ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
+              <div><span className="text-slate-500">Aliquota IVA:</span> {Number(sim.aliquota_iva ?? 0).toFixed(0)}%</div>
+              <div><span className="text-slate-500">Importo IVA:</span> {Number(sim.importo_iva ?? sim.iva ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
+              <div><span className="text-slate-500">Totale:</span> {Number(sim.totale ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
               <div><span className="text-slate-500">Stato:</span> {sim.stato_fattura || "—"}</div>
+              <div><span className="text-slate-500">Coerenza (imponibile + IVA = totale):</span> {sim.coerente ? <span className="text-green-700 font-medium" data-testid="sim-coherent">OK ✓</span> : <span className="text-red-700 font-medium" data-testid="sim-incoherent">INCOERENTE</span>}</div>
               <div className="sm:col-span-2"><span className="text-slate-500">Rif. Stripe:</span> {sim.riferimento_stripe?.numero_stripe || sim.riferimento_stripe?.stripe_invoice_id || "—"}</div>
             </div>
             <details className="mt-2">
