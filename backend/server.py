@@ -2158,18 +2158,35 @@ async def calendar_status(user: dict = Depends(get_current_user)):
 async def calendar_connect(user: dict = Depends(get_current_user)):
     if not gcal_utils.is_configured():
         raise HTTPException(status_code=400, detail="Google Calendar non è configurato. Aggiungi GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET nei Secrets.")
+    logger.info("gcal connect: redirect_uri=%s scopes=%s", gcal_utils.REDIRECT_URI, gcal_utils.SCOPES)
     return {"authorization_url": gcal_utils.authorization_url(_cal_state(user["user_id"]))}
 
 
 @api.get("/oauth/calendar/callback")
-async def calendar_callback(code: str = "", state: str = ""):
+async def calendar_callback(code: str = "", state: str = "", error: str = "", error_description: str = ""):
+    # Google can redirect back with ?error=... (e.g. access_denied) instead of a code.
+    if error:
+        logger.warning("gcal callback: google returned error stage=consent error=%s desc=%s",
+                       error, (error_description or "")[:200])
+        return RedirectResponse(f"{APP_URL}/app?calendar=error")
     try:
         payload = jwt.decode(state, JWT_SECRET, algorithms=[JWT_ALG])
         uid = payload["uid"]
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        logger.warning("gcal callback: invalid state jwt stage=state_decode (%s)", type(e).__name__)
         return RedirectResponse(f"{APP_URL}/app?calendar=error")
-    tokens = gcal_utils.exchange_code(code)
+    try:
+        tokens = gcal_utils.exchange_code(code)
+    except Exception as e:
+        logger.error("gcal callback: exchange_code exception stage=code_to_token %s: %s",
+                     type(e).__name__, str(e)[:200])
+        return RedirectResponse(f"{APP_URL}/app?calendar=error")
+    # Pop the non-sensitive diagnostic status so it is never persisted with the tokens.
+    http_status = tokens.pop("_http_status", None)
     if "access_token" not in tokens:
+        # Safe diagnostic log: OAuth error code + description only. NEVER logs code/tokens/secret/state.
+        logger.error("gcal callback: token exchange failed stage=code_to_token http_status=%s error=%s desc=%s",
+                     http_status, tokens.get("error"), str(tokens.get("error_description"))[:300])
         return RedirectResponse(f"{APP_URL}/app?calendar=error")
     info = gcal_utils.userinfo(tokens["access_token"])
     await db.calendar_connections.update_one({"user_id": uid},

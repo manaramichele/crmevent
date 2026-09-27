@@ -31,9 +31,18 @@ def authorization_url(state: str) -> str:
 
 
 def exchange_code(code: str) -> dict:
-    return requests.post("https://oauth2.googleapis.com/token", data={
+    resp = requests.post("https://oauth2.googleapis.com/token", data={
         "code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
-        "redirect_uri": REDIRECT_URI, "grant_type": "authorization_code"}, timeout=30).json()
+        "redirect_uri": REDIRECT_URI, "grant_type": "authorization_code"}, timeout=30)
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    # Non-sensitive HTTP status attached for diagnostics; callback pops it before persisting.
+    data["_http_status"] = resp.status_code
+    return data
 
 
 def userinfo(access_token: str) -> dict:
