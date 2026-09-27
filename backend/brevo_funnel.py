@@ -284,3 +284,28 @@ def normalize_event(raw_event: str) -> str:
         "blocked": "blocked", "invalid_email": "invalid_email", "error": "error", "deferred": "deferred",
     }
     return mapping.get(e, e)
+
+
+WEBHOOK_EVENTS = ["delivered", "opened", "uniqueOpened", "click", "hardBounce",
+                  "softBounce", "blocked", "spam", "unsubscribed", "invalid", "deferred", "error"]
+
+
+async def register_webhook(callback_url: str):
+    """Create or update the transactional Brevo webhook for the given callback URL (idempotent).
+    The callback URL (which contains the secret token) is never returned to the caller."""
+    sc, data, err = await _request("GET", "/v3/webhooks", params={"type": "transactional"})
+    existing_id = None
+    if sc == 200 and isinstance(data, dict):
+        for w in (data.get("webhooks") or []):
+            if w.get("url") == callback_url:
+                existing_id = w.get("id")
+                break
+    body = {"url": callback_url, "events": WEBHOOK_EVENTS}
+    if existing_id:
+        sc2, d2, e2 = await _request("PUT", f"/v3/webhooks/{existing_id}", json=body)
+        return {"ok": sc2 in (200, 204), "id": existing_id, "status": sc2, "error": e2, "created": False}
+    body2 = {"type": "transactional", "description": "CRMEvent Funnel Demo", **body}
+    sc2, d2, e2 = await _request("POST", "/v3/webhooks", json=body2)
+    nid = (d2 or {}).get("id") if isinstance(d2, dict) else None
+    return {"ok": sc2 in (200, 201) and bool(nid), "id": nid, "status": sc2, "error": e2, "created": True}
+

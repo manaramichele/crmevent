@@ -3165,6 +3165,24 @@ async def sync_funnel_templates(key: str, admin: dict = Depends(require_superadm
     return {"ok": ok, "results": results}
 
 
+@api.post("/platform/funnels/{key}/register-webhook")
+async def register_funnel_webhook(key: str, admin: dict = Depends(require_superadmin)):
+    """Register the Brevo transactional webhook server-side. The secret token is read from
+    the environment and embedded in the callback URL; it is NEVER returned to the frontend."""
+    if key != brevo_funnel.FUNNEL_KEY:
+        raise HTTPException(status_code=404, detail="Funnel non trovato")
+    if not brevo_funnel.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata.")
+    if not BREVO_WEBHOOK_TOKEN:
+        raise HTTPException(status_code=400, detail="BREVO_WEBHOOK_TOKEN non configurato nei Secrets.")
+    callback = f"{BACKEND_PUBLIC_URL}/api/brevo/webhook/{BREVO_WEBHOOK_TOKEN}"
+    res = await brevo_funnel.register_webhook(callback)
+    await record_audit(admin, "funnel_webhook", detail=f"Registrazione webhook Brevo ({'ok' if res.get('ok') else 'errore'})")
+    # Do NOT return the callback URL (it contains the secret token).
+    return {"ok": res.get("ok"), "webhook_id": res.get("id"), "created": res.get("created"),
+            "error": res.get("error")}
+
+
 class FunnelTestIn(BaseModel):
     email: EmailStr
 

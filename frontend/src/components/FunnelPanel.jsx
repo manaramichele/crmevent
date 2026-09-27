@@ -3,7 +3,7 @@ import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Workflow, RefreshCw, Send, CheckCircle2, XCircle, Clock, Mail } from "lucide-react";
+import { Workflow, RefreshCw, Send, CheckCircle2, XCircle, Clock, Mail, Link2 } from "lucide-react";
 
 const STATUS = {
   draft: { label: "Bozza", cls: "bg-slate-100 text-slate-600" },
@@ -24,6 +24,7 @@ export const FunnelPanel = () => {
   const [f, setF] = useState(null);
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [webhookBusy, setWebhookBusy] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [testBusy, setTestBusy] = useState(false);
   const [testResults, setTestResults] = useState(null);
@@ -45,6 +46,13 @@ export const FunnelPanel = () => {
     try { const { data } = await api.post("/platform/funnels/demo/sync-templates"); toast[data.ok ? "success" : "warning"](data.ok ? "Template sincronizzati su Brevo" : "Sincronizzazione parziale: controlla i dettagli"); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     finally { setSyncing(false); }
+  };
+
+  const registerWebhook = async () => {
+    setWebhookBusy(true);
+    try { const { data } = await api.post("/platform/funnels/demo/register-webhook"); toast[data.ok ? "success" : "warning"](data.ok ? `Webhook Brevo configurato${data.webhook_id ? ` (#${data.webhook_id})` : ""}` : `Webhook non configurato${data.error ? `: ${data.error}` : ""}`); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setWebhookBusy(false); }
   };
 
   const sendTest = async () => {
@@ -78,6 +86,7 @@ export const FunnelPanel = () => {
             <option value="active">Attivo</option>
           </select>
           <Button size="sm" variant="outline" onClick={syncTemplates} disabled={syncing || !f.brevo_configured} data-testid="funnel-sync-btn"><RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />{syncing ? "Sincronizzo…" : "Sincronizza template"}</Button>
+          <Button size="sm" variant="outline" onClick={registerWebhook} disabled={webhookBusy || !f.brevo_configured} data-testid="funnel-webhook-btn"><Link2 className="w-4 h-4 mr-1.5" />{webhookBusy ? "Configuro…" : "Configura webhook Brevo"}</Button>
         </div>
       </div>
 
