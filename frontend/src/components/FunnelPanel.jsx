@@ -26,6 +26,7 @@ export const FunnelPanel = () => {
   const [syncing, setSyncing] = useState(false);
   const [webhookBusy, setWebhookBusy] = useState(false);
   const [listBusy, setListBusy] = useState(false);
+  const [reconBusy, setReconBusy] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [testBusy, setTestBusy] = useState(false);
   const [testResults, setTestResults] = useState(null);
@@ -63,6 +64,13 @@ export const FunnelPanel = () => {
     finally { setListBusy(false); }
   };
 
+  const reconcile = async () => {
+    setReconBusy(true);
+    try { const { data } = await api.post("/platform/funnels/demo/reconcile"); toast.success(`Riconciliazione: ${data.closed} enrollment chiusi su ${data.active_before} attivi (nessuna email inviata)`); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setReconBusy(false); }
+  };
+
   const sendTest = async () => {
     if (!testEmail.trim()) { toast.error("Inserisci un'email di test"); return; }
     setTestBusy(true); setTestResults(null);
@@ -96,6 +104,7 @@ export const FunnelPanel = () => {
           <Button size="sm" variant="outline" onClick={ensureList} disabled={listBusy || !f.brevo_configured} data-testid="funnel-list-btn"><Mail className="w-4 h-4 mr-1.5" />{listBusy ? "Verifico…" : "Verifica/crea lista Brevo"}</Button>
           <Button size="sm" variant="outline" onClick={syncTemplates} disabled={syncing || !f.brevo_configured} data-testid="funnel-sync-btn"><RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />{syncing ? "Sincronizzo…" : "Collega template"}</Button>
           <Button size="sm" variant="outline" onClick={registerWebhook} disabled={webhookBusy || !f.brevo_configured} data-testid="funnel-webhook-btn"><Link2 className="w-4 h-4 mr-1.5" />{webhookBusy ? "Configuro…" : "Configura webhook Brevo"}</Button>
+          <Button size="sm" variant="outline" onClick={reconcile} disabled={reconBusy} data-testid="funnel-reconcile-btn"><RefreshCw className={`w-4 h-4 mr-1.5 ${reconBusy ? "animate-spin" : ""}`} />{reconBusy ? "Riconcilio…" : "Riconcilia enrollment"}</Button>
         </div>
       </div>
 

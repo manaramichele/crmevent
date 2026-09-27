@@ -215,3 +215,14 @@
 - Il flusso reale /fic/issue (dry_run, superadmin) resta invariato per il futuro LIVE → separazione netta simulazione vs emissione.
 - UI Account (org admin): sezione "Fatture" con pulsante "Simula fattura (TEST)" e dettaglio + payload FIC sicuro (nessun secret/token).
 - Nessun documento reale FIC, nessuna numerazione fiscale, nessun SDI durante il test.
+
+### 2026-06 (Funnel Demo — fix STOP immediato al trial + riconciliazione)
+- RCA prod: lead convertito aveva user_id ma funnel_status regredito a demo_started (DemoPage rimonta → POST /leads/{id}/funnel demo_started DOPO la registrazione) e la registrazione non chiudeva l'enrollment → cron avrebbe inviato Email 2 (demo_started non è stop reason).
+- Fix doppia protezione:
+  - register-organization: dopo trial_started chiude subito l'enrollment demo (_stop_active_demo_enrollment) → step 2/3/4 canceled, stop_reason=trial_started, stopped_at salvato.
+  - POST /leads/{id}/funnel: se il nuovo stato è una condizione di stop → chiusura immediata enrollment.
+  - _stop_reason ora considera anche lead.user_id (lead convertito → stop) come difesa aggiuntiva; il cron continua a rileggere lo stato prima di ogni invio.
+  - _cancel_enrollment idempotente + stopped_at.
+- Nuovo endpoint SuperAdmin POST /platform/funnels/demo/reconcile (nessuna email): chiude enrollment attivi il cui lead soddisfa una condizione di stop, normalizza funnel_status del lead convertito. Pulsante UI "Riconcilia enrollment".
+- UI Leads già mostra: Funnel interrotto — prova gratuita avviata; Email 1 Inviata; Email 2/3/4 Annullata.
+- Test preview 4/4 PASS (tests/test_funnel_stop.py). Funnel Demo resta BOZZA. Template/tempi Brevo invariati.

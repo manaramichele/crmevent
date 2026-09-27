@@ -417,6 +417,8 @@ async def register_organization(body: OrgRegisterIn, response: Response):
         await db.leads.update_one({"id": lead["id"]}, {"$set": {"user_id": uid,
             "funnel_status": "trial_started", "funnel_ts_trial_started": now_iso(), "updated_at": now_iso()}})
         await _sync_brevo_funnel_status(email, "trial_started")
+        # Immediate STOP: close the active demo enrollment so emails 2/3/4 never fire post-conversion.
+        await _stop_active_demo_enrollment(lead["id"], "trial_started")
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
@@ -2471,6 +2473,9 @@ async def lead_funnel(lead_id: str, body: FunnelIn):
     lead = await db.leads.find_one({"id": lead_id}, {"_id": 0, "email": 1})
     if lead:
         await _sync_brevo_funnel_status(lead.get("email"), body.status)
+    # Immediate STOP if the new status is a stop condition (mirrors the cron re-check).
+    if body.status in brevo_funnel.STOP_FUNNEL_STATUSES:
+        await _stop_active_demo_enrollment(lead_id, body.status)
     return {"ok": True}
 
 
@@ -3040,6 +3045,9 @@ def _stop_reason(lead: dict):
         return "spam"
     if lead.get("funnel_status") in brevo_funnel.STOP_FUNNEL_STATUSES:
         return lead.get("funnel_status")
+    if lead.get("user_id"):
+        # Lead converted to an account → must never receive demo nurture (defense in depth).
+        return "trial_started"
     return None
 
 
@@ -3049,7 +3057,16 @@ async def _cancel_enrollment(enr: dict, reason: str):
         if s["status"] == "scheduled":
             s["status"] = "canceled"
     await db.funnel_enrollments.update_one({"id": enr["id"]}, {"$set": {
-        "status": "stopped", "stop_reason": reason, "steps": steps, "updated_at": now_iso()}})
+        "status": "stopped", "stop_reason": reason, "steps": steps,
+        "stopped_at": now_iso(), "updated_at": now_iso()}})
+
+
+async def _stop_active_demo_enrollment(lead_id: str, reason: str):
+    """Immediately close the active demo enrollment for a lead (idempotent: only acts if active)."""
+    enr = await db.funnel_enrollments.find_one(
+        {"funnel_key": brevo_funnel.FUNNEL_KEY, "lead_id": lead_id, "status": "active"}, {"_id": 0})
+    if enr:
+        await _cancel_enrollment(enr, reason)
 
 
 async def _send_step(lead: dict, step_cfg: dict, tmpl_map: dict) -> dict:
@@ -3227,6 +3244,34 @@ async def set_funnel_status(key: str, body: FunnelStatusIn, admin: dict = Depend
     await db.email_funnels.update_one({"key": key}, {"$set": {"status": body.status, "updated_at": now_iso()}})
     await record_audit(admin, "funnel_status", detail=f"Funnel {key} impostato su {body.status}")
     return {"ok": True, "status": body.status}
+
+
+@api.post("/platform/funnels/{key}/reconcile")
+async def reconcile_funnel(key: str, admin: dict = Depends(require_superadmin)):
+    """Close any active enrollment whose lead now meets a stop condition (trial/cliente/converted/
+    unsubscribe/bounce/spam). Sends NO email. Works regardless of the funnel's draft/active status."""
+    if key != brevo_funnel.FUNNEL_KEY:
+        raise HTTPException(status_code=404, detail="Funnel non trovato")
+    enrollments = await db.funnel_enrollments.find(
+        {"funnel_key": key, "status": "active"}, {"_id": 0}).to_list(5000)
+    closed = 0
+    for enr in enrollments:
+        lead = await db.leads.find_one({"id": enr["lead_id"]}, {"_id": 0})
+        if not lead:
+            await _cancel_enrollment(enr, "lead_deleted")
+            closed += 1
+            continue
+        reason = _stop_reason(lead)
+        if reason:
+            # Normalise a converted lead's funnel_status so the UI shows the correct reason.
+            if lead.get("user_id") and lead.get("funnel_status") not in brevo_funnel.STOP_FUNNEL_STATUSES:
+                await db.leads.update_one({"id": lead["id"]}, {"$set": {
+                    "funnel_status": "trial_started",
+                    "funnel_ts_trial_started": lead.get("funnel_ts_trial_started") or now_iso(),
+                    "updated_at": now_iso()}})
+            await _cancel_enrollment(enr, reason)
+            closed += 1
+    return {"ok": True, "active_before": len(enrollments), "closed": closed}
 
 
 @api.post("/platform/funnels/{key}/sync-templates")
