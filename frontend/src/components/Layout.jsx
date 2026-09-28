@@ -198,8 +198,8 @@ export default function Layout({ children }) {
   }, [isSuper, multiOrg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const navGroups = isSuper
-    ? [{ items: SUPER_ORG_NAV }, { title: "Marketing", items: MARKETING_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }]
-    : [{ items: ORG_NAV }, { title: "Marketing", items: MARKETING_NAV }];
+    ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }, { title: "Marketing CRMEvent — Piattaforma", items: MARKETING_NAV }]
+    : [{ items: ORG_NAV }];
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !actingOrgId && !isPlatformRoute;

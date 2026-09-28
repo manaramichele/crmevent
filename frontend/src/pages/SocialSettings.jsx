@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import api, { formatApiError } from "@/lib/api";
+import api from "@/lib/platformApi";
+import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Instagram, Save, Loader2, Bot, Facebook, Linkedin } from "lucide-react";

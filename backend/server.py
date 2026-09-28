@@ -152,12 +152,25 @@ async def _resolve_active_org(request: Request, user: dict):
     return chosen["org_id"], chosen["role"]
 
 
+PLATFORM_ORG_ID = "__platform__"
+
+
 async def require_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    if request.query_params.get("scope") == "platform":
+        if user.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Accesso riservato al Super Admin CRMEvent")
+        return {**user, "org_id": PLATFORM_ORG_ID, "org_role": "superadmin",
+                "acting_org": PLATFORM_ORG_ID, "platform_scope": True}
     org_id, org_role = await _resolve_active_org(request, user)
     return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id}
 
 
 async def require_org_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    if request.query_params.get("scope") == "platform":
+        if user.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Accesso riservato al Super Admin CRMEvent")
+        return {**user, "org_id": PLATFORM_ORG_ID, "org_role": "superadmin",
+                "acting_org": PLATFORM_ORG_ID, "platform_scope": True}
     org_id, org_role = await _resolve_active_org(request, user)
     if org_role not in ("admin_org", "superadmin"):
         raise HTTPException(status_code=403, detail="Riservato agli amministratori dell'organizzazione")

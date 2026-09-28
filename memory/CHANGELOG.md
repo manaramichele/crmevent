@@ -1,5 +1,13 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Marketing · Social — SEPARAZIONE SCOPE Platform vs Organization
+- Introdotto scope esplicito senza duplicare la logica: `require_admin`/`require_org_admin` onorano `?scope=platform` → solo Super Admin → org_id sentinella `__platform__` (bypassa X-Org-Id/org attiva). Tutti gli endpoint social + pubblicazione IG funzionano in platform scope indipendentemente dall'org attiva.
+- Frontend: nuovo client `lib/platformApi.js` (forza `scope=platform`). Le pagine Social/SocialCalendar/SocialSettings usano platformApi. Menu spostato nel gruppo Super Admin "Marketing CRMEvent — Piattaforma"; rimosso per Admin Org/Utenti (CRMEvent Pro futuro, codice mantenuto). Badge "Marketing CRMEvent — Piattaforma" nell'header.
+- Migrazione dati (preview) org CRMEvent (brand=CRMEvent, era 976fd… "Org Social Test") → `__platform__`: social_settings 1, social_posts 34 (incl. piano ottobre), social_media 6 + 6 files referenziati, social_ai_generations 20, social_publish_logs 33, social_calendar 2. social_accounts: 0 (nessun account IG salvato in preview). Script: backend/migrate_social_platform.py.
+- FASE E pubblicazione IG invariata e ora platform-scope-ready (require_org_admin+scope=platform → __platform__, no X-Org-Id). Nessuna pubblicazione reale effettuata.
+- IMPORTANTE: in preview NON esiste "Trio Events" né alcun token @crmevent → OAuth @crmevent e Trio Events sono in PRODUZIONE. La migrazione dell'account IG allo scope platform va rifatta in produzione (stesso meccanismo scope). Verificato: platform scope brand=CRMEvent/34 post; non-superadmin scope=platform→403; org scope social_test→0 post.
+
+
 ## 2026-06 — Marketing · Social — FASE E: pubblicazione Instagram (immagine singola feed, preview)
 - Pubblicazione ufficiale via Instagram API (graph.instagram.com): container a 2 passi — `create_media` (image_url+caption) → `publish_media` (creation_id). Solo immagine singola feed + caption (caroselli/Stories/Reels NON attivati).
 - Endpoint `POST /api/social/posts/{id}/publish` {confirm}: Pilota automatico resta OFF; richiede **conferma esplicita** (428 se confirm assente). Flusso Bozza → Approva → (Programma | Pubblica ora) → Instagram.

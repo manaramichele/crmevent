@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import api, { formatApiError } from "@/lib/api";
+import api from "@/lib/platformApi";
+import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { CalendarRange } from "lucide-react";
 

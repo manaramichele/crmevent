@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import api, { formatApiError } from "@/lib/api";
+import api from "@/lib/platformApi";
+import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -213,8 +214,9 @@ export default function Social() {
     <div className="max-w-6xl space-y-6" data-testid="social-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 bg-tiffany rounded-full px-2.5 py-1 mb-1" data-testid="platform-scope-badge">Marketing CRMEvent — Piattaforma</span>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Sparkles className="w-6 h-6 text-tiffany-active" />Social</h1>
-          <p className="text-slate-500 text-sm mt-1">Crea, pianifica e approva contenuti social generati con l'AI.{dash.brand_name ? ` · ${dash.brand_name}` : ""}</p>
+          <p className="text-slate-500 text-sm mt-1">Comunicazione ufficiale CRMEvent · indipendente dall'organizzazione attiva.{dash.brand_name ? ` · ${dash.brand_name}` : ""}</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setPlanOpen(true)} variant="outline" data-testid="plan-open-btn"><CalendarPlus className="w-4 h-4 mr-2" />Genera piano editoriale</Button>
