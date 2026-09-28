@@ -4955,11 +4955,26 @@ async def social_post_delete(post_id: str, user: dict = Depends(require_admin)):
 
 @api.post("/social/posts/{post_id}/approve")
 async def social_post_approve(post_id: str, user: dict = Depends(require_org_admin)):
-    res = await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
+    post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    missing = []
+    if not post.get("creative_media_id"):
+        missing.append("creatività immagine")
+    if not (post.get("caption") or "").strip():
+        missing.append("caption")
+    if post.get("format") not in social_creative.DIMS:
+        missing.append("formato valido")
+    if (post.get("creative_meta") or {}).get("status") == "error":
+        missing.append("nessun errore di generazione")
+    accounts = await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
+    if accounts and not post.get("account_id"):
+        missing.append("account social selezionato")
+    if missing:
+        raise HTTPException(status_code=400, detail="Impossibile approvare · da completare: " + ", ".join(missing))
+    await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
         "status": "approved", "approved_by": user.get("user_id"),
         "approved_by_name": user.get("name"), "approved_at": now_iso(), "updated_at": now_iso()}})
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Contenuto non trovato")
     await _social_log(user, "approved", post_id=post_id)
     return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
 
@@ -5249,12 +5264,25 @@ async def social_post_creative(post_id: str, body: SocialCreativeIn, user: dict 
                 bg_bytes, source_media = await _load_media_bytes(user["org_id"], sm["id"])
         if bg_bytes is None:
             mode = "ai"
+    ai_meta = None
     if mode == "ai":
+        prompt = body.ai_prompt or social_creative.creative_bg_prompt(post)
+        gen_status = "success"
         try:
-            bg_bytes = await social_creative.generate_background(body.ai_prompt or social_creative.creative_bg_prompt(post))
+            bg_bytes, ai_meta = await social_creative.generate_background(prompt)
         except Exception as e:
             logger.warning("AI background non disponibile (%s): uso sfondo brand", e)
             bg_bytes = None
+            gen_status = "failed"
+        # Usage/cost audit for every AI image generation attempt.
+        await db.social_ai_generations.insert_one({
+            "id": new_id(), "org_id": user["org_id"], "type": "image",
+            "provider": (ai_meta or {}).get("provider", social_creative.IMAGE_PROVIDER),
+            "model": (ai_meta or {}).get("model", social_creative.IMAGE_MODEL),
+            "user_id": user.get("user_id"), "social_post_id": post_id,
+            "images": (ai_meta or {}).get("images", 0),
+            "status": "success" if bg_bytes else "failed_fallback_brand",
+            "cost": None, "created_at": now_iso()})
     logo_bytes = await _brand_logo_bytes(settings)
     png = social_creative.render(
         bg_bytes=bg_bytes, template=template, fmt=fmt,

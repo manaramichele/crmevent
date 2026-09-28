@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Sparkles, CalendarPlus, Bot, Loader2, Pencil, CheckCircle2, Clock, Trash2,
-  RefreshCw, ImagePlus, FileText, Images, Upload,
+  RefreshCw, ImagePlus, FileText, Images, Upload, Instagram, Star,
 } from "lucide-react";
 
 const FIELD = "w-full h-10 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
@@ -56,6 +56,7 @@ export default function Social() {
   const [creativeBusy, setCreativeBusy] = useState(false);
   const [cOpts, setCOpts] = useState({ mode: "auto", template: "", format: "", show_cta: true, media_id: "" });
   const [mediaPick, setMediaPick] = useState([]);
+  const [igOpen, setIgOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,6 +259,7 @@ export default function Social() {
                     <span className={`text-[11px] px-2 py-0.5 rounded-full ${STATUS_COLORS[p.status]}`}>{meta.status_labels?.[p.status] || p.status}</span>
                     <span className="text-[11px] text-slate-400 capitalize">{catLabel(p.category)}</span>
                   </div>
+                  {p.is_sample && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 w-fit" data-testid={`sample-badge-${p.id}`}><Star className="w-3 h-3" />CAMPIONE · {p.sample_label}</span>}
                   <div className="font-semibold text-slate-800 text-sm line-clamp-2">{p.title || p.topic || "Senza titolo"}</div>
                   <div className="text-xs text-slate-500 line-clamp-3 flex-1">{p.caption}</div>
                   {p.scheduled_at && <div className="text-[11px] text-slate-400">📅 {new Date(p.scheduled_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>}
@@ -435,12 +437,45 @@ export default function Social() {
             </div>
           )}
           <DialogFooter className="flex-wrap gap-2">
+            {editing && (() => {
+              const miss = [];
+              if (!editing.creative_media_id) miss.push("creatività");
+              if (!(editing.caption || "").trim()) miss.push("caption");
+              if (!["1:1", "4:5", "9:16"].includes(editing.format)) miss.push("formato");
+              return miss.length
+                ? <div data-testid="approve-readiness" className="w-full text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">⚠️ Prima di approvare completa: {miss.join(", ")}</div>
+                : <div data-testid="approve-ready" className="w-full text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5">✓ Pronto per l'approvazione</div>;
+            })()}
+            <Button variant="outline" onClick={() => setIgOpen(true)} data-testid="edit-igpreview"><Instagram className="w-4 h-4 mr-1" />Anteprima Instagram</Button>
             <Button variant="outline" onClick={regenerate} disabled={genBusy} data-testid="edit-regenerate"><RefreshCw className={`w-4 h-4 mr-1 ${genBusy ? "animate-spin" : ""}`} />Rigenera</Button>
             <Button variant="outline" onClick={savePost} data-testid="edit-save"><Pencil className="w-4 h-4 mr-1" />Salva</Button>
             <Button variant="outline" onClick={() => approve(editing)} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
             <Button variant="outline" onClick={() => schedule(editing)} data-testid="edit-schedule"><Clock className="w-4 h-4 mr-1" />Programma</Button>
             <Button variant="outline" className="text-red-600" onClick={() => del(editing)} data-testid="edit-delete"><Trash2 className="w-4 h-4 mr-1" />Elimina</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Anteprima Instagram */}
+      <Dialog open={igOpen} onOpenChange={setIgOpen}>
+        <DialogContent className="max-w-sm p-0 overflow-hidden" data-testid="ig-preview-dialog">
+          <DialogHeader className="px-4 pt-4"><DialogTitle>Anteprima Instagram</DialogTitle></DialogHeader>
+          {editing && (
+            <div className="bg-white">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-tiffany to-tiffany-hover flex items-center justify-center text-slate-900 text-xs font-bold">{(dash.brand_name || "CR").slice(0, 2).toUpperCase()}</div>
+                <div className="text-sm font-semibold text-slate-800" data-testid="ig-brand">{dash.brand_name || "CRMEvent"}</div>
+              </div>
+              {creative
+                ? <img src={`${backendUrl}${creative.url}`} alt="post" className="w-full" data-testid="ig-image" />
+                : <div className="aspect-square bg-slate-100 flex items-center justify-center text-slate-400 text-sm" data-testid="ig-no-image">Genera prima la creatività</div>}
+              <div className="px-3 py-3 space-y-2 text-sm">
+                <div className="text-slate-800 whitespace-pre-wrap" data-testid="ig-caption"><span className="font-semibold">{dash.brand_name || "CRMEvent"}</span> {editing.caption}</div>
+                {editing.cta && <div className="text-tiffany-active font-semibold" data-testid="ig-cta">👉 {editing.cta}</div>}
+                <div className="text-sky-700 text-xs" data-testid="ig-hashtags">{(Array.isArray(editing.hashtags) ? editing.hashtags : (editing.hashtags || "").split(/\s+/)).join(" ")}</div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

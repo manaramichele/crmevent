@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 logger = logging.getLogger("crmevent.creative")
 
 LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+IMAGE_PROVIDER = os.environ.get("SOCIAL_IMAGE_PROVIDER", "gemini")
 IMAGE_MODEL = os.environ.get("SOCIAL_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
 
 FONT_DIR = "/usr/share/fonts/truetype/liberation/"
@@ -264,15 +265,25 @@ def creative_bg_prompt(post: dict) -> str:
     )
 
 
-async def generate_background(prompt: str) -> bytes:
-    """Generate a background photo via Gemini Nano Banana (Emergent key). Returns PNG bytes."""
-    if not LLM_KEY:
-        raise RuntimeError("EMERGENT_LLM_KEY mancante")
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    chat = LlmChat(api_key=LLM_KEY, session_id=uuid.uuid4().hex,
-                   system_message="Generi immagini fotografiche di sfondo per social di eventi sportivi.")
-    chat.with_model("gemini", IMAGE_MODEL).with_params(modalities=["image", "text"])
-    _text, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
-    if not images:
-        raise RuntimeError("Nessuna immagine generata")
-    return base64.b64decode(images[0]["data"])
+async def generate_background(prompt: str):
+    """Provider-agnostic AI background generation. Returns (png_bytes, meta).
+
+    Only the 'gemini' provider (Nano Banana via the Emergent LLM key, already part of
+    the Emergent infrastructure) is wired now — no new dependency/cost. The provider is
+    read from SOCIAL_IMAGE_PROVIDER so OpenAI or others can be added later WITHOUT
+    changing any caller: the Social module never hard-depends on Gemini.
+    """
+    provider = IMAGE_PROVIDER
+    if provider == "gemini":
+        if not LLM_KEY:
+            raise RuntimeError("EMERGENT_LLM_KEY mancante")
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(api_key=LLM_KEY, session_id=uuid.uuid4().hex,
+                       system_message="Generi immagini fotografiche di sfondo per social di eventi sportivi.")
+        chat.with_model("gemini", IMAGE_MODEL).with_params(modalities=["image", "text"])
+        _text, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
+        if not images:
+            raise RuntimeError("Nessuna immagine generata")
+        return base64.b64decode(images[0]["data"]), {"provider": "gemini", "model": IMAGE_MODEL, "images": len(images)}
+    # Placeholder for future providers (openai, etc.) — intentionally not implemented yet.
+    raise NotImplementedError(f"Provider immagini non configurato/supportato: {provider}")
