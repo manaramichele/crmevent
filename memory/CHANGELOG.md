@@ -275,3 +275,9 @@
 - Nuovo endpoint SuperAdmin POST /platform/funnels/demo/reconcile (nessuna email): chiude enrollment attivi il cui lead soddisfa una condizione di stop, normalizza funnel_status del lead convertito. Pulsante UI "Riconcilia enrollment".
 - UI Leads già mostra: Funnel interrotto — prova gratuita avviata; Email 1 Inviata; Email 2/3/4 Annullata.
 - Test preview 4/4 PASS (tests/test_funnel_stop.py). Funnel Demo resta BOZZA. Template/tempi Brevo invariati.
+
+## 2026-09-28 — Pulizia bozze test + verifica OAuth platform scope
+- Eliminate 9 bozze residue (tutte draft, plan_id unico, zero relazioni a media/log/calendar) da org test "Org Social a" (4a20906d). Nessun altro tenant toccato.
+- Verificato: social_posts __platform__ = 34 (intatti); tenant 7d94739b=1, 7edbced1=1 (intatti).
+- Verificato chain OAuth Instagram platform-scope: SocialSettings.jsx usa platformApi (forza ?scope=platform) -> /oauth/instagram/start (require_org_admin: scope=platform+superadmin => org_id=__platform__) -> state JWT porta org_id=__platform__ -> callback salva social_accounts con org_id=__platform__, indipendente da X-Org-Id/Org attiva.
+- @crmevent NON ancora collegato (social_accounts=0). Nessun token presente. Pilota automatico OFF. Nessuna pubblicazione eseguita.
