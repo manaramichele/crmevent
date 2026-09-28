@@ -4992,6 +4992,107 @@ async def social_post_schedule(post_id: str, body: SocialScheduleIn, user: dict 
     return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
 
 
+# ---- Instagram publishing (Phase E): single feed image + caption. Autopilot stays OFF. ----
+class SocialPublishIn(BaseModel):
+    confirm: bool = False
+
+
+async def _ensure_public_jpeg(org_id: str, media: dict):
+    """Create a publicly reachable JPEG copy of the creative for Meta to fetch."""
+    f = await db.files.find_one({"id": media.get("file_id"), "org_id": org_id}, {"_id": 0})
+    if not f:
+        raise HTTPException(status_code=400, detail="File creatività non trovato")
+    data, _ct = storage_utils.get_object(f["storage_path"])
+    jpeg = social_creative.to_jpeg(data)
+    token = new_id() + new_id()
+    path = f"{storage_utils.APP_NAME}/social/{org_id}/pub_{token}.jpg"
+    res = storage_utils.put_object(path, jpeg, "image/jpeg")
+    await db.ig_public_media.insert_one({"token": token, "org_id": org_id, "storage_path": res["path"],
+                                         "created_at": now_iso()})
+    return f"{instagram_utils.BACKEND_PUBLIC_URL}/api/social/public/creative/{token}"
+
+
+@api.get("/social/public/creative/{token}")
+async def social_public_creative(token: str):
+    """Public (unauthenticated) JPEG endpoint so Meta can fetch the image at publish time."""
+    rec = await db.ig_public_media.find_one({"token": token}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Not found")
+    data, _ct = storage_utils.get_object(rec["storage_path"])
+    return Response(content=data, media_type="image/jpeg")
+
+
+@api.post("/social/posts/{post_id}/publish")
+async def social_post_publish(post_id: str, body: SocialPublishIn, user: dict = Depends(require_org_admin)):
+    post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    # Duplicate guard: never publish the same post twice.
+    if post.get("status") == "published" or post.get("published_media_id"):
+        raise HTTPException(status_code=409, detail="Questo contenuto è già stato pubblicato")
+    acct = await db.social_accounts.find_one({"org_id": user["org_id"], "platform": "instagram"}, {"_id": 0})
+    problems = []
+    if not acct or not acct.get("connected") or not acct.get("access_token") or not acct.get("ig_user_id"):
+        problems.append("account Instagram collegato e token valido")
+    else:
+        exp = acct.get("token_expires_at")
+        try:
+            if exp and datetime.fromisoformat(exp) <= datetime.now(timezone.utc):
+                problems.append("token valido (scaduto: aggiorna il token)")
+        except Exception:
+            pass
+    if post.get("status") not in ("approved", "scheduled"):
+        problems.append("post approvato")
+    if not post.get("creative_media_id"):
+        problems.append("creatività presente")
+    if post.get("format") not in ("1:1", "4:5"):
+        problems.append("formato compatibile con il feed (1:1 o 4:5)")
+    if not (post.get("caption") or "").strip():
+        problems.append("caption presente")
+    if problems:
+        raise HTTPException(status_code=400, detail="Impossibile pubblicare · da completare: " + ", ".join(problems))
+    if not body.confirm:
+        raise HTTPException(status_code=428, detail="Conferma esplicita richiesta per pubblicare ora")
+    # Atomic lock to prevent accidental double publish.
+    prev_status = post.get("status")
+    lock = await db.social_posts.update_one(
+        {"id": post_id, "org_id": user["org_id"], "status": {"$in": ["approved", "scheduled"]},
+         "published_media_id": {"$in": [None, ""]}},
+        {"$set": {"status": "publishing", "updated_at": now_iso()}})
+    if lock.matched_count == 0:
+        raise HTTPException(status_code=409, detail="Pubblicazione già in corso o completata")
+    media = await db.social_media.find_one({"org_id": user["org_id"], "id": post["creative_media_id"]}, {"_id": 0})
+    if not media:
+        await db.social_posts.update_one({"id": post_id, "org_id": user["org_id"]}, {"$set": {"status": prev_status}})
+        raise HTTPException(status_code=400, detail="Creatività non trovata")
+    image_url = await _ensure_public_jpeg(user["org_id"], media)
+    if not image_url.startswith("https://"):
+        await db.social_posts.update_one({"id": post_id, "org_id": user["org_id"]}, {"$set": {"status": prev_status}})
+        raise HTTPException(status_code=400, detail="URL immagine non HTTPS: BACKEND_PUBLIC_URL non configurato correttamente")
+    caption = (post.get("caption") or "").strip()
+    hashtags = post.get("hashtags") or []
+    if hashtags:
+        caption = caption + "\n\n" + " ".join(hashtags)
+    await _social_log(user, "publish_requested", post_id=post_id, platform="instagram",
+                      detail=f"acct=@{acct.get('username')} img={image_url}")
+    try:
+        cont = await instagram_utils.create_media(acct["ig_user_id"], image_url, caption, acct["access_token"])
+        pub = await instagram_utils.publish_media(acct["ig_user_id"], cont.get("id"), acct["access_token"])
+        media_id = pub.get("id")
+    except Exception as e:
+        await db.social_posts.update_one({"id": post_id, "org_id": user["org_id"]},
+                                         {"$set": {"status": "error", "last_publish_error": str(e)[:300],
+                                                   "updated_at": now_iso()}})
+        await _social_log(user, "publish_failed", post_id=post_id, platform="instagram", error=str(e)[:300])
+        raise HTTPException(status_code=502, detail=f"Pubblicazione Instagram fallita: {str(e)[:200]}")
+    await db.social_posts.update_one({"id": post_id, "org_id": user["org_id"]}, {"$set": {
+        "status": "published", "published_media_id": media_id, "published_at": now_iso(),
+        "published_by": user.get("user_id"), "published_by_name": user.get("name"), "updated_at": now_iso()}})
+    await _social_log(user, "publish_success", post_id=post_id, platform="instagram",
+                      detail=f"media_id={media_id} acct=@{acct.get('username')}")
+    return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+
+
 # ---- AI generation ----
 async def _record_generation(user: dict, gen_type: str, payload: dict, result) -> str:
     gid = new_id()
@@ -5649,6 +5750,7 @@ async def startup():
         await db.ig_oauth_states.create_index("expires_at", expireAfterSeconds=0)
         await db.social_accounts.create_index([("platform", 1), ("ig_user_id", 1)])
         await db.ig_data_deletions.create_index("confirmation_code")
+        await db.ig_public_media.create_index("token")
     except Exception:
         pass
     try:

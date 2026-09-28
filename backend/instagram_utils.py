@@ -89,3 +89,30 @@ def parse_signed_request(signed_request: str):
         return json.loads(_b64url_decode(payload))
     except Exception:
         return None
+
+
+def _check(r):
+    try:
+        j = r.json()
+    except Exception:
+        j = {"error": {"message": (r.text or "")[:300]}}
+    if r.status_code >= 400 or (isinstance(j, dict) and j.get("error")):
+        msg = (j.get("error") or {}).get("message") if isinstance(j, dict) else None
+        raise RuntimeError(msg or f"HTTP {r.status_code}")
+    return j
+
+
+async def create_media(ig_user_id: str, image_url: str, caption: str, token: str) -> dict:
+    """Step 1: create a single-image feed container. Returns {id: creation_id}."""
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(f"{GRAPH}/{ig_user_id}/media",
+                         data={"image_url": image_url, "caption": caption, "access_token": token})
+    return _check(r)
+
+
+async def publish_media(ig_user_id: str, creation_id: str, token: str) -> dict:
+    """Step 2: publish the container. Returns {id: media_id}."""
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(f"{GRAPH}/{ig_user_id}/media_publish",
+                         data={"creation_id": creation_id, "access_token": token})
+    return _check(r)

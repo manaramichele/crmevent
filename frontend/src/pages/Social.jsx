@@ -170,6 +170,15 @@ export default function Social() {
     try { await api.delete(`/social/posts/${p.id}`); toast.success("Contenuto eliminato"); setEditing(null); load(); }
     catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
+  const publishNow = async (p) => {
+    if (!window.confirm("Pubblicare ORA questo contenuto su Instagram? L'azione è irreversibile.")) return;
+    try {
+      const { data } = await api.post(`/social/posts/${p.id}/publish`, { confirm: true });
+      toast.success("Pubblicato su Instagram 🎉");
+      if (editing) setEditing(data);
+      load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
 
   // ---- Media ----
   const [upForm, setUpForm] = useState({ name: "", category: "photo", event_id: "", description: "", tags: "" });
@@ -451,6 +460,9 @@ export default function Social() {
             <Button variant="outline" onClick={savePost} data-testid="edit-save"><Pencil className="w-4 h-4 mr-1" />Salva</Button>
             <Button variant="outline" onClick={() => approve(editing)} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
             <Button variant="outline" onClick={() => schedule(editing)} data-testid="edit-schedule"><Clock className="w-4 h-4 mr-1" />Programma</Button>
+            {editing && (editing.status === "approved" || editing.status === "scheduled") && (
+              <Button onClick={() => publishNow(editing)} data-testid="edit-publish" className="bg-pink-600 hover:bg-pink-700 text-white"><Instagram className="w-4 h-4 mr-1" />Pubblica ora</Button>
+            )}
             <Button variant="outline" className="text-red-600" onClick={() => del(editing)} data-testid="edit-delete"><Trash2 className="w-4 h-4 mr-1" />Elimina</Button>
           </DialogFooter>
         </DialogContent>

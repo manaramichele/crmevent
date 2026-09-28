@@ -1,5 +1,16 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Marketing · Social — FASE E: pubblicazione Instagram (immagine singola feed, preview)
+- Pubblicazione ufficiale via Instagram API (graph.instagram.com): container a 2 passi — `create_media` (image_url+caption) → `publish_media` (creation_id). Solo immagine singola feed + caption (caroselli/Stories/Reels NON attivati).
+- Endpoint `POST /api/social/posts/{id}/publish` {confirm}: Pilota automatico resta OFF; richiede **conferma esplicita** (428 se confirm assente). Flusso Bozza → Approva → (Programma | Pubblica ora) → Instagram.
+- Controlli pre-pubblicazione: account IG collegato + token non scaduto, post approvato/programmato, creatività presente, formato feed (1:1 o 4:5), caption presente. Se manca qualcosa → 400 con elenco puntuale.
+- Immagine per Meta: `/api/files/{id}` è autenticato (Meta non può scaricarlo) → nuovo endpoint PUBBLICO `GET /api/social/public/creative/{token}` che serve una copia **JPEG** (Instagram feed richiede JPEG) generata con `social_creative.to_jpeg`; URL assoluto HTTPS da BACKEND_PUBLIC_URL. Collezione `ig_public_media` (token) + indice.
+- Anti-duplicati: lock atomico (status→"publishing" solo se approved/scheduled e published_media_id vuoto) + blocco se già published/published_media_id → 409.
+- Log in `social_publish_logs`: publish_requested / publish_success (con instagram media_id) / publish_failed (con errore API). **Nessun access_token** loggato.
+- Frontend: pulsante "Pubblica ora" (rosa Instagram) nell'editor per post approvati/programmati, con conferma `window.confirm`.
+- Verificato in preview SENZA pubblicare nulla: validazione completa (bozza vuota → 5 problemi), post approvato senza account IG → 400 "account… token valido", endpoint pubblico raggiungibile senza auth (404 su token ignoto). Il primo post reale su @crmevent sarà pubblicato manualmente dall'utente.
+
+
 ## 2026-06 — Marketing · Social — FASE D: Instagram/Meta OAuth (preview, publishing OFF)
 - Modulo `instagram_utils.py` (Instagram API with Instagram Login, host graph.instagram.com): authorize_url, exchange_code (short-lived), long_lived_token (~60gg), refresh_token, me(), parse_signed_request (HMAC-SHA256 con META_APP_SECRET). Segreti SOLO da env (META_APP_ID/META_APP_SECRET), mai hard-coded. Username/password IG mai ricevuti/salvati: solo token.
 - Endpoint (server.py): GET /api/oauth/instagram/start (require_org_admin, 400 se non configurato), GET /api/oauth/instagram/callback (state JWT + ig_oauth_states single-use, scambio code→long-lived, salva su social_accounts org-scoped, redirect a /marketing/impostazioni?instagram=connected|error), POST /api/social/accounts/{id}/refresh-token, POST /api/oauth/instagram/deauthorize (signed_request → revoca token/stato deauthorized), POST /api/oauth/instagram/data-deletion (signed_request → cancella dati account + confirmation_code + status url), GET /api/oauth/instagram/data-deletion/status.

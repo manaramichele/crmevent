@@ -254,6 +254,14 @@ def render(bg_bytes=None, template="educational", fmt="1:1", hook="", subtitle="
     return out.getvalue()
 
 
+def to_jpeg(data: bytes) -> bytes:
+    """Convert any image bytes to JPEG (Instagram feed requires JPEG)."""
+    im = Image.open(io.BytesIO(data)).convert("RGB")
+    out = io.BytesIO()
+    im.save(out, format="JPEG", quality=90)
+    return out.getvalue()
+
+
 def creative_bg_prompt(post: dict) -> str:
     base = post.get("image_suggestion") or post.get("topic") or "evento sportivo"
     return (
