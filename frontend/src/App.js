@@ -34,6 +34,9 @@ import Followups from "@/pages/Followups";
 import Leads from "@/pages/Leads";
 import SettingsPage from "@/pages/Settings";
 import Support from "@/pages/Support";
+import Social from "@/pages/Social";
+import SocialCalendar from "@/pages/SocialCalendar";
+import SocialSettings from "@/pages/SocialSettings";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
 
@@ -116,6 +119,9 @@ function Shell() {
         <Route path="/lead" element={<Protected><SuperAdminOnly><Leads /></SuperAdminOnly></Protected>} />
         <Route path="/supporto" element={<Protected><SuperAdminOnly><Support /></SuperAdminOnly></Protected>} />
         <Route path="/impostazioni" element={<Protected><AdminOnly><SettingsPage /></AdminOnly></Protected>} />
+        <Route path="/marketing/social" element={<Protected><AdminOnly><Social /></AdminOnly></Protected>} />
+        <Route path="/marketing/calendario" element={<Protected><AdminOnly><SocialCalendar /></AdminOnly></Protected>} />
+        <Route path="/marketing/impostazioni" element={<Protected><AdminOnly><SocialSettings /></AdminOnly></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

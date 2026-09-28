@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
@@ -34,6 +34,12 @@ const PLATFORM_NAV = [
 ];
 
 const PLATFORM_PATHS = ["/piattaforma", "/lead", "/supporto", "/audit"];
+
+const MARKETING_NAV = [
+  { to: "/marketing/social", label: "Social", icon: Megaphone, id: "social" },
+  { to: "/marketing/calendario", label: "Calendario editoriale", icon: CalendarRange, id: "social-calendario" },
+  { to: "/marketing/impostazioni", label: "Impostazioni Social", icon: SlidersHorizontal, id: "social-impostazioni" },
+];
 
 function OrgSwitcher({ orgs, actingOrgId, onChange }) {
   return (
@@ -192,8 +198,8 @@ export default function Layout({ children }) {
   }, [isSuper, multiOrg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const navGroups = isSuper
-    ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }]
-    : [{ items: ORG_NAV }];
+    ? [{ items: SUPER_ORG_NAV }, { title: "Marketing", items: MARKETING_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }]
+    : [{ items: ORG_NAV }, { title: "Marketing", items: MARKETING_NAV }];
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !actingOrgId && !isPlatformRoute;

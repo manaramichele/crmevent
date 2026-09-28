@@ -19,7 +19,7 @@ from typing import List, Optional
 import jwt
 import bcrypt
 import httpx
-from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depends, UploadFile, File, Header
+from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depends, UploadFile, File, Form, Header
 from fastapi.responses import RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -30,6 +30,7 @@ import email_utils
 import storage_utils
 import gcal_utils
 import brevo_funnel
+import social_ai
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -4694,6 +4695,488 @@ async def fic_simulate(invoice_id: str, user: dict = Depends(require_admin)):
     return await _fic_simulate(inv)
 
 
+# ---------------- MARKETING · SOCIAL AI ----------------
+SOCIAL_STATUSES = ["draft", "pending_approval", "approved", "scheduled", "published", "error"]
+SOCIAL_STATUS_LABELS = {
+    "draft": "Bozza", "pending_approval": "Da approvare", "approved": "Approvato",
+    "scheduled": "Programmato", "published": "Pubblicato", "error": "Errore",
+}
+SOCIAL_PLATFORMS = ["instagram", "facebook", "linkedin"]  # extensible; only instagram wired in phase 1
+
+
+class SocialSettingsIn(BaseModel):
+    brand_name: Optional[str] = None
+    description: Optional[str] = None
+    website: Optional[str] = None
+    target: Optional[str] = None
+    tone_of_voice: Optional[str] = None
+    main_goal: Optional[str] = None
+    default_cta: Optional[str] = None
+    frequency: Optional[str] = None
+    preferred_days: Optional[List[str]] = None
+    preferred_times: Optional[List[str]] = None
+    logo_url: Optional[str] = None
+    brand_colors: Optional[List[str]] = None
+    main_hashtags: Optional[List[str]] = None
+    avoid_info: Optional[str] = None
+    ai_instructions: Optional[str] = None
+
+
+class SocialPostIn(BaseModel):
+    platform: Optional[str] = "instagram"
+    category: Optional[str] = None
+    topic: Optional[str] = None
+    title: Optional[str] = None
+    body: Optional[str] = None
+    caption: Optional[str] = None
+    cta: Optional[str] = None
+    hashtags: Optional[List[str]] = None
+    image_suggestion: Optional[str] = None
+    media_id: Optional[str] = None
+    format: Optional[str] = "1:1"
+    scheduled_at: Optional[str] = None
+    event_id: Optional[str] = None
+
+
+class SocialGenerateIn(BaseModel):
+    topic: Optional[str] = None
+    category: Optional[str] = None
+    event_id: Optional[str] = None
+    platform: Optional[str] = "instagram"
+    extra_instructions: Optional[str] = None
+
+
+class SocialPlanIn(BaseModel):
+    date_from: str
+    date_to: str
+    posts_per_week: int = 3
+    goal: Optional[str] = None
+    event_id: Optional[str] = None
+    platform: Optional[str] = "instagram"
+
+
+class SocialScheduleIn(BaseModel):
+    scheduled_at: str
+
+
+class SocialMediaUpdateIn(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    event_id: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class SocialAccountIn(BaseModel):
+    platform: str = "instagram"
+    handle: Optional[str] = None
+
+
+DEFAULT_SOCIAL_SETTINGS = {
+    "brand_name": None, "description": None, "website": None, "target": None,
+    "tone_of_voice": None, "main_goal": None, "default_cta": None, "frequency": None,
+    "preferred_days": [], "preferred_times": [], "logo_url": None, "brand_colors": [],
+    "main_hashtags": [], "avoid_info": None, "ai_instructions": None,
+    "autopilot": "OFF",  # phase 1: always OFF
+}
+
+
+async def _get_social_settings(org_id: str) -> dict:
+    s = await db.social_settings.find_one({"org_id": org_id}, {"_id": 0})
+    if not s:
+        s = {**DEFAULT_SOCIAL_SETTINGS, "id": new_id(), "org_id": org_id,
+             "created_at": now_iso(), "updated_at": now_iso()}
+        await db.social_settings.insert_one(dict(s))
+        s.pop("_id", None)
+    s["autopilot"] = "OFF"  # enforced OFF in phase 1
+    return s
+
+
+async def _social_log(user: dict, action: str, post_id: Optional[str] = None,
+                       detail: Optional[str] = None, platform: Optional[str] = None,
+                       error: Optional[str] = None):
+    await db.social_publish_logs.insert_one({
+        "id": new_id(), "org_id": user["org_id"], "post_id": post_id, "action": action,
+        "actor_user_id": user.get("user_id"), "actor_email": user.get("email"),
+        "actor_name": user.get("name"), "platform": platform, "detail": detail,
+        "error": error, "created_at": now_iso()})
+
+
+async def _event_public_context(event_id: str, org_id: str) -> Optional[dict]:
+    """Return ONLY publishable event data for the AI — never personal/private data
+    (no emails, phones, staff names, internal notes)."""
+    ev = await db.events.find_one({"id": event_id, "org_id": org_id}, {"_id": 0})
+    if not ev:
+        return None
+    ctx = {k: ev.get(k) for k in ["nome", "edizione", "tipologia", "data_inizio", "data_fine",
+                                   "localita", "citta", "descrizione", "sito_web"] if ev.get(k)}
+    maps = await db.event_maps.find({"org_id": org_id, "evento_id": event_id}, {"_id": 0}).to_list(200)
+    percorsi = [m.get("nome") for m in maps if m.get("nome")]
+    if percorsi:
+        ctx["percorsi"] = percorsi
+    deals = await db.deals.find({"org_id": org_id, "evento_id": event_id, "fase": "confermato"}, {"_id": 0}).to_list(500)
+    sponsor_names = []
+    for d in deals:
+        c = await db.companies.find_one({"id": d.get("azienda_id"), "org_id": org_id}, {"_id": 0, "nome": 1})
+        if c and c.get("nome"):
+            sponsor_names.append(c["nome"])
+    if sponsor_names:
+        ctx["sponsor"] = sponsor_names
+    di = ev.get("data_inizio")
+    if di:
+        try:
+            d0 = datetime.fromisoformat(di[:10]).date()
+            ctx["giorni_all_evento"] = (d0 - datetime.now(timezone.utc).date()).days
+        except Exception:
+            pass
+    return ctx
+
+
+def _plan_dates(date_from: str, date_to: str, posts_per_week: int, times: Optional[list]) -> list:
+    """Evenly distribute publish datetimes across the period."""
+    try:
+        d0 = datetime.fromisoformat(date_from[:10]).date()
+        d1 = datetime.fromisoformat(date_to[:10]).date()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Date del piano non valide")
+    if d1 < d0:
+        raise HTTPException(status_code=400, detail="La data finale precede quella iniziale")
+    span_days = (d1 - d0).days + 1
+    weeks = max(1, (span_days + 6) // 7)
+    total = max(1, min(posts_per_week, 14)) * weeks
+    total = min(total, 40)
+    hhmm = (times or ["10:00"])[0] if times else "10:00"
+    try:
+        hh, mm = [int(x) for x in hhmm.split(":")[:2]]
+    except Exception:
+        hh, mm = 10, 0
+    out = []
+    for i in range(total):
+        offset = round(i * (span_days - 1) / max(1, total - 1)) if total > 1 else 0
+        day = d0 + timedelta(days=offset)
+        out.append(datetime(day.year, day.month, day.day, hh, mm, tzinfo=timezone.utc).isoformat())
+    return out
+
+
+def _sanitize_post(user: dict, body: SocialPostIn) -> dict:
+    data = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    plat = data.get("platform")
+    if plat and plat not in SOCIAL_PLATFORMS:
+        raise HTTPException(status_code=400, detail="Canale social non supportato")
+    return data
+
+
+# ---- Settings ----
+@api.get("/social/settings")
+async def social_settings_get(user: dict = Depends(require_admin)):
+    return await _get_social_settings(user["org_id"])
+
+
+@api.put("/social/settings")
+async def social_settings_put(body: SocialSettingsIn, user: dict = Depends(require_org_admin)):
+    await _get_social_settings(user["org_id"])
+    clean = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    clean["updated_at"] = now_iso()
+    clean["autopilot"] = "OFF"
+    await db.social_settings.update_one({"org_id": user["org_id"]}, {"$set": clean})
+    await _social_log(user, "settings_updated")
+    return await _get_social_settings(user["org_id"])
+
+
+# ---- Dashboard ----
+@api.get("/social/dashboard")
+async def social_dashboard(user: dict = Depends(require_admin)):
+    posts = await db.social_posts.find(oq(user), {"_id": 0}).to_list(5000)
+    counts = {s: 0 for s in SOCIAL_STATUSES}
+    for p in posts:
+        counts[p.get("status", "draft")] = counts.get(p.get("status", "draft"), 0) + 1
+    now = now_iso()
+    upcoming = sorted([p for p in posts if p.get("status") in ("scheduled", "approved")
+                       and (p.get("scheduled_at") or "") >= now],
+                      key=lambda x: x.get("scheduled_at") or "")[:8]
+    settings = await _get_social_settings(user["org_id"])
+    accounts = await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
+    return {"counts": counts, "total": len(posts), "upcoming": upcoming,
+            "autopilot": "OFF", "brand_name": settings.get("brand_name"),
+            "accounts": accounts}
+
+
+# ---- Posts CRUD ----
+@api.get("/social/posts")
+async def social_posts_list(status: Optional[str] = None, platform: Optional[str] = None,
+                            event_id: Optional[str] = None, user: dict = Depends(require_admin)):
+    q = oq(user)
+    if status:
+        q["status"] = status
+    if platform:
+        q["platform"] = platform
+    if event_id:
+        q["event_id"] = event_id
+    return await db.social_posts.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+
+@api.get("/social/posts/{post_id}")
+async def social_post_get(post_id: str, user: dict = Depends(require_admin)):
+    doc = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    return doc
+
+
+@api.post("/social/posts")
+async def social_post_create(body: SocialPostIn, user: dict = Depends(require_admin)):
+    data = _sanitize_post(user, body)
+    data.update({"org_id": user["org_id"], "status": "draft", "platform": data.get("platform") or "instagram",
+                 "source": "manual", "created_by": user.get("user_id"),
+                 "created_by_name": user.get("name")})
+    doc = await _create("social_posts", data)
+    await _social_log(user, "created", post_id=doc["id"], platform=doc.get("platform"))
+    return doc
+
+
+@api.put("/social/posts/{post_id}")
+async def social_post_update(post_id: str, body: SocialPostIn, user: dict = Depends(require_admin)):
+    clean = _sanitize_post(user, body)
+    clean["updated_at"] = now_iso()
+    res = await db.social_posts.update_one(oq(user, id=post_id), {"$set": clean})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    await _social_log(user, "edited", post_id=post_id)
+    return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+
+
+@api.delete("/social/posts/{post_id}")
+async def social_post_delete(post_id: str, user: dict = Depends(require_admin)):
+    await db.social_posts.delete_one(oq(user, id=post_id))
+    await _social_log(user, "deleted", post_id=post_id)
+    return {"ok": True}
+
+
+@api.post("/social/posts/{post_id}/approve")
+async def social_post_approve(post_id: str, user: dict = Depends(require_org_admin)):
+    res = await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
+        "status": "approved", "approved_by": user.get("user_id"),
+        "approved_by_name": user.get("name"), "approved_at": now_iso(), "updated_at": now_iso()}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    await _social_log(user, "approved", post_id=post_id)
+    return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+
+
+@api.post("/social/posts/{post_id}/schedule")
+async def social_post_schedule(post_id: str, body: SocialScheduleIn, user: dict = Depends(require_org_admin)):
+    res = await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
+        "status": "scheduled", "scheduled_at": body.scheduled_at,
+        "scheduled_by": user.get("user_id"), "scheduled_by_name": user.get("name"),
+        "updated_at": now_iso()}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    await _social_log(user, "scheduled", post_id=post_id, detail=body.scheduled_at)
+    return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+
+
+# ---- AI generation ----
+async def _record_generation(user: dict, gen_type: str, payload: dict, result) -> str:
+    gid = new_id()
+    await db.social_ai_generations.insert_one({
+        "id": gid, "org_id": user["org_id"], "type": gen_type, "model": social_ai.MODEL,
+        "input": payload, "output": result, "created_by": user.get("user_id"),
+        "created_by_name": user.get("name"), "created_at": now_iso()})
+    return gid
+
+
+@api.post("/social/generate")
+async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_admin)):
+    settings = await _get_social_settings(user["org_id"])
+    event_ctx = None
+    if body.event_id:
+        event_ctx = await _event_public_context(body.event_id, user["org_id"])
+    gen = await social_ai.generate_post(settings, event_ctx, topic=body.topic,
+                                        category=body.category, platform=body.platform or "instagram",
+                                        extra=body.extra_instructions)
+    gid = await _record_generation(user, "post", body.model_dump(), gen)
+    data = {"org_id": user["org_id"], "status": "draft", "source": "ai",
+            "platform": body.platform or "instagram", "event_id": body.event_id,
+            "topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
+            "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
+            "image_suggestion": gen.get("image_suggestion"), "category": gen.get("category"),
+            "format": gen.get("format"), "ai_generation_id": gid,
+            "created_by": user.get("user_id"), "created_by_name": user.get("name")}
+    doc = await _create("social_posts", data)
+    await _social_log(user, "generated", post_id=doc["id"], platform=doc.get("platform"))
+    return doc
+
+
+@api.post("/social/posts/{post_id}/regenerate")
+async def social_regenerate(post_id: str, body: SocialGenerateIn, user: dict = Depends(require_admin)):
+    post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    settings = await _get_social_settings(user["org_id"])
+    ev_id = body.event_id or post.get("event_id")
+    event_ctx = await _event_public_context(ev_id, user["org_id"]) if ev_id else None
+    gen = await social_ai.generate_post(settings, event_ctx,
+                                        topic=body.topic or post.get("topic"),
+                                        category=body.category or post.get("category"),
+                                        platform=post.get("platform") or "instagram",
+                                        extra=body.extra_instructions)
+    gid = await _record_generation(user, "post", {"regenerate": post_id, **body.model_dump()}, gen)
+    upd = {"topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
+           "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
+           "image_suggestion": gen.get("image_suggestion"), "category": gen.get("category"),
+           "format": gen.get("format"), "ai_generation_id": gid, "status": "draft", "updated_at": now_iso()}
+    await db.social_posts.update_one(oq(user, id=post_id), {"$set": upd})
+    await _social_log(user, "regenerated", post_id=post_id)
+    return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+
+
+@api.post("/social/plan/generate")
+async def social_plan_generate(body: SocialPlanIn, user: dict = Depends(require_admin)):
+    settings = await _get_social_settings(user["org_id"])
+    event_ctx = await _event_public_context(body.event_id, user["org_id"]) if body.event_id else None
+    dates = _plan_dates(body.date_from, body.date_to, body.posts_per_week, settings.get("preferred_times"))
+    posts = await social_ai.generate_plan(settings, event_ctx, goal=body.goal,
+                                          count=len(dates), platform=body.platform or "instagram")
+    plan_id = new_id()
+    await db.social_calendar.insert_one({
+        "id": plan_id, "org_id": user["org_id"], "date_from": body.date_from, "date_to": body.date_to,
+        "posts_per_week": body.posts_per_week, "goal": body.goal, "event_id": body.event_id,
+        "platform": body.platform or "instagram", "count": len(posts),
+        "created_by": user.get("user_id"), "created_by_name": user.get("name"), "created_at": now_iso()})
+    gid = await _record_generation(user, "plan", body.model_dump(), {"count": len(posts)})
+    created = []
+    for i, gen in enumerate(posts):
+        data = {"org_id": user["org_id"], "status": "draft", "source": "plan", "plan_id": plan_id,
+                "platform": body.platform or "instagram", "event_id": body.event_id,
+                "topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
+                "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
+                "image_suggestion": gen.get("image_suggestion"), "category": gen.get("category"),
+                "format": gen.get("format"), "scheduled_at": dates[i] if i < len(dates) else None,
+                "ai_generation_id": gid, "created_by": user.get("user_id"), "created_by_name": user.get("name")}
+        created.append(await _create("social_posts", data))
+    await _social_log(user, "plan_generated", detail=f"plan {plan_id} · {len(created)} post")
+    return {"plan_id": plan_id, "count": len(created), "posts": created}
+
+
+@api.get("/social/calendar")
+async def social_calendar_list(date_from: Optional[str] = None, date_to: Optional[str] = None,
+                               user: dict = Depends(require_admin)):
+    q = oq(user, scheduled_at={"$ne": None})
+    if date_from or date_to:
+        rng = {}
+        if date_from:
+            rng["$gte"] = date_from
+        if date_to:
+            rng["$lte"] = date_to + "T23:59:59"
+        q["scheduled_at"] = rng
+    posts = await db.social_posts.find(q, {"_id": 0}).sort("scheduled_at", 1).to_list(5000)
+    plans = await db.social_calendar.find(oq(user), {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"posts": posts, "plans": plans}
+
+
+# ---- Media library ----
+@api.get("/social/media")
+async def social_media_list(category: Optional[str] = None, event_id: Optional[str] = None,
+                            user: dict = Depends(require_admin)):
+    q = oq(user)
+    if category:
+        q["category"] = category
+    if event_id:
+        q["event_id"] = event_id
+    return await db.social_media.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+
+@api.post("/social/media")
+async def social_media_upload(file: UploadFile = File(...), name: str = Form(None),
+                              category: str = Form(None), event_id: str = Form(None),
+                              description: str = Form(None), tags: str = Form(None),
+                              user: dict = Depends(require_admin)):
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
+    fid = new_id()
+    path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/{fid}.{ext}"
+    data = await file.read()
+    ctype = file.content_type or MIME.get(ext, "application/octet-stream")
+    result = storage_utils.put_object(path, data, ctype)
+    # Register in files collection so the existing /api/files/{id} download works (org-checked).
+    await db.files.insert_one({"id": fid, "org_id": user["org_id"], "storage_path": result["path"],
+                               "original_filename": file.filename, "content_type": ctype,
+                               "size": result.get("size"), "is_deleted": False, "created_at": now_iso()})
+    tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    doc = await _create("social_media", {
+        "org_id": user["org_id"], "file_id": fid, "url": f"/api/files/{fid}",
+        "name": name or file.filename, "category": category or "photo", "event_id": event_id or None,
+        "description": description or None, "tags": tag_list, "content_type": ctype,
+        "size": result.get("size"), "uploaded_by": user.get("user_id")})
+    await _social_log(user, "media_uploaded", detail=doc["id"])
+    return doc
+
+
+@api.put("/social/media/{media_id}")
+async def social_media_update(media_id: str, body: SocialMediaUpdateIn, user: dict = Depends(require_admin)):
+    clean = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    clean["updated_at"] = now_iso()
+    res = await db.social_media.update_one(oq(user, id=media_id), {"$set": clean})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Media non trovato")
+    return await db.social_media.find_one(oq(user, id=media_id), {"_id": 0})
+
+
+@api.delete("/social/media/{media_id}")
+async def social_media_delete(media_id: str, user: dict = Depends(require_admin)):
+    m = await db.social_media.find_one(oq(user, id=media_id), {"_id": 0})
+    if m and m.get("file_id"):
+        await db.files.update_one({"id": m["file_id"], "org_id": user["org_id"]}, {"$set": {"is_deleted": True}})
+    await db.social_media.delete_one(oq(user, id=media_id))
+    return {"ok": True}
+
+
+# ---- Social accounts (Instagram scaffold; real OAuth arrives in Phase D) ----
+@api.get("/social/accounts")
+async def social_accounts_list(user: dict = Depends(require_admin)):
+    return await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
+
+
+@api.post("/social/accounts")
+async def social_account_upsert(body: SocialAccountIn, user: dict = Depends(require_org_admin)):
+    if body.platform not in SOCIAL_PLATFORMS:
+        raise HTTPException(status_code=400, detail="Canale social non supportato")
+    existing = await db.social_accounts.find_one(oq(user, platform=body.platform), {"_id": 0})
+    payload = {"handle": body.handle, "status": "pending_connection",
+               "connected": False, "access_token": None, "updated_at": now_iso()}
+    if existing:
+        await db.social_accounts.update_one(oq(user, id=existing["id"]), {"$set": payload})
+        doc = await db.social_accounts.find_one(oq(user, id=existing["id"]), {"_id": 0})
+    else:
+        doc = await _create("social_accounts", {"org_id": user["org_id"], "platform": body.platform, **payload})
+    await _social_log(user, "account_saved", platform=body.platform)
+    return doc
+
+
+@api.delete("/social/accounts/{account_id}")
+async def social_account_delete(account_id: str, user: dict = Depends(require_org_admin)):
+    await db.social_accounts.delete_one(oq(user, id=account_id))
+    await _social_log(user, "account_removed", detail=account_id)
+    return {"ok": True}
+
+
+@api.get("/social/logs")
+async def social_logs(post_id: Optional[str] = None, user: dict = Depends(require_admin)):
+    q = oq(user)
+    if post_id:
+        q["post_id"] = post_id
+    return await db.social_publish_logs.find(q, {"_id": 0}).sort("created_at", -1).limit(300).to_list(300)
+
+
+@api.get("/social/meta")
+async def social_meta(user: dict = Depends(require_admin)):
+    """Static metadata for the UI (statuses, categories, formats, platforms)."""
+    events = await db.events.find(oq(user), {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).to_list(2000)
+    return {"statuses": SOCIAL_STATUSES, "status_labels": SOCIAL_STATUS_LABELS,
+            "categories": social_ai.CATEGORIES, "formats": social_ai.FORMATS,
+            "platforms": SOCIAL_PLATFORMS,
+            "events": [{"id": e["id"], "nome": e.get("nome"), "data_inizio": e.get("data_inizio")} for e in events]}
+
+
 # ---------------- seed ----------------
 async def seed_admin():
     email = os.environ["ADMIN_EMAIL"].lower()
@@ -4879,7 +5362,9 @@ async def startup():
         pass
     for c in ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
               "event_maps", "activities", "followups", "lodgings", "meals",
-              "person_companies", "briefing_versions", "files"]:
+              "person_companies", "briefing_versions", "files",
+              "social_settings", "social_accounts", "social_posts", "social_calendar",
+              "social_media", "social_ai_generations", "social_publish_logs"]:
         try:
             await db[c].create_index("org_id")
         except Exception:
