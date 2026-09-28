@@ -316,3 +316,10 @@ Task 2 — Creatività manuale:
 - Unico 502 reale: POST /api/social/posts/{id}/publish. Log: Graph /media 200 ma /media_publish 400 Bad Request (post 49630fb1...); il blocco except rimappava il 400 upstream in HTTPException(502).
 - Fix (solo classificazione errori, publishing invariato): instagram_utils._check ora solleva GraphAPIError con status_code; publish except restituisce 422 (con dettaglio Meta) per errori client 4xx, 502 solo per gateway/5xx/network. Nessuna modifica a UI/OAuth/dati/post/logica editoriale.
 - Test tecnico (no pubblicazione): 400->422, 500->502, 200+error->502, generic->502. In PREVIEW: serve redeploy per applicare in produzione.
+
+## 2026-09-28 — Fix scroll touch drawer mobile (Layout.jsx)
+- Drawer mobile ora: h/max-h 100dvh, nav flex-1 min-h-0 overflow-y-auto overscroll-contain + -webkit-overflow-scrolling:touch, padding safe-area inferiore (env(safe-area-inset-bottom)+24px).
+- Body-lock iOS-safe via useEffect su mobileOpen: position:fixed/top:-scrollY/overflow:hidden mentre aperto; ripristino stile e window.scrollTo alla chiusura (mantiene posizione).
+- Verificato su viewport 390x844: drawer scrollabile fino ultima voce (Impostazioni Social), pagina bloccata (scrollY=0), nessuno scroll chaining, posizione ripristinata alla chiusura.
+- Nessuna modifica a menu desktop, voci, permessi, routing o layout generale. VolunteerLayout (bottom-nav) non toccato.
+- In PREVIEW: mostrato prima del deploy come richiesto.

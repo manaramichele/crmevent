@@ -197,6 +197,33 @@ export default function Layout({ children }) {
     }
   }, [isSuper, multiOrg]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Lock the underlying page (touch + normal scroll) while the mobile drawer is open,
+  // iOS/Safari-safe, and restore the exact scroll position on close.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prev = {
+      position: body.style.position, top: body.style.top, left: body.style.left,
+      right: body.style.right, width: body.style.width, overflow: body.style.overflow,
+    };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.right = prev.right;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [mobileOpen]);
+
   const navGroups = isSuper
     ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }, { title: "Marketing CRMEvent — Piattaforma", items: MARKETING_NAV }]
     : [{ items: ORG_NAV }];
@@ -248,10 +275,10 @@ export default function Layout({ children }) {
       {/* mobile sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 h-full w-64 bg-white p-3 shadow-xl">
-            <div className="h-14 flex items-center justify-between mb-2"><button onClick={() => { setMobileOpen(false); navigate("/"); }} data-testid="mobile-logo-home" className="flex items-center"><Logo /></button><button onClick={() => setMobileOpen(false)}><X className="w-6 h-6" /></button></div>
-            <nav className="space-y-1">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} data-testid="mobile-drawer-overlay" />
+          <aside className="absolute left-0 top-0 h-[100dvh] max-h-[100dvh] w-64 bg-white shadow-xl flex flex-col" data-testid="mobile-drawer">
+            <div className="h-14 flex items-center justify-between px-3 shrink-0 border-b border-slate-100"><button onClick={() => { setMobileOpen(false); navigate("/"); }} data-testid="mobile-logo-home" className="flex items-center"><Logo /></button><button onClick={() => setMobileOpen(false)} data-testid="mobile-menu-close"><X className="w-6 h-6" /></button></div>
+            <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-3 py-3 space-y-1 pb-[calc(env(safe-area-inset-bottom)+24px)]" data-testid="mobile-drawer-nav">
               {navGroups.map((g, gi) => (
                 <div key={gi} className={gi > 0 ? "pt-3 mt-2 border-t border-slate-100" : ""}>
                   {g.title && <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.title}</div>}
