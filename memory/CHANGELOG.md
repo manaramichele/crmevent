@@ -1,5 +1,16 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Marketing · Social (Social Media Manager AI) — FASE A + B (testato E2E, iter18 100% PASS)
+- Nuovo modulo multi-tenant "Marketing → Social" (Social / Calendario editoriale / Impostazioni Social). Tutte le collezioni org-scoped via `oq(user)`.
+- Collezioni: `social_settings`, `social_accounts`, `social_posts`, `social_calendar`, `social_media`, `social_ai_generations`, `social_publish_logs` (+ indici `org_id`).
+- Backend `server.py` sezione "MARKETING · SOCIAL AI": settings GET/PUT, dashboard, meta, posts CRUD + approve/schedule, generate (AI), regenerate, plan/generate, calendar, media (upload storage Emergent + /api/files), accounts (scaffold Instagram, status pending_connection), logs. Permessi: `require_org_admin` (settings/accounts/approve/schedule), `require_admin` (generate/list/edit/delete/media/dashboard).
+- LLM isolato in `social_ai.py` (gpt-5.4-mini via Emergent LLM key) — separato dalla chat assistente (`support_service.py`). `generate_post` e `generate_plan` con 12 categorie editoriali e anti-ripetizione. Contenuti specifici sul mondo eventi/sport (staff, volontari, turni, sponsor, briefing) — mai generici.
+- Uso dati CRMEvent: `_event_public_context` invia all'AI SOLO dati pubblicabili evento (nome, date, località, percorsi, sponsor confermati, giorni all'evento). MAI email/telefoni/dati personali.
+- Pilota automatico: presente nel DB, forzato SEMPRE su OFF in questa fase. Nessuna pubblicazione automatica: tutto richiede approvazione manuale.
+- Frontend: `Social.jsx` (dashboard, post grid, "Crea con AI", "Genera piano editoriale", editor con Rigenera/Modifica/Approva/Programma/Elimina, tab Libreria Media), `SocialSettings.jsx` (brand, tone, CTA, frequenza, giorni/orari, logo, colori, hashtag, cose da evitare, istruzioni AI, connessione Instagram, Autopilot OFF), `SocialCalendar.jsx` (contenuti per giorno con stati). Menu "MARKETING" in `Layout.jsx`, route in `App.js`.
+- Instagram/Meta (Fase D) NON implementato: solo scaffold che salva l'handle. Generazione creatività immagini (Fase C) predisposta ma non ancora attiva.
+
+
 ## 2026-06-26 — Google Analytics 4 + Consent Mode v2 (verificato E2E, TEST A/C/D/E PASS)
 - GA4 `G-PZK7J854DS` via gtag.js. Stub + Consent Mode v2 default (tutti `denied`, wait_for_update:500) in public/index.html PRIMA di GA; `gtag('config', ..., {send_page_view:false, anonymize_ip:true})`. Script di raccolta caricato SOLO su host `crmevent.it` (preview/dev/test non contaminano la proprietà).
 - `src/lib/analytics.js`: applyConsent/saveConsent (localStorage `crmevent_cookie_consent`), trackPageView (SPA, solo se analytics granted), trackEvent. Nessun dato personale nei parametri.

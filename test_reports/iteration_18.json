@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 18 — Marketing · Social (Phase A+B) end-to-end testing: 11/11 backend pytest cases pass and full UI flow (Social dashboard, AI generation, editor, Media tab, Impostazioni Social, Calendario editoriale) verified against the deployed preview URL. Multi-tenant isolation and permission boundaries were explicitly tested. Autopilot is correctly enforced OFF everywhere. AI generation (gpt-5.4-mini via Emergent LLM key) produced real non-empty content live.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_social.py",
+    "/app/test_reports/pytest/iter18_social.xml"
+  ],
+  "backend_tests_executed": [
+    "TestSettings.test_get_defaults (autopilot=OFF, defaults present)",
+    "TestSettings.test_put_settings (brand_name/target/tone/hashtags/preferred_days/times persisted; autopilot forced OFF)",
+    "TestDashboard.test_dashboard (counts for all 6 statuses, upcoming, autopilot=OFF)",
+    "TestDashboard.test_meta",
+    "TestPostLifecycle.test_generate_and_lifecycle (AI generate live -> edit -> approve -> schedule 2030-01-15 -> regenerate back to draft -> delete -> 404)",
+    "TestPlan.test_plan_generation (feb 1-21, 3/week -> >=3 posts across >=2 distinct days, calendar returns posts & plan record)",
+    "TestMedia.test_media_crud (multipart upload png -> /api/files/<id> url -> list -> update -> delete)",
+    "TestAccounts.test_upsert_and_delete (instagram handle, status=pending_connection, connected=false)",
+    "TestLogs.test_logs_present (settings_updated / generated actions recorded)",
+    "TestIsolation.test_orgs_do_not_see_each_other (Org B cannot list/get/approve/schedule Org A post -> 404; A's post survives B's delete attempt)",
+    "TestIsolation.test_settings_isolation (each org gets its own defaults, not the other's brand)"
+  ],
+  "frontend_ui_verified": [
+    "Sidebar MARKETING group visible with Social / Calendario editoriale / Impostazioni Social entries",
+    "/marketing/social: dashboard stat cards render (Bozze/Da approvare/Approvati/Programmati/Pubblicati), prossime pubblicazioni block, post grid with cards",
+    "'Crea con AI' dialog: topic input + generate button -> AI produced post (title 33 chars, caption 403 chars) and editor opened",
+    "'Genera piano editoriale' button present (plan-open-btn)",
+    "Libreria Media tab: media-file-input present (media-grid appears only when items exist)",
+    "/marketing/impostazioni: social-settings-page, ss-brand-name, ss-save-btn, ig-handle-input, ig-connect-btn, autopilot-state present. autopilot-state text = 'OFF'. Save works.",
+    "/marketing/calendario: social-calendar-page renders with scheduled posts grouped by day (giovedì 1 ottobre 2026, sabato 3 ottobre 2026, lunedì 5 ottobre 2026, ...)"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py has grown to 5410 lines — Marketing/Social section alone spans ~500 lines. Consider extracting to /app/backend/routers/social.py to keep files under the 700-line guideline.",
+    "DELETE /api/social/posts/{id} and DELETE /api/social/media/{id} always return {ok: true} even when the id doesn't belong to the caller's org (delete_one silently). Isolation is preserved (nothing is actually removed thanks to org_id filter) but returning 404 on missing would be more RESTful and less confusing. Same for DELETE /api/social/accounts.",
+    "social_settings_put uses PUT semantics but performs a partial $set (exclude_unset). Behaviour is fine and desirable but the HTTP verb technically implies full replacement — either document this as PATCH-like or switch to PATCH.",
+    "_plan_dates cap at 40 posts and hard-coded to first preferred_time only; consider distributing across multiple preferred_times when provided."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18_social.py (new — pytest, 11 test cases)"
+  ],
+  "success_rate": { "backend": "100% (11/11)", "frontend": "100% of tested flows" },
+  "test_credentials": "social_test_1790602207@example.com / Password123 (existing org). New orgs registered dynamically in backend tests via /api/auth/register-organization.",
+  "seed_data_creation": "Backend tests register two ephemeral organizations per module run for multi-tenant isolation. UI test used the pre-existing social_test organizer; produced 1 additional AI-generated draft and updated brand_name to 'TEST_UI_Brand'.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase D (Instagram/Meta publishing + autopilot cron) is intentionally NOT implemented; only the account scaffold saves a handle with status 'pending_connection'. Do not attempt real OAuth. All /api/social/* endpoints are org-scoped via oq(user). The stat card testids are of the form stat-<italianLabel> (e.g., stat-Bozze, stat-Approvati) not stat-draft/etc. The Emergent LLM key is live so AI calls take ~8-15s each; give generous timeouts.",
+  "rca of the issue": "N/A — no bugs found."
+}

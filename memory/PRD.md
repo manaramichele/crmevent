@@ -167,3 +167,12 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - Stripe resta TEST (STRIPE_MODE=test verificato in prod).
 - Funnel Demo: autorizzata attivazione TEMPORANEA per il test (B1), poi ripristino BOZZA (azioni SuperAdmin lato utente in prod).
 - Pre-step SuperAdmin in prod (l'agente non ha auth SuperAdmin Google in prod): 1) Verifica/crea lista Brevo, 2) Collega template, 3) Attiva Funnel, poi test, poi Funnel→BOZZA.
+
+## Marketing · Social (Social Media Manager AI) — roadmap
+- FASE A (fatto): DB + UI Marketing/Social + impostazioni + libreria media + calendario editoriale.
+- FASE B (fatto): generazione AI contenuti (post singolo + piano editoriale) con dati evento sanitizzati; trigger intelligenti come SUGGERIMENTI (architettura predisposta).
+- FASE C (P1, backlog): generazione/suggerimento creatività immagini (Nano Banana / GPT Image 1 via Emergent key) combinando immagine+logo+colori+testo; formati IG 1:1 / 4:5 / 9:16.
+- FASE D (P1, backlog — STOP prima di iniziare): connessione ufficiale Instagram/Meta (Graph API Content Publishing). Richiede: App Meta Business, Instagram Business/Creator collegato a Pagina Facebook, permessi instagram_basic + instagram_content_publish + pages_show_list + business_management, App Review Meta, token lungo + refresh, eventuali webhook. Da fornire in Emergent: META_APP_ID, META_APP_SECRET, redirect OAuth.
+- FASE E (P2, backlog): programmazione e pubblicazione automatica (cron) con Pilota Automatico ON (regole su cosa auto-pubblicare vs approvazione).
+- Trigger intelligenti (P1): 90/60/30/7/1 giorni all'evento, nuovo sponsor/percorso → generano SOLO suggerimenti (nessuna pubblicazione automatica).
+
