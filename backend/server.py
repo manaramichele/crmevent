@@ -1335,7 +1335,7 @@ async def upload(file: UploadFile = File(...), admin: dict = Depends(require_adm
     path = f"{storage_utils.APP_NAME}/uploads/{admin['user_id']}/{fid}.{ext}"
     data = await file.read()
     ctype = file.content_type or MIME.get(ext, "application/octet-stream")
-    result = storage_utils.put_object(path, data, ctype)
+    result = await asyncio.to_thread(storage_utils.put_object, path, data, ctype)
     await db.files.insert_one({"id": fid, "org_id": admin["org_id"], "storage_path": result["path"], "original_filename": file.filename,
                                "content_type": ctype, "size": result.get("size"), "is_deleted": False, "created_at": now_iso()})
     return {"id": fid, "url": f"/api/files/{fid}", "filename": file.filename}
@@ -1348,7 +1348,7 @@ async def download(file_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="File non trovato")
     if user.get("role") != "superadmin" and rec.get("org_id") not in (None, user.get("org_id")):
         raise HTTPException(status_code=404, detail="File non trovato")
-    data, ctype = storage_utils.get_object(rec["storage_path"])
+    data, ctype = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
     return Response(content=data, media_type=rec.get("content_type", ctype))
 
 
@@ -5046,11 +5046,11 @@ async def _ensure_public_jpeg(org_id: str, media: dict):
     f = await db.files.find_one({"id": media.get("file_id"), "org_id": org_id}, {"_id": 0})
     if not f:
         raise HTTPException(status_code=400, detail="File creatività non trovato")
-    data, _ct = storage_utils.get_object(f["storage_path"])
+    data, _ct = await asyncio.to_thread(storage_utils.get_object, f["storage_path"])
     jpeg = social_creative.to_jpeg(data)
     token = new_id() + new_id()
     path = f"{storage_utils.APP_NAME}/social/{org_id}/pub_{token}.jpg"
-    res = storage_utils.put_object(path, jpeg, "image/jpeg")
+    res = await asyncio.to_thread(storage_utils.put_object, path, jpeg, "image/jpeg")
     await db.ig_public_media.insert_one({"token": token, "org_id": org_id, "storage_path": res["path"],
                                          "created_at": now_iso()})
     return f"{instagram_utils.BACKEND_PUBLIC_URL}/api/social/public/creative/{token}"
@@ -5062,7 +5062,7 @@ async def social_public_creative(token: str):
     rec = await db.ig_public_media.find_one({"token": token}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Not found")
-    data, _ct = storage_utils.get_object(rec["storage_path"])
+    data, _ct = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
     return Response(content=data, media_type="image/jpeg")
 
 
@@ -5262,7 +5262,7 @@ async def social_media_upload(file: UploadFile = File(...), name: str = Form(Non
     path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/{fid}.{ext}"
     data = await file.read()
     ctype = file.content_type or MIME.get(ext, "application/octet-stream")
-    result = storage_utils.put_object(path, data, ctype)
+    result = await asyncio.to_thread(storage_utils.put_object, path, data, ctype)
     # Register in files collection so the existing /api/files/{id} download works (org-checked).
     await db.files.insert_one({"id": fid, "org_id": user["org_id"], "storage_path": result["path"],
                                "original_filename": file.filename, "content_type": ctype,
@@ -5500,7 +5500,7 @@ async def _load_media_bytes(org_id: str, media_id: str):
     if not f:
         return None, None
     try:
-        data, _ct = storage_utils.get_object(f["storage_path"])
+        data, _ct = await asyncio.to_thread(storage_utils.get_object, f["storage_path"])
         return data, m
     except Exception:
         return None, None
@@ -5568,7 +5568,7 @@ async def social_post_creative_upload(post_id: str, file: UploadFile = File(...)
     fid = new_id()
     ext = {"image/png": "png", "image/webp": "webp", "image/jpeg": "jpg"}.get(ctype) or (fname.rsplit(".", 1)[-1] if "." in fname else "jpg")
     path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/creative_{fid}.{ext}"
-    result = storage_utils.put_object(path, data, ctype or "image/jpeg")
+    result = await asyncio.to_thread(storage_utils.put_object, path, data, ctype or "image/jpeg")
     await db.files.insert_one({"id": fid, "org_id": user["org_id"], "storage_path": result["path"],
                                "original_filename": file.filename or f"creative_{post_id}.{ext}",
                                "content_type": ctype or "image/jpeg", "size": result.get("size"),

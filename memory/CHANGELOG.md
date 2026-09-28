@@ -303,3 +303,10 @@ Task 2 — Creatività manuale:
 - Token OAuth NON toccato; nessun nuovo collegamento richiesto se gia connesso.
 - Verificato in preview con account IG di test in __platform__: generate auto-assegna, approve OK senza selezione, publish si ferma a 428 (nessuna pubblicazione reale), multi-account richiede selezione, dashboard non espone token. Nessun 5xx nelle operazioni sui post (il NameError Header nei log era storico, Header e importato). Dati di test rimossi.
 - In PREVIEW: da deployare in produzione.
+
+## 2026-09-28 — Fix 502 Cloudflare modulo Social (event-loop blocking)
+- Causa: chiamate storage sincrone (requests, timeout fino a 120s) dentro endpoint async su uvicorn a 1 worker -> event loop bloccato quando il proxy objstore e lento -> worker non risponde -> Cloudflare 502 "origin returned invalid or incomplete response" su qualsiasi richiesta Social in coda.
+- Endpoint coinvolti: POST /api/social/posts/{id}/creative/upload, POST /api/social/media (upload immagine), GET /api/files/{id} (anteprima), /api/social/public/creative/{token}, e _ensure_public_jpeg.
+- Fix: tutte le storage_utils.put_object/get_object nei path async ora via await asyncio.to_thread(...) (8 call site). Nessuna modifica a UI, logica editoriale, OAuth o altre funzioni. Comportamento immagini invariato.
+- Verifica preview: open 200, save(PUT) 200, accounts 200, upload OK, preview img 200, approve 200. Nessun 5xx. Nessuna pubblicazione IG. Dati di test rimossi.
+- Da deployare in produzione per applicare il fix.
