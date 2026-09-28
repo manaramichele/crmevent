@@ -5130,6 +5130,10 @@ async def social_post_publish(post_id: str, body: SocialPublishIn, user: dict = 
                                          {"$set": {"status": "error", "last_publish_error": str(e)[:300],
                                                    "updated_at": now_iso()}})
         await _social_log(user, "publish_failed", post_id=post_id, platform="instagram", error=str(e)[:300])
+        # A Meta validation rejection (Graph 4xx) is a client-side error, NOT an origin/gateway
+        # failure: surface it as 422 with the Graph detail so it is not misclassified as a 502.
+        if isinstance(e, instagram_utils.GraphAPIError) and getattr(e, "is_client_error", False):
+            raise HTTPException(status_code=422, detail=f"Instagram ha rifiutato la pubblicazione: {str(e)[:200]}")
         raise HTTPException(status_code=502, detail=f"Pubblicazione Instagram fallita: {str(e)[:200]}")
     await db.social_posts.update_one({"id": post_id, "org_id": user["org_id"]}, {"$set": {
         "status": "published", "published_media_id": media_id, "published_at": now_iso(),

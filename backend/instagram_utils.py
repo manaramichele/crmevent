@@ -91,6 +91,14 @@ def parse_signed_request(signed_request: str):
         return None
 
 
+class GraphAPIError(RuntimeError):
+    """Instagram Graph API error that preserves the upstream HTTP status."""
+    def __init__(self, message, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.is_client_error = bool(status_code and 400 <= status_code < 500)
+
+
 def _check(r):
     try:
         j = r.json()
@@ -98,7 +106,7 @@ def _check(r):
         j = {"error": {"message": (r.text or "")[:300]}}
     if r.status_code >= 400 or (isinstance(j, dict) and j.get("error")):
         msg = (j.get("error") or {}).get("message") if isinstance(j, dict) else None
-        raise RuntimeError(msg or f"HTTP {r.status_code}")
+        raise GraphAPIError(msg or f"HTTP {r.status_code}", status_code=r.status_code)
     return j
 
 

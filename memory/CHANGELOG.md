@@ -310,3 +310,9 @@ Task 2 — Creatività manuale:
 - Fix: tutte le storage_utils.put_object/get_object nei path async ora via await asyncio.to_thread(...) (8 call site). Nessuna modifica a UI, logica editoriale, OAuth o altre funzioni. Comportamento immagini invariato.
 - Verifica preview: open 200, save(PUT) 200, accounts 200, upload OK, preview img 200, approve 200. Nessun 5xx. Nessuna pubblicazione IG. Dati di test rimossi.
 - Da deployare in produzione per applicare il fix.
+
+## 2026-09-28 — 502 pubblicazione Instagram riclassificato (RCA produzione)
+- RCA deployer (prod, read-only): fix asyncio.to_thread GIA live in prod (8 call site, 0 sincrone). Endpoint apertura post (/api/files/{id}, /api/social/media, /api/social/public/creative/{token}) rispondono 200 -> il 502 "aprendo il post" era cache Cloudflare/bundle JS stantii, non un bug.
+- Unico 502 reale: POST /api/social/posts/{id}/publish. Log: Graph /media 200 ma /media_publish 400 Bad Request (post 49630fb1...); il blocco except rimappava il 400 upstream in HTTPException(502).
+- Fix (solo classificazione errori, publishing invariato): instagram_utils._check ora solleva GraphAPIError con status_code; publish except restituisce 422 (con dettaglio Meta) per errori client 4xx, 502 solo per gateway/5xx/network. Nessuna modifica a UI/OAuth/dati/post/logica editoriale.
+- Test tecnico (no pubblicazione): 400->422, 500->502, 200+error->502, generic->502. In PREVIEW: serve redeploy per applicare in produzione.
