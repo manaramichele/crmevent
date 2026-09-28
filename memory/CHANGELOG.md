@@ -281,3 +281,16 @@
 - Verificato: social_posts __platform__ = 34 (intatti); tenant 7d94739b=1, 7edbced1=1 (intatti).
 - Verificato chain OAuth Instagram platform-scope: SocialSettings.jsx usa platformApi (forza ?scope=platform) -> /oauth/instagram/start (require_org_admin: scope=platform+superadmin => org_id=__platform__) -> state JWT porta org_id=__platform__ -> callback salva social_accounts con org_id=__platform__, indipendente da X-Org-Id/Org attiva.
 - @crmevent NON ancora collegato (social_accounts=0). Nessun token presente. Pilota automatico OFF. Nessuna pubblicazione eseguita.
+
+## 2026-09-28 — Fix data/ora Social + Creatività manuale (no auto-generazione)
+Task 1 — Date/time picker:
+- Nuovo helper src/lib/datetime.js (Europe/Rome). Modale Social: campi Data (calendario) + Ora 24h separati, blocco date/orari passati, display GG/MM/AAAA - HH:mm.
+- Storage resta UTC ISO (backend invariato). Elenco, modale e Calendario editoriale ora usano lo stesso fuso Europe/Rome -> nessuno sfasamento 1-2h. Verificato estate(+2)/inverno(+1).
+Task 2 — Creatività manuale:
+- AI genera anche image_brief (Brief grafico) per ogni post (social_ai.py generate_post/plan; salvato in social_posts).
+- Disattivata generazione automatica immagini/template: vecchio POST /social/posts/{id}/creative rimosso (ora 405).
+- Nuovi endpoint: POST /social/posts/{id}/creative/upload (upload manuale, valida 1:1 o 4:5, converte JPEG check), DELETE /social/posts/{id}/creative (rimuove img e riporta a draft se era approved/scheduled).
+- Gating: approve e publish bloccati senza creativita (backend + UI disabilitano i pulsanti). Post puo restare draft/scheduled senza immagine.
+- UI modale: sezione Creativita con Brief grafico + Carica/Sostituisci/Anteprima/Elimina immagine. Anteprima Instagram invariata.
+- Collegamento Instagram (OAuth platform scope) NON toccato. Nessuna pubblicazione reale eseguita.
+- NOTA: Task 1 e 2 sono in PREVIEW, non ancora deployati in produzione.

@@ -3,6 +3,7 @@ import api from "@/lib/platformApi";
 import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { CalendarRange } from "lucide-react";
+import { utcIsoToRomeParts } from "@/lib/datetime";
 
 const STATUS_COLORS = {
   draft: "bg-slate-100 text-slate-600", pending_approval: "bg-amber-100 text-amber-700",
@@ -26,7 +27,7 @@ export default function SocialCalendar() {
 
   const byDay = {};
   posts.forEach((p) => {
-    const d = (p.scheduled_at || "").slice(0, 10);
+    const d = utcIsoToRomeParts(p.scheduled_at).date; // Rome calendar day
     if (!d) return;
     (byDay[d] = byDay[d] || []).push(p);
   });
@@ -47,11 +48,11 @@ export default function SocialCalendar() {
         <div className="space-y-4">
           {days.map((d) => (
             <div key={d} className="bg-white border border-slate-200 rounded-xl p-4" data-testid={`calendar-day-${d}`}>
-              <div className="text-sm font-semibold text-slate-800 mb-3">{new Date(d).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
+              <div className="text-sm font-semibold text-slate-800 mb-3">{new Date(d + "T12:00:00").toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
               <div className="space-y-2">
                 {byDay[d].map((p) => (
                   <div key={p.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors" data-testid={`calendar-post-${p.id}`}>
-                    <span className="text-xs text-slate-400 w-12 shrink-0">{(p.scheduled_at || "").slice(11, 16)}</span>
+                    <span className="text-xs text-slate-400 w-12 shrink-0">{utcIsoToRomeParts(p.scheduled_at).time}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-slate-800 truncate">{p.title || p.topic || "Senza titolo"}</div>
                       <div className="text-xs text-slate-400 truncate">{(p.caption || "").slice(0, 90)}</div>

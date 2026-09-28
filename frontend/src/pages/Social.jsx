@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/platformApi";
 import { formatApiError } from "@/lib/api";
+import { utcIsoToRomeParts, romePartsToUtcIso, formatRome, nowRomeParts } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,9 +56,35 @@ export default function Social() {
   const [media, setMedia] = useState([]);
   const [creative, setCreative] = useState(null);
   const [creativeBusy, setCreativeBusy] = useState(false);
-  const [cOpts, setCOpts] = useState({ mode: "auto", template: "", format: "", show_cta: true, media_id: "" });
-  const [mediaPick, setMediaPick] = useState([]);
   const [igOpen, setIgOpen] = useState(false);
+  const creativeInputRef = useRef(null);
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("");
+
+  // Keep the Rome date/time fields in sync with the post being edited.
+  useEffect(() => {
+    if (editing?.id) {
+      const { date, time } = utcIsoToRomeParts(editing.scheduled_at);
+      setSchedDate(date); setSchedTime(time);
+    } else { setSchedDate(""); setSchedTime(""); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing?.id]);
+
+  const applySchedule = (dateStr, timeStr) => {
+    setSchedDate(dateStr || ""); setSchedTime(timeStr || "");
+    if (dateStr && timeStr) {
+      let iso = romePartsToUtcIso(dateStr, timeStr);
+      if (new Date(iso).getTime() < Date.now()) {
+        const n = nowRomeParts();
+        setSchedDate(n.date); setSchedTime(n.time);
+        iso = romePartsToUtcIso(n.date, n.time);
+        toast.info("Data/ora nel passato non consentita: impostato l'orario attuale");
+      }
+      setEditing((prev) => ({ ...prev, scheduled_at: iso }));
+    } else {
+      setEditing((prev) => ({ ...prev, scheduled_at: "" }));
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,28 +103,37 @@ export default function Social() {
 
   useEffect(() => {
     if (!editing) { setCreative(null); return; }
-    setCOpts({ mode: "auto", template: "", format: editing.format || "", show_cta: editing?.creative_meta?.show_cta ?? true, media_id: "" });
-    api.get("/social/media").then(({ data }) => {
-      setMediaPick(data.filter((m) => m.category !== "creative"));
-      if (editing.creative_media_id) {
+    if (editing.creative_media_id) {
+      api.get("/social/media", { params: { category: "creative" } }).then(({ data }) => {
         const m = data.find((x) => x.id === editing.creative_media_id);
         setCreative(m ? { url: m.url } : null);
-      } else setCreative(null);
-    }).catch(() => {});
+      }).catch(() => setCreative(null));
+    } else setCreative(null);
   }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const genCreative = async () => {
+  const uploadCreative = async (fileObj) => {
+    if (!fileObj) return;
     setCreativeBusy(true);
     try {
-      const { data } = await api.post(`/social/posts/${editing.id}/creative`, {
-        mode: cOpts.mode, template: cOpts.template || undefined, format: cOpts.format || undefined,
-        media_id: cOpts.media_id || undefined, show_cta: cOpts.show_cta,
-      });
+      const fd = new FormData();
+      fd.append("file", fileObj);
+      const { data } = await api.post(`/social/posts/${editing.id}/creative/upload`, fd,
+        { headers: { "Content-Type": "multipart/form-data" } });
       setCreative({ url: data.url + "?t=" + Date.now() });
-      toast.success("Creatività generata");
+      setEditing(data.post);
+      toast.success("Creatività caricata");
       load();
     } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
     setCreativeBusy(false);
+  };
+  const removeCreative = async () => {
+    if (!window.confirm("Eliminare la creatività di questo post?")) return;
+    try {
+      const { data } = await api.delete(`/social/posts/${editing.id}/creative`);
+      setCreative(null); setEditing(data);
+      toast.success("Creatività eliminata");
+      load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
 
   const catLabel = (c) => (c || "").replace(/_/g, " ");
@@ -247,7 +283,7 @@ export default function Social() {
               <div className="space-y-1">
                 {dash.upcoming.map((p) => (
                   <div key={p.id} className="flex items-center gap-3 text-sm py-1">
-                    <span className="text-xs text-slate-400 w-32 shrink-0">{new Date(p.scheduled_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="text-xs text-slate-400 w-32 shrink-0">{formatRome(p.scheduled_at)}</span>
                     <span className="truncate text-slate-700">{p.title || p.topic}</span>
                   </div>
                 ))}
@@ -273,10 +309,10 @@ export default function Social() {
                   {p.is_sample && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 w-fit" data-testid={`sample-badge-${p.id}`}><Star className="w-3 h-3" />CAMPIONE · {p.sample_label}</span>}
                   <div className="font-semibold text-slate-800 text-sm line-clamp-2">{p.title || p.topic || "Senza titolo"}</div>
                   <div className="text-xs text-slate-500 line-clamp-3 flex-1">{p.caption}</div>
-                  {p.scheduled_at && <div className="text-[11px] text-slate-400">📅 {new Date(p.scheduled_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>}
+                  {p.scheduled_at && <div className="text-[11px] text-slate-400">📅 {formatRome(p.scheduled_at)}</div>}
                   <div className="flex gap-1 pt-1 flex-wrap">
                     <Button size="sm" variant="outline" onClick={() => setEditing(p)} data-testid={`post-edit-${p.id}`}><Pencil className="w-3.5 h-3.5" /></Button>
-                    {p.status !== "approved" && p.status !== "scheduled" && <Button size="sm" variant="outline" onClick={() => approve(p)} data-testid={`post-approve-${p.id}`}><CheckCircle2 className="w-3.5 h-3.5" /></Button>}
+                    {p.status !== "approved" && p.status !== "scheduled" && <Button size="sm" variant="outline" disabled={!p.creative_media_id} onClick={() => approve(p)} data-testid={`post-approve-${p.id}`}><CheckCircle2 className="w-3.5 h-3.5" /></Button>}
                     <Button size="sm" variant="outline" onClick={() => del(p)} data-testid={`post-delete-${p.id}`}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 </div>
@@ -404,46 +440,44 @@ export default function Social() {
                 </div>
               </div>
               <div><label className="text-sm text-slate-600">Hashtag</label><input className={FIELD} value={csv(editing.hashtags)} onChange={(e) => setEditing({ ...editing, hashtags: e.target.value })} data-testid="edit-hashtags" /></div>
-              <div className="flex items-start gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg p-2"><ImagePlus className="w-4 h-4 mt-0.5 shrink-0 text-tiffany-active" /><span>{editing.image_suggestion || "—"}</span></div>
-              <div><label className="text-sm text-slate-600">Data e ora pubblicazione</label><input type="datetime-local" className={FIELD} value={(editing.scheduled_at || "").slice(0, 16)} onChange={(e) => setEditing({ ...editing, scheduled_at: e.target.value ? new Date(e.target.value).toISOString() : "" })} data-testid="edit-scheduled" /></div>
+              <div>
+                <label className="text-sm text-slate-600">Data e ora pubblicazione</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="date" className={FIELD} value={schedDate} min={nowRomeParts().date}
+                    onChange={(e) => applySchedule(e.target.value, schedTime)} data-testid="edit-sched-date" />
+                  <input type="time" className={FIELD} value={schedTime} step="60"
+                    min={schedDate && schedDate === nowRomeParts().date ? nowRomeParts().time : undefined}
+                    onChange={(e) => applySchedule(schedDate, e.target.value)} data-testid="edit-sched-time" />
+                </div>
+                <div className="text-xs text-slate-400 mt-1" data-testid="edit-sched-display">
+                  {editing.scheduled_at ? `Pubblicazione: ${formatRome(editing.scheduled_at)} (ora italiana)` : "Nessuna data impostata"}
+                </div>
+              </div>
 
-              {/* Creatività (Fase C) */}
+              {/* Creatività — upload manuale (nessuna generazione automatica) */}
               <div className="border-t border-slate-200 pt-3 space-y-3" data-testid="creative-panel">
-                <div className="text-sm font-semibold text-slate-800 flex items-center gap-2"><ImagePlus className="w-4 h-4 text-tiffany-active" />Creatività immagine</div>
-                {creative && <img src={`${backendUrl}${creative.url}`} alt="creatività" className="w-full max-w-[280px] rounded-lg border border-slate-200" data-testid="creative-preview" />}
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="text-xs text-slate-500">Modalità</label>
-                    <select className={FIELD} value={cOpts.mode} onChange={(e) => setCOpts({ ...cOpts, mode: e.target.value })} data-testid="creative-mode">
-                      <option value="auto">Automatica</option><option value="photo">Foto libreria</option>
-                      <option value="screenshot">Screenshot / Mockup</option><option value="ai">Immagine AI</option>
-                    </select>
-                  </div>
-                  <div><label className="text-xs text-slate-500">Template</label>
-                    <select className={FIELD} value={cOpts.template} onChange={(e) => setCOpts({ ...cOpts, template: e.target.value })} data-testid="creative-template">
-                      <option value="">Automatico (da categoria)</option>
-                      {(meta.creative_templates || []).map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
-                    </select>
-                  </div>
-                  <div><label className="text-xs text-slate-500">Formato</label>
-                    <select className={FIELD} value={cOpts.format} onChange={(e) => setCOpts({ ...cOpts, format: e.target.value })} data-testid="creative-format">
-                      <option value="">Suggerito ({editing.format || "1:1"})</option>
-                      {meta.formats?.map((f) => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                  </div>
-                  <div><label className="text-xs text-slate-500">Foto (opzionale)</label>
-                    <select className={FIELD} value={cOpts.media_id} onChange={(e) => setCOpts({ ...cOpts, media_id: e.target.value })} data-testid="creative-media">
-                      <option value="">Suggerita dall'AI</option>
-                      {mediaPick.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                  </div>
+                <div className="text-sm font-semibold text-slate-800 flex items-center gap-2"><ImagePlus className="w-4 h-4 text-tiffany-active" />Creatività</div>
+                <div className="rounded-lg bg-slate-50 border border-slate-200 p-3" data-testid="creative-brief">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Brief grafico</div>
+                  <div className="text-sm text-slate-700 whitespace-pre-wrap">{editing.image_brief || editing.image_suggestion || "—"}</div>
+                  <div className="text-[11px] text-slate-400 mt-1">Crea la grafica esternamente (es. ChatGPT) nello stile ufficiale CRMEvent, poi caricala qui.</div>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={cOpts.show_cta} onChange={(e) => setCOpts({ ...cOpts, show_cta: e.target.checked })} data-testid="creative-showcta" />Mostra CTA nella grafica</label>
-                <div className="flex gap-2">
-                  <Button onClick={genCreative} disabled={creativeBusy} data-testid="creative-generate" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">
-                    {creativeBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-1" />}{creative ? "Rigenera creatività" : "Genera creatività"}
+                {creative
+                  ? <div className="space-y-1">
+                      <img src={`${backendUrl}${creative.url}`} alt="creatività" className="w-full max-w-[280px] rounded-lg border border-slate-200" data-testid="creative-preview" />
+                      <div className="text-[11px] text-green-700">✓ Immagine caricata{editing.creative_meta?.format ? ` · ${editing.creative_meta.format}` : ""}</div>
+                    </div>
+                  : <div className="text-sm text-slate-400 flex items-center gap-2" data-testid="creative-empty"><ImagePlus className="w-4 h-4" />Nessuna immagine caricata</div>}
+                <input ref={creativeInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                  onChange={(e) => { uploadCreative(e.target.files?.[0]); e.target.value = ""; }} data-testid="creative-file-input" />
+                <div className="flex gap-2 flex-wrap">
+                  <Button onClick={() => creativeInputRef.current?.click()} disabled={creativeBusy} data-testid="creative-upload-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">
+                    {creativeBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}{creative ? "Sostituisci immagine" : "Carica immagine"}
                   </Button>
-                  {creative && <a href={`${backendUrl}${creative.url}`} download target="_blank" rel="noreferrer" data-testid="creative-download" className="inline-flex items-center px-3 h-10 rounded-lg border border-slate-200 text-sm hover:bg-slate-50">Scarica</a>}
+                  {creative && <a href={`${backendUrl}${creative.url}`} download target="_blank" rel="noreferrer" data-testid="creative-download" className="inline-flex items-center px-3 h-10 rounded-lg border border-slate-200 text-sm hover:bg-slate-50">Anteprima</a>}
+                  {creative && <Button variant="outline" className="text-red-600" onClick={removeCreative} data-testid="creative-remove-btn"><Trash2 className="w-4 h-4 mr-1" />Elimina immagine</Button>}
                 </div>
+                <div className="text-[11px] text-slate-400">Formato richiesto: 1:1 (quadrato) o 4:5 (verticale) · JPG, PNG o WEBP.</div>
               </div>
             </div>
           )}
@@ -452,7 +486,7 @@ export default function Social() {
               const miss = [];
               if (!editing.creative_media_id) miss.push("creatività");
               if (!(editing.caption || "").trim()) miss.push("caption");
-              if (!["1:1", "4:5", "9:16"].includes(editing.format)) miss.push("formato");
+              if (!["1:1", "4:5"].includes(editing.format)) miss.push("formato feed (1:1 o 4:5)");
               return miss.length
                 ? <div data-testid="approve-readiness" className="w-full text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">⚠️ Prima di approvare completa: {miss.join(", ")}</div>
                 : <div data-testid="approve-ready" className="w-full text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5">✓ Pronto per l'approvazione</div>;
@@ -460,10 +494,10 @@ export default function Social() {
             <Button variant="outline" onClick={() => setIgOpen(true)} data-testid="edit-igpreview"><Instagram className="w-4 h-4 mr-1" />Anteprima Instagram</Button>
             <Button variant="outline" onClick={regenerate} disabled={genBusy} data-testid="edit-regenerate"><RefreshCw className={`w-4 h-4 mr-1 ${genBusy ? "animate-spin" : ""}`} />Rigenera</Button>
             <Button variant="outline" onClick={savePost} data-testid="edit-save"><Pencil className="w-4 h-4 mr-1" />Salva</Button>
-            <Button variant="outline" onClick={() => approve(editing)} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
+            <Button variant="outline" onClick={() => approve(editing)} disabled={!editing?.creative_media_id} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
             <Button variant="outline" onClick={() => schedule(editing)} data-testid="edit-schedule"><Clock className="w-4 h-4 mr-1" />Programma</Button>
             {editing && (editing.status === "approved" || editing.status === "scheduled") && (
-              <Button onClick={() => publishNow(editing)} data-testid="edit-publish" className="bg-pink-600 hover:bg-pink-700 text-white"><Instagram className="w-4 h-4 mr-1" />Pubblica ora</Button>
+              <Button onClick={() => publishNow(editing)} disabled={!editing?.creative_media_id} data-testid="edit-publish" className="bg-pink-600 hover:bg-pink-700 text-white"><Instagram className="w-4 h-4 mr-1" />Pubblica ora</Button>
             )}
             <Button variant="outline" className="text-red-600" onClick={() => del(editing)} data-testid="edit-delete"><Trash2 className="w-4 h-4 mr-1" />Elimina</Button>
           </DialogFooter>
@@ -482,7 +516,7 @@ export default function Social() {
               </div>
               {creative
                 ? <img src={`${backendUrl}${creative.url}`} alt="post" className="w-full" data-testid="ig-image" />
-                : <div className="aspect-square bg-slate-100 flex items-center justify-center text-slate-400 text-sm" data-testid="ig-no-image">Genera prima la creatività</div>}
+                : <div className="aspect-square bg-slate-100 flex items-center justify-center text-slate-400 text-sm" data-testid="ig-no-image">Carica prima la creatività</div>}
               <div className="px-3 py-3 space-y-2 text-sm">
                 <div className="text-slate-800 whitespace-pre-wrap" data-testid="ig-caption"><span className="font-semibold">{dash.brand_name || "CRMEvent"}</span> {editing.caption}</div>
                 {editing.cta && <div className="text-tiffany-active font-semibold" data-testid="ig-cta">👉 {editing.cta}</div>}

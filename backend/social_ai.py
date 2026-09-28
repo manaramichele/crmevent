@@ -131,6 +131,7 @@ def _fallback_post(topic, category):
         "cta": "Prova gratis 14 giorni",
         "hashtags": ["#CRMEvent", "#eventi", "#organizzazioneeventi", "#sport"],
         "image_suggestion": "Foto di uno staff evento coordinato dietro le quinte",
+        "image_brief": "Grafica stile CRMEvent: sfondo bianco, headline nera con accenti Tiffany, logo CRMEvent in alto, screenshot reale del gestionale o mockup, CTA in basso.",
         "category": category or "funzionalita_crmevent",
         "format": "1:1",
         "suggested_time": "10:00",
@@ -158,6 +159,7 @@ async def generate_post(settings: dict, event_ctx: dict = None, topic: str = Non
         + '"cta": "CTA adatta al contenuto (alterna commerciale/engagement); stringa vuota se non serve", '
         + '"hashtags": ["#..."], '
         + '"image_suggestion": "suggerimento visual CONCRETO (screenshot/mockup CRMEvent, foto evento/staff/volontari/briefing/sponsor/percorsi)", '
+        + '"image_brief": "BRIEF GRAFICO in 1-2 frasi: quale immagine creare nello stile ufficiale CRMEvent (sfondo bianco, headline nera con accenti Tiffany, logo CRMEvent in alto, screenshot reale del gestionale oppure mockup laptop/telefono, CTA semplice in basso). Descrivi COSA mostrare, senza generare immagini.", '
         + f'"category": uno tra {CATEGORIES}, '
         + f'"format": uno tra {FORMATS}, '
         + '"suggested_time": "HH:MM"}'
@@ -172,6 +174,7 @@ async def generate_post(settings: dict, event_ctx: dict = None, topic: str = Non
         if isinstance(hs, str):
             hs = [h.strip() for h in hs.replace(",", " ").split() if h.strip()]
         data["hashtags"] = [h if h.startswith("#") else f"#{h}" for h in hs][:15]
+        data.setdefault("image_brief", data.get("image_suggestion") or "")
         return data
     except Exception as e:  # noqa: BLE001
         logger.exception("Errore generate_post: %s", e)
@@ -201,6 +204,7 @@ async def generate_plan(settings: dict, event_ctx: dict = None, goal: str = None
         + '"cta": "CTA variata; vuota se non serve", '
         + '"hashtags": ["#..."], '
         + '"image_suggestion": "visual concreto (screenshot/mockup CRMEvent, foto evento/staff/volontari/briefing/sponsor/percorsi)", '
+        + '"image_brief": "BRIEF GRAFICO in 1-2 frasi: quale immagine creare nello stile ufficiale CRMEvent (sfondo bianco, headline nera con accenti Tiffany, logo in alto, screenshot reale o mockup, CTA in basso), senza generare immagini", '
         + f'"category": uno tra {CATEGORIES}, "format": uno tra {FORMATS}, "suggested_time": "HH:MM"}}]}}'
     )
     try:
@@ -216,6 +220,7 @@ async def generate_plan(settings: dict, event_ctx: dict = None, goal: str = None
             if isinstance(hs, str):
                 hs = [h.strip() for h in hs.replace(",", " ").split() if h.strip()]
             p["hashtags"] = [h if h.startswith("#") else f"#{h}" for h in hs][:15]
+            p.setdefault("image_brief", p.get("image_suggestion") or "")
             out.append(p)
         while len(out) < count:
             out.append(_fallback_post(None, CATEGORIES[len(out) % len(CATEGORIES)]))

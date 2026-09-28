@@ -4747,6 +4747,7 @@ class SocialPostIn(BaseModel):
     cta: Optional[str] = None
     hashtags: Optional[List[str]] = None
     image_suggestion: Optional[str] = None
+    image_brief: Optional[str] = None
     media_id: Optional[str] = None
     format: Optional[str] = "1:1"
     scheduled_at: Optional[str] = None
@@ -4974,13 +4975,11 @@ async def social_post_approve(post_id: str, user: dict = Depends(require_org_adm
         raise HTTPException(status_code=404, detail="Contenuto non trovato")
     missing = []
     if not post.get("creative_media_id"):
-        missing.append("creatività immagine")
+        missing.append("creatività immagine (caricala nella sezione Creatività)")
     if not (post.get("caption") or "").strip():
         missing.append("caption")
-    if post.get("format") not in social_creative.DIMS:
-        missing.append("formato valido")
-    if (post.get("creative_meta") or {}).get("status") == "error":
-        missing.append("nessun errore di generazione")
+    if post.get("format") not in ("1:1", "4:5"):
+        missing.append("formato feed valido (1:1 o 4:5)")
     accounts = await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
     if accounts and not post.get("account_id"):
         missing.append("account social selezionato")
@@ -5130,7 +5129,7 @@ async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_a
             "platform": body.platform or "instagram", "event_id": body.event_id,
             "topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
             "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
-            "image_suggestion": gen.get("image_suggestion"), "category": gen.get("category"),
+            "image_suggestion": gen.get("image_suggestion"), "image_brief": gen.get("image_brief"), "category": gen.get("category"),
             "format": gen.get("format"), "ai_generation_id": gid,
             "created_by": user.get("user_id"), "created_by_name": user.get("name")}
     doc = await _create("social_posts", data)
@@ -5154,7 +5153,7 @@ async def social_regenerate(post_id: str, body: SocialGenerateIn, user: dict = D
     gid = await _record_generation(user, "post", {"regenerate": post_id, **body.model_dump()}, gen)
     upd = {"topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
            "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
-           "image_suggestion": gen.get("image_suggestion"), "category": gen.get("category"),
+           "image_suggestion": gen.get("image_suggestion"), "image_brief": gen.get("image_brief"), "category": gen.get("category"),
            "format": gen.get("format"), "ai_generation_id": gid, "status": "draft", "updated_at": now_iso()}
     await db.social_posts.update_one(oq(user, id=post_id), {"$set": upd})
     await _social_log(user, "regenerated", post_id=post_id)
@@ -5181,7 +5180,7 @@ async def social_plan_generate(body: SocialPlanIn, user: dict = Depends(require_
                 "platform": body.platform or "instagram", "event_id": body.event_id,
                 "topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
                 "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
-                "image_suggestion": gen.get("image_suggestion"), "category": gen.get("category"),
+                "image_suggestion": gen.get("image_suggestion"), "image_brief": gen.get("image_brief"), "category": gen.get("category"),
                 "format": gen.get("format"), "scheduled_at": dates[i] if i < len(dates) else None,
                 "ai_generation_id": gid, "created_by": user.get("user_id"), "created_by_name": user.get("name")}
         created.append(await _create("social_posts", data))
@@ -5481,72 +5480,92 @@ async def _suggest_media(org_id: str, event_id: Optional[str], prefer: list):
     return pick[0] if pick else None
 
 
-@api.post("/social/posts/{post_id}/creative")
-async def social_post_creative(post_id: str, body: SocialCreativeIn, user: dict = Depends(require_admin)):
+def _detect_feed_format(width: int, height: int):
+    """Return '1:1' or '4:5' if the image matches an Instagram feed ratio, else None."""
+    if width <= 0 or height <= 0:
+        return None
+    ratio = width / height
+    if abs(ratio - 1.0) <= 0.03:
+        return "1:1"
+    if abs(ratio - 0.8) <= 0.03:
+        return "4:5"
+    return None
+
+
+async def _delete_creative_media(user: dict, media_id: Optional[str]):
+    if not media_id:
+        return
+    m = await db.social_media.find_one(oq(user, id=media_id), {"_id": 0})
+    if m and m.get("file_id"):
+        await db.files.update_one({"id": m["file_id"], "org_id": user["org_id"]}, {"$set": {"is_deleted": True}})
+    await db.social_media.delete_one(oq(user, id=media_id))
+
+
+@api.post("/social/posts/{post_id}/creative/upload")
+async def social_post_creative_upload(post_id: str, file: UploadFile = File(...),
+                                      user: dict = Depends(require_admin)):
+    """Manual upload of the final creative (graphic produced externally). No AI generation."""
     post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
     if not post:
         raise HTTPException(status_code=404, detail="Contenuto non trovato")
-    settings = await _get_social_settings(user["org_id"])
-    template = body.template if body.template in social_creative.TEMPLATES else CATEGORY_TEMPLATE.get(post.get("category"), "educational")
-    fmt = body.format if body.format in social_creative.DIMS else (post.get("format") or "1:1")
-    mode = body.mode if body.mode in ("photo", "screenshot", "ai") else (
-        "screenshot" if template == "funzionalita" else ("ai" if template == "commerciale" else "photo"))
-    bg_bytes, source_media = None, None
-    if mode in ("photo", "screenshot"):
-        if body.media_id:
-            bg_bytes, source_media = await _load_media_bytes(user["org_id"], body.media_id)
-        else:
-            prefer = ["graphic", "event", "photo"] if mode == "screenshot" else ["photo", "event"]
-            sm = await _suggest_media(user["org_id"], post.get("event_id"), prefer)
-            if sm:
-                bg_bytes, source_media = await _load_media_bytes(user["org_id"], sm["id"])
-        if bg_bytes is None:
-            mode = "ai"
-    ai_meta = None
-    if mode == "ai":
-        prompt = body.ai_prompt or social_creative.creative_bg_prompt(post)
-        gen_status = "success"
-        try:
-            bg_bytes, ai_meta = await social_creative.generate_background(prompt)
-        except Exception as e:
-            logger.warning("AI background non disponibile (%s): uso sfondo brand", e)
-            bg_bytes = None
-            gen_status = "failed"
-        # Usage/cost audit for every AI image generation attempt.
-        await db.social_ai_generations.insert_one({
-            "id": new_id(), "org_id": user["org_id"], "type": "image",
-            "provider": (ai_meta or {}).get("provider", social_creative.IMAGE_PROVIDER),
-            "model": (ai_meta or {}).get("model", social_creative.IMAGE_MODEL),
-            "user_id": user.get("user_id"), "social_post_id": post_id,
-            "images": (ai_meta or {}).get("images", 0),
-            "status": "success" if bg_bytes else "failed_fallback_brand",
-            "cost": None, "created_at": now_iso()})
-    logo_bytes = await _brand_logo_bytes(settings)
-    png = social_creative.render(
-        bg_bytes=bg_bytes, template=template, fmt=fmt,
-        hook=post.get("title") or post.get("topic") or "",
-        subtitle=post.get("body") or "",
-        cta=(post.get("cta") if body.show_cta else None),
-        brand_name=settings.get("brand_name") or "CRMEvent",
-        brand_colors=settings.get("brand_colors") or [], logo_bytes=logo_bytes)
+    data = await file.read()
+    ctype = (file.content_type or "").lower()
+    fname = (file.filename or "").lower()
+    if not (ctype.startswith("image/") or fname.endswith((".jpg", ".jpeg", ".png", ".webp"))):
+        raise HTTPException(status_code=400, detail="Carica un'immagine (JPG, PNG o WEBP)")
+    from PIL import Image
+    import io as _io
+    try:
+        im = Image.open(_io.BytesIO(data)); im.load()
+        w, h = im.size
+    except Exception:
+        raise HTTPException(status_code=400, detail="File immagine non valido o corrotto")
+    fmt = _detect_feed_format(w, h)
+    if not fmt:
+        raise HTTPException(status_code=400,
+                            detail=f"Formato {w}x{h}px non compatibile con il feed Instagram. Usa 1:1 (quadrato) o 4:5 (verticale).")
+    try:
+        social_creative.to_jpeg(data)  # technical check reused at publish time
+    except Exception:
+        raise HTTPException(status_code=400, detail="Immagine non elaborabile per la pubblicazione")
+    old_id = post.get("creative_media_id")
     fid = new_id()
-    path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/creative_{fid}.png"
-    result = storage_utils.put_object(path, png, "image/png")
+    ext = {"image/png": "png", "image/webp": "webp", "image/jpeg": "jpg"}.get(ctype) or (fname.rsplit(".", 1)[-1] if "." in fname else "jpg")
+    path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/creative_{fid}.{ext}"
+    result = storage_utils.put_object(path, data, ctype or "image/jpeg")
     await db.files.insert_one({"id": fid, "org_id": user["org_id"], "storage_path": result["path"],
-                               "original_filename": f"creative_{post_id}.png", "content_type": "image/png",
-                               "size": result.get("size"), "is_deleted": False, "created_at": now_iso()})
-    meta = {"template": template, "format": fmt, "mode": mode,
-            "source_media_id": (source_media or {}).get("id"), "show_cta": bool(body.show_cta)}
+                               "original_filename": file.filename or f"creative_{post_id}.{ext}",
+                               "content_type": ctype or "image/jpeg", "size": result.get("size"),
+                               "is_deleted": False, "created_at": now_iso()})
+    meta = {"mode": "manual", "format": fmt, "width": w, "height": h}
     media_doc = await _create("social_media", {
         "org_id": user["org_id"], "file_id": fid, "url": f"/api/files/{fid}",
-        "name": f"Creatività · {template} · {fmt}", "category": "creative",
-        "event_id": post.get("event_id"), "post_id": post_id, "tags": ["creativity", template],
-        "content_type": "image/png", "size": result.get("size"), "meta": meta,
+        "name": f"Creatività (manuale) · {fmt}", "category": "creative",
+        "event_id": post.get("event_id"), "post_id": post_id, "tags": ["creativity", "manual"],
+        "content_type": ctype or "image/jpeg", "size": result.get("size"), "meta": meta,
         "uploaded_by": user.get("user_id")})
     await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
         "creative_media_id": media_doc["id"], "creative_meta": meta, "format": fmt, "updated_at": now_iso()}})
-    await _social_log(user, "creative_generated", post_id=post_id, detail=f"{template}/{fmt}/{mode}")
-    return {"media": media_doc, "url": media_doc["url"], "creative_meta": meta}
+    if old_id and old_id != media_doc["id"]:
+        await _delete_creative_media(user, old_id)
+    await _social_log(user, "creative_uploaded", post_id=post_id, detail=f"manual/{fmt}/{w}x{h}")
+    post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+    return {"post": post, "media": media_doc, "url": media_doc["url"]}
+
+
+@api.delete("/social/posts/{post_id}/creative")
+async def social_post_creative_delete(post_id: str, user: dict = Depends(require_admin)):
+    post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    await _delete_creative_media(user, post.get("creative_media_id"))
+    new_status = post.get("status")
+    if new_status in ("approved", "scheduled"):
+        new_status = "draft"  # cannot remain approved/scheduled without a creative
+    await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
+        "creative_media_id": None, "creative_meta": None, "status": new_status, "updated_at": now_iso()}})
+    await _social_log(user, "creative_removed", post_id=post_id)
+    return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
 
 
 @api.get("/social/meta")
