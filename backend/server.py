@@ -32,6 +32,7 @@ import gcal_utils
 import brevo_funnel
 import social_ai
 import social_creative
+import instagram_utils
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -5146,10 +5147,16 @@ async def social_media_delete(media_id: str, user: dict = Depends(require_admin)
     return {"ok": True}
 
 
-# ---- Social accounts (Instagram scaffold; real OAuth arrives in Phase D) ----
+# ---- Social accounts ----
+def _san_account(a: dict) -> dict:
+    """Never expose secrets (tokens) to the frontend."""
+    return {k: v for k, v in a.items() if k not in ("access_token",)}
+
+
 @api.get("/social/accounts")
 async def social_accounts_list(user: dict = Depends(require_admin)):
-    return await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
+    rows = await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
+    return [_san_account(a) for a in rows]
 
 
 @api.post("/social/accounts")
@@ -5181,6 +5188,123 @@ async def social_logs(post_id: Optional[str] = None, user: dict = Depends(requir
     if post_id:
         q["post_id"] = post_id
     return await db.social_publish_logs.find(q, {"_id": 0}).sort("created_at", -1).limit(300).to_list(300)
+
+
+# ---- Instagram OAuth (Phase D) — connection & compliance only; publishing stays OFF ----
+@api.get("/oauth/instagram/start")
+async def instagram_oauth_start(user: dict = Depends(require_org_admin)):
+    if not instagram_utils.configured():
+        raise HTTPException(status_code=400,
+                            detail="Instagram non configurato: aggiungi META_APP_ID e META_APP_SECRET nelle variabili d'ambiente.")
+    jti = new_id()
+    state = jwt.encode({"uid": user["user_id"], "org_id": user["org_id"], "jti": jti,
+                        "exp": datetime.now(timezone.utc) + timedelta(minutes=15)}, JWT_SECRET, algorithm=JWT_ALG)
+    await db.ig_oauth_states.insert_one({"jti": jti, "org_id": user["org_id"], "uid": user["user_id"],
+                                         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15),
+                                         "created_at": now_iso()})
+    return {"authorize_url": instagram_utils.authorize_url(state)}
+
+
+@api.get("/oauth/instagram/callback")
+async def instagram_oauth_callback(code: str = "", state: str = "", error: str = "", error_description: str = ""):
+    dest_ok = f"{APP_URL}/marketing/impostazioni?instagram=connected"
+    dest_err = f"{APP_URL}/marketing/impostazioni?instagram=error"
+    if error or not code:
+        logger.warning("instagram callback: error=%s desc=%s", error, (error_description or "")[:160])
+        return RedirectResponse(dest_err)
+    try:
+        payload = jwt.decode(state, JWT_SECRET, algorithms=[JWT_ALG])
+        org_id, uid, jti = payload["org_id"], payload["uid"], payload.get("jti")
+    except jwt.PyJWTError:
+        return RedirectResponse(dest_err)
+    st = await db.ig_oauth_states.find_one_and_delete({"jti": jti, "org_id": org_id})
+    if not st:
+        return RedirectResponse(dest_err)
+    try:
+        tok = await instagram_utils.exchange_code(code)
+        ig_user_id = str(tok.get("user_id"))
+        ll = await instagram_utils.long_lived_token(tok.get("access_token"))
+        access_token = ll.get("access_token")
+        expires_in = int(ll.get("expires_in") or instagram_utils.DEFAULT_LL_EXPIRY)
+        info = await instagram_utils.me(access_token)
+    except Exception as e:
+        logger.error("instagram callback exchange failed %s: %s", type(e).__name__, str(e)[:200])
+        return RedirectResponse(dest_err)
+    doc_set = {"platform": "instagram", "ig_user_id": ig_user_id, "username": info.get("username"),
+               "account_type": info.get("account_type"), "handle": info.get("username"),
+               "access_token": access_token,
+               "token_expires_at": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat(),
+               "connected": True, "status": "connected", "scopes": instagram_utils.SCOPES, "updated_at": now_iso()}
+    existing = await db.social_accounts.find_one({"org_id": org_id, "platform": "instagram"}, {"_id": 0})
+    if existing:
+        await db.social_accounts.update_one({"org_id": org_id, "id": existing["id"]}, {"$set": doc_set})
+    else:
+        await _create("social_accounts", {"org_id": org_id, **doc_set})
+    await db.social_publish_logs.insert_one({"id": new_id(), "org_id": org_id, "post_id": None,
+        "action": "instagram_connected", "actor_user_id": uid, "platform": "instagram",
+        "detail": info.get("username"), "created_at": now_iso()})
+    return RedirectResponse(dest_ok)
+
+
+@api.post("/social/accounts/{account_id}/refresh-token")
+async def instagram_refresh(account_id: str, user: dict = Depends(require_org_admin)):
+    a = await db.social_accounts.find_one(oq(user, id=account_id), {"_id": 0})
+    if not a or a.get("platform") != "instagram" or not a.get("access_token"):
+        raise HTTPException(status_code=400, detail="Account Instagram non collegato")
+    try:
+        r = await instagram_utils.refresh_token(a["access_token"])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Refresh token fallito: {str(e)[:140]}")
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=int(r.get("expires_in") or instagram_utils.DEFAULT_LL_EXPIRY))).isoformat()
+    await db.social_accounts.update_one(oq(user, id=account_id),
+                                        {"$set": {"access_token": r.get("access_token"),
+                                                  "token_expires_at": expires_at, "updated_at": now_iso()}})
+    await _social_log(user, "instagram_token_refreshed", platform="instagram")
+    return {"ok": True, "token_expires_at": expires_at}
+
+
+@api.post("/oauth/instagram/deauthorize")
+async def instagram_deauthorize(signed_request: str = Form(...)):
+    data = instagram_utils.parse_signed_request(signed_request)
+    if not data:
+        raise HTTPException(status_code=400, detail="signed_request non valido")
+    ig_user_id = str(data.get("user_id"))
+    accts = await db.social_accounts.find({"platform": "instagram", "ig_user_id": ig_user_id}).to_list(50)
+    for a in accts:
+        await db.social_accounts.update_one({"id": a["id"]}, {"$set": {
+            "connected": False, "status": "deauthorized", "access_token": None,
+            "token_expires_at": None, "updated_at": now_iso()}})
+        await db.social_publish_logs.insert_one({"id": new_id(), "org_id": a["org_id"], "post_id": None,
+            "action": "instagram_deauthorized", "platform": "instagram", "detail": ig_user_id, "created_at": now_iso()})
+    return {"ok": True}
+
+
+@api.post("/oauth/instagram/data-deletion")
+async def instagram_data_deletion(signed_request: str = Form(...)):
+    data = instagram_utils.parse_signed_request(signed_request)
+    if not data:
+        raise HTTPException(status_code=400, detail="signed_request non valido")
+    ig_user_id = str(data.get("user_id"))
+    code = new_id()
+    accts = await db.social_accounts.find({"platform": "instagram", "ig_user_id": ig_user_id}).to_list(50)
+    for a in accts:
+        await db.social_accounts.update_one({"id": a["id"]}, {"$set": {
+            "connected": False, "status": "data_deleted", "access_token": None, "token_expires_at": None,
+            "ig_user_id": None, "username": None, "handle": None, "updated_at": now_iso()}})
+        await db.social_publish_logs.insert_one({"id": new_id(), "org_id": a["org_id"], "post_id": None,
+            "action": "instagram_data_deletion", "platform": "instagram", "detail": code, "created_at": now_iso()})
+    await db.ig_data_deletions.insert_one({"id": new_id(), "confirmation_code": code, "ig_user_id": ig_user_id,
+        "accounts": [a["id"] for a in accts], "status": "completed", "created_at": now_iso()})
+    status_url = f"{instagram_utils.BACKEND_PUBLIC_URL}/api/oauth/instagram/data-deletion/status?code={code}"
+    return {"url": status_url, "confirmation_code": code}
+
+
+@api.get("/oauth/instagram/data-deletion/status")
+async def instagram_data_deletion_status(code: str):
+    rec = await db.ig_data_deletions.find_one({"confirmation_code": code}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Codice non trovato")
+    return {"confirmation_code": code, "status": rec.get("status"), "created_at": rec.get("created_at")}
 
 
 CATEGORY_TEMPLATE = {
@@ -5522,6 +5646,9 @@ async def startup():
         await db.brevo_templates.create_index("template_key", unique=True)
         await db.calendar_oauth_pkce.create_index("expires_at", expireAfterSeconds=0)
         await db.calendar_oauth_pkce.create_index([("jti", 1), ("uid", 1)])
+        await db.ig_oauth_states.create_index("expires_at", expireAfterSeconds=0)
+        await db.social_accounts.create_index([("platform", 1), ("ig_user_id", 1)])
+        await db.ig_data_deletions.create_index("confirmation_code")
     except Exception:
         pass
     try:

@@ -14,7 +14,6 @@ export default function SocialSettings() {
   const [s, setS] = useState(null);
   const [busy, setBusy] = useState(false);
   const [accounts, setAccounts] = useState([]);
-  const [igHandle, setIgHandle] = useState("");
 
   const load = async () => {
     const [{ data }, acc] = await Promise.all([
@@ -23,8 +22,6 @@ export default function SocialSettings() {
     ]);
     setS(data);
     setAccounts(acc.data);
-    const ig = acc.data.find((a) => a.platform === "instagram");
-    if (ig) setIgHandle(ig.handle || "");
   };
   useEffect(() => { load().catch((e) => toast.error(formatApiError(e?.response?.data?.detail))); }, []);
 
@@ -50,11 +47,31 @@ export default function SocialSettings() {
 
   const connectIg = async () => {
     try {
-      await api.post("/social/accounts", { platform: "instagram", handle: igHandle });
-      toast.success("Account Instagram salvato · collegamento OAuth in arrivo (Fase D)");
-      load();
+      const { data } = await api.get("/oauth/instagram/start");
+      window.location.href = data.authorize_url;
     } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
+
+  const igAccount = accounts.find((a) => a.platform === "instagram");
+
+  const disconnectIg = async () => {
+    if (!igAccount || !window.confirm("Scollegare l'account Instagram?")) return;
+    try { await api.delete(`/social/accounts/${igAccount.id}`); toast.success("Instagram scollegato"); load(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+
+  const refreshIg = async () => {
+    if (!igAccount) return;
+    try { const { data } = await api.post(`/social/accounts/${igAccount.id}/refresh-token`); toast.success("Token aggiornato"); load(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("instagram");
+    if (p === "connected") toast.success("Instagram collegato con successo");
+    else if (p === "error") toast.error("Collegamento Instagram non riuscito");
+    if (p) window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   if (!s) return <div className="text-slate-400 py-24 text-center">Caricamento…</div>;
 
@@ -119,13 +136,22 @@ export default function SocialSettings() {
       {/* Accounts */}
       <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4" data-testid="social-accounts-card">
         <h2 className="font-semibold text-slate-800">Account social</h2>
-        <p className="text-sm text-slate-500">In questa fase è predisposto Instagram. Il collegamento ufficiale via OAuth Meta sarà attivato nella Fase D. Facebook e LinkedIn arriveranno in seguito.</p>
-        <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200">
+        <p className="text-sm text-slate-500">In questa fase è attivo Instagram (collegamento ufficiale via OAuth Meta). La pubblicazione automatica resta disattivata: i contenuti richiedono sempre l'approvazione. Facebook e LinkedIn arriveranno in seguito.</p>
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 flex-wrap">
           <Instagram className="w-6 h-6 text-pink-600 shrink-0" />
-          <input className={FIELD + " max-w-xs"} data-testid="ig-handle-input" value={igHandle} onChange={(e) => setIgHandle(e.target.value)} placeholder="@profilo_instagram" />
-          <Button variant="outline" onClick={connectIg} data-testid="ig-connect-btn">Collega Instagram</Button>
-          {accounts.find((a) => a.platform === "instagram") && (
-            <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700" data-testid="ig-status">In attesa di collegamento</span>
+          {igAccount && igAccount.connected ? (
+            <>
+              <span className="text-sm font-medium text-slate-800" data-testid="ig-username">@{igAccount.username || igAccount.handle}</span>
+              <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700" data-testid="ig-status">Collegato</span>
+              <Button variant="outline" onClick={refreshIg} data-testid="ig-refresh-btn">Aggiorna token</Button>
+              <Button variant="outline" className="text-red-600" onClick={disconnectIg} data-testid="ig-disconnect-btn">Scollega</Button>
+            </>
+          ) : (
+            <>
+              <span className="text-sm text-slate-500 flex-1">Nessun account Instagram collegato</span>
+              <Button onClick={connectIg} data-testid="ig-connect-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">Collega Instagram</Button>
+              {igAccount && <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700" data-testid="ig-status">{igAccount.status || "non collegato"}</span>}
+            </>
           )}
         </div>
         <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 opacity-50">

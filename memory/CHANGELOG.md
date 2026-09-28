@@ -1,5 +1,14 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Marketing · Social — FASE D: Instagram/Meta OAuth (preview, publishing OFF)
+- Modulo `instagram_utils.py` (Instagram API with Instagram Login, host graph.instagram.com): authorize_url, exchange_code (short-lived), long_lived_token (~60gg), refresh_token, me(), parse_signed_request (HMAC-SHA256 con META_APP_SECRET). Segreti SOLO da env (META_APP_ID/META_APP_SECRET), mai hard-coded. Username/password IG mai ricevuti/salvati: solo token.
+- Endpoint (server.py): GET /api/oauth/instagram/start (require_org_admin, 400 se non configurato), GET /api/oauth/instagram/callback (state JWT + ig_oauth_states single-use, scambio code→long-lived, salva su social_accounts org-scoped, redirect a /marketing/impostazioni?instagram=connected|error), POST /api/social/accounts/{id}/refresh-token, POST /api/oauth/instagram/deauthorize (signed_request → revoca token/stato deauthorized), POST /api/oauth/instagram/data-deletion (signed_request → cancella dati account + confirmation_code + status url), GET /api/oauth/instagram/data-deletion/status.
+- Multi-tenant: un social_account instagram per org; deauthorize/data-deletion individuano l'org dal ig_user_id. access_token mai esposto in API (sanitizer _san_account). Indici: ig_oauth_states TTL, social_accounts (platform,ig_user_id), ig_data_deletions.
+- Redirect URI produzione: https://crmevent.it/api/oauth/instagram/callback ; preview: https://manage-events-12.preview.emergentagent.com/api/oauth/instagram/callback. Deauthorize/data-deletion URL registrati su Meta come concordato.
+- Frontend: SocialSettings — "Collega Instagram" (avvia OAuth), stato Collegato/username, "Aggiorna token", "Scollega", toast su ?instagram=connected|error.
+- Pubblicazione automatica DISATTIVATA (nessun endpoint media_publish). Verificato in preview: start 400 senza creds, signed_request valido/invalido, status 404, no token leak. Roundtrip OAuth completo richiede META_APP_ID/SECRET (da inserire dall'utente) + login IG reale.
+
+
 ## 2026-06 — Marketing · Social — FASE C: Creatività immagini (verificato E2E)
 - Renderer server-side `social_creative.py` (Pillow): compone creatività on-brand nei formati Instagram 4:5 (1080×1350), 1:1 (1080×1080), 9:16 (1080×1920). Brand kit automatico (logo ufficiale CRMEvent dal file pubblico, colore Tiffany, nome brand, colori da impostazioni). Il logo NON viene mai generato dall'AI.
 - Sistema di 6 template riutilizzabili: educational, problema_soluzione, funzionalita, foto_evento, quote, commerciale. Il Social AI sceglie il template dalla categoria del post (CATEGORY_TEMPLATE); l'utente può cambiarlo.

@@ -172,7 +172,7 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - FASE A (fatto): DB + UI Marketing/Social + impostazioni + libreria media + calendario editoriale.
 - FASE B (fatto): generazione AI contenuti (post singolo + piano editoriale) con dati evento sanitizzati; trigger intelligenti come SUGGERIMENTI (architettura predisposta).
 - FASE C (fatto): generazione/suggerimento creatività immagini (Nano Banana / Pillow) — 6 template, 3 modalità (foto libreria / screenshot / AI), brand kit automatico, formati IG 1:1 / 4:5 / 9:16, creatività collegata al post e salvata in Libreria Media.
-- FASE D (P1, backlog — STOP prima di iniziare): connessione ufficiale Instagram/Meta (Graph API Content Publishing). Richiede: App Meta Business, Instagram Business/Creator collegato a Pagina Facebook, permessi instagram_basic + instagram_content_publish + pages_show_list + business_management, App Review Meta, token lungo + refresh, eventuali webhook. Da fornire in Emergent: META_APP_ID, META_APP_SECRET, redirect OAuth.
-- FASE E (P2, backlog): programmazione e pubblicazione automatica (cron) con Pilota Automatico ON (regole su cosa auto-pubblicare vs approvazione).
+- FASE D (fatto in preview, publishing OFF): OAuth ufficiale Instagram Business Login (start/callback/deauthorize/data-deletion/status), token long-lived + refresh, collegamento multi-tenant su social_accounts, compliance callbacks. Richiede META_APP_ID/META_APP_SECRET in env. Non ancora deployato in produzione.
+- FASE E (P1, backlog): programmazione e pubblicazione (container IG media → media_publish, caroselli/stories/reels), Pilota Automatico ON con regole. Limiti: 100 post/24h, container 24h.
 - Trigger intelligenti (P1): 90/60/30/7/1 giorni all'evento, nuovo sponsor/percorso → generano SOLO suggerimenti (nessuna pubblicazione automatica).
 
