@@ -31,6 +31,7 @@ import storage_utils
 import gcal_utils
 import brevo_funnel
 import social_ai
+import social_creative
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -5167,13 +5168,128 @@ async def social_logs(post_id: Optional[str] = None, user: dict = Depends(requir
     return await db.social_publish_logs.find(q, {"_id": 0}).sort("created_at", -1).limit(300).to_list(300)
 
 
+CATEGORY_TEMPLATE = {
+    "educational": "educational", "problema_soluzione": "problema_soluzione",
+    "funzionalita_crmevent": "funzionalita", "organizzazione_evento": "foto_evento",
+    "gestione_staff_volontari": "foto_evento", "sponsor": "foto_evento", "briefing": "funzionalita",
+    "dietro_le_quinte": "foto_evento", "novita_prodotto": "funzionalita",
+    "consigli_organizzatori": "quote", "countdown": "commerciale", "cta_demo_prova": "commerciale",
+}
+_LOGO_PATH = "/app/frontend/public/logo-crmevent.png"
+
+
+class SocialCreativeIn(BaseModel):
+    mode: Optional[str] = "auto"        # auto | photo | screenshot | ai
+    template: Optional[str] = None
+    format: Optional[str] = None
+    media_id: Optional[str] = None
+    show_cta: Optional[bool] = True
+    ai_prompt: Optional[str] = None
+
+
+async def _brand_logo_bytes(settings: dict) -> Optional[bytes]:
+    url = (settings or {}).get("logo_url")
+    if url and url.startswith("http"):
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.get(url)
+            if r.status_code < 400:
+                return r.content
+        except Exception:
+            pass
+    try:
+        with open(_LOGO_PATH, "rb") as f:
+            return f.read()
+    except Exception:
+        return None
+
+
+async def _load_media_bytes(org_id: str, media_id: str):
+    m = await db.social_media.find_one({"org_id": org_id, "id": media_id}, {"_id": 0})
+    if not m:
+        return None, None
+    f = await db.files.find_one({"id": m.get("file_id"), "org_id": org_id}, {"_id": 0})
+    if not f:
+        return None, None
+    try:
+        data, _ct = storage_utils.get_object(f["storage_path"])
+        return data, m
+    except Exception:
+        return None, None
+
+
+async def _suggest_media(org_id: str, event_id: Optional[str], prefer: list):
+    items = await db.social_media.find({"org_id": org_id, "category": {"$ne": "creative"}}, {"_id": 0}).to_list(500)
+    if event_id:
+        ev = [x for x in items if x.get("event_id") == event_id]
+        items = ev or items
+    pref = [x for x in items if x.get("category") in prefer]
+    pick = pref or items
+    return pick[0] if pick else None
+
+
+@api.post("/social/posts/{post_id}/creative")
+async def social_post_creative(post_id: str, body: SocialCreativeIn, user: dict = Depends(require_admin)):
+    post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Contenuto non trovato")
+    settings = await _get_social_settings(user["org_id"])
+    template = body.template if body.template in social_creative.TEMPLATES else CATEGORY_TEMPLATE.get(post.get("category"), "educational")
+    fmt = body.format if body.format in social_creative.DIMS else (post.get("format") or "1:1")
+    mode = body.mode if body.mode in ("photo", "screenshot", "ai") else (
+        "screenshot" if template == "funzionalita" else ("ai" if template == "commerciale" else "photo"))
+    bg_bytes, source_media = None, None
+    if mode in ("photo", "screenshot"):
+        if body.media_id:
+            bg_bytes, source_media = await _load_media_bytes(user["org_id"], body.media_id)
+        else:
+            prefer = ["graphic", "event", "photo"] if mode == "screenshot" else ["photo", "event"]
+            sm = await _suggest_media(user["org_id"], post.get("event_id"), prefer)
+            if sm:
+                bg_bytes, source_media = await _load_media_bytes(user["org_id"], sm["id"])
+        if bg_bytes is None:
+            mode = "ai"
+    if mode == "ai":
+        try:
+            bg_bytes = await social_creative.generate_background(body.ai_prompt or social_creative.creative_bg_prompt(post))
+        except Exception as e:
+            logger.warning("AI background non disponibile (%s): uso sfondo brand", e)
+            bg_bytes = None
+    logo_bytes = await _brand_logo_bytes(settings)
+    png = social_creative.render(
+        bg_bytes=bg_bytes, template=template, fmt=fmt,
+        hook=post.get("title") or post.get("topic") or "",
+        subtitle=post.get("body") or "",
+        cta=(post.get("cta") if body.show_cta else None),
+        brand_name=settings.get("brand_name") or "CRMEvent",
+        brand_colors=settings.get("brand_colors") or [], logo_bytes=logo_bytes)
+    fid = new_id()
+    path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/creative_{fid}.png"
+    result = storage_utils.put_object(path, png, "image/png")
+    await db.files.insert_one({"id": fid, "org_id": user["org_id"], "storage_path": result["path"],
+                               "original_filename": f"creative_{post_id}.png", "content_type": "image/png",
+                               "size": result.get("size"), "is_deleted": False, "created_at": now_iso()})
+    meta = {"template": template, "format": fmt, "mode": mode,
+            "source_media_id": (source_media or {}).get("id"), "show_cta": bool(body.show_cta)}
+    media_doc = await _create("social_media", {
+        "org_id": user["org_id"], "file_id": fid, "url": f"/api/files/{fid}",
+        "name": f"Creatività · {template} · {fmt}", "category": "creative",
+        "event_id": post.get("event_id"), "post_id": post_id, "tags": ["creativity", template],
+        "content_type": "image/png", "size": result.get("size"), "meta": meta,
+        "uploaded_by": user.get("user_id")})
+    await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
+        "creative_media_id": media_doc["id"], "creative_meta": meta, "format": fmt, "updated_at": now_iso()}})
+    await _social_log(user, "creative_generated", post_id=post_id, detail=f"{template}/{fmt}/{mode}")
+    return {"media": media_doc, "url": media_doc["url"], "creative_meta": meta}
+
+
 @api.get("/social/meta")
 async def social_meta(user: dict = Depends(require_admin)):
     """Static metadata for the UI (statuses, categories, formats, platforms)."""
     events = await db.events.find(oq(user), {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).to_list(2000)
     return {"statuses": SOCIAL_STATUSES, "status_labels": SOCIAL_STATUS_LABELS,
             "categories": social_ai.CATEGORIES, "formats": social_ai.FORMATS,
-            "platforms": SOCIAL_PLATFORMS,
+            "platforms": SOCIAL_PLATFORMS, "creative_templates": social_creative.TEMPLATES,
             "events": [{"id": e["id"], "nome": e.get("nome"), "data_inizio": e.get("data_inizio")} for e in events]}
 
 

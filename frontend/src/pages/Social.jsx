@@ -52,6 +52,10 @@ export default function Social() {
   const [genBusy, setGenBusy] = useState(false);
 
   const [media, setMedia] = useState([]);
+  const [creative, setCreative] = useState(null);
+  const [creativeBusy, setCreativeBusy] = useState(false);
+  const [cOpts, setCOpts] = useState({ mode: "auto", template: "", format: "", show_cta: true, media_id: "" });
+  const [mediaPick, setMediaPick] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,6 +71,32 @@ export default function Social() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (tab === "media") api.get("/social/media").then(({ data }) => setMedia(data)).catch(() => {}); }, [tab]);
+
+  useEffect(() => {
+    if (!editing) { setCreative(null); return; }
+    setCOpts({ mode: "auto", template: "", format: editing.format || "", show_cta: editing?.creative_meta?.show_cta ?? true, media_id: "" });
+    api.get("/social/media").then(({ data }) => {
+      setMediaPick(data.filter((m) => m.category !== "creative"));
+      if (editing.creative_media_id) {
+        const m = data.find((x) => x.id === editing.creative_media_id);
+        setCreative(m ? { url: m.url } : null);
+      } else setCreative(null);
+    }).catch(() => {});
+  }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const genCreative = async () => {
+    setCreativeBusy(true);
+    try {
+      const { data } = await api.post(`/social/posts/${editing.id}/creative`, {
+        mode: cOpts.mode, template: cOpts.template || undefined, format: cOpts.format || undefined,
+        media_id: cOpts.media_id || undefined, show_cta: cOpts.show_cta,
+      });
+      setCreative({ url: data.url + "?t=" + Date.now() });
+      toast.success("Creatività generata");
+      load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+    setCreativeBusy(false);
+  };
 
   const catLabel = (c) => (c || "").replace(/_/g, " ");
 
@@ -363,6 +393,45 @@ export default function Social() {
               <div><label className="text-sm text-slate-600">Hashtag</label><input className={FIELD} value={csv(editing.hashtags)} onChange={(e) => setEditing({ ...editing, hashtags: e.target.value })} data-testid="edit-hashtags" /></div>
               <div className="flex items-start gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg p-2"><ImagePlus className="w-4 h-4 mt-0.5 shrink-0 text-tiffany-active" /><span>{editing.image_suggestion || "—"}</span></div>
               <div><label className="text-sm text-slate-600">Data e ora pubblicazione</label><input type="datetime-local" className={FIELD} value={(editing.scheduled_at || "").slice(0, 16)} onChange={(e) => setEditing({ ...editing, scheduled_at: e.target.value ? new Date(e.target.value).toISOString() : "" })} data-testid="edit-scheduled" /></div>
+
+              {/* Creatività (Fase C) */}
+              <div className="border-t border-slate-200 pt-3 space-y-3" data-testid="creative-panel">
+                <div className="text-sm font-semibold text-slate-800 flex items-center gap-2"><ImagePlus className="w-4 h-4 text-tiffany-active" />Creatività immagine</div>
+                {creative && <img src={`${backendUrl}${creative.url}`} alt="creatività" className="w-full max-w-[280px] rounded-lg border border-slate-200" data-testid="creative-preview" />}
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="text-xs text-slate-500">Modalità</label>
+                    <select className={FIELD} value={cOpts.mode} onChange={(e) => setCOpts({ ...cOpts, mode: e.target.value })} data-testid="creative-mode">
+                      <option value="auto">Automatica</option><option value="photo">Foto libreria</option>
+                      <option value="screenshot">Screenshot / Mockup</option><option value="ai">Immagine AI</option>
+                    </select>
+                  </div>
+                  <div><label className="text-xs text-slate-500">Template</label>
+                    <select className={FIELD} value={cOpts.template} onChange={(e) => setCOpts({ ...cOpts, template: e.target.value })} data-testid="creative-template">
+                      <option value="">Automatico (da categoria)</option>
+                      {(meta.creative_templates || []).map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+                    </select>
+                  </div>
+                  <div><label className="text-xs text-slate-500">Formato</label>
+                    <select className={FIELD} value={cOpts.format} onChange={(e) => setCOpts({ ...cOpts, format: e.target.value })} data-testid="creative-format">
+                      <option value="">Suggerito ({editing.format || "1:1"})</option>
+                      {meta.formats?.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div><label className="text-xs text-slate-500">Foto (opzionale)</label>
+                    <select className={FIELD} value={cOpts.media_id} onChange={(e) => setCOpts({ ...cOpts, media_id: e.target.value })} data-testid="creative-media">
+                      <option value="">Suggerita dall'AI</option>
+                      {mediaPick.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={cOpts.show_cta} onChange={(e) => setCOpts({ ...cOpts, show_cta: e.target.checked })} data-testid="creative-showcta" />Mostra CTA nella grafica</label>
+                <div className="flex gap-2">
+                  <Button onClick={genCreative} disabled={creativeBusy} data-testid="creative-generate" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">
+                    {creativeBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-1" />}{creative ? "Rigenera creatività" : "Genera creatività"}
+                  </Button>
+                  {creative && <a href={`${backendUrl}${creative.url}`} download target="_blank" rel="noreferrer" data-testid="creative-download" className="inline-flex items-center px-3 h-10 rounded-lg border border-slate-200 text-sm hover:bg-slate-50">Scarica</a>}
+                </div>
+              </div>
             </div>
           )}
           <DialogFooter className="flex-wrap gap-2">

@@ -1,5 +1,15 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Marketing · Social — FASE C: Creatività immagini (verificato E2E)
+- Renderer server-side `social_creative.py` (Pillow): compone creatività on-brand nei formati Instagram 4:5 (1080×1350), 1:1 (1080×1080), 9:16 (1080×1920). Brand kit automatico (logo ufficiale CRMEvent dal file pubblico, colore Tiffany, nome brand, colori da impostazioni). Il logo NON viene mai generato dall'AI.
+- Sistema di 6 template riutilizzabili: educational, problema_soluzione, funzionalita, foto_evento, quote, commerciale. Il Social AI sceglie il template dalla categoria del post (CATEGORY_TEMPLATE); l'utente può cambiarlo.
+- 3 modalità di sfondo: (A) Foto dalla Libreria Media con auto-suggest della più pertinente; (B) Screenshot/Mockup CRMEvent da Libreria (template funzionalita, layout a pannello con card); (C) Immagine AI generata con Gemini Nano Banana (gemini-3.1-flash-image-preview via Emergent LLM key) quando manca materiale o su scelta utente — prompt che vieta testo/logo nell'immagine. Fallback a sfondo brand se l'AI non è disponibile.
+- Overlay: hook (title) grande + sottotitolo (body) breve + tag categoria + CTA pill (adattamento automatico/troncamento se lunga) + logo chip + brand name. Scrim/gradienti per leggibilità.
+- Endpoint `POST /api/social/posts/{id}/creative` {mode,template,format,media_id,show_cta,ai_prompt}: renderizza PNG, lo carica su Object Storage, lo salva in Libreria Media (category='creative', post_id) e collega `creative_media_id`/`creative_meta` al social_post. `/social/meta` espone `creative_templates`.
+- Frontend: pannello "Creatività immagine" nell'editor del post (`Social.jsx`): Genera/Rigenera, anteprima, cambia modalità/template/formato/foto, mostra/nascondi CTA, Scarica. Flusso: Post → Genera creatività → Anteprima → Modifica/Rigenera → Approva.
+- Testato: 3 modalità (photo/screenshot/ai) HTTP 200, PNG dimensioni corrette per tutti i formati, template funzionalita e commerciale-AI verificati visivamente, creatività salvate in libreria e collegate al post.
+
+
 ## 2026-06 — Marketing · Social (Social Media Manager AI) — FASE A + B (testato E2E, iter18 100% PASS)
 - Nuovo modulo multi-tenant "Marketing → Social" (Social / Calendario editoriale / Impostazioni Social). Tutte le collezioni org-scoped via `oq(user)`.
 - Collezioni: `social_settings`, `social_accounts`, `social_posts`, `social_calendar`, `social_media`, `social_ai_generations`, `social_publish_logs` (+ indici `org_id`).

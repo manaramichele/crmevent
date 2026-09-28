@@ -171,7 +171,7 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ## Marketing · Social (Social Media Manager AI) — roadmap
 - FASE A (fatto): DB + UI Marketing/Social + impostazioni + libreria media + calendario editoriale.
 - FASE B (fatto): generazione AI contenuti (post singolo + piano editoriale) con dati evento sanitizzati; trigger intelligenti come SUGGERIMENTI (architettura predisposta).
-- FASE C (P1, backlog): generazione/suggerimento creatività immagini (Nano Banana / GPT Image 1 via Emergent key) combinando immagine+logo+colori+testo; formati IG 1:1 / 4:5 / 9:16.
+- FASE C (fatto): generazione/suggerimento creatività immagini (Nano Banana / Pillow) — 6 template, 3 modalità (foto libreria / screenshot / AI), brand kit automatico, formati IG 1:1 / 4:5 / 9:16, creatività collegata al post e salvata in Libreria Media.
 - FASE D (P1, backlog — STOP prima di iniziare): connessione ufficiale Instagram/Meta (Graph API Content Publishing). Richiede: App Meta Business, Instagram Business/Creator collegato a Pagina Facebook, permessi instagram_basic + instagram_content_publish + pages_show_list + business_management, App Review Meta, token lungo + refresh, eventuali webhook. Da fornire in Emergent: META_APP_ID, META_APP_SECRET, redirect OAuth.
 - FASE E (P2, backlog): programmazione e pubblicazione automatica (cron) con Pilota Automatico ON (regole su cosa auto-pubblicare vs approvazione).
 - Trigger intelligenti (P1): 90/60/30/7/1 giorni all'evento, nuovo sponsor/percorso → generano SOLO suggerimenti (nessuna pubblicazione automatica).
