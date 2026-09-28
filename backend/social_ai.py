@@ -31,15 +31,35 @@ SYSTEM = (
     "(sportivi e non: running, trail, triathlon, nuoto, ciclismo, tennis, fiere, congressi, festival).\n"
     "Scrivi SEMPRE in italiano, con tono coerente al brand indicato. Crei contenuti per Instagram e "
     "altri social, concreti e specifici, MAI generici da 'software gestionale'.\n"
-    "REGOLE FONDAMENTALI:\n"
-    "1. Parla di problemi REALI dell'organizzazione di un evento (staff, volontari, turni, sponsor, "
-    "partner, ospitalità, briefing, documenti, logistica) e mostra come CRMEvent li risolve.\n"
-    "2. NON inventare dati sensibili, numeri, nomi di persone, email o telefoni. Usa solo le "
+    "LINEE EDITORIALI PERMANENTI (applicale sempre):\n"
+    "1. NON inventare dati sensibili, numeri, nomi di persone, email o telefoni. Usa solo le "
     "informazioni pubblicabili fornite nel CONTESTO.\n"
-    "3. Le caption Instagram devono essere coinvolgenti, con eventuali emoji con misura, e una CTA chiara.\n"
-    "4. Gli hashtag devono essere pertinenti al mondo eventi/sport italiano.\n"
-    "5. Rispetta le indicazioni 'cosa evitare' e le istruzioni personalizzate del brand.\n"
-    "6. Restituisci SOLO un oggetto JSON valido, senza testo aggiuntivo."
+    "2. TESTO CREATIVITÀ: il campo 'title' è un HOOK di massimo 5-10 parole. Il campo 'body' è un "
+    "SOTTOTITOLO OPZIONALE di UNA sola breve frase (può essere vuoto). NON scrivere paragrafi lunghi "
+    "dentro l'immagine: tutto il resto va nella caption.\n"
+    "3. CTA: varia le CTA tra i post, NON usare sempre la stessa. Alterna CTA commerciali e CTA di "
+    "engagement in base al contenuto. Le CTA commerciali devono essere MINORITARIE rispetto ai "
+    "contenuti educational/informativi. Quando non serve, lascia 'cta' vuota (\"\"). "
+    "Esempi commerciali: 'Scopri CRMEvent su crmevent.it', 'Prova CRMEvent gratis per 14 giorni'. "
+    "Esempi engagement: 'Salva questo post', 'Ti è mai successo?', 'Scrivicelo nei commenti', "
+    "'Condividilo con il tuo team', 'Qual è la parte più difficile da gestire nel tuo evento?', "
+    "'Come gestisci questa attività nel tuo evento?'.\n"
+    "4. CAPTION naturali: scritte da chi conosce davvero l'organizzazione di eventi sportivi. Parti "
+    "spesso da situazioni concrete (es. 'Chi ha l'elenco aggiornato dei volontari?', 'Il responsabile "
+    "del ristoro ha ricevuto l'ultimo briefing?', 'Dove avevamo segnato l'hotel dello speaker?', "
+    "'Lo sponsor aveva confermato il materiale?'). Evita linguaggio pubblicitario o tipico dei testi AI. "
+    "Presenta CRMEvent come soluzione naturale al problema, senza trasformare ogni post in pubblicità.\n"
+    "5. VARIETÀ: non usare sempre lo schema problema→CRMEvent→CTA. Alterna problemi reali, consigli "
+    "pratici, checklist, domande alla community, errori frequenti, dietro le quinte, curiosità, mini "
+    "tutorial, funzionalità CRMEvent, esempi di organizzazione, contenuti commerciali, aggiornamenti.\n"
+    "6. VISUAL concreto: preferisci screenshot reali CRMEvent, mockup dell'interfaccia, foto di eventi, "
+    "staff al lavoro, briefing, volontari, village/expo, materiali sponsor, mappe e percorsi. Evita "
+    "immagini stock generiche.\n"
+    "7. HASHTAG pertinenti allo specifico argomento, VARIATI tra i post; mantieni #CRMEvent quando "
+    "opportuno, senza eccedere nel numero (5-8).\n"
+    "8. Usa esempi reali di running, trail, triathlon, nuoto, ciclismo, tennis e altri eventi sportivi.\n"
+    "Rispetta le indicazioni 'cosa evitare' e le istruzioni personalizzate del brand.\n"
+    "Restituisci SOLO un oggetto JSON valido, senza testo aggiuntivo."
 )
 
 
@@ -130,12 +150,14 @@ async def generate_post(settings: dict, event_ctx: dict = None, topic: str = Non
         + (f"ARGOMENTO RICHIESTO: {topic}\n" if topic else "")
         + (f"CATEGORIA RICHIESTA: {category}\n" if category else f"Scegli una categoria tra {CATEGORIES}.\n")
         + (f"ISTRUZIONI AGGIUNTIVE: {extra}\n" if extra else "")
-        + "\nGenera UN post social completo. Restituisci SOLO JSON con questa struttura esatta:\n"
-        + '{"topic": "argomento sintetico", "title": "titolo per la creativita", '
-        + '"body": "testo breve da inserire nella grafica", '
-        + '"caption": "caption Instagram completa e coinvolgente", '
-        + '"cta": "call to action", "hashtags": ["#..."], '
-        + '"image_suggestion": "descrizione del tipo di immagine consigliata", '
+        + "\nGenera UN post social completo seguendo le LINEE EDITORIALI. Restituisci SOLO JSON con questa struttura esatta:\n"
+        + '{"topic": "argomento sintetico", '
+        + '"title": "HOOK per la creativita: massimo 5-10 parole", '
+        + '"body": "SOTTOTITOLO opzionale: UNA sola breve frase, oppure stringa vuota (NIENTE paragrafi)", '
+        + '"caption": "caption Instagram naturale che parte da una situazione concreta", '
+        + '"cta": "CTA adatta al contenuto (alterna commerciale/engagement); stringa vuota se non serve", '
+        + '"hashtags": ["#..."], '
+        + '"image_suggestion": "suggerimento visual CONCRETO (screenshot/mockup CRMEvent, foto evento/staff/volontari/briefing/sponsor/percorsi)", '
         + f'"category": uno tra {CATEGORIES}, '
         + f'"format": uno tra {FORMATS}, '
         + '"suggested_time": "HH:MM"}'
@@ -168,9 +190,17 @@ async def generate_plan(settings: dict, event_ctx: dict = None, goal: str = None
         + (f"OBIETTIVO DELLA CAMPAGNA: {goal}\n" if goal else "")
         + f"\nGenera un piano editoriale di ESATTAMENTE {count} post DIVERSI tra loro, "
         + f"variando le categorie tra {CATEGORIES} ed evitando contenuti troppo simili.\n"
+        + "LINEA EDITORIALE (non rigida): la maggioranza dei post deve essere educational/engagement/"
+        + "problemi reali, alcuni dedicati alle funzionalità CRMEvent, e MASSIMO 2-3 direttamente "
+        + "commerciali. Varia CTA (spesso engagement o nessuna), hashtag e schema narrativo tra i post.\n"
         + "Restituisci SOLO JSON con questa struttura esatta:\n"
-        + '{"posts": [{"topic": "...", "title": "...", "body": "...", "caption": "...", '
-        + '"cta": "...", "hashtags": ["#..."], "image_suggestion": "...", '
+        + '{"posts": [{"topic": "...", '
+        + '"title": "HOOK max 5-10 parole", '
+        + '"body": "SOTTOTITOLO opzionale di UNA frase o stringa vuota (NIENTE paragrafi)", '
+        + '"caption": "caption naturale che parte da una situazione concreta", '
+        + '"cta": "CTA variata; vuota se non serve", '
+        + '"hashtags": ["#..."], '
+        + '"image_suggestion": "visual concreto (screenshot/mockup CRMEvent, foto evento/staff/volontari/briefing/sponsor/percorsi)", '
         + f'"category": uno tra {CATEGORIES}, "format": uno tra {FORMATS}, "suggested_time": "HH:MM"}}]}}'
     )
     try:
