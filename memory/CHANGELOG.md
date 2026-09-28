@@ -294,3 +294,12 @@ Task 2 — Creatività manuale:
 - UI modale: sezione Creativita con Brief grafico + Carica/Sostituisci/Anteprima/Elimina immagine. Anteprima Instagram invariata.
 - Collegamento Instagram (OAuth platform scope) NON toccato. Nessuna pubblicazione reale eseguita.
 - NOTA: Task 1 e 2 sono in PREVIEW, non ancora deployati in produzione.
+
+## 2026-09-28 — Account social auto-assegnato (Marketing CRMEvent Piattaforma)
+- Root cause errore "account social selezionato": approve richiedeva post.account_id ma il frontend non permetteva alcuna selezione; publish invece sceglieva gia l unico account (incoerenza).
+- Backend: helper _connected_ig_accounts/_default_account_id/_resolve_post_account. Auto-assegnazione del solo account IG connesso a nuovi post (generate/plan) e ai post esistenti al momento di approve. Se >1 account -> richiede selezione. approve/publish falliscono solo se manca davvero un account connesso. Account e post entrambi scope __platform__ via oq().
+- Sicurezza: /social/dashboard ora sanifica gli account (niente access_token esposto al frontend).
+- Frontend Social.jsx: sezione "Account di pubblicazione" (singolo = @username statico, multipli = selettore), readiness e pulsanti Approva/Pubblica bloccati se account mancante/non selezionato.
+- Token OAuth NON toccato; nessun nuovo collegamento richiesto se gia connesso.
+- Verificato in preview con account IG di test in __platform__: generate auto-assegna, approve OK senza selezione, publish si ferma a 428 (nessuna pubblicazione reale), multi-account richiede selezione, dashboard non espone token. Nessun 5xx nelle operazioni sui post (il NameError Header nei log era storico, Header e importato). Dati di test rimossi.
+- In PREVIEW: da deployare in produzione.

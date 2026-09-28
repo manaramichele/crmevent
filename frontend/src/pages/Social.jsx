@@ -61,6 +61,13 @@ export default function Social() {
   const [schedDate, setSchedDate] = useState("");
   const [schedTime, setSchedTime] = useState("");
 
+  const igAccounts = (dash.accounts || []).filter((a) => a.platform === "instagram" && a.connected && a.ig_user_id);
+  const saveAccount = async (accId) => {
+    setEditing((p) => ({ ...p, account_id: accId }));
+    try { await api.put(`/social/posts/${editing.id}`, { account_id: accId }); load(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+
   // Keep the Rome date/time fields in sync with the post being edited.
   useEffect(() => {
     if (editing?.id) {
@@ -454,6 +461,19 @@ export default function Social() {
                 </div>
               </div>
 
+              {/* Account di pubblicazione */}
+              <div data-testid="account-section">
+                <label className="text-sm text-slate-600">Account di pubblicazione</label>
+                {igAccounts.length === 0
+                  ? <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1" data-testid="account-none">Nessun account Instagram collegato. Collega @crmevent nelle Impostazioni Social.</div>
+                  : igAccounts.length === 1
+                    ? <div className="flex items-center gap-2 text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-1" data-testid="account-single"><Instagram className="w-4 h-4 text-pink-600" />Account di pubblicazione: <span className="font-semibold">@{igAccounts[0].username || igAccounts[0].handle}</span></div>
+                    : <select className={FIELD} value={editing.account_id || ""} onChange={(e) => saveAccount(e.target.value)} data-testid="account-select">
+                        <option value="">Seleziona account…</option>
+                        {igAccounts.map((a) => <option key={a.id} value={a.id}>@{a.username || a.handle}</option>)}
+                      </select>}
+              </div>
+
               {/* Creatività — upload manuale (nessuna generazione automatica) */}
               <div className="border-t border-slate-200 pt-3 space-y-3" data-testid="creative-panel">
                 <div className="text-sm font-semibold text-slate-800 flex items-center gap-2"><ImagePlus className="w-4 h-4 text-tiffany-active" />Creatività</div>
@@ -487,6 +507,8 @@ export default function Social() {
               if (!editing.creative_media_id) miss.push("creatività");
               if (!(editing.caption || "").trim()) miss.push("caption");
               if (!["1:1", "4:5"].includes(editing.format)) miss.push("formato feed (1:1 o 4:5)");
+              if (igAccounts.length === 0) miss.push("account collegato");
+              else if (igAccounts.length > 1 && !editing.account_id) miss.push("account selezionato");
               return miss.length
                 ? <div data-testid="approve-readiness" className="w-full text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">⚠️ Prima di approvare completa: {miss.join(", ")}</div>
                 : <div data-testid="approve-ready" className="w-full text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5">✓ Pronto per l'approvazione</div>;
@@ -494,10 +516,10 @@ export default function Social() {
             <Button variant="outline" onClick={() => setIgOpen(true)} data-testid="edit-igpreview"><Instagram className="w-4 h-4 mr-1" />Anteprima Instagram</Button>
             <Button variant="outline" onClick={regenerate} disabled={genBusy} data-testid="edit-regenerate"><RefreshCw className={`w-4 h-4 mr-1 ${genBusy ? "animate-spin" : ""}`} />Rigenera</Button>
             <Button variant="outline" onClick={savePost} data-testid="edit-save"><Pencil className="w-4 h-4 mr-1" />Salva</Button>
-            <Button variant="outline" onClick={() => approve(editing)} disabled={!editing?.creative_media_id} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
+            <Button variant="outline" onClick={() => approve(editing)} disabled={!editing?.creative_media_id || igAccounts.length === 0 || (igAccounts.length > 1 && !editing?.account_id)} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
             <Button variant="outline" onClick={() => schedule(editing)} data-testid="edit-schedule"><Clock className="w-4 h-4 mr-1" />Programma</Button>
             {editing && (editing.status === "approved" || editing.status === "scheduled") && (
-              <Button onClick={() => publishNow(editing)} disabled={!editing?.creative_media_id} data-testid="edit-publish" className="bg-pink-600 hover:bg-pink-700 text-white"><Instagram className="w-4 h-4 mr-1" />Pubblica ora</Button>
+              <Button onClick={() => publishNow(editing)} disabled={!editing?.creative_media_id || igAccounts.length === 0 || (igAccounts.length > 1 && !editing?.account_id)} data-testid="edit-publish" className="bg-pink-600 hover:bg-pink-700 text-white"><Instagram className="w-4 h-4 mr-1" />Pubblica ora</Button>
             )}
             <Button variant="outline" className="text-red-600" onClick={() => del(editing)} data-testid="edit-delete"><Trash2 className="w-4 h-4 mr-1" />Elimina</Button>
           </DialogFooter>

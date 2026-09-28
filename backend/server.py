@@ -4748,6 +4748,7 @@ class SocialPostIn(BaseModel):
     hashtags: Optional[List[str]] = None
     image_suggestion: Optional[str] = None
     image_brief: Optional[str] = None
+    account_id: Optional[str] = None
     media_id: Optional[str] = None
     format: Optional[str] = "1:1"
     scheduled_at: Optional[str] = None
@@ -4914,7 +4915,7 @@ async def social_dashboard(user: dict = Depends(require_admin)):
     accounts = await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
     return {"counts": counts, "total": len(posts), "upcoming": upcoming,
             "autopilot": "OFF", "brand_name": settings.get("brand_name"),
-            "accounts": accounts}
+            "accounts": [_san_account(a) for a in accounts]}
 
 
 # ---- Posts CRUD ----
@@ -4968,6 +4969,35 @@ async def social_post_delete(post_id: str, user: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+async def _connected_ig_accounts(user: dict) -> list:
+    """Instagram accounts in the CURRENT scope that are actually publishable."""
+    rows = await db.social_accounts.find(oq(user, platform="instagram"), {"_id": 0}).to_list(50)
+    return [a for a in rows if a.get("connected") and a.get("access_token") and a.get("ig_user_id")]
+
+
+async def _default_account_id(user: dict) -> Optional[str]:
+    """Sole connected Instagram account id (for auto-assign to new posts), else None."""
+    accts = await _connected_ig_accounts(user)
+    return accts[0]["id"] if len(accts) == 1 else None
+
+
+async def _resolve_post_account(user: dict, post: dict):
+    """Return (account_or_None, connected_accounts). Auto-assigns the sole connected
+    account to the post when exactly one exists and the post has none yet.
+    Account and post are both scoped to user['org_id'] via oq()."""
+    accts = await _connected_ig_accounts(user)
+    chosen = None
+    if post.get("account_id"):
+        chosen = next((a for a in accts if a["id"] == post["account_id"]), None)
+    if not chosen and len(accts) == 1:
+        chosen = accts[0]
+        if post.get("account_id") != chosen["id"]:
+            await db.social_posts.update_one(oq(user, id=post["id"]),
+                                             {"$set": {"account_id": chosen["id"], "updated_at": now_iso()}})
+            post["account_id"] = chosen["id"]
+    return chosen, accts
+
+
 @api.post("/social/posts/{post_id}/approve")
 async def social_post_approve(post_id: str, user: dict = Depends(require_org_admin)):
     post = await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
@@ -4980,9 +5010,11 @@ async def social_post_approve(post_id: str, user: dict = Depends(require_org_adm
         missing.append("caption")
     if post.get("format") not in ("1:1", "4:5"):
         missing.append("formato feed valido (1:1 o 4:5)")
-    accounts = await db.social_accounts.find(oq(user), {"_id": 0}).to_list(50)
-    if accounts and not post.get("account_id"):
-        missing.append("account social selezionato")
+    chosen, accts = await _resolve_post_account(user, post)
+    if not accts:
+        missing.append("account Instagram collegato (collega @crmevent nelle Impostazioni)")
+    elif len(accts) > 1 and not chosen:
+        missing.append("account di pubblicazione selezionato")
     if missing:
         raise HTTPException(status_code=400, detail="Impossibile approvare · da completare: " + ", ".join(missing))
     await db.social_posts.update_one(oq(user, id=post_id), {"$set": {
@@ -5042,9 +5074,11 @@ async def social_post_publish(post_id: str, body: SocialPublishIn, user: dict = 
     # Duplicate guard: never publish the same post twice.
     if post.get("status") == "published" or post.get("published_media_id"):
         raise HTTPException(status_code=409, detail="Questo contenuto è già stato pubblicato")
-    acct = await db.social_accounts.find_one({"org_id": user["org_id"], "platform": "instagram"}, {"_id": 0})
+    acct, accts = await _resolve_post_account(user, post)
     problems = []
-    if not acct or not acct.get("connected") or not acct.get("access_token") or not acct.get("ig_user_id"):
+    if len(accts) > 1 and not acct:
+        problems.append("account di pubblicazione selezionato")
+    elif not acct or not acct.get("connected") or not acct.get("access_token") or not acct.get("ig_user_id"):
         problems.append("account Instagram collegato e token valido")
     else:
         exp = acct.get("token_expires_at")
@@ -5125,7 +5159,8 @@ async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_a
                                         category=body.category, platform=body.platform or "instagram",
                                         extra=body.extra_instructions)
     gid = await _record_generation(user, "post", body.model_dump(), gen)
-    data = {"org_id": user["org_id"], "status": "draft", "source": "ai",
+    acct_id = await _default_account_id(user)
+    data = {"org_id": user["org_id"], "status": "draft", "source": "ai", "account_id": acct_id,
             "platform": body.platform or "instagram", "event_id": body.event_id,
             "topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
             "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
@@ -5175,8 +5210,9 @@ async def social_plan_generate(body: SocialPlanIn, user: dict = Depends(require_
         "created_by": user.get("user_id"), "created_by_name": user.get("name"), "created_at": now_iso()})
     gid = await _record_generation(user, "plan", body.model_dump(), {"count": len(posts)})
     created = []
+    acct_id = await _default_account_id(user)
     for i, gen in enumerate(posts):
-        data = {"org_id": user["org_id"], "status": "draft", "source": "plan", "plan_id": plan_id,
+        data = {"org_id": user["org_id"], "status": "draft", "source": "plan", "account_id": acct_id, "plan_id": plan_id,
                 "platform": body.platform or "instagram", "event_id": body.event_id,
                 "topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
                 "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
