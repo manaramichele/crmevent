@@ -6978,6 +6978,27 @@ def _brevo_avail_enabled():
     return os.environ.get("BREVO_AVAILABILITY_ENABLED", "").strip().lower() in ("1", "true", "on", "yes")
 
 
+def _norm_phone(raw, default_cc="+39"):
+    """Normalizza un numero al formato internazionale E.164 (+<8-15 cifre>).
+    Gestisce spazi, trattini, parentesi, prefisso 00 e '+' già presente. Se non parte con '+'
+    assume il prefisso di default (Italia). Ritorna None se non valido (il chiamante decide il fallback)."""
+    if not raw:
+        return None
+    n = re.sub(r"[^\d+]", "", str(raw))
+    if not n:
+        return None
+    if n.startswith("00"):
+        n = "+" + n[2:]
+    if n.startswith("+"):
+        digits = re.sub(r"\D", "", n)
+    else:
+        cc = re.sub(r"\D", "", default_cc or "39")
+        digits = cc + re.sub(r"\D", "", n).lstrip("0")
+    if 8 <= len(digits) <= 15:
+        return "+" + digits
+    return None
+
+
 async def _avail_list_id():
     """List ID Brevo salvato per la lista unica disponibilità (globale, un solo account Brevo)."""
     doc = await db.brevo_config.find_one({"key": "availability"}, {"_id": 0}) or {}
@@ -7083,19 +7104,36 @@ async def _brevo_avail(action: str, av: dict, event: dict, org_nome: str = None,
         log["status"] = "pending" if not _brevo_avail_enabled() else "skipped_no_key"
         await db.brevo_sync_log.insert_one(log)
         return {"status": log["status"], "sent": False}
-    sent, err = False, None
+    sent, err, phone_rejected = False, None, False
+    sms = _norm_phone(av.get("cellulare"))
     try:
-        attrs = {"NOME": av.get("nome"), "COGNOME": av.get("cognome"), "SMS": av.get("cellulare"),
+        attrs = {"NOME": av.get("nome"), "COGNOME": av.get("cognome"),
                  "EVENTO": event.get("nome"), "DATA_EVENTO": event.get("data_inizio"),
                  "ORGANIZZAZIONE": org_nome or "", "RUOLO_EVENTO": av.get("ruolo_evento") or "da_definire",
                  "STATO_DISPONIBILITA": av.get("stato") or "nuova"}
+        if sms:
+            attrs["SMS"] = sms
         async with brevo_client.BrevoClient() as c:
             list_id = await _ensure_avail_list(c)
-            if await c.get_contact(email):
-                # Persona già presente: aggiorna attributi e aggiunge alla lista SENZA resubscribe (no duplicati).
-                await c.update_contact(email, list_id=list_id, attributes=attrs)
-            else:
-                await c.create_contact(email, list_id, attributes=attrs)
+            exists = bool(await c.get_contact(email))
+
+            async def _upsert(a):
+                if exists:
+                    await c.update_contact(email, list_id=list_id, attributes=a)
+                else:
+                    await c.create_contact(email, list_id, attributes=a)
+
+            try:
+                await _upsert(attrs)
+            except brevo_client.BrevoError as be:
+                # Il telefono non deve MAI bloccare l'ingresso in lista: se Brevo rifiuta l'attributo
+                # telefono (400), ritenta l'upsert senza SMS così il contatto entra e riceve le email.
+                if "SMS" in attrs and be.status == 400:
+                    phone_rejected = True
+                    attrs.pop("SMS", None)
+                    await _upsert(attrs)
+                else:
+                    raise
             if send_template:
                 tpls = await c.get_templates()
                 tpl = next((t for t in tpls if (t.get("name") or "").strip().lower() == send_template.lower() and t.get("isActive")), None)
@@ -7105,13 +7143,16 @@ async def _brevo_avail(action: str, av: dict, event: dict, org_nome: str = None,
                                                               "templateId": tpl.get("id"), "params": params})
                     sent = True
         log["status"] = "sent" if sent else "synced"
+        if phone_rejected:
+            log["phone_rejected"] = True
+            log["warning"] = "Telefono rifiutato da Brevo: contatto sincronizzato senza numero."
     except Exception as e:
         err = str(e)[:300]
         log["status"] = "error"
         log["error"] = err
         logger.error(f"brevo avail sync failed: {err}")
     await db.brevo_sync_log.insert_one(log)
-    return {"status": log["status"], "sent": sent, "error": err}
+    return {"status": log["status"], "sent": sent, "error": err, "phone_rejected": phone_rejected}
 
 
 async def _confirm_availability(a: dict, event: dict, org_nome: str, user: dict) -> bool:
@@ -7516,7 +7557,8 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         raise HTTPException(status_code=400, detail="Seleziona almeno una giornata di disponibilità")
     org_id = link["org_id"]
     email = (body.email or "").strip().lower()
-    cell = (body.cellulare or "").strip()
+    raw_cell = (body.cellulare or "").strip()
+    cell = _norm_phone(raw_cell) or raw_cell
     submitted = {"nome": body.nome.strip(), "cognome": body.cognome.strip(), "email": email,
                  "cellulare": cell, "data_nascita": birth, "codice_fiscale": cf_norm or None}
     person = await db.persons.find_one({"org_id": org_id, "email": email}, {"_id": 0}) if email else None

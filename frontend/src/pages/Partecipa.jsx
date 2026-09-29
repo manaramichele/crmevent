@@ -9,6 +9,13 @@ import { CheckCircle2, CalendarDays, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
+
+const PHONE_CCS = [
+  ["+39", "🇮🇹 +39"], ["+41", "🇨🇭 +41"], ["+33", "🇫🇷 +33"], ["+49", "🇩🇪 +49"],
+  ["+34", "🇪🇸 +34"], ["+44", "🇬🇧 +44"], ["+43", "🇦🇹 +43"], ["+32", "🇧🇪 +32"],
+  ["+31", "🇳🇱 +31"], ["+351", "🇵🇹 +351"], ["+30", "🇬🇷 +30"], ["+386", "🇸🇮 +386"],
+  ["+385", "🇭🇷 +385"], ["+1", "🇺🇸 +1"],
+];
 const dmY = (d) => (d ? d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4) : "");
 const NONE = "__none__";
 const ALTRO = "Altro";
@@ -17,7 +24,7 @@ export default function Partecipa() {
   const { code } = useParams();
   const [state, setState] = useState("loading"); // loading | notfound | inactive | form | done
   const [info, setInfo] = useState(null);
-  const [form, setForm] = useState({ nome: "", cognome: "", cellulare: "", email: "", codice_fiscale: "", data_nascita: "" });
+  const [form, setForm] = useState({ nome: "", cognome: "", cellulare: "", prefix: "+39", email: "", codice_fiscale: "", data_nascita: "" });
   const [noCf, setNoCf] = useState(false);
   const [days, setDays] = useState({});
   const [pref, setPref] = useState(NONE);
@@ -56,8 +63,10 @@ export default function Partecipa() {
     if (!privacy) { toast.error("Devi prendere visione della Privacy Policy"); return; }
     setSubmitting(true);
     try {
+      const rawNum = (form.cellulare || "").trim();
+      const cellFull = (rawNum.startsWith("+") || rawNum.startsWith("00")) ? rawNum : `${form.prefix || "+39"}${rawNum}`;
       const body = {
-        nome: form.nome, cognome: form.cognome, cellulare: form.cellulare, email: form.email.trim(),
+        nome: form.nome, cognome: form.cognome, cellulare: cellFull, email: form.email.trim(),
         codice_fiscale: noCf ? null : (form.codice_fiscale || "").trim().toUpperCase(),
         data_nascita: noCf ? form.data_nascita : null,
         days: selDays,
@@ -118,7 +127,14 @@ export default function Partecipa() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <F label="Nome" req><Input value={form.nome} onChange={(e) => ch("nome", e.target.value)} data-testid="pf-nome" /></F>
           <F label="Cognome" req><Input value={form.cognome} onChange={(e) => ch("cognome", e.target.value)} data-testid="pf-cognome" /></F>
-          <F label="Cellulare" req><Input type="tel" inputMode="tel" value={form.cellulare} onChange={(e) => ch("cellulare", e.target.value)} data-testid="pf-cellulare" /></F>
+          <F label="Cellulare" req>
+            <div className="flex gap-2">
+              <select value={form.prefix} onChange={(e) => ch("prefix", e.target.value)} className="border border-slate-200 rounded-md px-2 py-2 text-sm bg-white w-[112px] shrink-0" data-testid="pf-cellulare-prefix">
+                {PHONE_CCS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              <Input type="tel" inputMode="tel" value={form.cellulare} onChange={(e) => ch("cellulare", e.target.value)} placeholder="333 1234567" className="flex-1 min-w-0" data-testid="pf-cellulare" />
+            </div>
+          </F>
           <F label="Email" req><Input type="email" inputMode="email" value={form.email} onChange={(e) => ch("email", e.target.value)} data-testid="pf-email" /></F>
           {!noCf
             ? <div className="sm:col-span-2"><F label="Codice Fiscale" req><Input value={form.codice_fiscale} onChange={(e) => ch("codice_fiscale", e.target.value.toUpperCase())} maxLength={16} className="font-mono uppercase" placeholder="es. RSSMRA85T10A562S" data-testid="pf-codice-fiscale" /></F></div>

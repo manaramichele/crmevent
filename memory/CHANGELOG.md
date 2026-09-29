@@ -1,5 +1,13 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Normalizzazione cellulare E.164 + telefono non bloccante (Brevo)
+- **Normalizzazione E.164** (`_norm_phone`, server.py): gestisce spazi/trattini/parentesi/`00`/`+` già presente; se manca il `+` assume il prefisso di default (Italia +39). Verificato: `3331234567`→`+393331234567`, `333 123 4567`→`+393331234567`, `+39 333 1234567`→`+393331234567`, internazionale `+447911123456` ok, input non validi→None.
+- **Salvataggio**: il cellulare è normalizzato in E.164 al submit del form pubblico (`pub_avail_submit`) e usato per dedup persona; a Brevo si invia SOLO il numero normalizzato (attributo `SMS`).
+- **Telefono non bloccante + fallback**: `_brevo_avail` non solleva mai; se Brevo rifiuta il telefono (HTTP 400) ritenta l'upsert del contatto **senza SMS**, così il contatto entra comunque in lista e riceve le email; l'errore/warning è loggato in `brevo_sync_log` (`phone_rejected`). Disponibilità/persona/CF non vengono mai persi.
+- **Form pubblico** (Partecipa.jsx): campo cellulare ora con **selettore prefisso internazionale** (default 🇮🇹 +39, modificabile) + numero; il numero è combinato col prefisso solo se non inizia già con `+`/`00`.
+- Verificato E2E in preview: submit 200 e persone salvate con telefono E.164 (la sync reale Brevo + fallback si testano in produzione con chiave). `BREVO_AVAILABILITY_ENABLED` resta OFF.
+
+
 ## 2026-06 — Fix orari mobile compatti + attivazione template Brevo via API
 - **Campi orario mobile** (Partecipa.jsx): input `type="time"` ora con `style={{width:150, maxWidth:"100%"}}` (inline → sovrascrive il `w-full` di shadcn), impilati (Dalle sopra, Alle sotto). Larghezza compatta ~150px, mai oltre la card a 375/390px. Nessuna modifica alla logica disponibilità.
 - **Attivazione template Brevo (Bozza→Attivo)**: nuovo `POST /api/brevo/availability-templates/activate` (superadmin) → `PUT /smtp/templates/{id} {isActive:true}` via API Brevo (attivazione REALE su Brevo, nessuna forzatura del DB CRMEvent). `brevo_client.activate_template()`. Nel pannello, accanto allo stato "Bozza" compare il pulsante **"Attiva in Brevo"** per ciascun template; dopo l'attivazione "Aggiorna stato" rileva automaticamente Attivo (il pannello legge lo stato reale via `get_templates().isActive`).
