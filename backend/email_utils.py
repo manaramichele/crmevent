@@ -19,10 +19,10 @@ _APP_URL = (os.environ.get("APP_URL") or os.environ.get("FRONTEND_URL") or "").r
 EMAIL_LOGO_URL = f"{_APP_URL}/logo-crmevent.png" if _APP_URL else "https://crmevent.it/logo-crmevent.png"
 
 # Dedicated provider (Resend, own verified domain crmevent.it). When RESEND_API_KEY
-# is set the app sends FROM "CRMEvent <noreply@crmevent.it>". Until then it falls
-# back to the managed sender so password-reset/invite emails keep working.
+# is set the app sends FROM "CRMEvent <hello@crmevent.it>" (verified domain mailbox).
+# Until then it falls back to the managed sender so password-reset/invite emails keep working.
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM_ADDRESS = os.environ.get("EMAIL_FROM_ADDRESS", "")
+EMAIL_FROM_ADDRESS = os.environ.get("EMAIL_FROM_ADDRESS", "hello@crmevent.it")
 RESEND_BASE_URL = "https://api.resend.com"
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")

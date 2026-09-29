@@ -5,13 +5,33 @@ import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ShieldCheck, AlertTriangle } from "lucide-react";
+import { ShieldCheck, AlertTriangle, Eye, EyeOff } from "lucide-react";
 
 const Card = ({ children }) => (
   <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
     <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-sm" data-testid="invite-page">{children}</div>
   </div>
 );
+
+const PwField = ({ value, onChange, placeholder, testid }) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input type={show ? "text" : "password"} placeholder={placeholder} value={value} onChange={onChange} data-testid={testid} className="pr-11" />
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setShow((s) => !s)}
+        tabIndex={-1}
+        aria-label={show ? "Nascondi password" : "Mostra password"}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600"
+        data-testid={`${testid}-toggle`}
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+};
 
 export default function Invite() {
   const nav = useNavigate();
@@ -104,13 +124,13 @@ export default function Invite() {
           {invite.account_exists ? (
             <div className="space-y-3">
               <p className="text-xs text-slate-500">Hai già un account CRMEvent con questa email. Inserisci la password per accettare.</p>
-              <Input type="password" placeholder="Password" value={login.password} onChange={(e) => setLogin({ password: e.target.value })} data-testid="invite-login-password" />
+              <PwField placeholder="Password" value={login.password} onChange={(e) => setLogin({ password: e.target.value })} testid="invite-login-password" />
               <Button onClick={loginAndAccept} disabled={busy} data-testid="invite-login-btn" className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-semibold">Accedi e accetta</Button>
             </div>
           ) : (
             <div className="space-y-3">
               <Input placeholder="Nome e cognome" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} data-testid="invite-reg-name" />
-              <Input type="password" placeholder="Crea una password (min 8)" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} data-testid="invite-reg-password" />
+              <PwField placeholder="Crea una password (min 8)" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} testid="invite-reg-password" />
               <Button onClick={registerAndAccept} disabled={busy} data-testid="invite-reg-btn" className="w-full h-11 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">Crea account e accetta</Button>
             </div>
           )}

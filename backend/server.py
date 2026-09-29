@@ -590,9 +590,9 @@ async def activate(body: ActivateIn, response: Response):
     upd = {"password_hash": hash_password(body.password), "active": True, "activation_token": None}
     if body.name:
         upd["name"] = body.name
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {**upd, "last_login_at": now_iso()}})
     if user.get("person_id"):
-        await db.persons.update_one({"id": user["person_id"]}, {"$set": {"invite_status": "account_attivato"}})
+        await db.persons.update_one({"id": user["person_id"]}, {"$set": {"invite_status": "account_attivato", "invite_accepted_at": now_iso(), "updated_at": now_iso()}})
     token = create_access_token(user["user_id"], user["email"])
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -3663,6 +3663,14 @@ async def _accept_invite(inv: dict, target_user: dict) -> None:
     await db.org_invites.delete_many({"org_id": inv["org_id"], "email": inv["email"], "id": {"$ne": inv["id"]}})
     if inv.get("lead_id"):
         await db.leads.update_one({"id": inv["lead_id"]}, {"$set": {"user_id": target_user["user_id"], "updated_at": now_iso()}})
+    # Person (anagrafica) collegata a org+email: rifletti l'attivazione account sul profilo,
+    # tenendola DISTINTA dallo 'stato' commerciale/operativo (es. da_contattare). Lo storico
+    # commerciale del Lead non viene mai toccato qui.
+    await db.persons.update_one(
+        {"org_id": inv["org_id"], "email": inv["email"].lower()},
+        {"$set": {"invite_status": "account_attivato", "user_id": target_user["user_id"],
+                  "user_role": role, "invite_accepted_at": now_iso(), "updated_at": now_iso()}})
+    await db.users.update_one({"user_id": target_user["user_id"]}, {"$set": {"last_login_at": now_iso()}})
     org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
     await record_audit(target_user, "invite_accepted", org_id=inv["org_id"], org_name=(org or {}).get("nome"),
                        target_email=target_user.get("email"), target_name=target_user.get("name"),

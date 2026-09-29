@@ -1,5 +1,12 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Flusso inviti utente: mittente, occhio password, stato account
+- **(1) Mittente email invito**: sender Resend centralizzato in `email_utils.py` → default `EMAIL_FROM_ADDRESS=hello@crmevent.it` (nome "CRMEvent"). Nessun hardcoding nel frontend. Le email Staff/Volontari (Brevo) NON toccate. In produzione il secret `EMAIL_FROM_ADDRESS` va impostato a `hello@crmevent.it` (o rimosso per usare il default); il dominio crmevent.it è verificato in Resend → qualsiasi mailbox @crmevent.it può inviare.
+- **(2) Mostra/nascondi password su /invito** (Invite.jsx): nuovo `PwField` con icona occhio (Eye/EyeOff) su entrambi i campi password (creazione account e accesso). Toggle focus-safe (`onMouseDown preventDefault`, `tabIndex=-1`) → nessuna perdita focus/reset. Requisiti password invariati.
+- **(3) Stato account dopo accettazione invito**: `_accept_invite` (flusso Org invite) e `/auth/activate` (flusso person invite) ora impostano sulla Persona `invite_status=account_attivato` + `invite_accepted_at`, membership `active=true`, user `last_login_at`. Il profilo mostra "Account attivo" + "Invito: Accettato · data". Lo `stato` commerciale/operativo (es. "Da contattare") resta un concetto DISTINTO e non rappresenta l'account; lo storico commerciale del Lead non viene mai toccato. Verificato E2E: register org-invite→200, invite_status=account_attivato, invite_accepted_at set, membership attiva.
+- ⚠️ Task 4 (separazione Persone in "Referenti aziende" / "Staff & Volontari") NON ancora implementato: richiede analisi non distruttiva delle anagrafiche esistenti → pianificato come intervento dedicato successivo.
+
+
 ## 2026-06 — Normalizzazione cellulare E.164 + telefono non bloccante (Brevo)
 - **Normalizzazione E.164** (`_norm_phone`, server.py): gestisce spazi/trattini/parentesi/`00`/`+` già presente; se manca il `+` assume il prefisso di default (Italia +39). Verificato: `3331234567`→`+393331234567`, `333 123 4567`→`+393331234567`, `+39 333 1234567`→`+393331234567`, internazionale `+447911123456` ok, input non validi→None.
 - **Salvataggio**: il cellulare è normalizzato in E.164 al submit del form pubblico (`pub_avail_submit`) e usato per dedup persona; a Brevo si invia SOLO il numero normalizzato (attributo `SMS`).
