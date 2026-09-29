@@ -23,6 +23,23 @@ export const BACKEND = process.env.REACT_APP_BACKEND_URL;
 export const fileUrl = (u) => (u ? (u.startsWith("http") ? u : `${BACKEND}${u}`) : "");
 export const toOptions = (arr) => (arr || []).map((v) => ({ value: v, label: v }));
 
+const _WD_IT = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
+const _MO_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+export const eventDayList = (start, end) => {
+  if (!start) return [];
+  const s = new Date(String(start).slice(0, 10) + "T00:00:00");
+  const e = new Date(String(end || start).slice(0, 10) + "T00:00:00");
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return [];
+  const out = [];
+  const cur = new Date(s);
+  while (cur <= e && out.length < 120) {
+    const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+    out.push({ date: iso, label: `${_WD_IT[cur.getDay()]} ${cur.getDate()} ${_MO_IT[cur.getMonth()]} ${cur.getFullYear()}` });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+};
+
 // Età calcolata dinamicamente dalla data di nascita (YYYY-MM-DD). Resta sempre corretta nel tempo.
 export const calcAge = (dn) => {
   if (!dn) return null;
@@ -210,10 +227,32 @@ export function PrimaryButton({ children, ...props }) {
   );
 }
 
-function Field({ field, value, onChange, options, onAddEntity }) {
+function Field({ field, value, onChange, options, onAddEntity, form }) {
   const common = { id: field.name, "data-testid": `field-${field.name}` };
   if (field.type === "image") {
     return <ImageUpload value={value} onChange={(u) => onChange(field.name, u)} testid={`field-${field.name}`} />;
+  }
+  if (field.type === "daydesc") {
+    const list = eventDayList(form?.data_inizio, form?.data_fine);
+    const val = value || {};
+    const setDay = (iso, txt) => {
+      const next = { ...val };
+      if (txt && txt.trim()) next[iso] = txt; else delete next[iso];
+      onChange(field.name, next);
+    };
+    if (!form?.data_inizio) {
+      return <div className="text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg p-3" data-testid="daydesc-empty">Imposta <span className="font-medium">Data inizio</span> (ed eventuale Data fine) evento per descrivere le singole giornate.</div>;
+    }
+    return (
+      <div className="space-y-2" data-testid="field-giorni_descrizioni">
+        {list.map((d) => (
+          <div key={d.date} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+            <div className="text-xs font-medium text-slate-600 capitalize sm:w-56">{d.label}</div>
+            <Input value={val[d.date] || ""} onChange={(e) => setDay(d.date, e.target.value)} placeholder="Descrizione giornata (es. Mezza Maratona)" maxLength={80} data-testid={`daydesc-${d.date}`} className="flex-1" />
+          </div>
+        ))}
+      </div>
+    );
   }
   if (field.type === "textarea") {
     return <Textarea {...common} value={value || ""} onChange={(e) => onChange(field.name, e.target.value)} placeholder={field.placeholder} />;
@@ -283,7 +322,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
                 <Label htmlFor={f.name} className="text-xs font-medium text-slate-600">
                   {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
                 </Label>
-                <Field field={f} value={form[f.name]} onChange={change} options={options} onAddEntity={setAddField} />
+                <Field field={f} value={form[f.name]} onChange={change} options={options} onAddEntity={setAddField} form={form} />
               </div>
             ))}
           </div>

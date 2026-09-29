@@ -45,7 +45,8 @@ export function AvailabilityEmailPanel() {
     try {
       const { data: r } = await api.post("/brevo/create-availability-templates");
       const created = (r.templates || []).filter((x) => x.created).length;
-      toast.success(created ? `Creati ${created} template su Brevo` : "I due template master esistono già: riuso dei Template ID esistenti");
+      const existing = (r.templates || []).length - created;
+      toast.success(`Configurazione Brevo completata · ${created} template creati, ${existing} già presenti · Lista ${r.list?.id ? `OK (ID ${r.list.id})` : "verificata"}`);
       load();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     finally { setCreating(false); }
@@ -68,7 +69,6 @@ export function AvailabilityEmailPanel() {
   const configured = data?.configured;
   const templates = data?.templates || [];
   const list = data?.list;
-  const missing = templates.some((t) => !t.template_id);
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8" data-testid="availability-email-panel">
@@ -108,7 +108,6 @@ export function AvailabilityEmailPanel() {
               <th className="py-2 px-3 font-semibold">Template ID</th>
               <th className="py-2 px-3 font-semibold">Stato</th>
               <th className="py-2 px-3 font-semibold">Ultimo aggiornamento</th>
-              <th className="py-2 px-3 font-semibold text-right">Test</th>
             </tr>
           </thead>
           <tbody>
@@ -125,16 +124,6 @@ export function AvailabilityEmailPanel() {
                       : <span className="text-amber-600 font-medium">Bozza</span>}
                 </td>
                 <td className="py-2.5 px-3 text-slate-500">{fmtDate(t.updated_at)}</td>
-                <td className="py-2.5 px-3 text-right">
-                  <Button
-                    size="sm" variant="outline"
-                    onClick={() => sendTest(t.kind)}
-                    disabled={sendingKind === t.kind}
-                    data-testid={`availability-send-test-${t.kind}`}
-                  >
-                    <Send className="w-3.5 h-3.5 mr-1.5" />{sendingKind === t.kind ? "Invio…" : "Invia test"}
-                  </Button>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -142,9 +131,10 @@ export function AvailabilityEmailPanel() {
       </div>
 
       <div className="mt-4">
-        <Button size="sm" variant="outline" onClick={createTemplates} disabled={creating || !configured || !missing} data-testid="availability-create-templates-btn">
-          <Plus className="w-4 h-4 mr-1.5" />{creating ? "Creo…" : missing ? "Crea template in Brevo" : "Template già presenti"}
+        <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={createTemplates} disabled={creating || !configured} data-testid="availability-create-templates-btn">
+          <Plus className="w-4 h-4 mr-1.5" />{creating ? "Configuro…" : "Crea/Configura in Brevo"}
         </Button>
+        {!configured && <span className="ml-2 text-[11px] text-slate-400">Disponibile in produzione (Brevo configurato)</span>}
       </div>
 
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="availability-list-info">
@@ -212,6 +202,26 @@ export function AvailabilityEmailPanel() {
         <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
           <ShieldCheck className="w-3.5 h-3.5" /> Il Codice Fiscale non viene mai inviato a Brevo. La chiave API non è mai esposta.
         </div>
+
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+          <Button
+            size="sm" variant="outline" className="justify-start"
+            onClick={() => sendTest("disponibilita")}
+            disabled={sendingKind === "disponibilita" || !configured}
+            data-testid="availability-send-test-disponibilita"
+          >
+            <Send className="w-3.5 h-3.5 mr-1.5" />{sendingKind === "disponibilita" ? "Invio…" : "Invia email di test – Disponibilità ricevuta"}
+          </Button>
+          <Button
+            size="sm" variant="outline" className="justify-start"
+            onClick={() => sendTest("conferma")}
+            disabled={sendingKind === "conferma" || !configured}
+            data-testid="availability-send-test-conferma"
+          >
+            <Send className="w-3.5 h-3.5 mr-1.5" />{sendingKind === "conferma" ? "Invio…" : "Invia email di test – Partecipazione confermata"}
+          </Button>
+        </div>
+        {!configured && <div className="text-[11px] text-amber-600 mt-1">Brevo non configurato in questo ambiente. L'invio reale è disponibile in produzione.</div>}
 
         {result && (
           <div className={`mt-3 rounded-lg border p-3 text-xs ${result.ok ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`} data-testid="availability-test-result">

@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, MailCheck,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
@@ -37,6 +37,7 @@ const PLATFORM_PATHS = ["/piattaforma", "/lead", "/supporto", "/audit"];
 
 const MARKETING_NAV = [
   { to: "/marketing/organizzatori", label: "Organizzatori", icon: Building2, id: "organizzatori" },
+  { to: "/marketing/disponibilita", label: "Email disponibilità", icon: MailCheck, id: "brevo-disponibilita" },
   { to: "/marketing/social", label: "Social", icon: Megaphone, id: "social" },
   { to: "/marketing/calendario", label: "Calendario editoriale", icon: CalendarRange, id: "social-calendario" },
   { to: "/marketing/impostazioni", label: "Impostazioni Social", icon: SlidersHorizontal, id: "social-impostazioni" },

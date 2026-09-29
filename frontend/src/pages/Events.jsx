@@ -250,6 +250,7 @@ export default function Events() {
     { name: "data_inizio", label: "Data inizio", type: "date" },
     { name: "data_fine", label: "Data fine", type: "date" },
     { name: "data_fine_disallestimento", label: "Data fine disallestimento (facoltativa)", type: "date" },
+    { name: "giorni_descrizioni", label: "Descrizione delle singole giornate (facoltativa)", type: "daydesc", full: true },
     { name: "ora_inizio", label: "Ora inizio", type: "time" },
     { name: "ora_fine", label: "Ora fine", type: "time" },
     { name: "localita", label: "Località / Venue" },

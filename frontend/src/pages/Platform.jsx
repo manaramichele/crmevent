@@ -4,7 +4,6 @@ import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { FunnelPanel } from "@/components/FunnelPanel";
-import { AvailabilityEmailPanel } from "@/components/AvailabilityEmailPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert, Mail } from "lucide-react";
@@ -205,8 +204,6 @@ export default function Platform() {
           </div>
         )}
       </div>
-
-      <AvailabilityEmailPanel />
 
       <FunnelPanel />
 

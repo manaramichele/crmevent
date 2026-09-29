@@ -627,6 +627,7 @@ class Event(BaseModel):
     stato: Optional[str] = "pianificato"
     descrizione: Optional[str] = None
     note: Optional[str] = None
+    giorni_descrizioni: Optional[dict] = None
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -640,6 +641,14 @@ class Event(BaseModel):
                 if prev and val < prev[1]:
                     raise ValueError(f"{label} non può essere precedente a {prev[0]}")
                 prev = (label, val)
+        # Descrizioni giornata: mantieni solo le date comprese nell'intervallo evento e non vuote.
+        if self.giorni_descrizioni is not None and self.data_inizio:
+            di = self.data_inizio[:10]
+            df = (self.data_fine or self.data_inizio)[:10]
+            self.giorni_descrizioni = {
+                k[:10]: str(v).strip() for k, v in self.giorni_descrizioni.items()
+                if v and str(v).strip() and di <= k[:10] <= df
+            }
         return self
 
 
@@ -6874,6 +6883,7 @@ def _avail_days(event: dict) -> list:
         return []
     if e < s:
         return []
+    desc = event.get("giorni_descrizioni") or {}
     out, cur = [], s
     while cur <= e and len(out) < 120:
         if di and cur < evstart:
@@ -6882,8 +6892,11 @@ def _avail_days(event: dict) -> list:
             fase = "disallestimento"
         else:
             fase = "evento"
-        out.append({"date": cur.isoformat(), "fase": fase,
-                    "label": f"{_WD_IT[cur.weekday()]} {cur.day} {_MO_IT[cur.month]}"})
+        day = {"date": cur.isoformat(), "fase": fase,
+               "label": f"{_WD_IT[cur.weekday()]} {cur.day} {_MO_IT[cur.month]}"}
+        if fase == "evento":
+            day["descrizione"] = desc.get(cur.isoformat()) or None
+        out.append(day)
         cur += timedelta(days=1)
     return out
 

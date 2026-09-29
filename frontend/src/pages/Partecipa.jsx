@@ -142,6 +142,7 @@ export default function Partecipa() {
                       <Checkbox checked={on} onCheckedChange={(v) => toggleDay(d.date, !!v)} data-testid={`pf-day-check-${d.date}`} />
                       <div>
                         <div className="text-sm font-medium text-slate-800 capitalize">{d.label}</div>
+                        {d.descrizione && <div className="text-sm font-semibold text-slate-700" data-testid={`pf-day-desc-${d.date}`}>{d.descrizione}</div>}
                         <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mt-0.5 ${d.fase === "allestimento" ? "bg-amber-100 text-amber-700" : d.fase === "disallestimento" ? "bg-violet-100 text-violet-700" : "bg-sky-100 text-sky-700"}`}>{d.fase === "allestimento" ? "Allestimento" : d.fase === "disallestimento" ? "Disallestimento" : "Evento"}</span>
                       </div>
                     </div>
