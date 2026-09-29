@@ -88,6 +88,10 @@ class BrevoClient:
     async def create_list(self, name, folder_id):
         return await self._req("POST", "/contacts/lists", json={"name": name, "folderId": folder_id})
 
+    async def get_list(self, list_id):
+        """List detail incl. totalSubscribers / uniqueSubscribers (contatti letti da Brevo)."""
+        return await self._req("GET", f"/contacts/lists/{list_id}")
+
     async def folders(self, limit=50):
         page = await self._req("GET", "/contacts/folders", params={"limit": limit, "offset": 0})
         return (page or {}).get("folders", [])

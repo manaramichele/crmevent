@@ -7232,7 +7232,16 @@ async def brevo_avail_templates_list(user: dict = Depends(require_superadmin)):
     base = [{"name": AVAIL_TPL_CONFERMA_DISP, "kind": "disponibilita", "type_label": AVAIL_TPL_KIND_LABEL["disponibilita"]},
             {"name": AVAIL_TPL_CONFERMA_PART, "kind": "conferma", "type_label": AVAIL_TPL_KIND_LABEL["conferma"]}]
     cfg = await db.brevo_config.find_one({"key": "availability"}, {"_id": 0}) or {}
-    lst = {"id": cfg.get("list_id"), "name": cfg.get("list_name") or AVAIL_LIST_NAME}
+    lst = {"id": cfg.get("list_id"), "name": cfg.get("list_name") or AVAIL_LIST_NAME, "contacts": None}
+    succ = await db.brevo_sync_log.find_one({"availability_id": {"$ne": None}, "status": {"$in": ["sent", "synced"]}},
+                                            {"_id": 0}, sort=[("created_at", -1)])
+    errdoc = await db.brevo_sync_log.find_one({"availability_id": {"$ne": None}, "status": "error"},
+                                              {"_id": 0}, sort=[("created_at", -1)])
+    lst["last_sync"] = succ.get("created_at") if succ else None
+    if errdoc and (not succ or (errdoc.get("created_at") or "") > (succ.get("created_at") or "")):
+        lst["last_error"] = {"error": errdoc.get("error") or "Errore di sincronizzazione", "at": errdoc.get("created_at")}
+    else:
+        lst["last_error"] = None
     if not brevo_client.is_configured():
         return {"configured": False, "enabled": _brevo_avail_enabled(), "list": lst,
                 "templates": [{**b, "template_id": None, "is_active": None, "updated_at": None} for b in base]}
@@ -7244,6 +7253,15 @@ async def brevo_avail_templates_list(user: dict = Depends(require_superadmin)):
             out.append({**b, "template_id": t.get("id") if t else None,
                         "is_active": t.get("isActive") if t else None,
                         "updated_at": (t.get("modifiedAt") or t.get("createdAt")) if t else None})
+        if lst.get("id"):
+            try:
+                detail = await c.get_list(lst["id"])
+                if isinstance(detail, dict):
+                    lst["contacts"] = detail.get("totalSubscribers")
+                    if lst["contacts"] is None:
+                        lst["contacts"] = detail.get("uniqueSubscribers")
+            except Exception:
+                lst["contacts"] = None
     return {"configured": True, "enabled": _brevo_avail_enabled(), "list": lst, "templates": out}
 
 

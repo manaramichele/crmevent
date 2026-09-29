@@ -1,6 +1,7 @@
 # CRMEvent — Changelog
 
 ## 2026-06 — Super Admin · Email disponibilità eventi (scheda Marketing/Brevo) — verificato frontend 100%
+- Riepilogo "Contatti in lista" nel pannello: List ID, **Contatti totali letti direttamente da Brevo** (`GET /contacts/lists/{id}` → totalSubscribers/uniqueSubscribers, mai calcolati dal DB CRMEvent), Ultima sincronizzazione (ultimo `brevo_sync_log` disponibilità con esito sent/synced) e Stato/Errore sincronizzazione (ultimo error se più recente dell'ultimo successo). Nessun grafico/statistica avanzata.
 - Lista unica Brevo **«CRMEvent · Disponibilità eventi»** confermata: ogni compilazione del modulo pubblico crea/aggiorna il contatto Brevo e lo associa a questa unica lista (mai una lista per Evento). Il List ID viene creato via API se assente e **persistito** in `brevo_config` (key=availability) per gli invii successivi; helper `_ensure_avail_list`/`_avail_list_id`.
 - Dedup persona: contatto già presente → `update_contact` (PUT listIds+attributi, MAI emailBlacklisted → nessun resubscribe, nessun duplicato); nuovo → `create_contact`. Storico partecipazioni per-Evento resta in CRMEvent (collection `availabilities`, una riga per Evento) e non si perde al partecipare a un nuovo Evento.
 - Mai inviati a Brevo: Codice Fiscale, Data di nascita, dati rimborsi (attributi limitati a NOME/COGNOME/SMS/EVENTO/DATA_EVENTO/ORGANIZZAZIONE/RUOLO_EVENTO/STATO_DISPONIBILITA).

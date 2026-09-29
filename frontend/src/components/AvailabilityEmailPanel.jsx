@@ -141,14 +141,46 @@ export function AvailabilityEmailPanel() {
         </table>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4">
         <Button size="sm" variant="outline" onClick={createTemplates} disabled={creating || !configured || !missing} data-testid="availability-create-templates-btn">
           <Plus className="w-4 h-4 mr-1.5" />{creating ? "Creo…" : missing ? "Crea template in Brevo" : "Template già presenti"}
         </Button>
-        <span className="text-xs text-slate-500" data-testid="availability-list-info">
-          Lista Brevo unica: <span className="font-medium text-slate-700">{list?.name || "CRMEvent · Disponibilità eventi"}</span>
-          {list?.id ? <> · List ID <span className="font-mono">{list.id}</span></> : " · verrà creata automaticamente al primo utilizzo"}
-        </span>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="availability-list-info">
+        <div className="text-xs font-semibold text-slate-700 mb-2">Lista Brevo unica · {list?.name || "CRMEvent · Disponibilità eventi"}</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div>
+            <div className="text-slate-400">List ID</div>
+            <div className="font-mono text-slate-700" data-testid="availability-list-id">{list?.id ?? "—"}</div>
+          </div>
+          <div>
+            <div className="text-slate-400">Contatti totali (Brevo)</div>
+            <div className="font-semibold text-slate-800" data-testid="availability-list-contacts">{list?.contacts ?? "—"}</div>
+          </div>
+          <div>
+            <div className="text-slate-400">Ultima sincronizzazione</div>
+            <div className="text-slate-700" data-testid="availability-list-lastsync">{fmtDate(list?.last_sync)}</div>
+          </div>
+          <div>
+            <div className="text-slate-400">Stato sincronizzazione</div>
+            <div data-testid="availability-list-syncstatus">
+              {list?.last_error
+                ? <span className="text-red-600 font-medium">Errore</span>
+                : list?.last_sync ? <span className="text-emerald-600 font-medium">OK</span> : <span className="text-slate-400">—</span>}
+            </div>
+          </div>
+        </div>
+        {list?.last_error && (
+          <div className="mt-2 text-[11px] text-red-600" data-testid="availability-list-error">
+            Errore sincronizzazione: {list.last_error.error}{list.last_error.at ? ` (${fmtDate(list.last_error.at)})` : ""}
+          </div>
+        )}
+        {!list?.id && (
+          <div className="mt-2 text-[11px] text-slate-400">
+            La lista verrà creata automaticamente via API al primo utilizzo (o con «Crea template in Brevo») e il List ID sarà salvato qui.
+          </div>
+        )}
       </div>
 
       <div className="mt-5 border-t border-slate-100 pt-4" data-testid="availability-test-section">
