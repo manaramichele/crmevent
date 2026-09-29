@@ -13,7 +13,10 @@ const TABS = [
   { id: "events", label: "Eventi trovati", icon: CalendarRange },
   { id: "finder", label: "Lead Finder", icon: Search },
   { id: "review", label: "Da verificare", icon: Users },
+  { id: "brevo", label: "Brevo", icon: Send },
 ];
+const BREVO_LABEL = { non_approvato: "Non approvato", approvato: "Approvato per Brevo", in_corso: "Sincronizzazione in corso", sincronizzato: "Sincronizzato Prospect", gia_presente: "Già presente in Brevo", disiscritto_bloccato: "Disiscritto / bloccato", errore: "Errore sincronizzazione" };
+const BREVO_BADGE = { sincronizzato: "bg-emerald-100 text-emerald-700", gia_presente: "bg-sky-100 text-sky-700", approvato: "bg-amber-100 text-amber-700", disiscritto_bloccato: "bg-red-100 text-red-700", errore: "bg-red-100 text-red-700", in_corso: "bg-slate-100 text-slate-600", non_approvato: "bg-slate-100 text-slate-500" };
 const STATE_LABEL = { da_completare: "Da completare", da_verificare: "Da verificare", verificato: "Verificato", interessante: "Interessante", contattato: "Contattato", demo_richiesta: "Demo richiesta", trial: "Trial", cliente: "Cliente", non_interessato: "Non interessato", non_contattare: "Non contattare" };
 const SCAN_STAT = [
   ["events_analyzed", "Eventi analizzati"], ["endu_reachable", "ENDU raggiungibili"],
@@ -56,6 +59,10 @@ export default function LeadFinder() {
   const [importFile, setImportFile] = useState(null);
   const [importPrev, setImportPrev] = useState(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [brevoCfg, setBrevoCfg] = useState(null);
+  const [brevoTest, setBrevoTest] = useState(null);
+  const [brevoBusy, setBrevoBusy] = useState(false);
+  const [syncConfirm, setSyncConfirm] = useState(null);
 
   const load = async () => {
     try {
@@ -70,7 +77,8 @@ export default function LeadFinder() {
       if (last && last.status === "done") { const { data: full } = await api.get(`/leadfinder/scan/${last.id}`); setScan(full); }
     } catch { /* no scans yet */ }
   };
-  useEffect(() => { load(); loadLastScan(); }, []);
+  const loadBrevo = async () => { try { const { data } = await api.get("/brevo/status"); setBrevoCfg(data); } catch { /* ignore */ } };
+  useEffect(() => { load(); loadLastScan(); loadBrevo(); }, []);
 
   const regions = [...new Set(orgs.map((o) => o.region).filter(Boolean))].sort();
   const sports = [...new Set(events.map((e) => e.sport).filter(Boolean))].sort();
@@ -158,6 +166,37 @@ export default function LeadFinder() {
   const enrichSelected = () => {
     toast.info("Arricchimento automatico dei selezionati in arrivo. I record 'Da completare' sono già predisposti: dominio email → sito ufficiale → organizzatore → eventi → città/regione → social → fonti.");
   };
+  const approveBrevo = async () => {
+    if (!mergeSel.length) return;
+    try { const { data } = await api.post("/leadfinder/organizers/approve-brevo", { ids: mergeSel }); toast.success(`Approvati per Brevo: ${data.approved}${data.skipped ? ` · ${data.skipped} saltati (bloccati)` : ""}`); setMergeSel([]); load(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+  const askSync = () => {
+    const approved = orgs.filter((o) => mergeSel.includes(o.id) && o.brevo_status === "approvato");
+    if (!approved.length) { toast.error('Seleziona contatti in stato "Approvato per Brevo"'); return; }
+    setSyncConfirm(approved.map((o) => o.id));
+  };
+  const doSync = async () => {
+    const ids = syncConfirm; setSyncConfirm(null);
+    try { const { data } = await api.post("/leadfinder/organizers/sync-brevo", { ids }); toast.success(`Sincronizzati ${data.synced} · bloccati ${data.blocked} · errori ${data.errors}${data.skipped_not_approved ? ` · ${data.skipped_not_approved} non approvati` : ""}`); setMergeSel([]); load(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+  const syncOne = async (o) => {
+    if (o.brevo_status !== "approvato") { toast.error('Prima "Approva per Brevo"'); return; }
+    try { const { data } = await api.post("/leadfinder/organizers/sync-brevo", { ids: [o.id] }); const r = (data.results || [])[0]; toast.success(`Brevo: ${BREVO_LABEL[r?.status] || r?.status}`); load(); const { data: fresh } = await api.get(`/leadfinder/organizers/${o.id}`); setDetail(fresh); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+  const testBrevo = async () => {
+    setBrevoBusy(true);
+    try { const { data } = await api.post("/brevo/test", {}); setBrevoTest(data); loadBrevo(); toast.success("Connessione Brevo OK"); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+    finally { setBrevoBusy(false); }
+  };
+  const createProspectList = async () => {
+    if (!window.confirm(`Creare/collegare la lista Brevo "${brevoCfg?.prospect_list_name}"?`)) return;
+    try { const { data } = await api.post("/brevo/create-list", {}); toast.success(data.created ? `Lista creata (ID ${data.list_id})` : `Lista esistente collegata (ID ${data.list_id})`); loadBrevo(); testBrevo(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
 
   const Link = ({ url, icon: Icon, label }) => url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-tiffany-fg hover:underline text-sm" data-testid={`lf-link-${label}`}><Icon className="w-4 h-4" />{label}<ExternalLink className="w-3 h-3" /></a> : <span className="inline-flex items-center gap-1 text-slate-400 text-sm"><Icon className="w-4 h-4" />Da verificare</span>;
 
@@ -203,6 +242,8 @@ export default function LeadFinder() {
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fLi} onChange={(e) => setFLi(e.target.checked)} />LinkedIn</label>
               {mergeSel.length >= 2 && <Button size="sm" onClick={doMerge} data-testid="lf-merge-btn" className="bg-amber-500 hover:bg-amber-600 text-white"><GitMerge className="w-4 h-4 mr-1" />Unisci {mergeSel.length}</Button>}
               {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={enrichSelected} data-testid="lf-enrich-btn"><Sparkles className="w-4 h-4 mr-1" />Arricchisci selezionati</Button>}
+              {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={approveBrevo} data-testid="lf-approve-brevo-btn"><ShieldCheck className="w-4 h-4 mr-1" />Approva per Brevo</Button>}
+              {mergeSel.length >= 1 && <Button size="sm" onClick={askSync} data-testid="lf-sync-brevo-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Send className="w-4 h-4 mr-1" />Sincronizza con Brevo</Button>}
               <div className="flex-1" />
               <Button size="sm" onClick={() => setShowAdd(true)} data-testid="lf-add-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Plus className="w-4 h-4 mr-1" />Aggiungi organizzatore</Button>
               <Button size="sm" variant="outline" onClick={() => { setShowImport(true); setImportPrev(null); setImportFile(null); }} data-testid="lf-import-btn"><Upload className="w-4 h-4 mr-1" />Importa email</Button>
@@ -212,7 +253,7 @@ export default function LeadFinder() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr>
                 {tab === "organizers" && <th className="p-2"></th>}
-                <th className="p-2 text-left">Organizzazione</th><th className="p-2">Eventi</th><th className="p-2">Email</th><th className="p-2">Instagram</th><th className="p-2">LinkedIn</th><th className="p-2">Regione</th><th className="p-2">Fonte</th><th className="p-2">Stato</th><th className="p-2">Ultima verifica</th>
+                <th className="p-2 text-left">Organizzazione</th><th className="p-2">Eventi</th><th className="p-2">Email</th><th className="p-2">Instagram</th><th className="p-2">LinkedIn</th><th className="p-2">Regione</th><th className="p-2">Fonte</th><th className="p-2">Stato</th><th className="p-2">Brevo</th><th className="p-2">Ultima verifica</th>
               </tr></thead>
               <tbody>
                 {(tab === "organizers" ? filtered : toReview).map((o) => (
@@ -226,6 +267,7 @@ export default function LeadFinder() {
                     <td className="p-2 text-center" onClick={() => setDetail(o)}>{o.region || "—"}</td>
                     <td className="p-2 text-center" onClick={() => setDetail(o)}>{o.source_main}</td>
                     <td className="p-2 text-center" onClick={() => setDetail(o)}><span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">{STATE_LABEL[o.status] || o.status}</span></td>
+                    <td className="p-2 text-center" onClick={() => setDetail(o)}><span className={`text-xs px-2 py-0.5 rounded-full ${BREVO_BADGE[o.brevo_status || "non_approvato"]}`}>{BREVO_LABEL[o.brevo_status || "non_approvato"]}</span></td>
                     <td className="p-2 text-center text-xs text-slate-400" onClick={() => setDetail(o)}>{o.last_verified_at ? o.last_verified_at.slice(0, 10) : "—"}</td>
                   </tr>
                 ))}
@@ -343,6 +385,68 @@ export default function LeadFinder() {
         </div>
       )}
 
+      {tab === "brevo" && (
+        <div className="space-y-4" data-testid="lf-brevo">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <div className="text-sm font-semibold text-slate-700">Marketing → Impostazioni → Brevo</div>
+                <div className="text-xs text-slate-500">Sincronizzazione controllata dei Prospect. Il Funnel Demo esistente non viene toccato.</div>
+              </div>
+              <Button size="sm" onClick={testBrevo} disabled={brevoBusy} data-testid="brevo-test-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><ShieldCheck className="w-4 h-4 mr-1" />{brevoBusy ? "Test…" : "Test connessione"}</Button>
+            </div>
+            {brevoCfg && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div className="rounded-lg border border-slate-200 p-2">API key backend: <strong className={brevoCfg.configured ? "text-emerald-600" : "text-red-600"}>{brevoCfg.configured ? "Configurata" : "Non configurata"}</strong></div>
+                <div className="rounded-lg border border-slate-200 p-2">Connessione: <strong>{brevoCfg.connection}</strong></div>
+                <div className="rounded-lg border border-slate-200 p-2">Lista: <strong>{brevoCfg.list_name || "—"}</strong></div>
+                <div className="rounded-lg border border-slate-200 p-2">listId: <strong>{brevoCfg.list_id || "—"}</strong></div>
+                <div className="rounded-lg border border-slate-200 p-2 col-span-2">Ultimo test: {brevoCfg.last_test ? `${brevoCfg.last_test.at?.slice(0, 19).replace("T", " ")} · ${brevoCfg.last_test.ok ? "OK" : "errore"}` : "—"}</div>
+              </div>
+            )}
+            {!brevoCfg?.configured && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">La chiave <code>BREVO_API_KEY</code> è vuota in preview (impostata nei Secrets di produzione). Il test funziona in produzione o aggiungendo una chiave in preview.</div>}
+          </div>
+
+          {brevoTest && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3 text-sm" data-testid="brevo-test-result">
+              <div className="text-emerald-600 font-medium">Connessione OK{brevoTest.account_email ? ` · account ${brevoTest.account_email}` : ""}</div>
+              <div>
+                <div className="text-xs font-semibold uppercase text-slate-400 mb-1">Lista Prospect "{brevoCfg?.prospect_list_name}"</div>
+                {brevoTest.prospect_list_exists
+                  ? <div className="text-slate-700">Trovata · listId <strong>{brevoTest.prospect_list.id}</strong></div>
+                  : <div className="flex items-center gap-2 flex-wrap"><span className="text-amber-700">Non esiste ancora.</span><Button size="sm" variant="outline" onClick={createProspectList} data-testid="brevo-create-list-btn">Crea lista "{brevoCfg?.prospect_list_name}"</Button></div>}
+                <div className="text-xs text-slate-400 mt-1">{brevoTest.note_demo}</div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase text-slate-400 mb-1">Attributi Brevo</div>
+                <div className="text-slate-700">Disponibili: {(brevoTest.attributes_available || []).join(", ") || "—"}</div>
+                {(brevoTest.attributes_missing || []).length > 0 && <div className="text-amber-700">Mancanti (NON creati automaticamente): {brevoTest.attributes_missing.join(", ")}</div>}
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase text-slate-400 mb-1">Mittenti configurati</div>
+                <ul className="text-slate-700">{(brevoTest.senders || []).map((s, i) => <li key={i}>{s.name} · {s.email} · {s.active ? "verificato" : "non verificato"}</li>)}{(brevoTest.senders || []).length === 0 ? <li className="text-slate-400">Nessun mittente</li> : null}</ul>
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase text-slate-400 mb-1">Tutte le liste</div>
+                <ul className="text-xs text-slate-600 max-h-40 overflow-y-auto">{(brevoTest.lists || []).map((l) => <li key={l.id}>#{l.id} · {l.name}{l.name?.includes("·") ? " (Demo — non toccata)" : ""}</li>)}</ul>
+              </div>
+            </div>
+          )}
+          <ul className="text-xs text-slate-500 list-disc pl-5 space-y-1">
+            <li>Nessun invio email da CRMEvent · nessuna sincronizzazione massiva · nessuna modifica al Funnel Demo.</li>
+            <li>Contatti disiscritti/bloccati NON vengono reinseriti (priorità assoluta).</li>
+          </ul>
+        </div>
+      )}
+
+      <Dialog open={!!syncConfirm} onOpenChange={(o) => !o && setSyncConfirm(null)}>
+        <DialogContent className="max-w-sm" data-testid="brevo-sync-confirm">
+          <DialogHeader><DialogTitle>Conferma sincronizzazione</DialogTitle></DialogHeader>
+          <div className="text-sm text-slate-700">Stai per sincronizzare <strong>{(syncConfirm || []).length}</strong> prospect con la lista <strong>"{brevoCfg?.list_name || brevoCfg?.prospect_list_name}"</strong> di Brevo. Il funnel Brevo gestirà le email.</div>
+          <div className="flex justify-end gap-2 pt-2"><Button variant="outline" size="sm" onClick={() => setSyncConfirm(null)}>Annulla</Button><Button size="sm" onClick={doSync} data-testid="brevo-sync-confirm-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900">Sincronizza {(syncConfirm || []).length} prospect</Button></div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="lf-org-detail">
           {detail && (<>
@@ -368,6 +472,18 @@ export default function LeadFinder() {
                 {detail.possibile_duplicato && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2" data-testid="lf-detail-dup">Possibile duplicato di: <strong>{detail.possibile_duplicato.name}</strong> — verifica e usa "Unisci duplicati" se confermato.</div>}
                 <select value={detail.status} onChange={(e) => setStatus(detail, e.target.value)} className={FIELD} data-testid="lf-detail-status">{Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
                 {detail.status === "non_contattare" && <div className="text-xs text-red-600 mt-1">"Non contattare" ha priorità e non viene sovrascritto dalle ricerche automatiche.</div>}
+              </section>
+              <section><div className="text-xs font-semibold uppercase text-slate-400 mb-1">Brevo</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${BREVO_BADGE[detail.brevo_status || "non_approvato"]}`} data-testid="lf-detail-brevo-status">{BREVO_LABEL[detail.brevo_status || "non_approvato"]}</span>
+                  {detail.brevo_status === "approvato" && <Button size="sm" onClick={() => syncOne(detail)} data-testid="lf-detail-sync-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900 h-7 px-2 text-xs"><Send className="w-3.5 h-3.5 mr-1" />Sincronizza con Brevo</Button>}
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-xs text-slate-600 mt-2">
+                  <div>Lista: {detail.brevo_list_id ? (brevoCfg?.list_name || detail.brevo_list_id) : "—"}</div>
+                  <div>Contact ID: {detail.brevo_contact_id || "—"}</div>
+                  <div className="col-span-2">Data sincronizzazione: {(detail.brevo_synced_at || "").slice(0, 19).replace("T", " ") || "—"}</div>
+                  {detail.brevo_error && <div className="col-span-2 text-red-600">Errore: {detail.brevo_error}</div>}
+                </div>
               </section>
             </div>
           </>)}

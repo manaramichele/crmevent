@@ -35,6 +35,7 @@ import social_creative
 import instagram_utils
 import leadfinder_scraper
 import seed_leadfinder
+import brevo_client
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -5492,7 +5493,223 @@ async def lf_dashboard(user: dict = Depends(require_org_admin)):
 
 @api.post("/leadfinder/brevo-export")
 async def lf_brevo_export(body: dict = {}, user: dict = Depends(require_org_admin)):
-    raise HTTPException(status_code=501, detail="Sincronizzazione Brevo non ancora attiva: CRMEvent resta il database principale in questa fase.")
+    raise HTTPException(status_code=501, detail="Usa 'Approva per Brevo' + 'Sincronizza con Brevo' (lista CRMEvent – Prospect).")
+
+
+# ==================== BREVO — sincronizzazione controllata Prospect ====================
+BREVO_STATES = ("non_approvato", "approvato", "in_corso", "sincronizzato",
+                "gia_presente", "disiscritto_bloccato", "errore")
+
+
+async def _brevo_config(user):
+    c = await db.brevo_config.find_one(oq(user), {"_id": 0}) or {}
+    return c
+
+
+async def _brevo_save_config(user, patch):
+    patch = {**patch, "updated_at": now_iso()}
+    await db.brevo_config.update_one(oq(user), {"$set": {**patch, "org_id": user["org_id"]}}, upsert=True)
+    return await _brevo_config(user)
+
+
+def _brevo_attrs_for(org):
+    """Build the custom-attribute payload from a CRMEvent organizer (only non-empty values)."""
+    ev = (org.get("events") or [{}])
+    first = ev[0] if ev else {}
+    m = {
+        "ORGANIZZAZIONE": org.get("legal_name") or org.get("name"),
+        "EVENTO": first.get("name"),
+        "SPORT": first.get("sport"),
+        "REGIONE": org.get("region"),
+        "CITTA": org.get("city"),
+        "SITO": org.get("website"),
+        "INSTAGRAM": org.get("instagram_url"),
+        "LINKEDIN": org.get("linkedin_url"),
+        "FONTE": org.get("source_main"),
+        "DATA_ACQUISIZIONE": (org.get("acquired_at") or "")[:10] or None,
+        "STATO_LEAD": org.get("status"),
+    }
+    return {k: v for k, v in m.items() if v}
+
+
+@api.get("/brevo/status")
+async def brevo_status(user: dict = Depends(require_org_admin)):
+    cfg = await _brevo_config(user)
+    return {
+        "configured": brevo_client.is_configured(),
+        "connection": cfg.get("connection", "sconosciuto"),
+        "list_id": cfg.get("list_id"),
+        "list_name": cfg.get("list_name"),
+        "last_test": cfg.get("last_test"),
+        "attributes_available": cfg.get("attributes_available", []),
+        "attributes_missing": cfg.get("attributes_missing", []),
+        "senders": cfg.get("senders", []),
+        "prospect_list_name": brevo_client.PROSPECT_LIST_NAME,
+        "desired_attributes": brevo_client.DESIRED_ATTRS,
+    }
+
+
+@api.post("/brevo/test")
+async def brevo_test(user: dict = Depends(require_org_admin)):
+    if not brevo_client.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata sul backend")
+    try:
+        async with brevo_client.BrevoClient() as c:
+            acct = await c.account()
+            lists = await c.lists()
+            attrs = await c.attributes()
+            senders = await c.senders()
+    except brevo_client.BrevoError as e:
+        await _brevo_save_config(user, {"connection": "errore", "last_test": {"at": now_iso(), "ok": False, "error": f"HTTP {e.status}"}})
+        raise HTTPException(status_code=502, detail=f"Brevo: errore connessione (HTTP {e.status})")
+    attr_names = {a.get("name") for a in attrs}
+    available = [a for a in brevo_client.DESIRED_ATTRS if a in attr_names]
+    missing = [a for a in brevo_client.DESIRED_ATTRS if a not in attr_names]
+    prospect = next((x for x in lists if (x.get("name") or "").strip().lower() == brevo_client.PROSPECT_LIST_NAME.lower()), None)
+    sender_list = [{"name": s.get("name"), "email": s.get("email"), "active": s.get("active")} for s in senders]
+    cfg_patch = {
+        "connection": "ok",
+        "last_test": {"at": now_iso(), "ok": True, "account_email": (acct or {}).get("email")},
+        "attributes_available": available, "attributes_missing": missing,
+        "senders": sender_list,
+    }
+    if prospect:
+        cfg_patch["list_id"] = prospect.get("id")
+        cfg_patch["list_name"] = prospect.get("name")
+    await _brevo_save_config(user, cfg_patch)
+    return {
+        "connection": "ok",
+        "account_email": (acct or {}).get("email"),
+        "lists": [{"id": x.get("id"), "name": x.get("name"), "total_subscribers": x.get("totalSubscribers")} for x in lists],
+        "prospect_list": {"id": prospect.get("id"), "name": prospect.get("name")} if prospect else None,
+        "prospect_list_exists": bool(prospect),
+        "attributes_available": available, "attributes_missing": missing,
+        "senders": sender_list,
+        "note_demo": "La lista/funnel Demo NON viene toccata: la sync usa solo la lista Prospect qui sopra.",
+    }
+
+
+@api.post("/brevo/create-list")
+async def brevo_create_list(body: dict = {}, user: dict = Depends(require_org_admin)):
+    if not brevo_client.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata")
+    try:
+        async with brevo_client.BrevoClient() as c:
+            existing = next((x for x in await c.lists() if (x.get("name") or "").strip().lower() == brevo_client.PROSPECT_LIST_NAME.lower()), None)
+            if existing:
+                await _brevo_save_config(user, {"list_id": existing["id"], "list_name": existing["name"]})
+                return {"created": False, "list_id": existing["id"], "list_name": existing["name"], "detail": "Lista già esistente: usata quella."}
+            folder_id = body.get("folder_id")
+            if not folder_id:
+                folders = await c.folders()
+                if not folders:
+                    raise HTTPException(status_code=400, detail="Nessuna cartella Brevo trovata: crea una cartella nel pannello Brevo e riprova.")
+                folder_id = folders[0]["id"]
+            res = await c.create_list(brevo_client.PROSPECT_LIST_NAME, folder_id)
+            lid = res.get("id")
+            await _brevo_save_config(user, {"list_id": lid, "list_name": brevo_client.PROSPECT_LIST_NAME})
+            return {"created": True, "list_id": lid, "list_name": brevo_client.PROSPECT_LIST_NAME}
+    except brevo_client.BrevoError as e:
+        raise HTTPException(status_code=502, detail=f"Brevo: impossibile creare la lista (HTTP {e.status})")
+
+
+@api.post("/leadfinder/organizers/approve-brevo")
+async def lf_approve_brevo(body: dict, user: dict = Depends(require_org_admin)):
+    ids = body.get("ids") or []
+    approved, skipped = 0, 0
+    for oid in ids:
+        o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})
+        if not o:
+            continue
+        # Blocklisted/unsubscribed contacts keep priority and are never re-approved.
+        if o.get("brevo_status") == "disiscritto_bloccato":
+            skipped += 1
+            continue
+        await db.lf_organizers.update_one(oq(user, id=oid), {"$set": {"brevo_status": "approvato", "updated_at": now_iso()}})
+        approved += 1
+    return {"approved": approved, "skipped": skipped}
+
+
+async def _brevo_sync_one(c, allowed_attrs, org, list_id, user):
+    email = (org.get("email") or "").strip().lower()
+    row = {"id": org["id"], "email": email}
+    if not email:
+        row.update(status="errore", error="email mancante")
+        return row
+    try:
+        contact = await c.get_contact(email)
+        if contact:
+            cid = contact.get("id")
+            blocked = bool(contact.get("emailBlacklisted"))
+            unsub_here = list_id in (contact.get("listUnsubscribed") or [])
+            if blocked or unsub_here:
+                new_status, res = "disiscritto_bloccato", "skipped_blocked"
+            elif list_id in (contact.get("listIds") or []):
+                new_status, res = "gia_presente", "already_present"
+            else:
+                await c.add_existing_to_list(email, list_id)
+                new_status, res = "sincronizzato", "added"
+        else:
+            attrs = {k: v for k, v in _brevo_attrs_for(org).items() if k in allowed_attrs}
+            created = await c.create_contact(email, list_id, attrs)
+            cid = (created or {}).get("id")
+            new_status, res = "sincronizzato", "created_and_added"
+        row.update(status=new_status, result=res, contact_id=cid)
+    except brevo_client.BrevoError as e:
+        row.update(status="errore", error=f"HTTP {e.status}", result="error")
+    # persist on organizer + audit log
+    upd = {"brevo_status": row["status"], "brevo_list_id": list_id, "updated_at": now_iso()}
+    if row.get("contact_id"):
+        upd["brevo_contact_id"] = row["contact_id"]
+    if row["status"] in ("sincronizzato", "gia_presente"):
+        upd["brevo_synced_at"] = now_iso()
+        upd["brevo_error"] = None
+    if row.get("error"):
+        upd["brevo_error"] = row["error"]
+    await db.lf_organizers.update_one(oq(user, id=org["id"]), {"$set": upd})
+    await db.brevo_sync_log.insert_one({
+        "id": new_id(), "org_id": user["org_id"], "organizer_id": org["id"], "email": email,
+        "list_id": list_id, "contact_id": row.get("contact_id"), "result": row.get("result"),
+        "status": row["status"], "error": row.get("error"),
+        "by_user": user.get("user_id"), "at": now_iso(),
+    })
+    return row
+
+
+@api.post("/leadfinder/organizers/sync-brevo")
+async def lf_sync_brevo(body: dict, user: dict = Depends(require_org_admin)):
+    if not brevo_client.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata")
+    cfg = await _brevo_config(user)
+    list_id = cfg.get("list_id")
+    if not list_id:
+        raise HTTPException(status_code=400, detail="Lista Prospect non configurata: esegui Test connessione e salva/crea la lista.")
+    ids = body.get("ids") or []
+    results, skipped = [], 0
+    try:
+        async with brevo_client.BrevoClient() as c:
+            allowed = set(await _brevo_config_allowed_attrs(c))
+            for oid in ids:
+                o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})
+                if not o:
+                    continue
+                if o.get("brevo_status") != "approvato":
+                    skipped += 1
+                    continue
+                await db.lf_organizers.update_one(oq(user, id=oid), {"$set": {"brevo_status": "in_corso"}})
+                o = await _lf_enrich(user, o)
+                results.append(await _brevo_sync_one(c, allowed, o, list_id, user))
+    except brevo_client.BrevoError as e:
+        raise HTTPException(status_code=502, detail=f"Brevo: errore (HTTP {e.status})")
+    return {"synced": sum(1 for r in results if r["status"] in ("sincronizzato", "gia_presente")),
+            "blocked": sum(1 for r in results if r["status"] == "disiscritto_bloccato"),
+            "errors": sum(1 for r in results if r["status"] == "errore"),
+            "skipped_not_approved": skipped, "results": results, "list_name": cfg.get("list_name")}
+
+
+async def _brevo_config_allowed_attrs(c):
+    attr_names = {a.get("name") for a in await c.attributes()}
+    return [a for a in brevo_client.DESIRED_ATTRS if a in attr_names]
 
 
 # ---- Lead Finder: scansione ENDU → sito ufficiale → organizzatore → contatti/social ----

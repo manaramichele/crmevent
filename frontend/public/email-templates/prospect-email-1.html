@@ -1,0 +1,59 @@
+<!--
+  CRMEvent · Funnel Prospect · Email 1
+  Da caricare in Brevo come TEMPLATE (bozza), NON per invii reali.
+  Placeholder da confermare prima dell'attivazione:
+    {{PUBLIC_DOMAIN}}  -> dominio pubblico CRMEvent (es. https://www.crmevent.it)
+  La CTA punta a /demo con UTM. Il footer usa i tag Brevo obbligatori {{ unsubscribe }} e {{ contact.EMAIL }}.
+  Colore primario Tiffany / RAL 6027 = #147D74 (accento) su sfondo bianco, testo scuro.
+-->
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="x-apple-disable-message-reformatting" />
+<title>CRMEvent</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f6f6;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+<span style="display:none;font-size:1px;color:#f4f6f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Staff, volontari, sponsor, turni e briefing in un unico posto.</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f6;padding:24px 0;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+      <tr><td style="padding:28px 32px 8px 32px;">
+        <img src="{{PUBLIC_DOMAIN}}/logo-crmevent.png" alt="CRMEvent" height="34" style="height:34px;display:block;border:0;" />
+      </td></tr>
+      <tr><td style="padding:12px 32px 0 32px;">
+        <h1 style="margin:0 0 8px 0;font-size:24px;line-height:1.25;color:#111827;font-weight:700;">Organizzare un evento sportivo senza rincorrere Excel, chat e documenti</h1>
+      </td></tr>
+      <tr><td style="padding:8px 32px 0 32px;font-size:15px;line-height:1.6;color:#374151;">
+        <p style="margin:0 0 12px 0;">Organizzare un evento è già abbastanza complicato.</p>
+        <p style="margin:0 0 12px 0;">Staff e volontari su WhatsApp.<br/>Sponsor nelle email.<br/>Turni su Excel.<br/>Hotel e pasti su un altro file.<br/>Briefing e documenti sparsi nelle cartelle.</p>
+        <p style="margin:0 0 12px 0;">È proprio da questa situazione che nasce <strong>CRMEvent</strong>.</p>
+        <p style="margin:0 0 8px 0;">Un unico spazio pensato per chi organizza eventi sportivi, dove gestire:</p>
+        <p style="margin:0 0 16px 0;color:#147D74;font-weight:600;">Eventi · Staff · Volontari · Team e turni · Sponsor e partner · Ospitalità · Attività · Documenti e briefing</p>
+        <p style="margin:0 0 20px 0;">L'obiettivo è semplice: avere le informazioni dell'evento organizzate e accessibili quando servono.</p>
+        <p style="margin:0 0 20px 0;font-weight:600;">Vuoi vedere come funziona?</p>
+      </td></tr>
+      <tr><td align="center" style="padding:4px 32px 8px 32px;">
+        <a href="{{PUBLIC_DOMAIN}}/demo?utm_source=brevo&utm_medium=email&utm_campaign=prospect&utm_content=email1"
+           style="display:inline-block;background:#147D74;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:999px;">GUARDA LA DEMO</a>
+      </td></tr>
+      <tr><td align="center" style="padding:0 32px 20px 32px;font-size:13px;line-height:1.5;color:#6b7280;">
+        Una panoramica concreta di CRMEvent e di come può aiutarti nell'organizzazione del prossimo evento.
+      </td></tr>
+      <tr><td style="padding:0 32px 28px 32px;font-size:15px;color:#374151;">
+        <p style="margin:0;">A presto,<br/><strong>CRMEvent</strong></p>
+      </td></tr>
+      <tr><td style="padding:18px 32px;background:#0f172a;color:#cbd5e1;font-size:12px;line-height:1.6;">
+        <strong style="color:#ffffff;">CRMEvent</strong><br/>
+        <a href="{{PUBLIC_DOMAIN}}" style="color:#5eead4;text-decoration:none;">{{PUBLIC_DOMAIN}}</a><br/>
+        Ricevi questa email come organizzatore di eventi sportivi.
+        Se non desideri più ricevere le nostre comunicazioni puoi
+        <a href="{{ unsubscribe }}" style="color:#5eead4;">disiscriverti qui</a>.<br/>
+        {{ contact.EMAIL }}
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>
