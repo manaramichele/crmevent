@@ -158,6 +158,34 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
                 : rows.length === 0 ? <p className="text-sm text-slate-400 py-8 text-center">Nessuna disponibilità ricevuta finora.</p>
                 : (
                   <>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3" data-testid="avail-kpi">
+                      {[
+                        { k: "total", label: "Ricevute", val: rows.length, on: () => { setFRuolo("all"); setFStato("all"); }, color: "text-slate-900" },
+                        { k: "nuovi", label: "Nuovi", val: rows.filter((r) => (r.stato || "nuova") === "nuova").length, on: () => setFStato("nuova"), color: "text-blue-600" },
+                        { k: "confermati", label: "Confermati", val: rows.filter((r) => r.stato === "confermata").length, on: () => setFStato("confermata"), color: "text-emerald-600" },
+                        { k: "staff", label: "Staff", val: rows.filter((r) => r.ruolo_evento === "staff").length, on: () => setFRuolo("staff"), color: "text-indigo-600" },
+                        { k: "volontari", label: "Volontari", val: rows.filter((r) => r.ruolo_evento === "volontario").length, on: () => setFRuolo("volontario"), color: "text-teal-600" },
+                        { k: "dadefinire", label: "Da definire", val: rows.filter((r) => (r.ruolo_evento || "da_definire") === "da_definire").length, on: () => setFRuolo("da_definire"), color: "text-amber-600" },
+                      ].map((c) => (
+                        <button key={c.k} onClick={c.on} data-testid={`kpi-${c.k}`} className="border border-slate-200 rounded-xl p-2.5 text-left hover:border-tiffany-border hover:bg-tiffany-light/20 transition-colors">
+                          <div className={`text-xl font-bold ${c.color}`}>{c.val}</div>
+                          <div className="text-[11px] text-slate-500">{c.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                    {(() => {
+                      const inviate = rows.filter((r) => r.availability_email_sent_at || r.confirmation_email_sent_at).length;
+                      const errore = rows.filter((r) => r.confirmation_email_error || r.brevo_status === "error").length;
+                      const daInviare = Math.max(0, rows.length - inviate - errore);
+                      return (
+                        <div className="flex items-center gap-3 mb-3 text-xs" data-testid="avail-email-stats">
+                          <span className="inline-flex items-center gap-1 text-slate-500"><Mail className="w-3.5 h-3.5" />Email:</span>
+                          <span className="text-emerald-600">Inviate {inviate}</span>
+                          <span className="text-slate-500">Da inviare {daInviare}</span>
+                          <span className="text-red-500">Errore {errore}</span>
+                        </div>
+                      );
+                    })()}
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                       <Select value={fRuolo} onValueChange={setFRuolo}>
                         <SelectTrigger className="h-8 w-40" data-testid="avail-filter-ruolo"><SelectValue /></SelectTrigger>

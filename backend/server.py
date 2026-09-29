@@ -6952,8 +6952,8 @@ async def avail_list_received(event_id: str, user: dict = Depends(require_admin)
 
 # ---- Brevo sync per disponibilità (gated: nessun invio reale finché BREVO_AVAILABILITY_ENABLED è off) ----
 AVAIL_LIST_NAME = "CRMEvent · Disponibilità eventi"
-AVAIL_TPL_CONFERMA_DISP = "CRMEvent · Conferma disponibilità evento"
-AVAIL_TPL_CONFERMA_PART = "CRMEvent · Conferma partecipazione evento"
+AVAIL_TPL_CONFERMA_DISP = "CRMEvent · Disponibilità ricevuta"
+AVAIL_TPL_CONFERMA_PART = "CRMEvent · Partecipazione confermata"
 
 
 def _brevo_avail_enabled():
@@ -6961,23 +6961,62 @@ def _brevo_avail_enabled():
 
 
 def _avail_email_html(kind: str) -> str:
+    """Master template HTML (unico per piattaforma). I dati sono dinamici via {{params.*}}:
+    NOME, NOME_EVENTO, DATA_EVENTO, LOCALITA_EVENTO, LOGO_EVENTO_URL. Il logo NON è salvato nel
+    template: viene passato ad ogni invio (logo dell'Evento o fallback CRMEvent)."""
     if kind == "conferma":
-        body = ("<p>Ciao {{params.nome}},</p>"
-                "<p>la tua disponibilità per <strong>{{params.nome_evento}}</strong> è stata confermata.</p>"
-                "<p>Grazie per aver dato la tua disponibilità. Ti invieremo successivamente tutte le informazioni "
-                "operative relative ad attività, orari, punto di ritrovo e briefing.</p>")
-        title = "Disponibilità confermata"
+        intro = ("<p>Ciao {{params.NOME}},</p>"
+                 "<p>ci fa piacere confermarti la partecipazione a <strong>{{params.NOME_EVENTO}}</strong>. "
+                 "Grazie per aver scelto di far parte della squadra che contribuirà alla realizzazione dell'evento.</p>")
+        outro = ("<p>Nei prossimi giorni riceverai le informazioni operative relative alla tua attività, agli orari, "
+                 "al punto di ritrovo e al briefing. Non devi fare altro per il momento.</p>"
+                 "<p>A presto!<br/>Lo staff di {{params.NOME_EVENTO}}</p>")
     else:
-        body = ("<p>Grazie per la tua disponibilità, {{params.nome}}.</p>"
-                "<p>Abbiamo ricevuto la tua disponibilità per <strong>{{params.nome_evento}}</strong>. "
-                "L'organizzazione valuterà le disponibilità ricevute e ti contatterà successivamente con maggiori "
-                "informazioni sulle attività e sugli eventuali turni.</p>")
-        title = "Disponibilità ricevuta"
-    return (f'<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2a37;">'
-            f'<h2 style="color:#147D74;">{title}</h2>{body}'
-            f'<p style="margin-top:16px;"><strong>Evento:</strong> {{{{params.nome_evento}}}}<br/>'
-            f'<strong>Data:</strong> {{{{params.data_evento}}}}</p>'
-            f'<p style="color:#64748b;font-size:13px;margin-top:24px;">A presto.<br/>CRMEvent</p></div>')
+        intro = ("<p>Ciao {{params.NOME}},</p>"
+                 "<p>grazie per aver dato la tua disponibilità per <strong>{{params.NOME_EVENTO}}</strong>. "
+                 "Abbiamo ricevuto correttamente i tuoi dati e le giornate in cui hai indicato di essere disponibile.</p>"
+                 "<p>L'organizzazione sta raccogliendo tutte le disponibilità e ti contatterà successivamente per "
+                 "comunicarti l'eventuale conferma e le informazioni operative.</p>")
+        outro = ("<p>Grazie per la disponibilità e per il tempo che hai deciso di dedicarci.<br/>"
+                 "Lo staff di {{params.NOME_EVENTO}}</p>")
+    return (
+        '<div style="background:#f1f5f9;padding:24px 0;font-family:Arial,Helvetica,sans-serif;">'
+        '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">'
+        '<div style="padding:28px 24px;text-align:center;">'
+        '<img src="{{params.LOGO_EVENTO_URL}}" alt="{{params.NOME_EVENTO}}" style="max-width:200px;max-height:96px;height:auto;object-fit:contain;display:inline-block;border:0;"/>'
+        '<h1 style="font-size:20px;color:#0f172a;margin:18px 0 4px;">{{params.NOME_EVENTO}}</h1>'
+        '<p style="font-size:14px;color:#64748b;margin:0;">{{params.DATA_EVENTO}}</p>'
+        '<p style="font-size:14px;color:#64748b;margin:2px 0 0;">{{params.LOCALITA_EVENTO}}</p>'
+        '</div>'
+        '<div style="padding:8px 28px 24px;color:#1f2a37;font-size:15px;line-height:1.6;">'
+        f'{intro}{outro}'
+        '</div>'
+        '<div style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:12px;">'
+        'Comunicazione gestita tramite CRMEvent'
+        '</div></div></div>'
+    )
+
+
+def _event_logo_url(event: dict, base: str = None) -> str:
+    base = (base or PUBLIC_SITE_URL).rstrip("/")
+    if event.get("logo_url"):
+        return f"{base}/api/public/event-logo/{event.get('id')}"
+    return f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=2"
+
+
+def _avail_email_params(av: dict, event: dict, org: dict, logo_url: str) -> dict:
+    """Solo i dati necessari alla comunicazione. MAI Codice Fiscale, data di nascita, note, rimborsi."""
+    return {
+        "NOME": av.get("nome") or "",
+        "COGNOME": av.get("cognome") or "",
+        "NOME_EVENTO": event.get("nome") or "",
+        "DATA_EVENTO": event.get("data_inizio") or "",
+        "LOCALITA_EVENTO": event.get("localita") or event.get("citta") or "",
+        "LOGO_EVENTO_URL": logo_url or "",
+        "NOME_ORGANIZZAZIONE": (org or {}).get("nome") or "",
+        "DATA_INIZIO_ALLESTIMENTO": event.get("data_inizio_allestimento") or "",
+        "DATA_FINE_DISALLESTIMENTO": event.get("data_fine_disallestimento") or "",
+    }
 
 
 async def _brevo_avail(action: str, av: dict, event: dict, org_nome: str = None, send_template: str = None):
@@ -7018,7 +7057,7 @@ async def _brevo_avail(action: str, av: dict, event: dict, org_nome: str = None,
                 tpls = await c.get_templates()
                 tpl = next((t for t in tpls if (t.get("name") or "").strip().lower() == send_template.lower() and t.get("isActive")), None)
                 if tpl:
-                    params = {"nome": av.get("nome"), "nome_evento": event.get("nome"), "data_evento": event.get("data_inizio")}
+                    params = _avail_email_params(av, event, {"nome": org_nome}, _event_logo_url(event))
                     await c._req("POST", "/smtp/email", json={"to": [{"email": email, "name": av.get("nome") or ""}],
                                                               "templateId": tpl.get("id"), "params": params})
                     sent = True
@@ -7139,8 +7178,8 @@ async def brevo_create_avail_templates(user: dict = Depends(require_org_admin)):
             tpls = await c.get_templates()
             out = []
             for name, subject, kind in [
-                (AVAIL_TPL_CONFERMA_DISP, "Grazie per la tua disponibilità", "disponibilita"),
-                (AVAIL_TPL_CONFERMA_PART, "La tua disponibilità è stata confermata", "conferma"),
+                (AVAIL_TPL_CONFERMA_DISP, "Grazie {{params.NOME}}, abbiamo ricevuto la tua disponibilità", "disponibilita"),
+                (AVAIL_TPL_CONFERMA_PART, "{{params.NOME_EVENTO}}: la tua disponibilità è confermata", "conferma"),
             ]:
                 ex = next((t for t in tpls if (t.get("name") or "").strip().lower() == name.lower()), None)
                 if ex:
@@ -7151,6 +7190,56 @@ async def brevo_create_avail_templates(user: dict = Depends(require_org_admin)):
             return {"sender": sender, "templates": out, "is_active": False}
     except brevo_client.BrevoError as e:
         raise HTTPException(status_code=502, detail=f"Brevo: impossibile creare i template (HTTP {e.status})")
+
+
+@api.get("/brevo/availability-templates")
+async def brevo_avail_templates_list(user: dict = Depends(require_org_admin)):
+    """Elenca i due template master (nome + Template ID + stato attivo). Nessuna copia per evento."""
+    base = [{"name": AVAIL_TPL_CONFERMA_DISP, "kind": "disponibilita"},
+            {"name": AVAIL_TPL_CONFERMA_PART, "kind": "conferma"}]
+    if not brevo_client.is_configured():
+        return {"configured": False, "enabled": _brevo_avail_enabled(),
+                "templates": [{**b, "template_id": None, "is_active": None} for b in base]}
+    out = []
+    async with brevo_client.BrevoClient() as c:
+        tpls = await c.get_templates()
+        for b in base:
+            t = next((x for x in tpls if (x.get("name") or "").strip().lower() == b["name"].lower()), None)
+            out.append({**b, "template_id": t.get("id") if t else None, "is_active": t.get("isActive") if t else None})
+    return {"configured": True, "enabled": _brevo_avail_enabled(), "templates": out}
+
+
+@api.get("/brevo/availability-template-preview")
+async def brevo_avail_template_preview(event_id: str, kind: str = "disponibilita", request: Request = None, user: dict = Depends(require_admin)):
+    """Anteprima HTML reale del template master con i dati dinamici dell'Evento indicato."""
+    event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0}) or {}
+    base = str(request.base_url).rstrip("/") if request else PUBLIC_SITE_URL
+    params = _avail_email_params({"nome": "Mario", "cognome": "Rossi"}, event, org, _event_logo_url(event, base))
+    html = _avail_email_html("conferma" if kind == "conferma" else "disponibilita")
+    for k, v in params.items():
+        html = html.replace("{{params." + k + "}}", str(v or ""))
+    return Response(content=html, media_type="text/html; charset=utf-8")
+
+
+@api.get("/public/event-logo/{event_id}")
+async def pub_event_logo(event_id: str):
+    """Logo pubblico dell'Evento (immagine soltanto) per le email Brevo. Fallback: logo CRMEvent."""
+    fallback = RedirectResponse(f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=2")
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event or not event.get("logo_url"):
+        return fallback
+    fid = (event["logo_url"] or "").rstrip("/").split("/")[-1]
+    rec = await db.files.find_one({"id": fid, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        return fallback
+    try:
+        data, ctype = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
+        return Response(content=data, media_type=rec.get("content_type", ctype))
+    except Exception:
+        return fallback
 
 
 # ---- Public (no login) ----
@@ -7308,8 +7397,12 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     try:
         org = await db.organizations.find_one({"id": org_id}, {"_id": 0}) or {}
         av_final = await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0})
-        res = await _brevo_avail("submit", av_final, event, org.get("nome"), send_template=AVAIL_TPL_CONFERMA_DISP)
-        await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"brevo_status": res["status"]}})
+        tpl = None if av_final.get("availability_email_sent_at") else AVAIL_TPL_CONFERMA_DISP
+        res = await _brevo_avail("submit", av_final, event, org.get("nome"), send_template=tpl)
+        setf = {"brevo_status": res["status"]}
+        if res.get("sent"):
+            setf["availability_email_sent_at"] = now
+        await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": setf})
     except Exception as e:
         logger.error(f"brevo avail submit sync failed: {e}")
     return {"ok": True, "event_nome": event.get("nome")}
