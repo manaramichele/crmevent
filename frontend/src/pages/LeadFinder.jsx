@@ -197,6 +197,11 @@ export default function LeadFinder() {
     try { const { data } = await api.post("/brevo/create-list", {}); toast.success(data.created ? `Lista creata (ID ${data.list_id})` : `Lista esistente collegata (ID ${data.list_id})`); loadBrevo(); testBrevo(); }
     catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
+  const createTemplate = async () => {
+    if (!window.confirm('Creare il template "CRMEvent · Funnel Prospect · Email 1" in Brevo (bozza, nessun invio)?')) return;
+    try { const { data } = await api.post("/brevo/create-email-template", {}); toast.success(data.created ? `Template creato in Brevo (ID ${data.template_id})` : `Template già presente (ID ${data.template_id})`); testBrevo(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
 
   const Link = ({ url, icon: Icon, label }) => url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-tiffany-fg hover:underline text-sm" data-testid={`lf-link-${label}`}><Icon className="w-4 h-4" />{label}<ExternalLink className="w-3 h-3" /></a> : <span className="inline-flex items-center gap-1 text-slate-400 text-sm"><Icon className="w-4 h-4" />Da verificare</span>;
 
@@ -416,6 +421,13 @@ export default function LeadFinder() {
                   ? <div className="text-slate-700">Trovata · listId <strong>{brevoTest.prospect_list.id}</strong></div>
                   : <div className="flex items-center gap-2 flex-wrap"><span className="text-amber-700">Non esiste ancora.</span><Button size="sm" variant="outline" onClick={createProspectList} data-testid="brevo-create-list-btn">Crea lista "{brevoCfg?.prospect_list_name}"</Button></div>}
                 <div className="text-xs text-slate-400 mt-1">{brevoTest.note_demo}</div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase text-slate-400 mb-1">Template Email 1 "{`CRMEvent · Funnel Prospect · Email 1`}"</div>
+                {brevoTest.prospect_template_exists
+                  ? <div className="text-slate-700">Presente in Brevo · template ID <strong>{brevoTest.prospect_template.id}</strong></div>
+                  : <div className="flex items-center gap-2 flex-wrap"><span className="text-amber-700">Non presente in Brevo.</span><Button size="sm" variant="outline" onClick={createTemplate} data-testid="brevo-create-template-btn">Crea template in Brevo (bozza)</Button></div>}
+                <div className="text-xs text-slate-400 mt-1">Bozza, nessun invio. Automazione/Funnel Prospect da configurare manualmente in Brevo (le API non creano automazioni).</div>
               </div>
               <div>
                 <div className="text-xs font-semibold uppercase text-slate-400 mb-1">Attributi Brevo</div>

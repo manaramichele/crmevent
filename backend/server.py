@@ -5559,6 +5559,7 @@ async def brevo_test(user: dict = Depends(require_org_admin)):
             lists = await c.lists()
             attrs = await c.attributes()
             senders = await c.senders()
+            templates = await c.get_templates()
     except brevo_client.BrevoError as e:
         await _brevo_save_config(user, {"connection": "errore", "last_test": {"at": now_iso(), "ok": False, "error": f"HTTP {e.status}"}})
         raise HTTPException(status_code=502, detail=f"Brevo: errore connessione (HTTP {e.status})")
@@ -5566,6 +5567,7 @@ async def brevo_test(user: dict = Depends(require_org_admin)):
     available = [a for a in brevo_client.DESIRED_ATTRS if a in attr_names]
     missing = [a for a in brevo_client.DESIRED_ATTRS if a not in attr_names]
     prospect = next((x for x in lists if (x.get("name") or "").strip().lower() == brevo_client.PROSPECT_LIST_NAME.lower()), None)
+    tpl = next((t for t in templates if (t.get("name") or "").strip().lower() == brevo_client.PROSPECT_TEMPLATE_NAME.lower()), None)
     sender_list = [{"name": s.get("name"), "email": s.get("email"), "active": s.get("active")} for s in senders]
     cfg_patch = {
         "connection": "ok",
@@ -5583,6 +5585,8 @@ async def brevo_test(user: dict = Depends(require_org_admin)):
         "lists": [{"id": x.get("id"), "name": x.get("name"), "total_subscribers": x.get("totalSubscribers")} for x in lists],
         "prospect_list": {"id": prospect.get("id"), "name": prospect.get("name")} if prospect else None,
         "prospect_list_exists": bool(prospect),
+        "prospect_template": {"id": tpl.get("id"), "name": tpl.get("name")} if tpl else None,
+        "prospect_template_exists": bool(tpl),
         "attributes_available": available, "attributes_missing": missing,
         "senders": sender_list,
         "note_demo": "La lista/funnel Demo NON viene toccata: la sync usa solo la lista Prospect qui sopra.",
@@ -5611,6 +5615,65 @@ async def brevo_create_list(body: dict = {}, user: dict = Depends(require_org_ad
             return {"created": True, "list_id": lid, "list_name": brevo_client.PROSPECT_LIST_NAME}
     except brevo_client.BrevoError as e:
         raise HTTPException(status_code=502, detail=f"Brevo: impossibile creare la lista (HTTP {e.status})")
+
+
+def _prospect_email_html(domain: str) -> str:
+    domain = (domain or "").rstrip("/")
+    cta = f"{domain}/demo?utm_source=brevo&utm_medium=email&utm_campaign=prospect&utm_content=email1"
+    logo = f"{domain}/logo-crmevent.png"
+    return f"""<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="x-apple-disable-message-reformatting"/><title>CRMEvent</title></head>
+<body style="margin:0;padding:0;background:#f4f6f6;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+<span style="display:none;font-size:1px;color:#f4f6f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Staff, volontari, sponsor, turni e briefing in un unico posto.</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f6;padding:24px 0;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+<tr><td style="padding:28px 32px 8px 32px;"><img src="{logo}" alt="CRMEvent" height="34" style="height:34px;display:block;border:0;"/></td></tr>
+<tr><td style="padding:12px 32px 0 32px;"><h1 style="margin:0 0 8px 0;font-size:24px;line-height:1.25;color:#111827;font-weight:700;">Organizzare un evento sportivo senza rincorrere Excel, chat e documenti</h1></td></tr>
+<tr><td style="padding:8px 32px 0 32px;font-size:15px;line-height:1.6;color:#374151;">
+<p style="margin:0 0 12px 0;">Organizzare un evento è già abbastanza complicato.</p>
+<p style="margin:0 0 12px 0;">Staff e volontari su WhatsApp.<br/>Sponsor nelle email.<br/>Turni su Excel.<br/>Hotel e pasti su un altro file.<br/>Briefing e documenti sparsi nelle cartelle.</p>
+<p style="margin:0 0 12px 0;">È proprio da questa situazione che nasce <strong>CRMEvent</strong>.</p>
+<p style="margin:0 0 8px 0;">Un unico spazio pensato per chi organizza eventi sportivi, dove gestire:</p>
+<p style="margin:0 0 16px 0;color:#147D74;font-weight:600;">Eventi · Staff · Volontari · Team e turni · Sponsor e partner · Ospitalità · Attività · Documenti e briefing</p>
+<p style="margin:0 0 20px 0;">L'obiettivo è semplice: avere le informazioni dell'evento organizzate e accessibili quando servono.</p>
+<p style="margin:0 0 20px 0;font-weight:600;">Vuoi vedere come funziona?</p></td></tr>
+<tr><td align="center" style="padding:4px 32px 8px 32px;"><a href="{cta}" style="display:inline-block;background:#147D74;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:999px;">GUARDA LA DEMO</a></td></tr>
+<tr><td align="center" style="padding:0 32px 20px 32px;font-size:13px;line-height:1.5;color:#6b7280;">Una panoramica concreta di CRMEvent e di come può aiutarti nell'organizzazione del prossimo evento.</td></tr>
+<tr><td style="padding:0 32px 28px 32px;font-size:15px;color:#374151;"><p style="margin:0;">A presto,<br/><strong>CRMEvent</strong></p></td></tr>
+<tr><td style="padding:18px 32px;background:#0f172a;color:#cbd5e1;font-size:12px;line-height:1.6;"><strong style="color:#ffffff;">CRMEvent</strong><br/><a href="{domain}" style="color:#5eead4;text-decoration:none;">{domain}</a><br/>Ricevi questa email come organizzatore di eventi sportivi. Se non desideri più ricevere le nostre comunicazioni puoi <a href="{{{{ unsubscribe }}}}" style="color:#5eead4;">disiscriverti qui</a>.<br/>{{{{ contact.EMAIL }}}}</td></tr>
+</table></td></tr></table></body></html>"""
+
+
+@api.post("/brevo/create-email-template")
+async def brevo_create_template(body: dict = {}, user: dict = Depends(require_org_admin)):
+    if not brevo_client.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata")
+    domain = (APP_URL or "").rstrip("/")
+    if not domain:
+        raise HTTPException(status_code=400, detail="Dominio pubblico (APP_URL) non configurato")
+    html = _prospect_email_html(domain)
+    subject = "Organizzare un evento sportivo senza rincorrere Excel, chat e documenti"
+    try:
+        async with brevo_client.BrevoClient() as c:
+            templates = await c.get_templates()
+            existing = next((t for t in templates if (t.get("name") or "").strip().lower() == brevo_client.PROSPECT_TEMPLATE_NAME.lower()), None)
+            if existing:
+                return {"created": False, "template_id": existing.get("id"), "name": existing.get("name"),
+                        "detail": "Template già esistente in Brevo: non duplicato."}
+            senders = await c.senders()
+            verified = [s for s in senders if s.get("active")]
+            pref = next((s for s in verified if "crmevent" in (s.get("email") or "").lower()), None) or (verified[0] if verified else None)
+            if not pref:
+                raise HTTPException(status_code=400, detail="Nessun mittente verificato in Brevo: verifica un mittente CRMEvent prima di creare il template (nessun mittente creato).")
+            sender = {"name": body.get("sender_name") or "CRMEvent", "email": pref["email"]}
+            res = await c.create_email_template(brevo_client.PROSPECT_TEMPLATE_NAME, subject, html, sender)
+            return {"created": True, "template_id": res.get("id"), "name": brevo_client.PROSPECT_TEMPLATE_NAME,
+                    "sender": sender, "subject": subject,
+                    "preheader": "Staff, volontari, sponsor, turni e briefing in un unico posto.",
+                    "cta_url": f"{domain}/demo?utm_source=brevo&utm_medium=email&utm_campaign=prospect&utm_content=email1",
+                    "is_active": False}
+    except brevo_client.BrevoError as e:
+        raise HTTPException(status_code=502, detail=f"Brevo: impossibile creare il template (HTTP {e.status})")
 
 
 @api.post("/leadfinder/organizers/approve-brevo")

@@ -13,6 +13,7 @@ BASE_URL = "https://api.brevo.com/v3"
 DESIRED_ATTRS = ["ORGANIZZAZIONE", "EVENTO", "SPORT", "REGIONE", "CITTA", "SITO",
                  "INSTAGRAM", "LINKEDIN", "FONTE", "DATA_ACQUISIZIONE", "STATO_LEAD"]
 PROSPECT_LIST_NAME = "CRMEvent – Prospect"
+PROSPECT_TEMPLATE_NAME = "CRMEvent · Funnel Prospect · Email 1"
 
 
 class BrevoNotConfigured(Exception):
@@ -111,3 +112,22 @@ class BrevoClient:
         # ONLY listIds — never send EMAIL/emailBlacklisted, so we never resubscribe.
         ident = quote(email, safe="")
         return await self._req("PUT", f"/contacts/{ident}", json={"listIds": [list_id]})
+
+    async def get_templates(self, limit=50):
+        out, offset = [], 0
+        while True:
+            page = await self._req("GET", "/smtp/templates", params={"limit": limit, "offset": offset, "sort": "desc"})
+            chunk = (page or {}).get("templates", [])
+            out.extend(chunk)
+            if len(chunk) < limit:
+                break
+            offset += limit
+        return out
+
+    async def create_email_template(self, name, subject, html, sender, tag=None):
+        """Create a DRAFT email template (isActive=False). Never sends. sender = {name,email} or {id}."""
+        payload = {"templateName": name, "subject": subject, "htmlContent": html,
+                   "sender": sender, "isActive": False}
+        if tag:
+            payload["tag"] = tag
+        return await self._req("POST", "/smtp/templates", json=payload)
