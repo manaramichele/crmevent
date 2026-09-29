@@ -23,6 +23,18 @@ export const BACKEND = process.env.REACT_APP_BACKEND_URL;
 export const fileUrl = (u) => (u ? (u.startsWith("http") ? u : `${BACKEND}${u}`) : "");
 export const toOptions = (arr) => (arr || []).map((v) => ({ value: v, label: v }));
 
+// Età calcolata dinamicamente dalla data di nascita (YYYY-MM-DD). Resta sempre corretta nel tempo.
+export const calcAge = (dn) => {
+  if (!dn) return null;
+  const b = new Date(String(dn).slice(0, 10));
+  if (isNaN(b.getTime())) return null;
+  const t = new Date();
+  let a = t.getFullYear() - b.getFullYear();
+  const m = t.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+  return a >= 0 && a < 120 ? a : null;
+};
+
 export function useSettings() {
   const [settings, setSettings] = useState(null);
   useEffect(() => { api.get("/settings").then(({ data }) => setSettings(data)).catch(() => {}); }, []);

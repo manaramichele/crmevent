@@ -23,7 +23,7 @@ from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depend
 from fastapi.responses import RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 
 import asyncio
 import email_utils
@@ -605,6 +605,7 @@ class Event(BaseModel):
     edizione: Optional[str] = None
     logo_url: Optional[str] = None
     tipologia: Optional[str] = None
+    data_inizio_allestimento: Optional[str] = None
     data_inizio: Optional[str] = None
     data_fine: Optional[str] = None
     ora_inizio: Optional[str] = None
@@ -625,6 +626,15 @@ class Event(BaseModel):
     stato: Optional[str] = "pianificato"
     descrizione: Optional[str] = None
     note: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check_dates(self):
+        allest, inizio, fine = self.data_inizio_allestimento, self.data_inizio, self.data_fine
+        if allest and inizio and allest > inizio:
+            raise ValueError("La Data inizio allestimento non può essere successiva alla Data inizio evento")
+        if inizio and fine and fine < inizio:
+            raise ValueError("La Data fine evento non può essere precedente alla Data inizio evento")
+        return self
 
 
 class Company(BaseModel):
@@ -656,6 +666,7 @@ class Person(BaseModel):
     ruolo: Optional[str] = None
     azienda_id: Optional[str] = None
     data_nascita: Optional[str] = None
+    codice_fiscale: Optional[str] = None
     indirizzo: Optional[str] = None
     cap: Optional[str] = None
     citta: Optional[str] = None
@@ -6737,6 +6748,363 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     client.close()
+
+
+# ==================== RACCOLTA DISPONIBILITÀ STAFF/VOLONTARI ====================
+# Public no-login availability collection, per-event. Data stays org-scoped: the secure
+# random `code` is the ONLY way an anonymous visitor resolves (org + event); it exposes
+# only the minimal public event info and accepts a single availability submission.
+_WD_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+_MO_IT = ["", "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
+          "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+_avail_rate = defaultdict(list)
+
+
+def _avail_rate_ok(key, max_calls=6, window=60):
+    now = time.time()
+    b = _avail_rate[key]
+    while b and b[0] < now - window:
+        b.pop(0)
+    if len(b) >= max_calls:
+        return False
+    b.append(now)
+    return True
+
+
+def _client_ip(request: Request) -> str:
+    fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    return fwd or (request.client.host if request.client else "?")
+
+
+def _compute_age(dn: Optional[str]) -> Optional[int]:
+    if not dn:
+        return None
+    try:
+        b = datetime.strptime(dn[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
+    t = datetime.now(timezone.utc).date()
+    return t.year - b.year - ((t.month, t.day) < (b.month, b.day))
+
+
+# ---- Codice Fiscale (Italian tax code) parsing & validation ----
+_CF_OMO = {"L": "0", "M": "1", "N": "2", "P": "3", "Q": "4", "R": "5", "S": "6", "T": "7", "U": "8", "V": "9"}
+_CF_MONTHS = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "H": 6, "L": 7, "M": 8, "P": 9, "R": 10, "S": 11, "T": 12}
+_CF_ODD = {"0": 1, "1": 0, "2": 5, "3": 7, "4": 9, "5": 13, "6": 15, "7": 17, "8": 19, "9": 21,
+           "A": 1, "B": 0, "C": 5, "D": 7, "E": 9, "F": 13, "G": 15, "H": 17, "I": 19, "J": 21,
+           "K": 2, "L": 4, "M": 18, "N": 20, "O": 11, "P": 3, "Q": 6, "R": 8, "S": 12, "T": 14,
+           "U": 16, "V": 10, "W": 22, "X": 25, "Y": 24, "Z": 23}
+
+
+def _cf_normalize(cf: Optional[str]) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (cf or "").upper())
+
+
+def _cf_valid(cf: str) -> bool:
+    cf = _cf_normalize(cf)
+    if len(cf) != 16 or not re.match(r"^[A-Z0-9]{16}$", cf):
+        return False
+    tot = 0
+    for i, ch in enumerate(cf[:15]):
+        if i % 2 == 0:  # odd position (1-indexed)
+            tot += _CF_ODD.get(ch, -999)
+        else:
+            tot += (int(ch) if ch.isdigit() else ord(ch) - ord("A"))
+    if tot < 0:
+        return False
+    return chr(ord("A") + tot % 26) == cf[15]
+
+
+def _cf_birthdate(cf: str) -> Optional[str]:
+    cf = _cf_normalize(cf)
+    if len(cf) != 16:
+        return None
+    try:
+        yy = int(_CF_OMO.get(cf[6], cf[6]) + _CF_OMO.get(cf[7], cf[7]))
+        mon = _CF_MONTHS.get(cf[8])
+        day = int(_CF_OMO.get(cf[9], cf[9]) + _CF_OMO.get(cf[10], cf[10]))
+    except ValueError:
+        return None
+    if not mon:
+        return None
+    if day > 40:
+        day -= 40
+    if day < 1 or day > 31:
+        return None
+    cy = datetime.now(timezone.utc).year % 100
+    year = 2000 + yy if yy <= cy else 1900 + yy
+    try:
+        return datetime(year, mon, day).strftime("%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _avail_days(event: dict) -> list:
+    """Days offered on the public form: from setup start (allestimento) or event start,
+    through event end. Each day is tagged 'allestimento' (before event start) or 'evento'."""
+    di = event.get("data_inizio")
+    df = event.get("data_fine") or di
+    allest = event.get("data_inizio_allestimento")
+    start = allest or di
+    end = df or di
+    if not start or not end:
+        return []
+    try:
+        s = datetime.strptime(start[:10], "%Y-%m-%d").date()
+        e = datetime.strptime(end[:10], "%Y-%m-%d").date()
+        evstart = datetime.strptime(di[:10], "%Y-%m-%d").date() if di else s
+    except Exception:
+        return []
+    if e < s:
+        return []
+    out, cur = [], s
+    while cur <= e and len(out) < 90:
+        fase = "allestimento" if (di and cur < evstart) else "evento"
+        out.append({"date": cur.isoformat(), "fase": fase,
+                    "label": f"{_WD_IT[cur.weekday()]} {cur.day} {_MO_IT[cur.month]}"})
+        cur += timedelta(days=1)
+    return out
+
+
+def _avail_link_url(code: str) -> str:
+    return f"{PUBLIC_SITE_URL}/partecipa/{code}"
+
+
+# ---- Admin (org-scoped) ----
+@api.post("/events/{event_id}/availability/link")
+async def avail_generate_link(event_id: str, user: dict = Depends(require_admin)):
+    event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    await db.avail_links.update_many({"org_id": user["org_id"], "evento_id": event_id, "active": True},
+                                     {"$set": {"active": False, "revoked_at": now_iso()}})
+    code = secrets.token_urlsafe(24)
+    await db.avail_links.insert_one({"id": new_id(), "org_id": user["org_id"], "evento_id": event_id,
+                                     "code": code, "active": True, "created_at": now_iso(),
+                                     "created_by": user.get("user_id"), "revoked_at": None})
+    return {"active": True, "code": code, "url": _avail_link_url(code)}
+
+
+@api.get("/events/{event_id}/availability/link")
+async def avail_get_link(event_id: str, user: dict = Depends(require_admin)):
+    event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    link = await db.avail_links.find_one({"org_id": user["org_id"], "evento_id": event_id, "active": True}, {"_id": 0})
+    if not link:
+        return {"active": False, "code": None, "url": None}
+    return {"active": True, "code": link["code"], "url": _avail_link_url(link["code"])}
+
+
+@api.post("/events/{event_id}/availability/link/deactivate")
+async def avail_deactivate_link(event_id: str, user: dict = Depends(require_admin)):
+    await db.avail_links.update_many({"org_id": user["org_id"], "evento_id": event_id, "active": True},
+                                     {"$set": {"active": False, "revoked_at": now_iso()}})
+    return {"active": False}
+
+
+@api.get("/events/{event_id}/availabilities")
+async def avail_list_received(event_id: str, user: dict = Depends(require_admin)):
+    event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    rows = await db.availabilities.find({"org_id": user["org_id"], "evento_id": event_id}, {"_id": 0}).sort("created_at", -1).to_list(3000)
+    out = []
+    for r in rows:
+        p = await db.persons.find_one({"id": r.get("persona_id"), "org_id": user["org_id"]}, {"_id": 0}) or {}
+        dn = p.get("data_nascita") or r.get("data_nascita")
+        out.append({**r,
+                    "persona": {"id": p.get("id") or r.get("persona_id"),
+                                "nome": p.get("nome") or r.get("nome"),
+                                "cognome": p.get("cognome") or r.get("cognome"),
+                                "email": p.get("email") or r.get("email"),
+                                "cellulare": p.get("cellulare") or r.get("cellulare"),
+                                "data_nascita": dn},
+                    "eta": _compute_age(dn)})
+    return {"event": {"id": event["id"], "nome": event.get("nome"),
+                      "data_inizio_allestimento": event.get("data_inizio_allestimento"),
+                      "data_inizio": event.get("data_inizio"), "data_fine": event.get("data_fine")},
+            "availabilities": out}
+
+
+class AvailUpdate(BaseModel):
+    ruolo_evento: Optional[str] = None
+    stato: Optional[str] = None
+    preferenza_attivita: Optional[str] = None
+    preferenza_altro: Optional[str] = None
+    apply_person: Optional[bool] = False
+
+
+@api.put("/availabilities/{aid}")
+async def avail_update_one(aid: str, body: AvailUpdate, user: dict = Depends(require_admin)):
+    a = await db.availabilities.find_one({"org_id": user["org_id"], "id": aid}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Disponibilità non trovata")
+    upd = {}
+    if body.ruolo_evento in ("da_definire", "staff", "volontario"):
+        upd["ruolo_evento"] = body.ruolo_evento
+    if body.stato in ("nuova", "confermata", "non_utilizzata"):
+        upd["stato"] = body.stato
+    if body.preferenza_attivita is not None:
+        upd["preferenza_attivita"] = body.preferenza_attivita
+    if body.preferenza_altro is not None:
+        upd["preferenza_altro"] = body.preferenza_altro
+    if body.apply_person and a.get("mismatch"):
+        sub = a.get("submitted") or {}
+        pfields = {k: sub[k] for k in ("nome", "cognome", "email", "cellulare", "data_nascita", "codice_fiscale") if sub.get(k)}
+        if a.get("persona_id") and pfields:
+            await db.persons.update_one({"id": a["persona_id"], "org_id": user["org_id"]},
+                                        {"$set": {**pfields, "updated_at": now_iso()}})
+        upd["mismatch"] = None
+        upd["has_mismatch"] = False
+    upd["updated_at"] = now_iso()
+    await db.availabilities.update_one({"org_id": user["org_id"], "id": aid}, {"$set": upd})
+    return await db.availabilities.find_one({"org_id": user["org_id"], "id": aid}, {"_id": 0})
+
+
+# ---- Public (no login) ----
+@api.get("/public/availability/{code}")
+async def pub_avail_info(code: str):
+    link = await db.avail_links.find_one({"code": code}, {"_id": 0})
+    if not link:
+        raise HTTPException(status_code=404, detail="Link non valido")
+    event = await db.events.find_one({"id": link["evento_id"], "org_id": link["org_id"]}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    base = {"nome": event.get("nome"), "data_inizio": event.get("data_inizio"),
+            "data_fine": event.get("data_fine"), "localita": event.get("localita") or event.get("citta"),
+            "has_logo": bool(event.get("logo_url")),
+            "data_inizio_allestimento": event.get("data_inizio_allestimento")}
+    if not link.get("active"):
+        return {"active": False, "event": base}
+    settings = await db.settings.find_one({"id": link["org_id"]}, {"_id": 0}) or {}
+    attivita = settings.get("ruoli_staff") or default_settings()["ruoli_staff"]
+    return {"active": True, "event": base, "days": _avail_days(event),
+            "has_allestimento": bool(event.get("data_inizio_allestimento")),
+            "attivita_options": attivita}
+
+
+@api.get("/public/availability/{code}/logo")
+async def pub_avail_logo(code: str):
+    link = await db.avail_links.find_one({"code": code}, {"_id": 0})
+    if not link:
+        raise HTTPException(status_code=404, detail="Link non valido")
+    event = await db.events.find_one({"id": link["evento_id"], "org_id": link["org_id"]}, {"_id": 0})
+    if not event or not event.get("logo_url"):
+        raise HTTPException(status_code=404, detail="Logo non disponibile")
+    fid = (event["logo_url"] or "").rstrip("/").split("/")[-1]
+    rec = await db.files.find_one({"id": fid, "is_deleted": False}, {"_id": 0})
+    if not rec or rec.get("org_id") not in (None, link["org_id"]):
+        raise HTTPException(status_code=404, detail="Logo non disponibile")
+    data, ctype = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
+    return Response(content=data, media_type=rec.get("content_type", ctype))
+
+
+class PubAvailIn(BaseModel):
+    nome: str
+    cognome: str
+    cellulare: str
+    email: EmailStr
+    codice_fiscale: Optional[str] = None
+    data_nascita: Optional[str] = None
+    days: List[dict] = []
+    preferenza_attivita: Optional[str] = None
+    preferenza_altro: Optional[str] = None
+    privacy: bool = False
+
+
+@api.post("/public/availability/{code}")
+async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
+    if not _avail_rate_ok(f"ip:{_client_ip(request)}", max_calls=6, window=60):
+        raise HTTPException(status_code=429, detail="Troppe richieste. Riprova tra qualche istante.")
+    link = await db.avail_links.find_one({"code": code}, {"_id": 0})
+    if not link or not link.get("active"):
+        raise HTTPException(status_code=410, detail="La raccolta delle disponibilità per questo evento è terminata.")
+    event = await db.events.find_one({"id": link["evento_id"], "org_id": link["org_id"]}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    if not body.privacy:
+        raise HTTPException(status_code=400, detail="È necessario prendere visione della Privacy Policy")
+    if not all((getattr(body, f) or "").strip() for f in ("nome", "cognome", "cellulare")):
+        raise HTTPException(status_code=400, detail="Compila tutti i campi obbligatori")
+    cf_norm = _cf_normalize(body.codice_fiscale) if body.codice_fiscale else ""
+    if cf_norm:
+        if not _cf_valid(cf_norm):
+            raise HTTPException(status_code=400, detail="Codice Fiscale non valido")
+        birth = _cf_birthdate(cf_norm)
+        if not birth:
+            raise HTTPException(status_code=400, detail="Codice Fiscale non valido: data di nascita non ricavabile")
+    else:
+        birth = (body.data_nascita or "").strip()[:10]
+        if not birth:
+            raise HTTPException(status_code=400, detail="Inserisci il Codice Fiscale oppure la Data di nascita")
+    day_meta = {d["date"]: d["fase"] for d in _avail_days(event)}
+    days_clean = []
+    for d in (body.days or []):
+        if not (d.get("date") and d.get("disponibile")):
+            continue
+        if d["date"] not in day_meta:
+            continue
+        days_clean.append({"date": d["date"], "fase": day_meta[d["date"]],
+                           "dalle": (d.get("dalle") or "").strip() or None,
+                           "alle": (d.get("alle") or "").strip() or None})
+    if not days_clean:
+        raise HTTPException(status_code=400, detail="Seleziona almeno una giornata di disponibilità")
+    org_id = link["org_id"]
+    email = (body.email or "").strip().lower()
+    cell = (body.cellulare or "").strip()
+    submitted = {"nome": body.nome.strip(), "cognome": body.cognome.strip(), "email": email,
+                 "cellulare": cell, "data_nascita": birth, "codice_fiscale": cf_norm or None}
+    person = await db.persons.find_one({"org_id": org_id, "email": email}, {"_id": 0}) if email else None
+    if not person and cell:
+        person = await db.persons.find_one({"org_id": org_id, "cellulare": cell}, {"_id": 0})
+    if not person and cf_norm:
+        person = await db.persons.find_one({"org_id": org_id, "codice_fiscale": cf_norm}, {"_id": 0})
+    mismatch = {}
+    if person:
+        fill = {}
+        for k in ("email", "cellulare", "data_nascita", "cognome", "codice_fiscale"):
+            cur, new = person.get(k), submitted.get(k)
+            if new and not cur:
+                fill[k] = new
+            elif new and cur and str(cur).strip().lower() != str(new).strip().lower():
+                mismatch[k] = {"attuale": cur, "inviato": new}
+        if fill:
+            await db.persons.update_one({"id": person["id"], "org_id": org_id}, {"$set": {**fill, "updated_at": now_iso()}})
+        pid = person["id"]
+    else:
+        pdoc = await _create("persons", {"org_id": org_id, "nome": submitted["nome"], "cognome": submitted["cognome"],
+                                         "email": email or None, "cellulare": cell or None,
+                                         "data_nascita": submitted["data_nascita"], "codice_fiscale": cf_norm or None,
+                                         "tag": ["disponibilita"],
+                                         "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
+        pid = pdoc["id"]
+    now = now_iso()
+    existing = await db.availabilities.find_one({"org_id": org_id, "evento_id": event["id"], "persona_id": pid}, {"_id": 0})
+    if existing:
+        upd = {"days": days_clean, "preferenza_attivita": body.preferenza_attivita or None,
+               "preferenza_altro": (body.preferenza_altro or "").strip() or None,
+               "submitted": submitted, "privacy_accepted": True, "privacy_ts": now,
+               "ip": _client_ip(request), "user_agent": (request.headers.get("user-agent") or "")[:300],
+               "updated_at": now}
+        if mismatch:
+            upd["mismatch"] = {**(existing.get("mismatch") or {}), **mismatch}
+            upd["has_mismatch"] = True
+        await db.availabilities.update_one({"org_id": org_id, "id": existing["id"]}, {"$set": upd})
+    else:
+        await db.availabilities.insert_one({
+            "id": new_id(), "org_id": org_id, "evento_id": event["id"], "persona_id": pid,
+            "nome": submitted["nome"], "cognome": submitted["cognome"], "email": email or None,
+            "cellulare": cell or None, "data_nascita": submitted["data_nascita"],
+            "ruolo_evento": "da_definire", "stato": "nuova",
+            "preferenza_attivita": body.preferenza_attivita or None,
+            "preferenza_altro": (body.preferenza_altro or "").strip() or None,
+            "days": days_clean, "submitted": submitted,
+            "mismatch": mismatch or None, "has_mismatch": bool(mismatch),
+            "privacy_accepted": True, "privacy_ts": now, "ip": _client_ip(request),
+            "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
+            "created_at": now, "updated_at": now})
+    return {"ok": True, "event_nome": event.get("nome")}
 
 
 app.include_router(api)

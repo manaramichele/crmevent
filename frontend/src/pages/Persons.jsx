@@ -220,7 +220,7 @@ export default function Persons() {
     { name: "ruolo", label: "Qualifica" }, { name: "email", label: "Email", type: "email" },
     { name: "email_secondaria", label: "Email secondaria", type: "email" }, { name: "cellulare", label: "Cellulare", type: "tel" },
     { name: "telefono", label: "Telefono", type: "tel" }, { name: "azienda_id", label: "Azienda principale", type: "select", options: companyOpts },
-    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "linkedin", label: "LinkedIn" },
+    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "linkedin", label: "LinkedIn" },
     { name: "indirizzo", label: "Indirizzo" }, { name: "cap", label: "CAP" }, { name: "citta", label: "Città" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "foto_url", label: "Foto (URL)" }, { name: "note", label: "Note", type: "textarea", full: true },

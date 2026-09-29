@@ -11,9 +11,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText } from "lucide-react";
+import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import AvailabilityDialog from "@/components/AvailabilityDialog";
 
 const STATO = { attivo: "green", pianificato: "tiffany", concluso: "gray", annullato: "red" };
 const STATO_LABEL = { attivo: "Attivo", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
@@ -237,6 +238,7 @@ export default function Events() {
   const settings = useSettings();
   const navigate = useNavigate();
   const [mapsFor, setMapsFor] = useState(null);
+  const [availFor, setAvailFor] = useState(null);
   if (!settings) return <div className="text-slate-400">Caricamento...</div>;
 
   const fields = [
@@ -244,6 +246,7 @@ export default function Events() {
     { name: "logo_url", label: "Logo evento (PNG/JPG)", type: "image", full: true },
     { name: "edizione", label: "Edizione" },
     { name: "tipologia", label: "Tipologia", type: "select", options: toOptions(settings.tipologie_evento) },
+    { name: "data_inizio_allestimento", label: "Data inizio allestimento (facoltativa)", type: "date" },
     { name: "data_inizio", label: "Data inizio", type: "date" },
     { name: "data_fine", label: "Data fine", type: "date" },
     { name: "ora_inizio", label: "Ora inizio", type: "time" },
@@ -269,7 +272,15 @@ export default function Events() {
     { key: "nome", label: "Evento", render: (r) => <div><div className="font-medium text-slate-800">{r.nome}</div>{r.edizione && <div className="text-xs text-slate-400">Ed. {r.edizione}</div>}</div> },
     { key: "tipologia", label: "Tipologia" },
     { key: "citta", label: "Città" },
-    { key: "data_inizio", label: "Date", render: (r) => <span>{r.data_inizio}{r.data_fine && r.data_fine !== r.data_inizio ? ` → ${r.data_fine}` : ""}</span> },
+    { key: "data_inizio", label: "Date", render: (r) => {
+      const dm = (d) => d ? d.slice(8, 10) + "/" + d.slice(5, 7) : "";
+      return (
+        <div className="text-sm">
+          {r.data_inizio_allestimento && <div className="text-xs text-amber-600">Allestimento dal {dm(r.data_inizio_allestimento)}</div>}
+          <span className="text-slate-700">{r.data_inizio ? `Evento ${dm(r.data_inizio)}` : "—"}{r.data_fine && r.data_fine !== r.data_inizio ? ` → ${dm(r.data_fine)}` : ""}</span>
+        </div>
+      );
+    } },
     { key: "stato", label: "Stato", render: (r) => <StatusBadge color={STATO[r.stato] || "gray"}>{STATO_LABEL[r.stato] || r.stato}</StatusBadge> },
   ];
 
@@ -280,6 +291,7 @@ export default function Events() {
 
   const rowActions = (row) => (
     <>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Raccolta disponibilità" onClick={() => setAvailFor(row.id)} data-testid={`availability-${row.id}`}><ClipboardList className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Briefing evento" onClick={() => navigate(`/eventi/${row.id}/briefing`)} data-testid={`briefing-${row.id}`}><FileText className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Mappe & Percorsi" onClick={() => setMapsFor(row.id)} data-testid={`maps-${row.id}`}><MapIcon className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Aggiungi a Google Calendar" onClick={() => syncCal(row)} data-testid={`calsync-${row.id}`}><CalendarPlus className="w-4 h-4" /></Button>
@@ -292,6 +304,7 @@ export default function Events() {
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event"
         searchKeys={["nome", "citta", "tipologia"]} rowActions={rowActions} />
       {mapsFor && <MapsDialog eventId={mapsFor} open={!!mapsFor} onOpenChange={(o) => !o && setMapsFor(null)} />}
+      {availFor && <AvailabilityDialog eventId={availFor} open={!!availFor} onOpenChange={(o) => !o && setAvailFor(null)} />}
     </>
   );
 }
