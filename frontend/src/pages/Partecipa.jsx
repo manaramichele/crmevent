@@ -192,7 +192,7 @@ function F({ label, req, children }) {
 
 function Shell({ logo, event, children }) {
   return (
-    <div className="min-h-screen bg-slate-50 py-6 px-4">
+    <div className="min-h-screen bg-slate-50 pt-6 pb-40 px-4">
       <div className="max-w-lg mx-auto">
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-5 sm:p-7">

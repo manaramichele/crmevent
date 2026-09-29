@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend E2E testing of Raccolta disponibilità pubblica flow (Partecipa.jsx) and admin AvailabilityDialog completed successfully. Public page renders logo, event data (Nova Run Festival, 20/12/2026, Milano), allestimento note. All client-side validations work (empty fields, invalid CF, missing day, missing privacy). Toggle 'Non ho un Codice Fiscale italiano' swaps CF input with Data di nascita input. Full submission with VRDLGU00A01H501Y produced 'Grazie, disponibilità registrata.' thank-you screen. Admin flow: SuperAdmin login via email/password, acting_org_id=nova_events_test_org set via localStorage, Events list shows 'Allestimento dal 18/12 · Evento 20/12', availability dialog opens with link tab containing crmevent.it URL and Copia/Apri/Rigenera/Disattiva buttons, Ricevute tab lists 3 persons (Luca Bianchi 26, John Smith 36, Mario Rossi 40) with correct columns. Changing Ruolo evento to Staff and Stato to Confermata persists (verified in trigger label). Clicking person name opens PersonDetailDialog showing Anagrafica tab with Data di nascita 2000-01-01, Età 26 anni, Codice Fiscale VRDLGU00A01H501Y. Event edit dialog contains 'Data inizio allestimento (facoltativa)' field prefilled with 12/18/2026.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Partecipa.jsx public page", "issues": ["Iubenda cookie banner overlays 'Invia disponibilità' button on first load (bottom-slidein). Users must interact with banner before the submit is clickable. Consider auto-dismiss on public availability page or repositioning banner to non-blocking layout."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Test-instruction/data discrepancy (not a bug): the CF 'BNCLCU90A01F205X' listed in the request as 'valido' is REJECTED by the backend codice_fiscale validator ('Codice Fiscale non valido'). Fallback VRDLGU00A01H501Y worked. Either the CF checksum for BNCLCU90A01F205X is actually invalid, or the backend validator is stricter than expected. Please verify the CF validator implementation and/or update seed/test-data documentation.",
+    "Consider suppressing iubenda cookie banner on public availability pages (/partecipa/*) since users are unauthenticated and the banner can block submit action until dismissed."
+  ],
+  "critical_code_review_comments": [
+    "Partecipa.jsx: privacy validation happens after day validation - order of toasts stacks (Sonner). Fine functionally.",
+    "AvailabilityDialog.jsx: link URL uses hardcoded domain 'crmevent.it' server-side (public URL) which is correct per requirements, but the 'Apri pagina' button opens crmevent.it (not reachable from preview) - by design.",
+    "Row-level Select updates via updateRow do not show a success toast (silent save). Consider adding subtle confirmation on save success for Ruolo/Stato changes."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100%"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (email+password submit-auth-button) - working. Set localStorage 'acting_org_id'='nova_events_test_org' then reload.",
+  "seed_data_creation": "Created 1 new availability record for Luca Bianchi (VRDLGU00A01H501Y) linked to event nova_run_festival_evt in org nova_events_test_org via public form. Persona also created in anagrafica with note 'Inserito automaticamente dalla raccolta disponibilità pubblica'.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test org 'nova_events_test_org' now has 3 availability entries for event nova_run_festival_evt (Mario Rossi/John Smith seed + Luca Bianchi from this test). Public link /partecipa/GTsKCYLQZQb8U8AeOh_wO6Jp-BngpWW9 was active during testing. Iubenda cookie banner needs dismissal before clicking submit on public page in automation.",
+  "rca of the issue": "N/A - all flows working as expected."
+}

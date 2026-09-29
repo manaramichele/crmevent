@@ -74,7 +74,7 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
   };
 
   const updateRow = async (aid, patch) => {
-    try { const { data } = await api.put(`/availabilities/${aid}`, patch); setRows((p) => p.map((r) => (r.id === aid ? { ...r, ...data } : r))); if (patch.apply_person) toast.success("Anagrafica aggiornata"); }
+    try { const { data } = await api.put(`/availabilities/${aid}`, patch); setRows((p) => p.map((r) => (r.id === aid ? { ...r, ...data } : r))); toast.success(patch.apply_person ? "Anagrafica aggiornata" : "Disponibilità aggiornata"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
 
