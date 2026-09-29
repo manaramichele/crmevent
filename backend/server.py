@@ -33,6 +33,7 @@ import brevo_funnel
 import social_ai
 import social_creative
 import instagram_utils
+import leadfinder_scraper
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -5339,6 +5340,219 @@ async def lf_dashboard(user: dict = Depends(require_org_admin)):
 @api.post("/leadfinder/brevo-export")
 async def lf_brevo_export(body: dict = {}, user: dict = Depends(require_org_admin)):
     raise HTTPException(status_code=501, detail="Sincronizzazione Brevo non ancora attiva: CRMEvent resta il database principale in questa fase.")
+
+
+# ---- Lead Finder: scansione ENDU → sito ufficiale → organizzatore → contatti/social ----
+def _lf_src(url, source=None):
+    d = {"url": url}
+    if source:
+        d["source"] = source
+    return d
+
+
+async def _lf_scan_persist(org_id: str, ev: dict, r: dict) -> dict:
+    """Persist one scan result onto the event + its organizer (fill-if-empty, never overwrite
+    manually confirmed data). Returns a report row. Dedup by email→domain→name→social."""
+    uq = {"org_id": org_id}
+    site = r.get("site") or {}
+    endu_ig = r.get("endu_instagram")
+    endu_fb = r.get("endu_facebook")
+    social_page = r.get("social_page")
+    official = r.get("official_site")
+    org_site = site.get("org_site")
+    emails = [e["email"] for e in site.get("emails", [])]
+    email_sources = {e["email"]: e["source"] for e in site.get("emails", [])}
+    ssrc = site.get("sources", {})
+
+    # ---- event enrichment ----
+    ev_sources = {**(ev.get("sources") or {})}
+    ev_sources["endu"] = _lf_src(ev.get("endu_url"))
+    ev_set = {"updated_at": now_iso(), "last_scanned_at": now_iso()}
+    if official:
+        ev_set["website"] = official
+        ev_sources["event_site"] = _lf_src(official, "ENDU")
+    ev_ig = endu_ig or (social_page if r.get("endu_social_kind") == "instagram" else None)
+    ev_fb = endu_fb or (social_page if r.get("endu_social_kind") == "facebook" else None)
+    if ev_ig:
+        ev_set["instagram_url"] = ev_ig
+        ev_sources["instagram"] = _lf_src(ev_ig, "ENDU")
+    if ev_fb:
+        ev_set["facebook_url"] = ev_fb
+        ev_sources["facebook"] = _lf_src(ev_fb, "ENDU")
+    if social_page and not ev_ig and not ev_fb:
+        ev_sources["social_page"] = _lf_src(social_page, "ENDU")
+    ev_set["sources"] = ev_sources
+    await db.lf_events.update_one({**uq, "id": ev["id"]}, {"$set": ev_set})
+
+    # ---- organizer resolution & dedup ----
+    org = await db.lf_organizers.find_one({**uq, "id": ev.get("organizer_id")}, {"_id": 0})
+    org_website = org_site or official
+    org_domain = leadfinder_scraper._host(org_website) if org_website else None
+    # organizer socials: prefer official site; fall back to ENDU event social (high reliability)
+    org_ig = site.get("instagram") or ev_ig
+    org_fb = site.get("facebook") or ev_fb
+    org_li = site.get("linkedin")  # NEVER inferred: only if explicitly found on site/ENDU
+
+    # search for a possible pre-existing DIFFERENT organizer matching the scraped identity
+    dup_ors = []
+    if emails:
+        dup_ors.append({"emails": {"$in": [e.lower() for e in emails]}})
+    if org_domain:
+        dup_ors.append({"web_domain": org_domain})
+    if org_ig:
+        dup_ors.append({"instagram_url": org_ig})
+    duplicate_of = None
+    if dup_ors:
+        match = await db.lf_organizers.find_one(
+            {**uq, "$or": dup_ors, "id": {"$ne": ev.get("organizer_id")}}, {"_id": 0})
+        if match:
+            duplicate_of = {"id": match["id"], "name": match.get("name")}
+
+    if org:
+        oset = {"updated_at": now_iso(), "last_verified_at": now_iso(),
+                "source_main": org.get("source_main") or "ENDU"}
+        osrc = {**(org.get("sources") or {})}
+        osrc["endu"] = _lf_src(ev.get("endu_url"))
+        # fill-if-empty (preserves manually confirmed data)
+        if site.get("org_name") and not org.get("legal_name"):
+            oset["legal_name"] = site["org_name"]
+            osrc["legal_name"] = _lf_src(org_website or official)
+        if org_website and not org.get("website"):
+            oset["website"] = org_website
+            osrc["website"] = _lf_src(org_website)
+        if org_site and org_site != official:
+            osrc["organizer_site"] = _lf_src(org_site)
+        if official:
+            osrc["event_site"] = _lf_src(official, "ENDU")
+        if site.get("phone") and not org.get("phone"):
+            oset["phone"] = site["phone"]
+            osrc["phone"] = _lf_src(ssrc.get("phone"))
+        # emails: append new, keep existing (manual) first
+        merged_emails = list(dict.fromkeys([*(org.get("emails") or []), *[e.lower() for e in emails]]))
+        if merged_emails:
+            oset["emails"] = merged_emails
+            oset["email"] = org.get("email") or merged_emails[0]
+            for e in emails:
+                osrc[f"email:{e.lower()}"] = _lf_src(email_sources.get(e))
+        if org_ig and not org.get("instagram_url"):
+            oset["instagram_url"] = org_ig
+            osrc["instagram"] = _lf_src(ssrc.get("instagram") or ev.get("endu_url"),
+                                        "sito ufficiale" if site.get("instagram") else "ENDU")
+        if org_fb and not org.get("facebook_url"):
+            oset["facebook_url"] = org_fb
+            osrc["facebook"] = _lf_src(ssrc.get("facebook") or ev.get("endu_url"),
+                                       "sito ufficiale" if site.get("facebook") else "ENDU")
+        if org_li and not org.get("linkedin_url"):
+            oset["linkedin_url"] = org_li
+            osrc["linkedin"] = _lf_src(ssrc.get("linkedin"), "sito ufficiale")
+        if duplicate_of:
+            oset["possibile_duplicato"] = duplicate_of
+        if org.get("status") != "non_contattare":
+            oset["status"] = org.get("status") if org.get("status") not in (None, "") else "da_verificare"
+            oset.setdefault("status", "da_verificare")
+        oset["sources"] = osrc
+        oset["web_domain"] = org_domain or org.get("web_domain")
+        oset = _lf_norm_org({**org, **oset})
+        await db.lf_organizers.update_one({**uq, "id": org["id"]}, {"$set": oset})
+        org = {**org, **oset}
+
+    # ---- report row ----
+    has_org = bool((org or {}).get("legal_name") or site.get("org_name"))
+    has_email = bool(emails)
+    has_social = bool(org_ig or org_fb)
+    reasons = []
+    if not official:
+        reasons.append("sito ufficiale non presente su ENDU")
+    elif site.get("error"):
+        reasons.append("sito non raggiungibile")
+    if official and not site.get("error"):
+        if not has_email:
+            reasons.append("email non trovata sul sito")
+        if not has_social:
+            reasons.append("nessun social ufficiale")
+        if not site.get("org_name"):
+            reasons.append("ragione sociale organizzatore non identificata")
+    if has_org and has_email and has_social:
+        stato = "Completo"
+    elif official and (has_email or has_social or site.get("org_name")):
+        stato = "Parziale"
+    else:
+        stato = "Da verificare"
+    return {
+        "event": ev.get("name"), "endu_url": ev.get("endu_url"),
+        "organizer": (org or {}).get("name"),
+        "organizer_legal": (org or {}).get("legal_name") or site.get("org_name"),
+        "event_site": official, "org_site": org_site,
+        "emails": emails, "instagram": org_ig, "facebook": org_fb, "linkedin": org_li,
+        "endu_has_site": bool(official), "endu_has_social": bool(social_page),
+        "site_visited": len(site.get("visited") or []),
+        "duplicate_of": duplicate_of, "status": stato, "reason": ", ".join(reasons) or None,
+    }
+
+
+async def _lf_run_scan(scan_id: str, org_id: str, event_ids: Optional[list]):
+    uq = {"org_id": org_id}
+    q = {**uq}
+    if event_ids:
+        q["id"] = {"$in": event_ids}
+    events = await db.lf_events.find(q, {"_id": 0}).to_list(500)
+    session = leadfinder_scraper.requests.Session()
+    rows = []
+    await db.lf_scans.update_one({"id": scan_id}, {"$set": {"total": len(events)}})
+    for i, ev in enumerate(events):
+        try:
+            r = await asyncio.to_thread(leadfinder_scraper.scan_event, ev.get("endu_url"), session)
+            row = await _lf_scan_persist(org_id, ev, r)
+        except Exception as e:
+            row = {"event": ev.get("name"), "endu_url": ev.get("endu_url"),
+                   "status": "Errore", "reason": str(e)[:160]}
+        rows.append(row)
+        await db.lf_scans.update_one({"id": scan_id}, {"$set": {"done": i + 1, "rows": rows, "updated_at": now_iso()}})
+    # aggregate stats
+    def cnt(pred):
+        return sum(1 for x in rows if pred(x))
+    stats = {
+        "events_analyzed": len(rows),
+        "endu_with_site": cnt(lambda x: x.get("endu_has_site")),
+        "endu_with_social": cnt(lambda x: x.get("endu_has_social")),
+        "sites_visited": cnt(lambda x: (x.get("site_visited") or 0) > 0),
+        "organizers_identified": len({x.get("organizer_legal") for x in rows if x.get("organizer_legal")}),
+        "emails_found": cnt(lambda x: x.get("emails")),
+        "instagram_found": cnt(lambda x: x.get("instagram")),
+        "facebook_found": cnt(lambda x: x.get("facebook")),
+        "linkedin_found": cnt(lambda x: x.get("linkedin")),
+        "duplicates_found": cnt(lambda x: x.get("duplicate_of")),
+        "complete": cnt(lambda x: x.get("status") == "Completo"),
+        "partial": cnt(lambda x: x.get("status") == "Parziale"),
+        "to_verify": cnt(lambda x: x.get("status") == "Da verificare"),
+        "errors": cnt(lambda x: x.get("status") == "Errore"),
+    }
+    await db.lf_scans.update_one({"id": scan_id}, {"$set": {
+        "status": "done", "rows": rows, "stats": stats, "finished_at": now_iso()}})
+
+
+@api.post("/leadfinder/scan-endu")
+async def lf_scan_endu(body: dict = {}, user: dict = Depends(require_org_admin)):
+    scan_id = new_id()
+    await db.lf_scans.insert_one({
+        "id": scan_id, "org_id": user["org_id"], "status": "running", "total": 0, "done": 0,
+        "rows": [], "stats": {}, "created_by": user.get("user_id"),
+        "created_at": now_iso(), "updated_at": now_iso()})
+    asyncio.create_task(_lf_run_scan(scan_id, user["org_id"], body.get("event_ids")))
+    return {"scan_id": scan_id, "status": "running"}
+
+
+@api.get("/leadfinder/scan/{scan_id}")
+async def lf_scan_status(scan_id: str, user: dict = Depends(require_org_admin)):
+    s = await db.lf_scans.find_one(oq(user, id=scan_id), {"_id": 0})
+    if not s:
+        raise HTTPException(status_code=404, detail="Scansione non trovata")
+    return s
+
+
+@api.get("/leadfinder/scans")
+async def lf_scans_list(user: dict = Depends(require_org_admin)):
+    return await db.lf_scans.find(oq(user), {"_id": 0, "rows": 0}).sort("created_at", -1).to_list(20)
 
 
 # ---- AI generation ----

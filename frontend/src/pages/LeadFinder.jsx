@@ -15,6 +15,15 @@ const TABS = [
   { id: "review", label: "Da verificare", icon: Users },
 ];
 const STATE_LABEL = { da_verificare: "Da verificare", verificato: "Verificato", interessante: "Interessante", contattato: "Contattato", demo_richiesta: "Demo richiesta", trial: "Trial", cliente: "Cliente", non_interessato: "Non interessato", non_contattare: "Non contattare" };
+const SCAN_STAT = [
+  ["events_analyzed", "Eventi analizzati"], ["endu_with_site", "Siti ufficiali su ENDU"],
+  ["endu_with_social", "Social su ENDU"], ["sites_visited", "Siti visitati"],
+  ["organizers_identified", "Organizzatori identificati"], ["emails_found", "Email trovate"],
+  ["instagram_found", "Instagram"], ["facebook_found", "Facebook"], ["linkedin_found", "LinkedIn"],
+  ["duplicates_found", "Duplicati rilevati"], ["complete", "Record completi"],
+  ["partial", "Record parziali"], ["to_verify", "Da verificare"],
+];
+const SCAN_BADGE = { Completo: "bg-emerald-100 text-emerald-700", Parziale: "bg-amber-100 text-amber-700", "Da verificare": "bg-slate-100 text-slate-600", Errore: "bg-red-100 text-red-700" };
 const yesNo = (v) => (v ? "Sì" : "—");
 
 function Stat({ label, value }) {
@@ -35,6 +44,8 @@ export default function LeadFinder() {
   const [fEmail, setFEmail] = useState(false); const [fIg, setFIg] = useState(false); const [fLi, setFLi] = useState(false);
   const [detail, setDetail] = useState(null);
   const [mergeSel, setMergeSel] = useState([]);
+  const [scan, setScan] = useState(null);
+  const [scanning, setScanning] = useState(false);
 
   const load = async () => {
     try {
@@ -42,7 +53,14 @@ export default function LeadFinder() {
       setDash(d.data); setOrgs(o.data); setEvents(e.data);
     } catch (err) { toast.error(formatApiError(err?.response?.data?.detail)); }
   };
-  useEffect(() => { load(); }, []);
+  const loadLastScan = async () => {
+    try {
+      const { data } = await api.get("/leadfinder/scans");
+      const last = (data || [])[0];
+      if (last && last.status === "done") { const { data: full } = await api.get(`/leadfinder/scan/${last.id}`); setScan(full); }
+    } catch { /* no scans yet */ }
+  };
+  useEffect(() => { load(); loadLastScan(); }, []);
 
   const regions = [...new Set(orgs.map((o) => o.region).filter(Boolean))].sort();
   const sports = [...new Set(events.map((e) => e.sport).filter(Boolean))].sort();
@@ -69,6 +87,23 @@ export default function LeadFinder() {
     catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
   const brevo = async () => { try { await api.post("/leadfinder/brevo-export", {}); } catch (e) { toast.info(formatApiError(e?.response?.data?.detail)); } };
+
+  const startScan = async () => {
+    setScanning(true); setScan(null);
+    try {
+      const { data } = await api.post("/leadfinder/scan-endu", {});
+      const sid = data.scan_id;
+      const poll = async () => {
+        try {
+          const { data: s } = await api.get(`/leadfinder/scan/${sid}`);
+          setScan(s);
+          if (s.status === "done") { setScanning(false); load(); toast.success("Scansione ENDU completata"); return; }
+        } catch { /* keep polling */ }
+        setTimeout(poll, 2500);
+      };
+      poll();
+    } catch (e) { setScanning(false); toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
 
   const Link = ({ url, icon: Icon, label }) => url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-tiffany-fg hover:underline text-sm" data-testid={`lf-link-${label}`}><Icon className="w-4 h-4" />{label}<ExternalLink className="w-3 h-3" /></a> : <span className="inline-flex items-center gap-1 text-slate-400 text-sm"><Icon className="w-4 h-4" />Da verificare</span>;
 
@@ -153,16 +188,60 @@ export default function LeadFinder() {
       )}
 
       {tab === "finder" && (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3" data-testid="lf-finder">
-          <div className="text-sm text-slate-700">Il Lead Finder ricerca organizzatori ed eventi da fonti pubbliche. <strong>Fonte attiva: ENDU.</strong> Flusso: evento → organizzatore → email → sito ufficiale → social ufficiali. In questa fase i dati provengono dal test controllato su 20 eventi ENDU.</div>
-          <ul className="text-sm text-slate-600 list-disc pl-5 space-y-1">
+        <div className="space-y-4" data-testid="lf-finder">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+            <div className="text-sm text-slate-700">Il Lead Finder ricerca organizzatori ed eventi da fonti pubbliche. <strong>Fonte attiva: ENDU.</strong></div>
+            <div className="text-sm text-slate-600">Catena di scansione: <strong>ENDU → sito ufficiale → pagine rilevanti → organizzatore → contatti → social → deduplicazione → CRMEvent.</strong> I risultati vengono salvati in stato <em>Da verificare</em>: nessun dato è inventato, ogni informazione conserva la propria fonte. LinkedIn è associato solo se presente esplicitamente su ENDU o sui siti ufficiali.</div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button onClick={startScan} disabled={scanning} data-testid="lf-scan-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900">
+                <Search className="w-4 h-4 mr-1" />{scanning ? "Scansione in corso…" : "Scansiona ENDU + Arricchisci"}
+              </Button>
+              <Button disabled variant="outline" className="opacity-60 cursor-not-allowed" data-testid="lf-brevo-btn-disabled" onClick={brevo}><Send className="w-4 h-4 mr-1" />Esporta/Sincronizza con Brevo (non attivo)</Button>
+            </div>
+            {scan && (
+              <div className="text-xs text-slate-500" data-testid="lf-scan-progress">
+                Stato: <strong>{scan.status === "done" ? "Completata" : "In corso"}</strong> — {scan.done || 0}/{scan.total || 0} eventi analizzati
+              </div>
+            )}
+          </div>
+
+          {scan && scan.stats && Object.keys(scan.stats).length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3" data-testid="lf-scan-stats">
+              {SCAN_STAT.map(([k, label]) => <Stat key={k} label={label} value={scan.stats[k] ?? 0} />)}
+            </div>
+          )}
+
+          {scan && (scan.rows || []).length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="lf-scan-table">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-slate-500 uppercase"><tr>
+                  <th className="p-2 text-left">Evento</th><th className="p-2 text-left">Organizzatore</th><th className="p-2">Sito evento</th><th className="p-2">Sito org.</th><th className="p-2">Email</th><th className="p-2">IG</th><th className="p-2">FB</th><th className="p-2">LinkedIn</th><th className="p-2">Stato</th><th className="p-2 text-left">Note</th>
+                </tr></thead>
+                <tbody>
+                  {scan.rows.map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100 align-top" data-testid={`lf-scan-row-${i}`}>
+                      <td className="p-2 font-medium text-slate-800">{r.endu_url ? <a href={r.endu_url} target="_blank" rel="noreferrer" className="hover:underline">{r.event}</a> : r.event}</td>
+                      <td className="p-2 text-slate-700">{r.organizer_legal || r.organizer || "—"}</td>
+                      <td className="p-2 text-center">{r.event_site ? <a href={r.event_site} target="_blank" rel="noreferrer" className="text-tiffany-fg"><Globe className="w-4 h-4 inline" /></a> : "—"}</td>
+                      <td className="p-2 text-center">{r.org_site ? <a href={r.org_site} target="_blank" rel="noreferrer" className="text-tiffany-fg"><Globe className="w-4 h-4 inline" /></a> : "—"}</td>
+                      <td className="p-2 text-slate-600">{(r.emails || []).length ? (r.emails || []).join(", ") : "—"}</td>
+                      <td className="p-2 text-center">{r.instagram ? <a href={r.instagram} target="_blank" rel="noreferrer" className="text-tiffany-fg"><Instagram className="w-4 h-4 inline" /></a> : "—"}</td>
+                      <td className="p-2 text-center">{r.facebook ? <a href={r.facebook} target="_blank" rel="noreferrer" className="text-tiffany-fg"><Globe className="w-4 h-4 inline" /></a> : "—"}</td>
+                      <td className="p-2 text-center">{r.linkedin ? <a href={r.linkedin} target="_blank" rel="noreferrer" className="text-tiffany-fg"><Linkedin className="w-4 h-4 inline" /></a> : "—"}</td>
+                      <td className="p-2 text-center whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full ${SCAN_BADGE[r.status] || "bg-slate-100 text-slate-600"}`}>{r.status}</span>{r.duplicate_of && <div className="text-[10px] text-amber-600 mt-0.5">dup? {r.duplicate_of.name}</div>}</td>
+                      <td className="p-2 text-slate-400">{r.reason || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <ul className="text-xs text-slate-500 list-disc pl-5 space-y-1">
             <li>Dati a livello evento (nome, sport, città/provincia, data, URL) recuperati da ENDU.</li>
-            <li>Email e social ufficiali richiedono la consultazione del sito ufficiale dell'organizzatore → impostati come <em>Da verificare</em> finché non confermati (nessun dato inventato).</li>
+            <li>Email e social ufficiali provengono dai siti ufficiali; ogni dato conserva l'URL della pagina sorgente.</li>
             <li>La scansione massiva e i provider esterni a pagamento non sono attivi.</li>
           </ul>
-          <div className="flex gap-2 pt-2">
-            <Button disabled className="opacity-60 cursor-not-allowed" data-testid="lf-brevo-btn-disabled" onClick={brevo}><Send className="w-4 h-4 mr-1" />Esporta/Sincronizza con Brevo (non attivo)</Button>
-          </div>
         </div>
       )}
 
@@ -188,6 +267,7 @@ export default function LeadFinder() {
                 <div className="text-xs text-slate-400">Acquisito: {(detail.acquired_at || "").slice(0, 10) || "—"} · Ultima verifica: {(detail.last_verified_at || "").slice(0, 10) || "—"}</div>
               </section>
               <section><div className="text-xs font-semibold uppercase text-slate-400 mb-1">Stato</div>
+                {detail.possibile_duplicato && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2" data-testid="lf-detail-dup">Possibile duplicato di: <strong>{detail.possibile_duplicato.name}</strong> — verifica e usa "Unisci duplicati" se confermato.</div>}
                 <select value={detail.status} onChange={(e) => setStatus(detail, e.target.value)} className={FIELD} data-testid="lf-detail-status">{Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
                 {detail.status === "non_contattare" && <div className="text-xs text-red-600 mt-1">"Non contattare" ha priorità e non viene sovrascritto dalle ricerche automatiche.</div>}
               </section>
