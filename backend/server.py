@@ -6954,6 +6954,11 @@ async def avail_list_received(event_id: str, user: dict = Depends(require_admin)
 AVAIL_LIST_NAME = "CRMEvent · Disponibilità eventi"
 AVAIL_TPL_CONFERMA_DISP = "CRMEvent · Disponibilità ricevuta"
 AVAIL_TPL_CONFERMA_PART = "CRMEvent · Partecipazione confermata"
+AVAIL_TPL_KIND_LABEL = {"disponibilita": "Disponibilità", "conferma": "Conferma"}
+AVAIL_TPL_SUBJECT = {
+    "disponibilita": "Grazie {{params.NOME}}, abbiamo ricevuto la tua disponibilità",
+    "conferma": "{{params.NOME_EVENTO}}: la tua disponibilità è confermata",
+}
 
 
 def _brevo_avail_enabled():
@@ -7163,8 +7168,9 @@ async def avail_confirm_bulk(event_id: str, body: BulkConfirm, user: dict = Depe
 
 
 @api.post("/brevo/create-availability-templates")
-async def brevo_create_avail_templates(user: dict = Depends(require_org_admin)):
-    """Create the two availability email templates as DRAFTS (isActive=false). Never sends."""
+async def brevo_create_avail_templates(user: dict = Depends(require_superadmin)):
+    """Create the two availability email templates as DRAFTS (isActive=false). Never sends.
+    Anti-duplicato: se i due master esistono già, riusa i Template ID esistenti."""
     if not brevo_client.is_configured():
         raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata")
     try:
@@ -7193,20 +7199,87 @@ async def brevo_create_avail_templates(user: dict = Depends(require_org_admin)):
 
 
 @api.get("/brevo/availability-templates")
-async def brevo_avail_templates_list(user: dict = Depends(require_org_admin)):
-    """Elenca i due template master (nome + Template ID + stato attivo). Nessuna copia per evento."""
-    base = [{"name": AVAIL_TPL_CONFERMA_DISP, "kind": "disponibilita"},
-            {"name": AVAIL_TPL_CONFERMA_PART, "kind": "conferma"}]
+async def brevo_avail_templates_list(user: dict = Depends(require_superadmin)):
+    """Elenca i due template master (nome + Template ID + stato attivo + tipo + ultimo aggiornamento).
+    Riservato al Super Admin. Nessuna copia per evento."""
+    base = [{"name": AVAIL_TPL_CONFERMA_DISP, "kind": "disponibilita", "type_label": AVAIL_TPL_KIND_LABEL["disponibilita"]},
+            {"name": AVAIL_TPL_CONFERMA_PART, "kind": "conferma", "type_label": AVAIL_TPL_KIND_LABEL["conferma"]}]
     if not brevo_client.is_configured():
         return {"configured": False, "enabled": _brevo_avail_enabled(),
-                "templates": [{**b, "template_id": None, "is_active": None} for b in base]}
+                "templates": [{**b, "template_id": None, "is_active": None, "updated_at": None} for b in base]}
     out = []
     async with brevo_client.BrevoClient() as c:
         tpls = await c.get_templates()
         for b in base:
             t = next((x for x in tpls if (x.get("name") or "").strip().lower() == b["name"].lower()), None)
-            out.append({**b, "template_id": t.get("id") if t else None, "is_active": t.get("isActive") if t else None})
+            out.append({**b, "template_id": t.get("id") if t else None,
+                        "is_active": t.get("isActive") if t else None,
+                        "updated_at": (t.get("modifiedAt") or t.get("createdAt")) if t else None})
     return {"configured": True, "enabled": _brevo_avail_enabled(), "templates": out}
+
+
+@api.get("/brevo/availability-test-events")
+async def brevo_avail_test_events(user: dict = Depends(require_superadmin)):
+    """Eventi appartenenti a Organizzazioni di tipo Test, per l'invio di email di prova."""
+    test_orgs = await db.organizations.find({"type": "test"}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)
+    org_map = {o["id"]: o.get("nome") for o in test_orgs}
+    if not org_map:
+        return {"events": []}
+    evs = await db.events.find({"org_id": {"$in": list(org_map.keys())}}, {"_id": 0}).to_list(1000)
+    out = [{"id": e["id"], "nome": e.get("nome"), "org_id": e.get("org_id"),
+            "org_nome": org_map.get(e.get("org_id")), "data_inizio": e.get("data_inizio"),
+            "localita": e.get("localita") or e.get("citta"), "has_logo": bool(e.get("logo_url"))}
+           for e in evs]
+    out.sort(key=lambda x: (x.get("org_nome") or "", x.get("nome") or ""))
+    return {"events": out}
+
+
+class AvailTestEmail(BaseModel):
+    event_id: str
+    kind: str = "disponibilita"
+    to_email: EmailStr
+
+
+@api.post("/brevo/availability-test-email")
+async def brevo_avail_test_email(body: AvailTestEmail, user: dict = Depends(require_superadmin)):
+    """Invia una email di PROVA (manuale, Super Admin) del template master indicato, usando i dati reali
+    di un Evento di un'Organizzazione Test (logo incluso). Non attiva alcun automatismo e non dipende
+    da BREVO_AVAILABILITY_ENABLED. Usa l'HTML master inline (indipendente dallo stato attivo/bozza del
+    template). La BREVO_API_KEY non è mai esposta."""
+    if not brevo_client.is_configured():
+        return {"ok": False, "configured": False,
+                "message": "Brevo non configurato in questo ambiente. L'invio reale è disponibile in produzione."}
+    kind = "conferma" if body.kind == "conferma" else "disponibilita"
+    event = await db.events.find_one({"id": body.event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    org = await db.organizations.find_one({"id": event.get("org_id")}, {"_id": 0}) or {}
+    if org.get("type") != "test":
+        raise HTTPException(status_code=400, detail="L'invio di prova è consentito solo su Eventi di Organizzazioni di tipo Test.")
+    params = _avail_email_params({"nome": "Mario", "cognome": "Rossi"}, event, org, _event_logo_url(event))
+    html = _avail_email_html(kind)
+    subject = AVAIL_TPL_SUBJECT[kind]
+    for k, v in params.items():
+        token = "{{params." + k + "}}"
+        html = html.replace(token, str(v or ""))
+        subject = subject.replace(token, str(v or ""))
+    try:
+        async with brevo_client.BrevoClient() as c:
+            senders = await c.senders()
+            verified = [s for s in senders if s.get("active")]
+            pref = next((s for s in verified if "crmevent" in (s.get("email") or "").lower()), None) or (verified[0] if verified else None)
+            if not pref:
+                raise HTTPException(status_code=400, detail="Nessun mittente verificato in Brevo.")
+            sender = {"name": "CRMEvent", "email": pref["email"]}
+            res = await c._req("POST", "/smtp/email", json={
+                "to": [{"email": str(body.to_email), "name": "Mario Rossi"}],
+                "subject": subject, "htmlContent": html, "sender": sender})
+        mid = res.get("messageId") if isinstance(res, dict) else None
+        return {"ok": True, "configured": True, "message": f"Email di test inviata a {body.to_email}",
+                "messageId": mid, "sender": sender["email"], "event": event.get("nome"),
+                "kind": kind, "logo": bool(event.get("logo_url"))}
+    except brevo_client.BrevoError as e:
+        raise HTTPException(status_code=502, detail=f"Brevo: invio non riuscito (HTTP {e.status})")
 
 
 @api.get("/brevo/availability-template-preview")
