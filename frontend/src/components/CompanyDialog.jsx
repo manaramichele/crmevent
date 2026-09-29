@@ -7,12 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SettingSelect from "@/components/SettingSelect";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-const TIPO = { azienda: "Azienda", prospect: "Prospect", fornitore: "Fornitore", sponsor: "Sponsor", partner: "Partner", media: "Media", istituzione: "Istituzione" };
 const emptyRef = { nome: "", cognome: "", ruolo: "", email: "", cellulare: "", referente_principale: false };
 
 export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) {
@@ -22,7 +20,7 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
   const [refs, setRefs] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setF(initial || { nazione: "Italia", tipo: "azienda" }); setRefs([]); }, [initial, open]);
+  useEffect(() => { setF(initial || { nazione: "Italia", tipo: "Azienda" }); setRefs([]); }, [initial, open]);
   const ch = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
   const save = async () => {
@@ -64,8 +62,7 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
           <div className="space-y-1.5"><Label className="text-xs">Settore</Label>
             <SettingSelect settingKey="settori" value={f.settore} onChange={(v) => ch("settore", v)} options={settings?.settori || []} addLabel="Aggiungi nuovo settore" testid="field-settore" /></div>
           <div className="space-y-1.5"><Label className="text-xs">Tipo</Label>
-            <Select value={f.tipo || "azienda"} onValueChange={(v) => ch("tipo", v)}><SelectTrigger data-testid="field-tipo"><SelectValue /></SelectTrigger>
-              <SelectContent>{Object.keys(TIPO).map((k) => <SelectItem key={k} value={k}>{TIPO[k]}</SelectItem>)}</SelectContent></Select></div>
+            <SettingSelect settingKey="tipi_azienda" value={f.tipo} onChange={(v) => ch("tipo", v)} options={settings?.tipi_azienda || []} addLabel="Aggiungi nuova tipologia" placeholder="Seleziona tipo..." testid="field-tipo" /></div>
           <div className="space-y-1.5"><Label className="text-xs">Partita IVA</Label><Input value={f.partita_iva || ""} onChange={(e) => ch("partita_iva", e.target.value)} /></div>
           <div className="space-y-1.5"><Label className="text-xs">Sito web</Label><Input value={f.sito_web || ""} onChange={(e) => ch("sito_web", e.target.value)} /></div>
           <div className="space-y-1.5"><Label className="text-xs">Email</Label><Input value={f.email || ""} onChange={(e) => ch("email", e.target.value)} /></div>

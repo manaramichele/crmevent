@@ -14,6 +14,7 @@ import { X, Plus, Check, Pencil, AlertTriangle } from "lucide-react";
 const LISTS = [
   { key: "tipologie_evento", label: "Tipologie evento" },
   { key: "settori", label: "Settori aziende" },
+  { key: "tipi_azienda", label: "Tipi di azienda" },
   { key: "ruoli_staff", label: "Ruoli staff" },
   { key: "aree_operative", label: "Aree operative" },
   { key: "livelli_sponsorship", label: "Livelli sponsorship" },

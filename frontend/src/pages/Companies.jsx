@@ -57,7 +57,7 @@ export default function Companies() {
                     <td className="px-4 py-3 text-slate-700">{r.settore || "—"}</td>
                     <td className="px-4 py-3 text-slate-700">{r.citta || "—"}</td>
                     <td className="px-4 py-3 text-slate-700">{r.email || "—"}</td>
-                    <td className="px-4 py-3"><StatusBadge color={TIPO_COLOR[r.tipo] || "gray"}>{TIPO_LABEL[r.tipo] || r.tipo}</StatusBadge></td>
+                    <td className="px-4 py-3"><StatusBadge color={TIPO_COLOR[r.tipo] || TIPO_COLOR[String(r.tipo || "").toLowerCase()] || "gray"}>{TIPO_LABEL[r.tipo] || r.tipo || "—"}</StatusBadge></td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => { setEditing(r); setFormOpen(true); }} data-testid={`edit-company-${r.id}`}><Pencil className="w-4 h-4" /></Button>

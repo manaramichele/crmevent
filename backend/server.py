@@ -1470,6 +1470,7 @@ def default_settings(org_id="global"):
     return {"id": org_id,
             "tipologie_evento": ["Fiera", "Congresso", "Concerto", "Festival", "Conferenza", "Workshop", "Gala"],
             "settori": ["Tecnologia", "Food & Beverage", "Moda", "Automotive", "Finanza", "Media", "No Profit"],
+            "tipi_azienda": ["Azienda", "Espositore", "Istituzione", "Partner", "Sponsor"],
             "ruoli_staff": ["Coordinatore", "Hostess", "Tecnico", "Sicurezza", "Accoglienza", "Logistica"],
             "aree_operative": ["Expo", "Palco", "Ingresso", "Ristoro", "Logistica", "Parcheggi", "Percorso"],
             "livelli_sponsorship": ["Main Sponsor", "Gold", "Silver", "Bronze", "Technical Partner"],
@@ -1484,6 +1485,12 @@ async def get_settings(admin: dict = Depends(require_admin)):
     if not doc:
         doc = default_settings(sid)
         await db.settings.insert_one(dict(doc))
+        return doc
+    defaults = default_settings(sid)
+    missing = {k: v for k, v in defaults.items() if k not in doc}
+    if missing:
+        await db.settings.update_one({"id": sid}, {"$set": missing})
+        doc.update(missing)
     return doc
 
 
@@ -1496,6 +1503,7 @@ async def update_settings(body: dict, admin: dict = Depends(require_admin)):
 
 
 USAGE_MAP = {"tipologie_evento": ("events", "tipologia"), "settori": ("companies", "settore"),
+             "tipi_azienda": ("companies", "tipo"),
              "ruoli_staff": ("staff", "ruolo"), "aree_operative": ("staff", "area"),
              "livelli_sponsorship": ("deals", "livello")}
 
