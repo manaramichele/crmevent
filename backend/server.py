@@ -6950,6 +6950,107 @@ async def avail_list_received(event_id: str, user: dict = Depends(require_admin)
             "availabilities": out}
 
 
+# ---- Brevo sync per disponibilità (gated: nessun invio reale finché BREVO_AVAILABILITY_ENABLED è off) ----
+AVAIL_LIST_NAME = "CRMEvent · Disponibilità eventi"
+AVAIL_TPL_CONFERMA_DISP = "CRMEvent · Conferma disponibilità evento"
+AVAIL_TPL_CONFERMA_PART = "CRMEvent · Conferma partecipazione evento"
+
+
+def _brevo_avail_enabled():
+    return os.environ.get("BREVO_AVAILABILITY_ENABLED", "").strip().lower() in ("1", "true", "on", "yes")
+
+
+def _avail_email_html(kind: str) -> str:
+    if kind == "conferma":
+        body = ("<p>Ciao {{params.nome}},</p>"
+                "<p>la tua disponibilità per <strong>{{params.nome_evento}}</strong> è stata confermata.</p>"
+                "<p>Grazie per aver dato la tua disponibilità. Ti invieremo successivamente tutte le informazioni "
+                "operative relative ad attività, orari, punto di ritrovo e briefing.</p>")
+        title = "Disponibilità confermata"
+    else:
+        body = ("<p>Grazie per la tua disponibilità, {{params.nome}}.</p>"
+                "<p>Abbiamo ricevuto la tua disponibilità per <strong>{{params.nome_evento}}</strong>. "
+                "L'organizzazione valuterà le disponibilità ricevute e ti contatterà successivamente con maggiori "
+                "informazioni sulle attività e sugli eventuali turni.</p>")
+        title = "Disponibilità ricevuta"
+    return (f'<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2a37;">'
+            f'<h2 style="color:#147D74;">{title}</h2>{body}'
+            f'<p style="margin-top:16px;"><strong>Evento:</strong> {{{{params.nome_evento}}}}<br/>'
+            f'<strong>Data:</strong> {{{{params.data_evento}}}}</p>'
+            f'<p style="color:#64748b;font-size:13px;margin-top:24px;">A presto.<br/>CRMEvent</p></div>')
+
+
+async def _brevo_avail(action: str, av: dict, event: dict, org_nome: str = None, send_template: str = None):
+    """Best-effort, gated Brevo sync for an availability. Never raises: availability data has
+    priority. Records a brevo_sync_log row. Real contact upsert / email send happen ONLY when
+    BREVO_AVAILABILITY_ENABLED is on AND a key is configured; otherwise the intent is logged as
+    'pending' for later retry/approval. Codice Fiscale is NEVER sent to Brevo."""
+    email = (av.get("email") or "").strip().lower()
+    log = {"id": new_id(), "org_id": av.get("org_id"), "evento_id": av.get("evento_id"),
+           "availability_id": av.get("id"), "email": email, "action": action,
+           "template": send_template, "created_at": now_iso()}
+    if not email:
+        log["status"] = "skipped_no_email"
+        await db.brevo_sync_log.insert_one(log)
+        return {"status": "skipped_no_email", "sent": False}
+    if not _brevo_avail_enabled() or not brevo_client.is_configured():
+        log["status"] = "pending" if not _brevo_avail_enabled() else "skipped_no_key"
+        await db.brevo_sync_log.insert_one(log)
+        return {"status": log["status"], "sent": False}
+    sent, err = False, None
+    try:
+        attrs = {"NOME": av.get("nome"), "COGNOME": av.get("cognome"), "SMS": av.get("cellulare"),
+                 "EVENTO": event.get("nome"), "DATA_EVENTO": event.get("data_inizio"),
+                 "ORGANIZZAZIONE": org_nome or "", "RUOLO_EVENTO": av.get("ruolo_evento") or "da_definire",
+                 "STATO_DISPONIBILITA": av.get("stato") or "nuova"}
+        async with brevo_client.BrevoClient() as c:
+            lists = await c.lists()
+            lst = next((l for l in lists if (l.get("name") or "").strip().lower() == AVAIL_LIST_NAME.lower()), None)
+            if not lst:
+                folders = await c.folders()
+                lst = await c.create_list(AVAIL_LIST_NAME, folders[0]["id"] if folders else 1)
+            list_id = lst.get("id")
+            if await c.get_contact(email):
+                await c.add_existing_to_list(email, list_id)
+            else:
+                await c.create_contact(email, list_id, attributes=attrs)
+            if send_template:
+                tpls = await c.get_templates()
+                tpl = next((t for t in tpls if (t.get("name") or "").strip().lower() == send_template.lower() and t.get("isActive")), None)
+                if tpl:
+                    params = {"nome": av.get("nome"), "nome_evento": event.get("nome"), "data_evento": event.get("data_inizio")}
+                    await c._req("POST", "/smtp/email", json={"to": [{"email": email, "name": av.get("nome") or ""}],
+                                                              "templateId": tpl.get("id"), "params": params})
+                    sent = True
+        log["status"] = "sent" if sent else "synced"
+    except Exception as e:
+        err = str(e)[:300]
+        log["status"] = "error"
+        log["error"] = err
+        logger.error(f"brevo avail sync failed: {err}")
+    await db.brevo_sync_log.insert_one(log)
+    return {"status": log["status"], "sent": sent, "error": err}
+
+
+async def _confirm_availability(a: dict, event: dict, org_nome: str, user: dict) -> bool:
+    """Set an availability to 'confermata' (idempotent) and trigger the 2nd Brevo email at most once."""
+    now = now_iso()
+    upd = {"stato": "confermata", "updated_at": now,
+           "confirmed_at": a.get("confirmed_at") or now,
+           "confirmed_by": a.get("confirmed_by") or (user.get("email") or user.get("user_id"))}
+    emailed = False
+    if not a.get("confirmation_email_sent_at"):
+        res = await _brevo_avail("confirm", {**a, "stato": "confermata"}, event, org_nome, send_template=AVAIL_TPL_CONFERMA_PART)
+        upd["confirmation_email_status"] = res["status"]
+        if res.get("sent"):
+            upd["confirmation_email_sent_at"] = now
+            emailed = True
+        if res.get("error"):
+            upd["confirmation_email_error"] = res["error"]
+    await db.availabilities.update_one({"org_id": a["org_id"], "id": a["id"]}, {"$set": upd})
+    return emailed
+
+
 class AvailUpdate(BaseModel):
     ruolo_evento: Optional[str] = None
     stato: Optional[str] = None
@@ -6963,11 +7064,14 @@ async def avail_update_one(aid: str, body: AvailUpdate, user: dict = Depends(req
     a = await db.availabilities.find_one({"org_id": user["org_id"], "id": aid}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Disponibilità non trovata")
+    event = await db.events.find_one({"id": a.get("evento_id"), "org_id": user["org_id"]}, {"_id": 0}) or {}
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0}) or {}
+    org_nome = org.get("nome")
     upd = {}
+    ruolo_changed = stato_changed = False
     if body.ruolo_evento in ("da_definire", "staff", "volontario"):
         upd["ruolo_evento"] = body.ruolo_evento
-    if body.stato in ("nuova", "confermata", "non_utilizzata"):
-        upd["stato"] = body.stato
+        ruolo_changed = body.ruolo_evento != a.get("ruolo_evento")
     if body.preferenza_attivita is not None:
         upd["preferenza_attivita"] = body.preferenza_attivita
     if body.preferenza_altro is not None:
@@ -6980,9 +7084,73 @@ async def avail_update_one(aid: str, body: AvailUpdate, user: dict = Depends(req
                                         {"$set": {**pfields, "updated_at": now_iso()}})
         upd["mismatch"] = None
         upd["has_mismatch"] = False
+    prev_stato = a.get("stato")
+    do_confirm = body.stato == "confermata" and prev_stato != "confermata"
+    if body.stato in ("nuova", "confermata", "non_utilizzata") and not do_confirm:
+        upd["stato"] = body.stato
+        stato_changed = body.stato != prev_stato
     upd["updated_at"] = now_iso()
     await db.availabilities.update_one({"org_id": user["org_id"], "id": aid}, {"$set": upd})
+    if do_confirm:
+        await _confirm_availability({**a, **upd}, event, org_nome, user)
+    elif ruolo_changed or stato_changed:
+        final = await db.availabilities.find_one({"org_id": user["org_id"], "id": aid}, {"_id": 0})
+        try:
+            await _brevo_avail("attr_update", final, event, org_nome)
+        except Exception:
+            pass
     return await db.availabilities.find_one({"org_id": user["org_id"], "id": aid}, {"_id": 0})
+
+
+class BulkConfirm(BaseModel):
+    ids: List[str] = []
+
+
+@api.post("/events/{event_id}/availabilities/confirm-bulk")
+async def avail_confirm_bulk(event_id: str, body: BulkConfirm, user: dict = Depends(require_admin)):
+    event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0}) or {}
+    confirmed, emailed = 0, 0
+    for aid in (body.ids or []):
+        a = await db.availabilities.find_one({"org_id": user["org_id"], "evento_id": event_id, "id": aid}, {"_id": 0})
+        if not a or a.get("stato") == "confermata":
+            continue
+        e = await _confirm_availability(a, event, org.get("nome"), user)
+        confirmed += 1
+        emailed += 1 if e else 0
+    return {"confirmed": confirmed, "emailed": emailed}
+
+
+@api.post("/brevo/create-availability-templates")
+async def brevo_create_avail_templates(user: dict = Depends(require_org_admin)):
+    """Create the two availability email templates as DRAFTS (isActive=false). Never sends."""
+    if not brevo_client.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata")
+    try:
+        async with brevo_client.BrevoClient() as c:
+            senders = await c.senders()
+            verified = [s for s in senders if s.get("active")]
+            pref = next((s for s in verified if "crmevent" in (s.get("email") or "").lower()), None) or (verified[0] if verified else None)
+            if not pref:
+                raise HTTPException(status_code=400, detail="Nessun mittente verificato in Brevo.")
+            sender = {"name": "CRMEvent", "email": pref["email"]}
+            tpls = await c.get_templates()
+            out = []
+            for name, subject, kind in [
+                (AVAIL_TPL_CONFERMA_DISP, "Grazie per la tua disponibilità", "disponibilita"),
+                (AVAIL_TPL_CONFERMA_PART, "La tua disponibilità è stata confermata", "conferma"),
+            ]:
+                ex = next((t for t in tpls if (t.get("name") or "").strip().lower() == name.lower()), None)
+                if ex:
+                    out.append({"name": name, "template_id": ex.get("id"), "created": False})
+                    continue
+                res = await c.create_email_template(name, subject, _avail_email_html(kind), sender)
+                out.append({"name": name, "template_id": res.get("id"), "created": True})
+            return {"sender": sender, "templates": out, "is_active": False}
+    except brevo_client.BrevoError as e:
+        raise HTTPException(status_code=502, detail=f"Brevo: impossibile creare i template (HTTP {e.status})")
 
 
 # ---- Public (no login) ----
@@ -7036,6 +7204,7 @@ class PubAvailIn(BaseModel):
     preferenza_attivita: Optional[str] = None
     preferenza_altro: Optional[str] = None
     privacy: bool = False
+    marketing_consent: bool = False
 
 
 @api.post("/public/availability/{code}")
@@ -7105,20 +7274,26 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
         pid = pdoc["id"]
     now = now_iso()
+    mk = bool(body.marketing_consent)
+    mk_fields = {"marketing_consent": mk,
+                 "marketing_consent_ts": now if mk else None,
+                 "marketing_source": "raccolta_disponibilita_pubblica" if mk else None}
     existing = await db.availabilities.find_one({"org_id": org_id, "evento_id": event["id"], "persona_id": pid}, {"_id": 0})
     if existing:
         upd = {"days": days_clean, "preferenza_attivita": body.preferenza_attivita or None,
                "preferenza_altro": (body.preferenza_altro or "").strip() or None,
                "submitted": submitted, "privacy_accepted": True, "privacy_ts": now,
                "ip": _client_ip(request), "user_agent": (request.headers.get("user-agent") or "")[:300],
-               "updated_at": now}
+               "updated_at": now, **mk_fields}
         if mismatch:
             upd["mismatch"] = {**(existing.get("mismatch") or {}), **mismatch}
             upd["has_mismatch"] = True
         await db.availabilities.update_one({"org_id": org_id, "id": existing["id"]}, {"$set": upd})
+        av_id = existing["id"]
     else:
+        av_id = new_id()
         await db.availabilities.insert_one({
-            "id": new_id(), "org_id": org_id, "evento_id": event["id"], "persona_id": pid,
+            "id": av_id, "org_id": org_id, "evento_id": event["id"], "persona_id": pid,
             "nome": submitted["nome"], "cognome": submitted["cognome"], "email": email or None,
             "cellulare": cell or None, "data_nascita": submitted["data_nascita"],
             "ruolo_evento": "da_definire", "stato": "nuova",
@@ -7128,7 +7303,15 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "mismatch": mismatch or None, "has_mismatch": bool(mismatch),
             "privacy_accepted": True, "privacy_ts": now, "ip": _client_ip(request),
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
-            "created_at": now, "updated_at": now})
+            "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
+    # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
+    try:
+        org = await db.organizations.find_one({"id": org_id}, {"_id": 0}) or {}
+        av_final = await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0})
+        res = await _brevo_avail("submit", av_final, event, org.get("nome"), send_template=AVAIL_TPL_CONFERMA_DISP)
+        await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"brevo_status": res["status"]}})
+    except Exception as e:
+        logger.error(f"brevo avail submit sync failed: {e}")
     return {"ok": True, "event_nome": event.get("nome")}
 
 

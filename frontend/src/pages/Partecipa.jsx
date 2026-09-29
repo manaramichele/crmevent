@@ -23,6 +23,7 @@ export default function Partecipa() {
   const [pref, setPref] = useState(NONE);
   const [prefAltro, setPrefAltro] = useState("");
   const [privacy, setPrivacy] = useState(false);
+  const [marketing, setMarketing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -63,6 +64,7 @@ export default function Partecipa() {
         preferenza_attivita: pref === NONE ? null : pref,
         preferenza_altro: pref === ALTRO ? prefAltro : null,
         privacy: true,
+        marketing_consent: marketing,
       };
       const res = await fetch(`${BACKEND}/api/public/availability/${code}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -171,6 +173,11 @@ export default function Partecipa() {
         <label className="flex items-start gap-2.5 pt-2 cursor-pointer">
           <Checkbox checked={privacy} onCheckedChange={(v) => setPrivacy(!!v)} data-testid="pf-privacy" className="mt-0.5" />
           <span className="text-sm text-slate-600">Ho preso visione della <Link to="/privacy-policy" target="_blank" className="text-tiffany-active hover:underline">Privacy Policy</Link>.</span>
+        </label>
+
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <Checkbox checked={marketing} onCheckedChange={(v) => setMarketing(!!v)} data-testid="pf-marketing" className="mt-0.5" />
+          <span className="text-sm text-slate-600">Desidero ricevere via email aggiornamenti e comunicazioni relative agli eventi. <span className="text-slate-400">(facoltativo)</span></span>
         </label>
 
         <Button onClick={submit} disabled={submitting} className="w-full bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold h-11 text-base" data-testid="pf-submit">

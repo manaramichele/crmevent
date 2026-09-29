@@ -209,3 +209,12 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - P1: mappatura disponibilità in creazione Team/Turni (mostra chi è disponibile per giorno/fascia); webhook Brevo -> lf_organizers (unsubscribe/bounce).
 - P1 (in attesa deploy): test E2E reale creazione template Brevo in produzione (Template ID + mittente).
 - P2: QR/condivisione WhatsApp del link disponibilità; punteggio qualità lead; spostamento Prospect<->Demo; pubblicazione Instagram caroselli/Stories/Reel; Stripe/Fatture in Cloud LIVE.
+
+## Brevo disponibilità + Conferma da tabella (2026-06)
+- Pipeline: Raccolta disponibilità pubblica -> Persona (dedup email/cellulare/CF) -> adesione (ruolo Da definire, stato Nuova) -> sync Brevo lista "CRMEvent · Disponibilità eventi" (attributi dedicati, MAI il CF) -> 1ª email "Conferma disponibilità" -> Conferma organizzatore (tabella per evento: checkbox Confermato, ruolo inline, filtri, bulk) -> stato Confermata + confirmed_at/by -> 2ª email "Conferma partecipazione" (una sola volta) -> futura assegnazione Team/Turno/Briefing.
+- Brevo GATED da env BREVO_AVAILABILITY_ENABLED (default off): in preview e finché non approvato, nessun invio reale; le intenzioni sono loggate in brevo_sync_log (pending) per retry. Template creati come BOZZA via POST /api/brevo/create-availability-templates. Consenso marketing separato e facoltativo (non blocca).
+- Endpoint nuovi: POST /api/events/{id}/availabilities/confirm-bulk, POST /api/brevo/create-availability-templates. availability doc: confirmed_at/by, confirmation_email_sent_at/status/error, brevo_status, marketing_consent(+ts/source).
+
+### Backlog aggiornato (P1)
+- Attivazione invii Brevo disponibilità (dopo approvazione utente): BREVO_AVAILABILITY_ENABLED=on in produzione + attivazione template + test invio singolo.
+- Consultazione disponibilità in creazione Team/Turni; alimentazione Briefing da assegnazione reale.
