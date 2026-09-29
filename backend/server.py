@@ -5231,6 +5231,158 @@ async def lf_create_organizer(body: dict, user: dict = Depends(require_org_admin
     return await _lf_enrich(user, doc)
 
 
+# ---- Lead Finder: inserimento manuale / importazione email (solo Super Admin platform scope) ----
+LF_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+
+
+def _norm_email(e):
+    return (e or "").strip().lower()
+
+
+def _valid_email(e):
+    return bool(LF_EMAIL_RE.match(e or ""))
+
+
+async def _lf_existing_emails(user):
+    out = set()
+    async for o in db.lf_organizers.find(oq(user), {"_id": 0, "emails": 1}):
+        for e in (o.get("emails") or []):
+            if e:
+                out.add(e.lower())
+    return out
+
+
+def _extract_email_cells(filename, content):
+    """Return raw email strings from an .xlsx/.xls/.csv file (email column, else first column)."""
+    import io
+    ext = (filename or "").lower().rsplit(".", 1)[-1]
+    rows = []
+    if ext in ("csv", "txt"):
+        import csv
+        text = None
+        for enc in ("utf-8-sig", "utf-8", "latin-1"):
+            try:
+                text = content.decode(enc)
+                break
+            except Exception:
+                continue
+        text = text or content.decode("utf-8", "ignore")
+        sample = text[:2000]
+        delim = ";" if sample.count(";") > sample.count(",") else ","
+        for r in csv.reader(io.StringIO(text), delimiter=delim):
+            rows.append([str(c) for c in r])
+    elif ext == "xlsx":
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        for r in wb.active.iter_rows(values_only=True):
+            rows.append([("" if c is None else str(c)) for c in r])
+        wb.close()
+    elif ext == "xls":
+        import xlrd
+        sh = xlrd.open_workbook(file_contents=content).sheet_by_index(0)
+        for i in range(sh.nrows):
+            rows.append([("" if c is None else str(c)) for c in sh.row_values(i)])
+    else:
+        raise HTTPException(status_code=400, detail="Formato non supportato. Usa .xlsx, .xls o .csv")
+    if not rows:
+        return []
+    header = [(c or "").strip().lower() for c in rows[0]]
+    col, start = 0, 0
+    if "email" in header:
+        col, start = header.index("email"), 1
+    elif header and header[0] in ("email", "e-mail", "mail", "indirizzo email"):
+        col, start = 0, 1
+    elif header and not _valid_email(header[0]):
+        start = 1  # first row looks like a (non-email) header -> skip it
+    out = []
+    for r in rows[start:]:
+        if col < len(r):
+            v = (r[col] or "").strip()
+            if v:
+                out.append(v)
+    return out
+
+
+def _categorize_emails(raw_list, existing):
+    valid, invalid = [], []
+    for e in raw_list:
+        ne = _norm_email(e)
+        (valid if _valid_email(ne) else invalid).append(ne if _valid_email(ne) else e)
+    seen, unique, dup_in_file = set(), [], 0
+    for e in valid:
+        if e in seen:
+            dup_in_file += 1
+        else:
+            seen.add(e)
+            unique.append(e)
+    already = [e for e in unique if e in existing]
+    new = [e for e in unique if e not in existing]
+    return {
+        "total": len(raw_list), "valid": len(valid), "invalid": invalid[:200],
+        "invalid_count": len(invalid), "dup_in_file": dup_in_file,
+        "unique_valid": len(unique), "existing_count": len(already),
+        "new": new, "new_count": len(new),
+    }
+
+
+def _lf_email_record(user, email, origin):
+    return _lf_norm_org({
+        "org_id": user["org_id"], "email": email, "name": None, "website": None,
+        "status": "da_completare", "verify_status": "non_verificato",
+        "source_main": origin, "origin": origin,
+        "sources": {"email": {"source": origin, "url": None}},
+        "acquired_at": now_iso(),
+    })
+
+
+@api.post("/leadfinder/organizers/manual")
+async def lf_manual_add(body: dict, user: dict = Depends(require_org_admin)):
+    email = _norm_email(body.get("email"))
+    if not email or not _valid_email(email):
+        raise HTTPException(status_code=400, detail="Email valida obbligatoria")
+    dup = await db.lf_organizers.find_one({**oq(user), "emails": email}, {"_id": 0})
+    if dup:
+        return {"status": "exists", "organizer": await _lf_enrich(user, dup)}
+    o = _lf_email_record(user, email, "Inserimento manuale")
+    if (body.get("name") or "").strip():
+        o["name"] = body["name"].strip()
+    if (body.get("website") or "").strip():
+        o["website"] = body["website"].strip()
+    if (body.get("notes") or "").strip():
+        o["notes"] = body["notes"].strip()
+    o = _lf_norm_org(o)
+    doc = await _create("lf_organizers", o)
+    return {"status": "created", "organizer": await _lf_enrich(user, doc)}
+
+
+@api.post("/leadfinder/organizers/import/preview")
+async def lf_import_preview(file: UploadFile = File(...), user: dict = Depends(require_org_admin)):
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File troppo grande (max 5MB)")
+    raw = _extract_email_cells(file.filename, content)
+    if not raw:
+        raise HTTPException(status_code=400, detail="Nessuna email trovata nel file (attesa una colonna 'email')")
+    existing = await _lf_existing_emails(user)
+    return _categorize_emails(raw, existing)
+
+
+@api.post("/leadfinder/organizers/import/confirm")
+async def lf_import_confirm(body: dict, user: dict = Depends(require_org_admin)):
+    emails = body.get("emails") or []
+    existing = await _lf_existing_emails(user)
+    created, skipped, seen = 0, 0, set()
+    for raw in emails:
+        e = _norm_email(raw)
+        if not _valid_email(e) or e in existing or e in seen:
+            skipped += 1
+            continue
+        seen.add(e)
+        await _create("lf_organizers", _lf_email_record(user, e, "Importazione manuale"))
+        created += 1
+    return {"created": created, "skipped": skipped}
+
+
 @api.get("/leadfinder/organizers/{oid}")
 async def lf_get_organizer(oid: str, user: dict = Depends(require_org_admin)):
     o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})

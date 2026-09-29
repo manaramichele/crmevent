@@ -4,7 +4,7 @@ import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Building2, Users, CalendarRange, Search, ShieldCheck, ExternalLink, GitMerge, Send, Instagram, Linkedin, Mail, Globe } from "lucide-react";
+import { Building2, Users, CalendarRange, Search, ShieldCheck, ExternalLink, GitMerge, Send, Instagram, Linkedin, Mail, Globe, Plus, Upload, Sparkles } from "lucide-react";
 
 const FIELD = "w-full h-10 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
 const TABS = [
@@ -14,7 +14,7 @@ const TABS = [
   { id: "finder", label: "Lead Finder", icon: Search },
   { id: "review", label: "Da verificare", icon: Users },
 ];
-const STATE_LABEL = { da_verificare: "Da verificare", verificato: "Verificato", interessante: "Interessante", contattato: "Contattato", demo_richiesta: "Demo richiesta", trial: "Trial", cliente: "Cliente", non_interessato: "Non interessato", non_contattare: "Non contattare" };
+const STATE_LABEL = { da_completare: "Da completare", da_verificare: "Da verificare", verificato: "Verificato", interessante: "Interessante", contattato: "Contattato", demo_richiesta: "Demo richiesta", trial: "Trial", cliente: "Cliente", non_interessato: "Non interessato", non_contattare: "Non contattare" };
 const SCAN_STAT = [
   ["events_analyzed", "Eventi analizzati"], ["endu_reachable", "ENDU raggiungibili"],
   ["endu_with_site", "Siti ufficiali su ENDU"],
@@ -50,6 +50,12 @@ export default function LeadFinder() {
   const [diag, setDiag] = useState(null);
   const [diagUrl, setDiagUrl] = useState("");
   const [diagBusy, setDiagBusy] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ email: "", name: "", website: "", notes: "" });
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importPrev, setImportPrev] = useState(null);
+  const [importBusy, setImportBusy] = useState(false);
 
   const load = async () => {
     try {
@@ -120,6 +126,39 @@ export default function LeadFinder() {
     finally { setDiagBusy(false); }
   };
 
+  const submitAdd = async () => {
+    if (!addForm.email.trim()) { toast.error("Email obbligatoria"); return; }
+    try {
+      const { data } = await api.post("/leadfinder/organizers/manual", addForm);
+      if (data.status === "exists") { toast.info(`Email già presente: ${data.organizer.name || data.organizer.email}`); setDetail(data.organizer); }
+      else { toast.success("Organizzatore creato in stato 'Da completare'"); }
+      setShowAdd(false); setAddForm({ email: "", name: "", website: "", notes: "" }); load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+  const doPreview = async () => {
+    if (!importFile) { toast.error("Seleziona un file"); return; }
+    setImportBusy(true); setImportPrev(null);
+    try {
+      const fd = new FormData(); fd.append("file", importFile);
+      const { data } = await api.post("/leadfinder/organizers/import/preview", fd);
+      setImportPrev(data);
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+    finally { setImportBusy(false); }
+  };
+  const doImport = async () => {
+    if (!importPrev?.new?.length) return;
+    setImportBusy(true);
+    try {
+      const { data } = await api.post("/leadfinder/organizers/import/confirm", { emails: importPrev.new });
+      toast.success(`Importate ${data.created} nuove email${data.skipped ? ` · ${data.skipped} saltate` : ""}`);
+      setShowImport(false); setImportFile(null); setImportPrev(null); load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+    finally { setImportBusy(false); }
+  };
+  const enrichSelected = () => {
+    toast.info("Arricchimento automatico dei selezionati in arrivo. I record 'Da completare' sono già predisposti: dominio email → sito ufficiale → organizzatore → eventi → città/regione → social → fonti.");
+  };
+
   const Link = ({ url, icon: Icon, label }) => url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-tiffany-fg hover:underline text-sm" data-testid={`lf-link-${label}`}><Icon className="w-4 h-4" />{label}<ExternalLink className="w-3 h-3" /></a> : <span className="inline-flex items-center gap-1 text-slate-400 text-sm"><Icon className="w-4 h-4" />Da verificare</span>;
 
   return (
@@ -163,6 +202,10 @@ export default function LeadFinder() {
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fIg} onChange={(e) => setFIg(e.target.checked)} />Instagram</label>
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fLi} onChange={(e) => setFLi(e.target.checked)} />LinkedIn</label>
               {mergeSel.length >= 2 && <Button size="sm" onClick={doMerge} data-testid="lf-merge-btn" className="bg-amber-500 hover:bg-amber-600 text-white"><GitMerge className="w-4 h-4 mr-1" />Unisci {mergeSel.length}</Button>}
+              {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={enrichSelected} data-testid="lf-enrich-btn"><Sparkles className="w-4 h-4 mr-1" />Arricchisci selezionati</Button>}
+              <div className="flex-1" />
+              <Button size="sm" onClick={() => setShowAdd(true)} data-testid="lf-add-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Plus className="w-4 h-4 mr-1" />Aggiungi organizzatore</Button>
+              <Button size="sm" variant="outline" onClick={() => { setShowImport(true); setImportPrev(null); setImportFile(null); }} data-testid="lf-import-btn"><Upload className="w-4 h-4 mr-1" />Importa email</Button>
             </div>
           )}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -175,7 +218,7 @@ export default function LeadFinder() {
                 {(tab === "organizers" ? filtered : toReview).map((o) => (
                   <tr key={o.id} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer" data-testid={`lf-org-row-${o.id}`}>
                     {tab === "organizers" && <td className="p-2 text-center"><input type="checkbox" checked={mergeSel.includes(o.id)} onChange={(e) => setMergeSel((s) => e.target.checked ? [...s, o.id] : s.filter((x) => x !== o.id))} onClick={(ev) => ev.stopPropagation()} data-testid={`lf-merge-check-${o.id}`} /></td>}
-                    <td className="p-2 font-medium text-slate-800" onClick={() => setDetail(o)}>{o.name}</td>
+                    <td className="p-2 font-medium text-slate-800" onClick={() => setDetail(o)}>{o.name || <span className="text-slate-500 font-normal">{o.email || "—"}</span>}</td>
                     <td className="p-2 text-center" onClick={() => setDetail(o)}>{o.events_count}</td>
                     <td className="p-2 text-center" onClick={() => setDetail(o)}>{yesNo((o.emails || []).length)}</td>
                     <td className="p-2 text-center" onClick={() => setDetail(o)}>{yesNo(o.instagram_url)}</td>
@@ -303,7 +346,7 @@ export default function LeadFinder() {
       <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="lf-org-detail">
           {detail && (<>
-            <DialogHeader><DialogTitle>{detail.name}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{detail.name || detail.email || "Organizzatore"}</DialogTitle></DialogHeader>
             <div className="space-y-4 text-sm">
               <section><div className="text-xs font-semibold uppercase text-slate-400 mb-1">Anagrafica</div>
                 <div className="grid grid-cols-2 gap-1 text-slate-700"><div>Ragione sociale: {detail.legal_name || "—"}</div><div>Tipologia: {detail.org_type || "—"}</div><div>Città: {detail.city || "—"} {detail.province ? `(${detail.province})` : ""}</div><div>Regione: {detail.region || "—"}</div><div className="col-span-2"><Link url={detail.website} icon={Globe} label="Sito web" /></div></div>
@@ -328,6 +371,50 @@ export default function LeadFinder() {
               </section>
             </div>
           </>)}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent className="max-w-md" data-testid="lf-add-modal">
+          <DialogHeader><DialogTitle>Aggiungi organizzatore</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div><label className="text-xs text-slate-500">Email <span className="text-red-500">*</span></label><input type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder="info@organizzatore.it" className={FIELD} data-testid="lf-add-email" /></div>
+            <div><label className="text-xs text-slate-500">Nome organizzatore (facoltativo)</label><input value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} className={FIELD} data-testid="lf-add-name" /></div>
+            <div><label className="text-xs text-slate-500">Sito (facoltativo)</label><input value={addForm.website} onChange={(e) => setAddForm((f) => ({ ...f, website: e.target.value }))} placeholder="https://…" className={FIELD} data-testid="lf-add-website" /></div>
+            <div><label className="text-xs text-slate-500">Note (facoltativo)</label><textarea value={addForm.notes} onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className={`${FIELD} h-auto py-2`} data-testid="lf-add-notes" /></div>
+            <p className="text-xs text-slate-400">Con la sola email il record viene creato in stato <strong>Da completare</strong>. Nessun dato viene inventato. I duplicati (email già presente) non vengono creati.</p>
+            <div className="flex justify-end gap-2 pt-1"><Button variant="outline" size="sm" onClick={() => setShowAdd(false)}>Annulla</Button><Button size="sm" onClick={submitAdd} data-testid="lf-add-submit" className="bg-tiffany hover:bg-tiffany/90 text-slate-900">Salva</Button></div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImport} onOpenChange={setShowImport}>
+        <DialogContent className="max-w-lg" data-testid="lf-import-modal">
+          <DialogHeader><DialogTitle>Importa email</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-slate-500">Carica un file <strong>.xlsx</strong>, <strong>.xls</strong> o <strong>.csv</strong> con una colonna <code>email</code>. Non servono altre colonne.</p>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { setImportFile(e.target.files?.[0] || null); setImportPrev(null); }} className="block w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-slate-100 file:text-slate-700 file:text-sm" data-testid="lf-import-file" />
+            {!importPrev && <div className="flex justify-end"><Button size="sm" onClick={doPreview} disabled={importBusy || !importFile} data-testid="lf-import-preview-btn">{importBusy ? "Analisi…" : "Analizza file"}</Button></div>}
+            {importPrev && (
+              <div className="space-y-2" data-testid="lf-import-preview">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">Email nel file: <strong>{importPrev.total}</strong></div>
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">Valide: <strong>{importPrev.valid}</strong></div>
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-emerald-700">Nuove: <strong>{importPrev.new_count}</strong></div>
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-amber-700">Già presenti: <strong>{importPrev.existing_count}</strong></div>
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">Duplicate nel file: <strong>{importPrev.dup_in_file}</strong></div>
+                  <div className="rounded-lg bg-red-50 border border-red-200 p-2 text-red-700">Non valide: <strong>{importPrev.invalid_count}</strong></div>
+                </div>
+                {importPrev.invalid_count > 0 && (
+                  <details className="text-xs" data-testid="lf-import-invalid"><summary className="cursor-pointer text-red-600">Mostra email non valide ({importPrev.invalid_count})</summary>
+                    <ul className="list-disc pl-5 mt-1 max-h-32 overflow-y-auto text-slate-600">{importPrev.invalid.map((e, i) => <li key={i} className="break-all">{e || "(vuota)"}</li>)}</ul>
+                  </details>
+                )}
+                <p className="text-xs text-slate-400">I nuovi record vengono creati in stato <strong>Da completare</strong> · origine <strong>Importazione manuale</strong> · verifica <strong>Non verificato</strong>. Nessun invio a Brevo.</p>
+                <div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => { setImportPrev(null); setImportFile(null); }}>Cambia file</Button><Button size="sm" onClick={doImport} disabled={importBusy || !importPrev.new_count} data-testid="lf-import-confirm-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900">{importBusy ? "Importazione…" : `Importa ${importPrev.new_count} nuove email`}</Button></div>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
