@@ -1154,6 +1154,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                 aziende.append(n)
         out.append({**p,
                     "is_referente": bool(rp) or bool(p.get("azienda_id")),
+                    "is_evento": bool(prs),
                     "is_staff": bool(cats & {"staff", "collaboratore"}),
                     "is_volontario": "volontario" in cats,
                     "is_team": "team" in cats,

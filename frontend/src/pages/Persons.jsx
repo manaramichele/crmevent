@@ -135,18 +135,35 @@ function EventRolesDialog({ person, events, teams, settings, open, onOpenChange,
 
 function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, onRoleClick }) {
   const [q, setQ] = useState("");
+  const [sub, setSub] = useState("tutti");
   const filtered = rows.filter((r) => {
-    if (tab === "referenti" && !r.is_referente) return false;
-    if (tab === "staff" && !r.is_staff) return false;
-    if (tab === "volontari" && !r.is_volontario) return false;
+    if (tab === "referenti_aziende" && !r.is_referente) return false;
+    if (tab === "staff_volontari" && !r.is_evento) return false;
+    if (tab === "da_classificare" && (r.is_referente || r.is_evento)) return false;
+    if (tab === "staff_volontari") {
+      if (sub === "staff" && !r.is_staff) return false;
+      if (sub === "volontario" && !r.is_volontario) return false;
+      if (sub === "da_definire" && (r.is_staff || r.is_volontario)) return false;
+    }
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
+  const SUBS = [{ v: "tutti", l: "Tutti" }, { v: "da_definire", l: "Da definire" }, { v: "staff", l: "Staff" }, { v: "volontario", l: "Volontario" }];
   return (
     <div>
-      <div className="mb-4 relative w-full sm:w-72">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <Input className="pl-9" placeholder="Cerca persone..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-person-input" />
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input className="pl-9" placeholder="Cerca persone..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-person-input" />
+        </div>
+        {tab === "staff_volontari" && (
+          <div className="flex flex-wrap gap-1.5" data-testid="sv-subfilter">
+            {SUBS.map((s) => (
+              <button key={s.v} type="button" onClick={() => setSub(s.v)} data-testid={`sv-sub-${s.v}`}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${sub === s.v ? "bg-tiffany text-slate-900 border-tiffany" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}`}>{s.l}</button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -275,13 +292,13 @@ export default function Persons() {
       <Tabs defaultValue="tutte">
         <TabsList className="mb-4 flex-wrap h-auto">
           <TabsTrigger value="tutte" data-testid="tab-tutte">Tutte</TabsTrigger>
-          <TabsTrigger value="referenti" data-testid="tab-referenti">Referenti</TabsTrigger>
-          <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
-          <TabsTrigger value="volontari" data-testid="tab-volontari">Volontari</TabsTrigger>
+          <TabsTrigger value="referenti_aziende" data-testid="tab-referenti-aziende">Referenti aziende</TabsTrigger>
+          <TabsTrigger value="staff_volontari" data-testid="tab-staff-volontari">Staff &amp; Volontari</TabsTrigger>
+          <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare</TabsTrigger>
           <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
           <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
         </TabsList>
-        {["tutte", "referenti", "staff", "volontari"].map((t) => (
+        {["tutte", "referenti_aziende", "staff_volontari", "da_classificare"].map((t) => (
           <TabsContent key={t} value={t}>
             <PeopleTable rows={rows} loading={loading} tab={t} onOpen={(r) => setDetailId(r.id)}
               onEdit={(r) => { setEditing(r); setFormOpen(true); }} onInvite={(r) => setInvite(r)} onDelete={delPerson} onRoleClick={(r) => setRolesFor(r)} />

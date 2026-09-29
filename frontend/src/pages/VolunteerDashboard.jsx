@@ -6,6 +6,18 @@ import { CalendarDays, MapPin, ChevronRight } from "lucide-react";
 
 const today = new Date().toISOString().slice(0, 10);
 
+// Stato OPERATIVO della persona nell'evento (distinto dallo stato commerciale del Lead).
+// "da_contattare" è lo stato iniziale/commerciale e non viene mostrato in dashboard:
+// il badge appare solo quando esiste uno stato operativo realmente utile all'utente.
+const OP_STATO = {
+  disponibilita_richiesta: { label: "Disponibilità richiesta", color: "blue" },
+  disponibile: { label: "Disponibile", color: "green" },
+  da_riconfermare: { label: "Da riconfermare", color: "orange" },
+  confermato: { label: "Confermato", color: "green" },
+  non_disponibile: { label: "Non disponibile", color: "red" },
+  rinunciato: { label: "Rinunciato", color: "red" },
+};
+
 export default function VolunteerDashboard() {
   const [items, setItems] = useState(null);
   const nav = useNavigate();
@@ -28,7 +40,7 @@ export default function VolunteerDashboard() {
           {x.event.citta && <div className="flex items-center gap-1.5 text-sm text-slate-500 mt-0.5"><MapPin className="w-4 h-4" />{x.event.localita || x.event.citta}</div>}
           <div className="mt-3 flex flex-wrap gap-2">
             {x.presence.ruolo && <StatusBadge color="tiffany">{x.presence.ruolo}</StatusBadge>}
-            {x.presence.stato && <StatusBadge color={x.presence.stato === "confermato" ? "green" : "orange"}>{x.presence.stato.replaceAll("_", " ")}</StatusBadge>}
+            {OP_STATO[x.presence.stato] && <StatusBadge color={OP_STATO[x.presence.stato].color} data-testid="vol-op-stato">{OP_STATO[x.presence.stato].label}</StatusBadge>}
           </div>
         </div>
         <ChevronRight className="w-5 h-5 text-slate-300 shrink-0" />
