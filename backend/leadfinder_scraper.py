@@ -64,9 +64,13 @@ ORG_SPELLED = re.compile(
 _ORG_BAD = ("iban", "via ", "viale", "piazza", "p.iva", "piva", "partita iva", "c.f", "codice",
             "tel", "email", "@", "cap ", " n.", "numero", "http", "www.", "cookie", "privacy policy")
 # internal pages worth visiting on an official site (matched against href + link text)
-PAGE_KEYWORDS = ("contatt", "chi-siamo", "chisiamo", "chi_siamo", "about", "organizzaz",
-                 "organizzat", "staff", "associazione", "societa", "società", "team",
-                 "privacy", "note-legali", "notelegali", "legal", "info", "who-we-are")
+PAGE_KEYWORDS = ("contatt", "chi-siamo", "chisiamo", "chi_siamo", "chi siamo", "about",
+                 "organizzaz", "organizzat", "staff", "associazione", "societa", "società",
+                 "team", "privacy", "cookie", "note-legali", "notelegali", "note legali",
+                 "legal", "info", "who-we-are", "dove-siamo", "dove siamo", "asd", "s.s.d",
+                 "regolament", "comitato", "chi-sono", "contact", "impress", "trasparenza")
+COPYRIGHT_RE = re.compile(
+    r"©\s*(?:\d{4}(?:\s*[-–/]\s*\d{4})?\s*)?(?:by\s+)?([A-ZÀ-Ù][A-Za-zÀ-ù0-9'&.\-]+(?:\s+[A-ZÀ-Ù0-9][A-Za-zÀ-ù0-9'&.\-]*){0,4})")
 
 
 def _fetch(url, session=None):
@@ -223,7 +227,7 @@ def _extract_page(html, page_url):
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     res = {"emails": [], "phones": [], "instagram": None, "facebook": None,
-           "linkedin": None, "org_candidates": []}
+           "linkedin": None, "org_candidates": [], "copyright": []}
 
     # mailto / tel links are the most reliable
     for a in soup.find_all("a", href=True):
@@ -244,17 +248,25 @@ def _extract_page(html, page_url):
                 res[k] = _clean_social(href)
 
     text = soup.get_text(" ", strip=True)
-    for m in EMAIL_RE.findall(text):
+    # de-obfuscate common email masks: "info [at] domain [dot] it", "info(at)domain.it"
+    deob = re.sub(r"\s*\[\s*at\s*\]\s*|\s*\(\s*at\s*\)\s*|\s+@\s+", "@", text, flags=re.I)
+    deob = re.sub(r"\s*\[\s*dot\s*\]\s*|\s*\(\s*dot\s*\)\s*|\s+dot\s+", ".", deob, flags=re.I)
+    for m in EMAIL_RE.findall(text) + EMAIL_RE.findall(deob):
         e = m.lower()
         if not any(b in e for b in EMAIL_BLOCK):
             res["emails"].append(e)
 
-    # organizer legal-entity candidates (ASD / SSD / Associazione Sportiva ...)
+    # organizer legal-entity candidates (ASD / SSD / Associazione Sportiva ...) + copyright/footer name
     res["org_candidates"] = _org_names(text)
+    for m in COPYRIGHT_RE.finditer(text):
+        c = re.split(r"\.\s|[|·•]", m.group(1).strip())[0].strip()
+        if 4 <= len(c) <= 50 and not any(b in c.lower() for b in _ORG_BAD):
+            res["copyright"].append(c)
 
-    res["emails"] = list(dict.fromkeys(res["emails"]))[:8]
+    res["emails"] = list(dict.fromkeys(res["emails"]))[:10]
     res["phones"] = list(dict.fromkeys(res["phones"]))[:4]
     res["org_candidates"] = list(dict.fromkeys(res["org_candidates"]))[:6]
+    res["copyright"] = list(dict.fromkeys(res["copyright"]))[:4]
     res["_source"] = page_url
     return res
 
@@ -281,10 +293,10 @@ def _pick_internal_pages(html, base_url, limit=5):
     return [h for _, h in scored[:limit]]
 
 
-def scrape_official_site(start_url, session=None, max_pages=6, follow_org_site=True):
-    """Visit an official event/organizer site: homepage + a few relevant internal pages.
-    Returns aggregated contacts/socials WITH per-datum source URLs, plus visited pages.
-    If the event site links out to an ASD/società site (different domain), follows it once."""
+def scrape_official_site(start_url, session=None, max_pages=8, follow_org_site=True):
+    """Visit an official event/organizer site: homepage + relevant internal pages (with a 2nd level
+    if no email is found), plus an eventual external organizer (ASD/società) site on another domain.
+    Returns aggregated contacts/socials WITH per-datum source URLs, plus the list of visited pages."""
     out = {"start_url": start_url, "org_site": None, "visited": [], "emails": [],
            "email_main": None, "phone": None, "instagram": None, "facebook": None,
            "linkedin": None, "org_name": None, "sources": {}, "error": None}
@@ -295,18 +307,12 @@ def scrape_official_site(start_url, session=None, max_pages=6, follow_org_site=T
         return out
     out["start_url"] = home_url
     home_host = _host(home_url)
-    pages = [home_url] + _pick_internal_pages(home_html, home_url, limit=max_pages - 1)
 
     email_src, social_src = {}, {}
-    org_candidates = []
-    html_by_url = {home_url: home_html}
-    for pu in pages:
-        html = html_by_url.get(pu)
-        if html is None:
-            time.sleep(POLITE_DELAY)
-            html, real = _fetch(pu, session)
-            if not html:
-                continue
+    org_candidates, copyrights = [], []
+    fetched = {home_url: home_html}
+
+    def _absorb(html, pu):
         out["visited"].append(pu)
         ex = _extract_page(html, pu)
         for e in ex["emails"]:
@@ -317,40 +323,59 @@ def scrape_official_site(start_url, session=None, max_pages=6, follow_org_site=T
         if ex["phones"] and not out["phone"]:
             out["phone"] = ex["phones"][0]
             out["sources"]["phone"] = pu
-        org_candidates += ex["org_candidates"]
+        org_candidates.extend(ex["org_candidates"])
+        copyrights.extend(ex.get("copyright", []))
 
-    # Optionally follow an external organizer site linked from the event site (ASD/società on another domain)
-    if follow_org_site:
+    for pu in [home_url] + _pick_internal_pages(home_html, home_url, limit=max_pages - 1):
+        html = fetched.get(pu)
+        if html is None:
+            time.sleep(POLITE_DELAY)
+            html, real = _fetch(pu, session)
+            if not html:
+                continue
+            fetched[pu] = html
+        _absorb(html, pu)
+
+    # 2nd level: if no email yet, follow further relevant links discovered on the visited pages
+    if not email_src and len(out["visited"]) < max_pages:
+        extra = []
+        for u, html in list(fetched.items()):
+            for cand in _pick_internal_pages(html, u, limit=4):
+                if cand not in fetched and cand not in extra:
+                    extra.append(cand)
+        for pu in extra[: max_pages - len(out["visited"])]:
+            time.sleep(POLITE_DELAY)
+            html, real = _fetch(pu, session)
+            if html:
+                fetched[pu] = html
+                _absorb(html, pu)
+
+    # follow an external organizer site (ASD/società on another domain) linked from any visited page
+    if follow_org_site and not out["org_site"]:
         org_link = None
-        soup = BeautifulSoup(home_html, "lxml")
-        for a in soup.find_all("a", href=True):
-            href = urljoin(home_url, a["href"].strip())
-            blob = (href + " " + a.get_text(" ", strip=True)).lower()
-            if href.startswith("http") and _host(href) and _host(href) != home_host \
-                    and not _social_kind(href) \
-                    and not any(b in _host(href) for b in ORG_SITE_BLOCK) \
-                    and _org_names(a.get_text(" ", strip=True) or ""):
-                org_link = href
+        for u, html in list(fetched.items()):
+            soup = BeautifulSoup(html, "lxml")
+            for a in soup.find_all("a", href=True):
+                href = urljoin(u, a["href"].strip())
+                if href.startswith("http") and _host(href) and _host(href) != home_host \
+                        and not _social_kind(href) \
+                        and not any(b in _host(href) for b in ORG_SITE_BLOCK) \
+                        and _org_names(a.get_text(" ", strip=True) or ""):
+                    org_link = href
+                    break
+            if org_link:
                 break
         if org_link:
             time.sleep(POLITE_DELAY)
             oh, ou = _fetch(org_link, session)
             if oh:
                 out["org_site"] = ou
-                out["visited"].append(ou)
-                ex = _extract_page(oh, ou)
-                for e in ex["emails"]:
-                    email_src.setdefault(e, ou)
-                for kind in ("instagram", "facebook", "linkedin"):
-                    if ex[kind] and kind not in social_src:
-                        social_src[kind] = (ex[kind], ou)
-                org_candidates += ex["org_candidates"]
+                _absorb(oh, ou)
 
     # finalize
     emails = list(email_src.keys())
     out["emails"] = [{"email": e, "source": email_src[e]} for e in emails]
     if emails:
-        # rank: emails on the site's own domain first, then role-inboxes, then the rest
         site_dom = _host(home_url)
         def _rank(e):
             dom = e.split("@")[-1]
@@ -365,11 +390,12 @@ def scrape_official_site(start_url, session=None, max_pages=6, follow_org_site=T
             out[kind] = social_src[kind][0]
             out["sources"][kind] = social_src[kind][1]
     if org_candidates:
-        # prefer a candidate that starts with a legal prefix (ASD/SSD/APS/Associazione/Società);
-        # otherwise fall back to the most frequently seen candidate.
         legal = [c for c in org_candidates if re.match(r"^\s*(A\.?S\.?D|S\.?S\.?D|A\.?P\.?S|Associazione|Societ)", c, re.I)]
         pool = legal or org_candidates
         out["org_name"] = max(set(pool), key=pool.count)
+    elif copyrights:
+        out["org_name"] = max(set(copyrights), key=copyrights.count)
+        out["sources"]["org_name"] = "copyright/footer"
     return out
 
 
@@ -401,15 +427,16 @@ def scan_event(endu_url, session=None):
 
 
 def diagnose_event(endu_url, session=None):
-    """Single-event end-to-end diagnostic: HTTP status → ENDU data → official site → social →
-    official site reachable. No DB writes. Used by the /leadfinder/diagnose endpoint."""
+    """Single-event end-to-end diagnostic: HTTP status → ENDU data → official site (deep) → contacts
+    → social (event vs organizer). No DB writes. Used by the /leadfinder/diagnose endpoint."""
     session = session or requests.Session()
     out = {"endu_url": endu_url, "http_status": None, "final_url": None, "bytes": 0,
            "name": None, "date": None, "city": None, "province": None,
            "official_site": None, "social_page": None, "social_kind": None,
-           "instagram": None, "facebook": None,
-           "official_reachable": None, "official_pages_found": 0,
-           "official_emails": [], "official_socials": {}, "error": None}
+           "organizer": None, "org_site": None, "email_main": None, "emails": [], "phone": None,
+           "instagram_event": None, "instagram_org": None, "facebook": None, "linkedin": None,
+           "pages_analyzed": [], "sources": {}, "not_found": [],
+           "official_reachable": None, "error": None}
     try:
         r = session.get(endu_url, headers={"User-Agent": UA, "Accept-Language": "it,en;q=0.8"},
                         timeout=TIMEOUT, allow_redirects=True)
@@ -423,19 +450,42 @@ def diagnose_event(endu_url, session=None):
         for k in ("name", "date", "city", "province", "official_site", "social_page"):
             out[k] = links.get(k)
         out["social_kind"] = links.get("social_kind")
-        out["instagram"] = links.get("instagram")
+        out["instagram_event"] = links.get("instagram")
         out["facebook"] = links.get("facebook")
         if not links.get("name") and not links.get("official_site") and not links.get("social_page"):
             out["error"] = "Pagina ENDU letta ma nessun dato evento/link estratto (struttura cambiata o contenuto JS)"
         if links.get("official_site"):
             time.sleep(POLITE_DELAY)
-            st = scrape_official_site(links["official_site"], session=session, max_pages=3)
+            st = scrape_official_site(links["official_site"], session=session, max_pages=8)
             out["official_reachable"] = not st.get("error")
-            out["official_pages_found"] = len(st.get("visited") or [])
-            out["official_emails"] = [e["email"] for e in st.get("emails", [])]
-            out["official_socials"] = {k: st.get(k) for k in ("instagram", "facebook", "linkedin") if st.get(k)}
+            out["pages_analyzed"] = st.get("visited") or []
+            out["organizer"] = st.get("org_name")
+            out["org_site"] = st.get("org_site")
+            out["email_main"] = st.get("email_main")
+            out["emails"] = [{"email": e["email"], "source": e["source"]} for e in st.get("emails", [])]
+            out["phone"] = st.get("phone")
+            out["instagram_org"] = st.get("instagram")
+            out["facebook"] = st.get("facebook") or out["facebook"]
+            out["linkedin"] = st.get("linkedin")
+            out["sources"] = st.get("sources") or {}
             if st.get("error"):
                 out["error"] = (out["error"] + "; " if out["error"] else "") + f"sito ufficiale: {st['error']}"
+        else:
+            out["not_found"].append("Sito ufficiale non presente su ENDU: impossibile arricchire contatti/organizzatore")
+        # reasons for missing data
+        if out["official_site"]:
+            if not out["organizer"]:
+                out["not_found"].append("Ragione sociale organizzatore non identificata sul sito")
+            if not out["emails"]:
+                out["not_found"].append("Email pubblica non trovata sulle pagine analizzate")
+            if not out["phone"]:
+                out["not_found"].append("Telefono pubblico non trovato")
+            if not (out["instagram_org"] or out["instagram_event"]):
+                out["not_found"].append("Instagram non trovato")
+            if not out["facebook"]:
+                out["not_found"].append("Facebook non trovato")
+        if not out["linkedin"]:
+            out["not_found"].append("LinkedIn non presente su ENDU né sul sito ufficiale (non associato per policy)")
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {str(e)[:160]}"
     return out

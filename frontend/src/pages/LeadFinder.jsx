@@ -238,10 +238,24 @@ export default function LeadFinder() {
                 <div><span className="text-slate-400">URL ENDU:</span> <a href={diag.endu_url} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.endu_url}</a></div>
                 <div><span className="text-slate-400">HTTP:</span> <strong className={diag.http_status === 200 ? "text-emerald-600" : "text-red-600"}>{diag.http_status ?? "—"}</strong> · {diag.bytes || 0} byte {diag.final_url && diag.final_url !== diag.endu_url ? `→ ${diag.final_url}` : ""}</div>
                 <div><span className="text-slate-400">Evento:</span> {diag.name || "—"} · <span className="text-slate-400">data</span> {diag.date || "—"} · <span className="text-slate-400">città</span> {diag.city || "—"} {diag.province ? `(${diag.province})` : ""}</div>
-                <div><span className="text-slate-400">Sito ufficiale:</span> {diag.official_site ? <a href={diag.official_site} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.official_site}</a> : "—"}</div>
-                <div><span className="text-slate-400">Pagina social:</span> {diag.social_page ? <a href={diag.social_page} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.social_page}</a> : "—"} {diag.social_kind ? `(${diag.social_kind})` : ""}</div>
-                <div><span className="text-slate-400">Sito raggiungibile:</span> {diag.official_reachable === null ? "n/d" : diag.official_reachable ? <span className="text-emerald-600 font-medium">Sì</span> : <span className="text-red-600 font-medium">No</span>} · {diag.official_pages_found || 0} pagine · email: {(diag.official_emails || []).join(", ") || "—"}</div>
-                {diag.error ? <div className="text-red-600"><span className="text-slate-400">Errore:</span> {diag.error}</div> : <div className="text-emerald-600">Pipeline ENDU → sito ufficiale OK</div>}
+                <div><span className="text-slate-400">Sito ufficiale:</span> {diag.official_site ? <a href={diag.official_site} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.official_site}</a> : "—"} {diag.official_reachable === false ? <span className="text-red-600">(non raggiungibile)</span> : diag.official_reachable ? <span className="text-emerald-600">(raggiungibile)</span> : null}</div>
+                <hr className="my-1 border-slate-200" />
+                <div><span className="text-slate-400">Organizzatore:</span> {diag.organizer || "—"} {diag.org_site ? <a href={diag.org_site} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">· sito org.</a> : ""}</div>
+                <div><span className="text-slate-400">Email:</span> {diag.email_main ? <strong>{diag.email_main}</strong> : "—"}{(diag.emails || []).length > 1 ? ` (+${diag.emails.length - 1})` : ""}</div>
+                <div><span className="text-slate-400">Telefono:</span> {diag.phone || "—"}</div>
+                <div><span className="text-slate-400">Instagram evento (ENDU):</span> {diag.instagram_event ? <a href={diag.instagram_event} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.instagram_event}</a> : "—"}</div>
+                <div><span className="text-slate-400">Instagram organizzatore (sito):</span> {diag.instagram_org ? <a href={diag.instagram_org} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.instagram_org}</a> : "—"}</div>
+                <div><span className="text-slate-400">Facebook:</span> {diag.facebook ? <a href={diag.facebook} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.facebook}</a> : "—"}</div>
+                <div><span className="text-slate-400">LinkedIn:</span> {diag.linkedin ? <a href={diag.linkedin} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.linkedin}</a> : "—"}</div>
+                <div><span className="text-slate-400">Pagine sito analizzate ({(diag.pages_analyzed || []).length}):</span>
+                  <ul className="list-disc pl-5 mt-0.5">{(diag.pages_analyzed || []).map((u, i) => <li key={i}><a href={u} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{u}</a></li>)}{(diag.pages_analyzed || []).length === 0 ? <li className="text-slate-400 list-none">—</li> : null}</ul>
+                </div>
+                {(diag.not_found || []).length > 0 && (
+                  <div><span className="text-amber-600 font-medium">Dati non trovati:</span>
+                    <ul className="list-disc pl-5 mt-0.5 text-amber-700">{diag.not_found.map((n, i) => <li key={i}>{n}</li>)}</ul>
+                  </div>
+                )}
+                {diag.error ? <div className="text-red-600"><span className="text-slate-400">Errore:</span> {diag.error}</div> : <div className="text-emerald-600 font-medium">Pipeline ENDU → sito ufficiale → contatti OK</div>}
               </div>
             )}
           </div>
