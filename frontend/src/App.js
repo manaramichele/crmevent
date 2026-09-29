@@ -37,6 +37,7 @@ import Support from "@/pages/Support";
 import Social from "@/pages/Social";
 import SocialCalendar from "@/pages/SocialCalendar";
 import SocialSettings from "@/pages/SocialSettings";
+import LeadFinder from "@/pages/LeadFinder";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
 
@@ -119,6 +120,7 @@ function Shell() {
         <Route path="/lead" element={<Protected><SuperAdminOnly><Leads /></SuperAdminOnly></Protected>} />
         <Route path="/supporto" element={<Protected><SuperAdminOnly><Support /></SuperAdminOnly></Protected>} />
         <Route path="/impostazioni" element={<Protected><AdminOnly><SettingsPage /></AdminOnly></Protected>} />
+        <Route path="/marketing/organizzatori" element={<Protected><AdminOnly><LeadFinder /></AdminOnly></Protected>} />
         <Route path="/marketing/social" element={<Protected><AdminOnly><Social /></AdminOnly></Protected>} />
         <Route path="/marketing/calendario" element={<Protected><AdminOnly><SocialCalendar /></AdminOnly></Protected>} />
         <Route path="/marketing/impostazioni" element={<Protected><AdminOnly><SocialSettings /></AdminOnly></Protected>} />

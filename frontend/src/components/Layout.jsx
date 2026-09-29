@@ -36,6 +36,7 @@ const PLATFORM_NAV = [
 const PLATFORM_PATHS = ["/piattaforma", "/lead", "/supporto", "/audit"];
 
 const MARKETING_NAV = [
+  { to: "/marketing/organizzatori", label: "Organizzatori", icon: Building2, id: "organizzatori" },
   { to: "/marketing/social", label: "Social", icon: Megaphone, id: "social" },
   { to: "/marketing/calendario", label: "Calendario editoriale", icon: CalendarRange, id: "social-calendario" },
   { to: "/marketing/impostazioni", label: "Impostazioni Social", icon: SlidersHorizontal, id: "social-impostazioni" },

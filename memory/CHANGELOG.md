@@ -323,3 +323,11 @@ Task 2 — Creatività manuale:
 - Verificato su viewport 390x844: drawer scrollabile fino ultima voce (Impostazioni Social), pagina bloccata (scrollY=0), nessuno scroll chaining, posizione ripristinata alla chiusura.
 - Nessuna modifica a menu desktop, voci, permessi, routing o layout generale. VolunteerLayout (bottom-nav) non toccato.
 - In PREVIEW: mostrato prima del deploy come richiesto.
+
+## 2026-09-29 — Lead Finder / Organizzatori (Super Admin) + test 20 eventi ENDU
+- Nuova sezione Marketing -> Organizzatori (platform scope) con 5 sotto-schede: Dashboard, Organizzatori, Eventi trovati, Lead Finder, Da verificare.
+- Modello: lf_organizers (anagrafica, contatti, social URL completi, fonti per-dato, stati, socials_status) + lf_events (organizer_id -> N eventi). Dedup email/dominio/nome_key/instagram (409 su duplicato) + Unisci duplicati. Stato non_contattare sticky (non sovrascrivibile da automatismi).
+- Endpoint /api/leadfinder/* (dashboard, organizers CRUD+merge, events CRUD, brevo-export=501 disabilitato).
+- Frontend LeadFinder.jsx: tabella+filtri (regione/sport/stato/email/IG/LinkedIn)+ricerca, scheda organizzatore (link cliccabili), dashboard metriche+distribuzioni.
+- Seed reale 20 eventi ENDU -> 15 organizzatori (grouping serie: Adriatic 3, Giro Handbike 2, Porto Cervo 3). Dati evento (nome/sport/citta/prov->regione/data/URL) da ENDU; email+social=Da verificare (NON inventati).
+- Nessun servizio a pagamento, nessun invio Brevo, nessuna scansione massiva. In PREVIEW.

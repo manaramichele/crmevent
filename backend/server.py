@@ -5143,6 +5143,204 @@ async def social_post_publish(post_id: str, body: SocialPublishIn, user: dict = 
     return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
 
 
+# ============ Lead Finder / Organizzatori (Super Admin, platform scope) ============
+LF_STATES = ["da_verificare", "verificato", "interessante", "contattato",
+             "demo_richiesta", "trial", "cliente", "non_interessato", "non_contattare"]
+
+
+def _lf_domain(url):
+    if not url:
+        return None
+    d = re.sub(r"^https?://", "", str(url).strip().lower()).split("/")[0].replace("www.", "")
+    return d or None
+
+
+def _lf_key(name):
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+def _lf_norm_org(o: dict) -> dict:
+    """Recompute derived dedup fields."""
+    emails = [e.lower() for e in (o.get("emails") or []) if e]
+    if o.get("email"):
+        e = o["email"].lower()
+        if e not in emails:
+            emails.insert(0, e)
+    o["emails"] = emails
+    o["email"] = emails[0] if emails else None
+    o["web_domain"] = _lf_domain(o.get("website"))
+    o["name_key"] = _lf_key(o.get("name"))
+    return o
+
+
+async def _lf_find_dup(user, name=None, email=None, website=None, instagram_url=None, exclude_id=None):
+    ors = []
+    if email:
+        ors.append({"emails": email.lower()})
+    if website and _lf_domain(website):
+        ors.append({"web_domain": _lf_domain(website)})
+    if instagram_url:
+        ors.append({"instagram_url": instagram_url})
+    if name:
+        ors.append({"name_key": _lf_key(name)})
+    if not ors:
+        return None
+    q = {**oq(user), "$or": ors}
+    if exclude_id:
+        q["id"] = {"$ne": exclude_id}
+    return await db.lf_organizers.find_one(q, {"_id": 0})
+
+
+async def _lf_events_for(user, org_id):
+    return await db.lf_events.find(oq(user, organizer_id=org_id), {"_id": 0}).sort("date", 1).to_list(200)
+
+
+async def _lf_enrich(user, o):
+    evs = await _lf_events_for(user, o["id"])
+    o["events"] = evs
+    o["events_count"] = len(evs)
+    o["sports"] = sorted({e.get("sport") for e in evs if e.get("sport")})
+    return o
+
+
+@api.get("/leadfinder/organizers")
+async def lf_list_organizers(user: dict = Depends(require_org_admin)):
+    rows = await db.lf_organizers.find(oq(user), {"_id": 0}).sort("name", 1).to_list(2000)
+    for o in rows:
+        await _lf_enrich(user, o)
+    return rows
+
+
+@api.post("/leadfinder/organizers")
+async def lf_create_organizer(body: dict, user: dict = Depends(require_org_admin)):
+    if not (body.get("name") or "").strip():
+        raise HTTPException(status_code=400, detail="Nome organizzazione obbligatorio")
+    dup = await _lf_find_dup(user, name=body.get("name"), email=body.get("email"),
+                             website=body.get("website"), instagram_url=body.get("instagram_url"))
+    if dup:
+        raise HTTPException(status_code=409, detail=f"Possibile duplicato: '{dup.get('name')}' — usa Unisci duplicati o modifica quello esistente")
+    o = _lf_norm_org({**body})
+    o.setdefault("status", "da_verificare")
+    o.setdefault("socials_status", "da_verificare")
+    o.setdefault("source_main", body.get("source_main") or "manuale")
+    o.setdefault("sources", body.get("sources") or {})
+    o["acquired_at"] = body.get("acquired_at") or now_iso()
+    doc = await _create("lf_organizers", o)
+    return await _lf_enrich(user, doc)
+
+
+@api.get("/leadfinder/organizers/{oid}")
+async def lf_get_organizer(oid: str, user: dict = Depends(require_org_admin)):
+    o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})
+    if not o:
+        raise HTTPException(status_code=404, detail="Organizzatore non trovato")
+    return await _lf_enrich(user, o)
+
+
+@api.put("/leadfinder/organizers/{oid}")
+async def lf_update_organizer(oid: str, body: dict, user: dict = Depends(require_org_admin)):
+    o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})
+    if not o:
+        raise HTTPException(status_code=404, detail="Organizzatore non trovato")
+    upd = {**o, **{k: v for k, v in body.items() if k not in ("id", "org_id")}}
+    # "Non contattare" is sticky: a non-manual/automatic caller cannot overwrite it.
+    if o.get("status") == "non_contattare" and body.get("status") and body.get("status") != "non_contattare" and not body.get("_manual"):
+        upd["status"] = "non_contattare"
+    upd = _lf_norm_org(upd)
+    upd["updated_at"] = now_iso()
+    if body.get("_verified"):
+        upd["last_verified_at"] = now_iso()
+    upd.pop("_manual", None); upd.pop("_verified", None)
+    await db.lf_organizers.update_one(oq(user, id=oid), {"$set": upd})
+    return await _lf_enrich(user, await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0}))
+
+
+@api.post("/leadfinder/organizers/merge")
+async def lf_merge_organizers(body: dict, user: dict = Depends(require_org_admin)):
+    primary_id = body.get("primary_id")
+    dup_ids = [d for d in (body.get("duplicate_ids") or []) if d and d != primary_id]
+    primary = await db.lf_organizers.find_one(oq(user, id=primary_id), {"_id": 0})
+    if not primary or not dup_ids:
+        raise HTTPException(status_code=400, detail="Selezione non valida")
+    merged = {**primary}
+    for did in dup_ids:
+        d = await db.lf_organizers.find_one(oq(user, id=did), {"_id": 0})
+        if not d:
+            continue
+        for f in ("website", "email", "phone", "instagram_url", "linkedin_url", "facebook_url",
+                  "legal_name", "org_type", "city", "province", "region", "country"):
+            if not merged.get(f) and d.get(f):
+                merged[f] = d[f]
+        merged["emails"] = list({*(merged.get("emails") or []), *(d.get("emails") or [])})
+        merged["sources"] = {**(d.get("sources") or {}), **(merged.get("sources") or {})}
+        if d.get("status") == "non_contattare":
+            merged["status"] = "non_contattare"
+        await db.lf_events.update_many(oq(user, organizer_id=did), {"$set": {"organizer_id": primary_id}})
+        await db.lf_organizers.delete_one(oq(user, id=did))
+    merged = _lf_norm_org(merged); merged["updated_at"] = now_iso()
+    await db.lf_organizers.update_one(oq(user, id=primary_id), {"$set": merged})
+    return await _lf_enrich(user, await db.lf_organizers.find_one(oq(user, id=primary_id), {"_id": 0}))
+
+
+@api.get("/leadfinder/events")
+async def lf_list_events(user: dict = Depends(require_org_admin)):
+    rows = await db.lf_events.find(oq(user), {"_id": 0}).sort("date", 1).to_list(3000)
+    omap = {o["id"]: o.get("name") for o in await db.lf_organizers.find(oq(user), {"_id": 0, "id": 1, "name": 1}).to_list(2000)}
+    for e in rows:
+        e["organizer_name"] = omap.get(e.get("organizer_id"))
+    return rows
+
+
+@api.post("/leadfinder/events")
+async def lf_create_event(body: dict, user: dict = Depends(require_org_admin)):
+    if not (body.get("name") or "").strip():
+        raise HTTPException(status_code=400, detail="Nome evento obbligatorio")
+    if not body.get("organizer_id"):
+        raise HTTPException(status_code=400, detail="organizer_id obbligatorio")
+    doc = await _create("lf_events", {**body, "sources": body.get("sources") or {}})
+    return doc
+
+
+@api.put("/leadfinder/events/{eid}")
+async def lf_update_event(eid: str, body: dict, user: dict = Depends(require_org_admin)):
+    e = await db.lf_events.find_one(oq(user, id=eid), {"_id": 0})
+    if not e:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    upd = {**e, **{k: v for k, v in body.items() if k not in ("id", "org_id")}, "updated_at": now_iso()}
+    await db.lf_events.update_one(oq(user, id=eid), {"$set": upd})
+    return await db.lf_events.find_one(oq(user, id=eid), {"_id": 0})
+
+
+@api.get("/leadfinder/dashboard")
+async def lf_dashboard(user: dict = Depends(require_org_admin)):
+    orgs = await db.lf_organizers.find(oq(user), {"_id": 0}).to_list(3000)
+    events = await db.lf_events.find(oq(user), {"_id": 0}).to_list(5000)
+    def dist(items, key):
+        d = {}
+        for it in items:
+            k = it.get(key) or "—"
+            d[k] = d.get(k, 0) + 1
+        return dict(sorted(d.items(), key=lambda x: -x[1]))
+    return {
+        "organizers_total": len(orgs),
+        "organizers_verified": sum(1 for o in orgs if o.get("status") == "verificato"),
+        "organizers_to_verify": sum(1 for o in orgs if o.get("status") == "da_verificare"),
+        "events_total": len(events),
+        "with_email": sum(1 for o in orgs if o.get("emails")),
+        "with_instagram": sum(1 for o in orgs if o.get("instagram_url")),
+        "with_linkedin": sum(1 for o in orgs if o.get("linkedin_url")),
+        "by_region": dist(orgs, "region"),
+        "by_sport": dist(events, "sport"),
+        "by_source": dist(orgs, "source_main"),
+        "states": LF_STATES,
+    }
+
+
+@api.post("/leadfinder/brevo-export")
+async def lf_brevo_export(body: dict = {}, user: dict = Depends(require_org_admin)):
+    raise HTTPException(status_code=501, detail="Sincronizzazione Brevo non ancora attiva: CRMEvent resta il database principale in questa fase.")
+
+
 # ---- AI generation ----
 async def _record_generation(user: dict, gen_type: str, payload: dict, result) -> str:
     gid = new_id()
