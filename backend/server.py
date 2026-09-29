@@ -2986,7 +2986,7 @@ async def brevo_send_test(body: BrevoTestEmail, admin: dict = Depends(require_su
 BREVO_WEBHOOK_TOKEN = os.environ.get("BREVO_WEBHOOK_TOKEN", "")
 WEBHOOK_CRON_SECRET = os.environ.get("WEBHOOK_CRON_SECRET", "")
 BACKEND_PUBLIC_URL = os.environ.get("BACKEND_PUBLIC_URL") or APP_URL
-PUBLIC_SITE_URL = "https://crmevent.it"
+PUBLIC_SITE_URL = (os.environ.get("PUBLIC_SITE_URL") or "https://crmevent.it").rstrip("/")
 DEMO_URL = f"{PUBLIC_SITE_URL}/demo"
 TRIAL_URL = f"{PUBLIC_SITE_URL}/registrati"
 
@@ -5648,9 +5648,9 @@ def _prospect_email_html(domain: str) -> str:
 async def brevo_create_template(body: dict = {}, user: dict = Depends(require_org_admin)):
     if not brevo_client.is_configured():
         raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata")
-    domain = (APP_URL or "").rstrip("/")
+    domain = PUBLIC_SITE_URL
     if not domain:
-        raise HTTPException(status_code=400, detail="Dominio pubblico (APP_URL) non configurato")
+        raise HTTPException(status_code=400, detail="Dominio pubblico (PUBLIC_SITE_URL) non configurato")
     html = _prospect_email_html(domain)
     subject = "Organizzare un evento sportivo senza rincorrere Excel, chat e documenti"
     try:
