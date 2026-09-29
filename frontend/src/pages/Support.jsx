@@ -235,7 +235,7 @@ export default function Support() {
   const kbFields = [
     { name: "titolo", label: "Titolo", required: true, full: true },
     { name: "categoria", label: "Categoria", type: "select", options: catOpts },
-    { name: "stato", label: "Stato", type: "select", options: statoOpts },
+    { name: "stato", label: "Stato", keepOrder: true, type: "select", options: statoOpts },
     { name: "domanda", label: "Domanda", full: true },
     { name: "risposta", label: "Risposta", type: "textarea", required: true, full: true },
     { name: "ruoli", label: "Ruoli applicabili (es. admin · staff,volontario · tutti)", full: true },
@@ -252,7 +252,7 @@ export default function Support() {
     { name: "domanda", label: "Domanda", required: true, full: true },
     { name: "risposta", label: "Risposta", type: "textarea", required: true, full: true },
     { name: "categoria", label: "Categoria", type: "select", options: catOpts },
-    { name: "stato", label: "Stato", type: "select", options: statoOpts },
+    { name: "stato", label: "Stato", keepOrder: true, type: "select", options: statoOpts },
     { name: "parole_chiave", label: "Parole chiave (virgola)", full: true },
   ];
   const faqCols = [
@@ -265,7 +265,7 @@ export default function Support() {
   const frFields = [
     { name: "titolo", label: "Titolo", required: true, full: true },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
-    { name: "stato", label: "Stato", type: "select", options: frStati },
+    { name: "stato", label: "Stato", keepOrder: true, type: "select", options: frStati },
   ];
   const frCols = [
     { key: "titolo", label: "Richiesta", render: (r) => <span className="font-medium text-slate-800">{r.titolo}</span> },

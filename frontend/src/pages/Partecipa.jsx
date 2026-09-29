@@ -75,14 +75,14 @@ export default function Partecipa() {
     finally { setSubmitting(false); }
   };
 
-  const logoSrc = info?.event?.has_logo ? `${BACKEND}/api/public/availability/${code}/logo` : "/logo-crmevent.png";
+  const logoSrc = info?.event?.has_logo ? `${BACKEND}/api/public/availability/${code}/logo` : "/logo-crmevent-dark.png?v=2";
 
   if (state === "loading") return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-6 h-6 animate-spin text-tiffany-active" /></div>
   );
 
   if (state === "notfound") return (
-    <Shell logo="/logo-crmevent.png">
+    <Shell logo="/logo-crmevent-dark.png?v=2">
       <div className="text-center py-8"><h1 className="text-xl font-bold text-slate-900 mb-2">Link non valido</h1>
         <p className="text-slate-500 text-sm">Questo link non è più disponibile. Contatta l'organizzazione dell'evento.</p></div>
     </Shell>
@@ -110,7 +110,7 @@ export default function Partecipa() {
     <Shell logo={logoSrc} event={ev}>
       <h1 className="text-2xl font-bold text-slate-900 font-display">Dai la tua disponibilità</h1>
       <p className="text-sm text-slate-500 mt-1.5">Inserisci i tuoi dati e indica i giorni in cui sei disponibile per collaborare all'evento.</p>
-      {info.has_allestimento && <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">Puoi indicare la tua disponibilità anche nei giorni precedenti all'evento per le attività di allestimento.</p>}
+      {(info.has_allestimento || info.has_disallestimento) && <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">Puoi indicare la tua disponibilità anche nei giorni precedenti e successivi all'evento per le attività di allestimento e disallestimento.</p>}
 
       <div className="mt-6 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -140,7 +140,7 @@ export default function Partecipa() {
                       <Checkbox checked={on} onCheckedChange={(v) => toggleDay(d.date, !!v)} data-testid={`pf-day-check-${d.date}`} />
                       <div>
                         <div className="text-sm font-medium text-slate-800 capitalize">{d.label}</div>
-                        <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mt-0.5 ${d.fase === "allestimento" ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"}`}>{d.fase === "allestimento" ? "Allestimento" : "Evento"}</span>
+                        <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mt-0.5 ${d.fase === "allestimento" ? "bg-amber-100 text-amber-700" : d.fase === "disallestimento" ? "bg-violet-100 text-violet-700" : "bg-sky-100 text-sky-700"}`}>{d.fase === "allestimento" ? "Allestimento" : d.fase === "disallestimento" ? "Disallestimento" : "Evento"}</span>
                       </div>
                     </div>
                   </div>
@@ -161,7 +161,7 @@ export default function Partecipa() {
             <SelectTrigger data-testid="pf-pref"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>Nessuna preferenza</SelectItem>
-              {(info.attivita_options || []).map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+              {[...(info.attivita_options || [])].sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" })).map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
               <SelectItem value={ALTRO}>Altro</SelectItem>
             </SelectContent>
           </Select>
@@ -196,18 +196,18 @@ function Shell({ logo, event, children }) {
       <div className="max-w-lg mx-auto">
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-5 sm:p-7">
-            <div className="flex items-center gap-3 mb-4">
-              <img src={logo} alt="" className="h-11 max-w-[160px] object-contain" onError={(e) => { e.currentTarget.src = "/logo-crmevent.png"; }} />
-            </div>
-            {event && (
-              <div className="mb-4 pb-4 border-b border-slate-100">
-                <div className="text-lg font-bold text-slate-900">{event.nome}</div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-slate-500">
-                  {event.data_inizio && <span className="inline-flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" />{dmY(event.data_inizio)}{event.data_fine && event.data_fine !== event.data_inizio ? ` → ${dmY(event.data_fine)}` : ""}</span>}
-                  {event.localita && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{event.localita}</span>}
+            <div className="flex flex-col items-center text-center mb-5">
+              <img src={logo} alt="" className="w-[150px] sm:w-[200px] h-auto max-h-28 object-contain" onError={(e) => { e.currentTarget.src = "/logo-crmevent-dark.png?v=2"; }} />
+              {event && (
+                <div className="mt-4 pb-4 border-b border-slate-100 w-full">
+                  <div className="text-lg font-bold text-slate-900">{event.nome}</div>
+                  <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">
+                    {event.data_inizio && <span className="inline-flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" />{dmY(event.data_inizio)}{event.data_fine && event.data_fine !== event.data_inizio ? ` → ${dmY(event.data_fine)}` : ""}</span>}
+                    {event.localita && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{event.localita}</span>}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
             {children}
           </div>
         </div>

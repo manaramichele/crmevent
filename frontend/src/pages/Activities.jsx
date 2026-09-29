@@ -19,12 +19,12 @@ export default function Activities() {
 
   const fields = [
     { name: "titolo", label: "Titolo", required: true, full: true },
-    { name: "tipo", label: "Tipo", type: "select", options: Object.keys(TIPO_LABEL).map((v) => ({ value: v, label: TIPO_LABEL[v] })) },
+    { name: "tipo", label: "Tipo", keepOrder: true, type: "select", options: Object.keys(TIPO_LABEL).map((v) => ({ value: v, label: TIPO_LABEL[v] })) },
     { name: "data", label: "Data", type: "date" },
     { name: "evento_id", label: "Evento", type: "select", options: events.map((e) => ({ value: e.id, label: e.nome })) },
     { name: "azienda_id", label: "Azienda", type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })) },
     { name: "persona_id", label: "Referente", type: "select", options: persons.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() })) },
-    { name: "stato", label: "Stato", type: "select", options: Object.keys(STATO_LABEL).map((v) => ({ value: v, label: STATO_LABEL[v] })) },
+    { name: "stato", label: "Stato", keepOrder: true, type: "select", options: Object.keys(STATO_LABEL).map((v) => ({ value: v, label: STATO_LABEL[v] })) },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
 

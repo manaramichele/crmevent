@@ -249,6 +249,7 @@ export default function Events() {
     { name: "data_inizio_allestimento", label: "Data inizio allestimento (facoltativa)", type: "date" },
     { name: "data_inizio", label: "Data inizio", type: "date" },
     { name: "data_fine", label: "Data fine", type: "date" },
+    { name: "data_fine_disallestimento", label: "Data fine disallestimento (facoltativa)", type: "date" },
     { name: "ora_inizio", label: "Ora inizio", type: "time" },
     { name: "ora_fine", label: "Ora fine", type: "time" },
     { name: "localita", label: "Località / Venue" },
@@ -264,7 +265,7 @@ export default function Events() {
     { name: "telefono", label: "Telefono", type: "tel" },
     { name: "partecipanti_previsti", label: "Partecipanti previsti", type: "number" },
     { name: "budget", label: "Budget (€)", type: "number" },
-    { name: "stato", label: "Stato", type: "select", options: Object.keys(STATO_LABEL).map((v) => ({ value: v, label: STATO_LABEL[v] })) },
+    { name: "stato", label: "Stato", keepOrder: true, type: "select", options: Object.keys(STATO_LABEL).map((v) => ({ value: v, label: STATO_LABEL[v] })) },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
@@ -274,10 +275,12 @@ export default function Events() {
     { key: "citta", label: "Città" },
     { key: "data_inizio", label: "Date", render: (r) => {
       const dm = (d) => d ? d.slice(8, 10) + "/" + d.slice(5, 7) : "";
+      const ev = r.data_inizio ? (r.data_fine && r.data_fine !== r.data_inizio ? `${dm(r.data_inizio)}–${dm(r.data_fine)}` : dm(r.data_inizio)) : "";
       return (
-        <div className="text-sm">
+        <div className="text-sm space-y-0.5">
           {r.data_inizio_allestimento && <div className="text-xs text-amber-600">Allestimento dal {dm(r.data_inizio_allestimento)}</div>}
-          <span className="text-slate-700">{r.data_inizio ? `Evento ${dm(r.data_inizio)}` : "—"}{r.data_fine && r.data_fine !== r.data_inizio ? ` → ${dm(r.data_fine)}` : ""}</span>
+          <span className="text-slate-700">{ev ? `Evento ${ev}` : "—"}</span>
+          {r.data_fine_disallestimento && <div className="text-xs text-violet-600">Disallestimento fino al {dm(r.data_fine_disallestimento)}</div>}
         </div>
       );
     } },

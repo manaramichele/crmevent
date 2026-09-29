@@ -35,6 +35,24 @@ export const calcAge = (dn) => {
   return a >= 0 && a < 120 ? a : null;
 };
 
+// Ordina alfabeticamente (A-Z, case-insensitive, locale IT) le opzioni "a valori".
+// Eccezioni: "Nessuna preferenza"/valore vuoto/"tutti" sempre in testa; "Altro"/"+ ..." sempre in coda.
+// keepOrder=true preserva l'ordine originale (per elenchi con ordine logico: stati, priorità, fasi...).
+export const sortOptions = (opts, keepOrder = false) => {
+  if (keepOrder || !Array.isArray(opts)) return opts || [];
+  const rank = (o) => {
+    const l = String(o.label ?? o.value ?? "").trim().toLowerCase();
+    if (o.value === "" || l === "nessuna preferenza" || l === "tutti" || l === "tutte") return -1;
+    if (l === "altro" || l.startsWith("+ ")) return 1;
+    return 0;
+  };
+  return [...opts].sort((a, b) => {
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
+    return String(a.label ?? a.value ?? "").localeCompare(String(b.label ?? b.value ?? ""), "it", { sensitivity: "base" });
+  });
+};
+
 export function useSettings() {
   const [settings, setSettings] = useState(null);
   useEffect(() => { api.get("/settings").then(({ data }) => setSettings(data)).catch(() => {}); }, []);
@@ -206,7 +224,7 @@ function Field({ field, value, onChange, options }) {
       addLabel={field.addLabel || "Aggiungi nuovo"} testid={`field-${field.name}`} />;
   }
   if (field.type === "select") {
-    const opts = field.options || options?.[field.source] || [];
+    const opts = sortOptions(field.options || options?.[field.source] || [], field.keepOrder);
     return (
       <Select value={value || ""} onValueChange={(v) => onChange(field.name, v)}>
         <SelectTrigger data-testid={`field-${field.name}`}><SelectValue placeholder={field.placeholder || "Seleziona..."} /></SelectTrigger>

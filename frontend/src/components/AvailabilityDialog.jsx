@@ -25,7 +25,7 @@ function DaysSummary({ days = [] }) {
     <div className="flex flex-col gap-0.5">
       {days.map((d, i) => (
         <span key={i} className="text-xs text-slate-700 whitespace-nowrap">
-          <span className={d.fase === "allestimento" ? "text-amber-600 font-medium" : "text-slate-500"}>{dm(d.date)}</span>
+          <span className={d.fase === "allestimento" ? "text-amber-600 font-medium" : d.fase === "disallestimento" ? "text-violet-600 font-medium" : "text-slate-500"}>{dm(d.date)}</span>
           {" · "}{d.dalle || d.alle ? `${d.dalle || "?"}–${d.alle || "?"}` : "disponibile"}
         </span>
       ))}
@@ -90,7 +90,8 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
           {event && (event.data_inizio || event.data_inizio_allestimento) && (
             <p className="text-sm text-slate-500 -mt-2">
               {event.data_inizio_allestimento && <span className="text-amber-600">Allestimento dal {dm(event.data_inizio_allestimento)} · </span>}
-              {event.data_inizio && <span>Evento {dm(event.data_inizio)}{event.data_fine && event.data_fine !== event.data_inizio ? ` → ${dm(event.data_fine)}` : ""}</span>}
+              {event.data_inizio && <span>Evento {dm(event.data_inizio)}{event.data_fine && event.data_fine !== event.data_inizio ? `–${dm(event.data_fine)}` : ""}</span>}
+              {event.data_fine_disallestimento && <span className="text-violet-600"> · Disallestimento fino al {dm(event.data_fine_disallestimento)}</span>}
             </p>
           )}
 

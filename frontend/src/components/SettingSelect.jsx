@@ -18,6 +18,12 @@ export default function SettingSelect({ settingKey, value, onChange, options = [
   // Always render the current value as an option (covers a just-added value before the
   // parent's options list refreshes, and legacy values not in the configured list).
   const allOpts = value && !opts.some((o) => norm(o) === norm(value)) ? [...opts, value] : opts;
+  const sortedOpts = [...allOpts].sort((a, b) => {
+    const al = String(a).trim().toLowerCase(), bl = String(b).trim().toLowerCase();
+    if (al === "altro" && bl !== "altro") return 1;
+    if (bl === "altro" && al !== "altro") return -1;
+    return String(a).localeCompare(String(b), "it", { sensitivity: "base" });
+  });
 
   const doAdd = async () => {
     const name = text.trim();
@@ -56,7 +62,7 @@ export default function SettingSelect({ settingKey, value, onChange, options = [
     <Select value={value || ""} onValueChange={(v) => { if (v === ADD) setAdding(true); else onChange(v); }}>
       <SelectTrigger data-testid={testid}><SelectValue placeholder={placeholder} /></SelectTrigger>
       <SelectContent>
-        {allOpts.map((o) => <SelectItem key={o} value={o} data-testid={`${testid}-opt-${o}`}>{o}</SelectItem>)}
+        {sortedOpts.map((o) => <SelectItem key={o} value={o} data-testid={`${testid}-opt-${o}`}>{o}</SelectItem>)}
         <SelectItem value={ADD} data-testid={`${testid}-add-option`} className="text-tiffany-active font-semibold">+ {addLabel}</SelectItem>
       </SelectContent>
     </Select>

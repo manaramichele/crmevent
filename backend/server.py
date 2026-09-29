@@ -608,6 +608,7 @@ class Event(BaseModel):
     data_inizio_allestimento: Optional[str] = None
     data_inizio: Optional[str] = None
     data_fine: Optional[str] = None
+    data_fine_disallestimento: Optional[str] = None
     ora_inizio: Optional[str] = None
     ora_fine: Optional[str] = None
     localita: Optional[str] = None
@@ -629,11 +630,16 @@ class Event(BaseModel):
 
     @model_validator(mode="after")
     def _check_dates(self):
-        allest, inizio, fine = self.data_inizio_allestimento, self.data_inizio, self.data_fine
-        if allest and inizio and allest > inizio:
-            raise ValueError("La Data inizio allestimento non può essere successiva alla Data inizio evento")
-        if inizio and fine and fine < inizio:
-            raise ValueError("La Data fine evento non può essere precedente alla Data inizio evento")
+        seq = [("Data inizio allestimento", self.data_inizio_allestimento),
+               ("Data inizio evento", self.data_inizio),
+               ("Data fine evento", self.data_fine),
+               ("Data fine disallestimento", self.data_fine_disallestimento)]
+        prev = None
+        for label, val in seq:
+            if val:
+                if prev and val < prev[1]:
+                    raise ValueError(f"{label} non può essere precedente a {prev[0]}")
+                prev = (label, val)
         return self
 
 
@@ -6841,25 +6847,33 @@ def _cf_birthdate(cf: str) -> Optional[str]:
 
 def _avail_days(event: dict) -> list:
     """Days offered on the public form: from setup start (allestimento) or event start,
-    through event end. Each day is tagged 'allestimento' (before event start) or 'evento'."""
+    through teardown end (disallestimento) or event end. Each day is tagged
+    'allestimento' (before event start), 'evento', or 'disallestimento' (after event end)."""
     di = event.get("data_inizio")
     df = event.get("data_fine") or di
     allest = event.get("data_inizio_allestimento")
+    disallest = event.get("data_fine_disallestimento")
     start = allest or di
-    end = df or di
+    end = disallest or df or di
     if not start or not end:
         return []
     try:
         s = datetime.strptime(start[:10], "%Y-%m-%d").date()
         e = datetime.strptime(end[:10], "%Y-%m-%d").date()
         evstart = datetime.strptime(di[:10], "%Y-%m-%d").date() if di else s
+        evend = datetime.strptime(df[:10], "%Y-%m-%d").date() if df else evstart
     except Exception:
         return []
     if e < s:
         return []
     out, cur = [], s
-    while cur <= e and len(out) < 90:
-        fase = "allestimento" if (di and cur < evstart) else "evento"
+    while cur <= e and len(out) < 120:
+        if di and cur < evstart:
+            fase = "allestimento"
+        elif cur > evend:
+            fase = "disallestimento"
+        else:
+            fase = "evento"
         out.append({"date": cur.isoformat(), "fase": fase,
                     "label": f"{_WD_IT[cur.weekday()]} {cur.day} {_MO_IT[cur.month]}"})
         cur += timedelta(days=1)
@@ -6923,7 +6937,8 @@ async def avail_list_received(event_id: str, user: dict = Depends(require_admin)
                     "eta": _compute_age(dn)})
     return {"event": {"id": event["id"], "nome": event.get("nome"),
                       "data_inizio_allestimento": event.get("data_inizio_allestimento"),
-                      "data_inizio": event.get("data_inizio"), "data_fine": event.get("data_fine")},
+                      "data_inizio": event.get("data_inizio"), "data_fine": event.get("data_fine"),
+                      "data_fine_disallestimento": event.get("data_fine_disallestimento")},
             "availabilities": out}
 
 
@@ -6974,13 +6989,15 @@ async def pub_avail_info(code: str):
     base = {"nome": event.get("nome"), "data_inizio": event.get("data_inizio"),
             "data_fine": event.get("data_fine"), "localita": event.get("localita") or event.get("citta"),
             "has_logo": bool(event.get("logo_url")),
-            "data_inizio_allestimento": event.get("data_inizio_allestimento")}
+            "data_inizio_allestimento": event.get("data_inizio_allestimento"),
+            "data_fine_disallestimento": event.get("data_fine_disallestimento")}
     if not link.get("active"):
         return {"active": False, "event": base}
     settings = await db.settings.find_one({"id": link["org_id"]}, {"_id": 0}) or {}
     attivita = settings.get("ruoli_staff") or default_settings()["ruoli_staff"]
     return {"active": True, "event": base, "days": _avail_days(event),
             "has_allestimento": bool(event.get("data_inizio_allestimento")),
+            "has_disallestimento": bool(event.get("data_fine_disallestimento")),
             "attivita_options": attivita}
 
 

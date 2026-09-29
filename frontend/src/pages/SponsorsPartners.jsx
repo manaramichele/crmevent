@@ -29,11 +29,11 @@ export default function SponsorsPartners() {
   const fields = [
     { name: "azienda_id", label: "Azienda", required: true, type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })) },
     { name: "evento_id", label: "Evento", required: true, type: "select", options: events.map((e) => ({ value: e.id, label: e.nome })) },
-    { name: "tipo", label: "Tipo", type: "select", options: Object.keys(TIPO_LABEL).map((v) => ({ value: v, label: TIPO_LABEL[v] })) },
-    { name: "fase", label: "Fase pipeline", type: "select", options: FASI.map((v) => ({ value: v, label: FASE_LABEL[v] })) },
+    { name: "tipo", label: "Tipo", keepOrder: true, type: "select", options: Object.keys(TIPO_LABEL).map((v) => ({ value: v, label: TIPO_LABEL[v] })) },
+    { name: "fase", label: "Fase pipeline", keepOrder: true, type: "select", options: FASI.map((v) => ({ value: v, label: FASE_LABEL[v] })) },
     { name: "valore", label: "Valore (€)", type: "number" },
     { name: "valore_confermato", label: "Valore confermato (€)", type: "number" },
-    { name: "livello", label: "Livello sponsorship", type: "select", options: toOptions(settings?.livelli_sponsorship) },
+    { name: "livello", label: "Livello sponsorship", keepOrder: true, type: "select", options: toOptions(settings?.livelli_sponsorship) },
     { name: "referente_id", label: "Referente", type: "select", options: persons.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() })) },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
