@@ -113,6 +113,19 @@ class BrevoClient:
         ident = quote(email, safe="")
         return await self._req("PUT", f"/contacts/{ident}", json={"listIds": [list_id]})
 
+    async def update_contact(self, email, list_id=None, attributes=None):
+        """Update an existing contact WITHOUT resubscribing (emailBlacklisted is NEVER sent).
+        Optionally add to a list and/or refresh custom attributes. No duplicate is created."""
+        ident = quote(email, safe="")
+        payload = {}
+        if list_id is not None:
+            payload["listIds"] = [list_id]
+        if attributes:
+            payload["attributes"] = {k: v for k, v in attributes.items() if v is not None}
+        if not payload:
+            return None
+        return await self._req("PUT", f"/contacts/{ident}", json=payload)
+
     async def get_templates(self, limit=50):
         out, offset = [], 0
         while True:

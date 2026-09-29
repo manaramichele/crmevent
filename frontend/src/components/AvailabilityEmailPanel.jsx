@@ -67,6 +67,7 @@ export function AvailabilityEmailPanel() {
   const enabled = data?.enabled;
   const configured = data?.configured;
   const templates = data?.templates || [];
+  const list = data?.list;
   const missing = templates.some((t) => !t.template_id);
 
   return (
@@ -140,10 +141,14 @@ export function AvailabilityEmailPanel() {
         </table>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={createTemplates} disabled={creating || !configured || !missing} data-testid="availability-create-templates-btn">
           <Plus className="w-4 h-4 mr-1.5" />{creating ? "Creo…" : missing ? "Crea template in Brevo" : "Template già presenti"}
         </Button>
+        <span className="text-xs text-slate-500" data-testid="availability-list-info">
+          Lista Brevo unica: <span className="font-medium text-slate-700">{list?.name || "CRMEvent · Disponibilità eventi"}</span>
+          {list?.id ? <> · List ID <span className="font-mono">{list.id}</span></> : " · verrà creata automaticamente al primo utilizzo"}
+        </span>
       </div>
 
       <div className="mt-5 border-t border-slate-100 pt-4" data-testid="availability-test-section">

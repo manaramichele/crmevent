@@ -6965,6 +6965,35 @@ def _brevo_avail_enabled():
     return os.environ.get("BREVO_AVAILABILITY_ENABLED", "").strip().lower() in ("1", "true", "on", "yes")
 
 
+async def _avail_list_id():
+    """List ID Brevo salvato per la lista unica disponibilità (globale, un solo account Brevo)."""
+    doc = await db.brevo_config.find_one({"key": "availability"}, {"_id": 0}) or {}
+    return doc.get("list_id")
+
+
+async def _avail_list_id_save(list_id, name=None):
+    await db.brevo_config.update_one({"key": "availability"},
+                                     {"$set": {"key": "availability", "list_id": list_id,
+                                               "list_name": name or AVAIL_LIST_NAME, "updated_at": now_iso()}},
+                                     upsert=True)
+
+
+async def _ensure_avail_list(c):
+    """Trova o crea (via API) la lista unica «CRMEvent · Disponibilità eventi» e persiste il List ID.
+    Mai una lista per Evento: tutte le disponibilità confluiscono in questa unica lista."""
+    list_id = await _avail_list_id()
+    if list_id:
+        return list_id
+    lists = await c.lists()
+    lst = next((l for l in lists if (l.get("name") or "").strip().lower() == AVAIL_LIST_NAME.lower()), None)
+    if not lst:
+        folders = await c.folders()
+        lst = await c.create_list(AVAIL_LIST_NAME, folders[0]["id"] if folders else 1)
+    list_id = lst.get("id")
+    await _avail_list_id_save(list_id)
+    return list_id
+
+
 def _avail_email_html(kind: str) -> str:
     """Master template HTML (unico per piattaforma). I dati sono dinamici via {{params.*}}:
     NOME, NOME_EVENTO, DATA_EVENTO, LOCALITA_EVENTO, LOGO_EVENTO_URL. Il logo NON è salvato nel
@@ -7048,14 +7077,10 @@ async def _brevo_avail(action: str, av: dict, event: dict, org_nome: str = None,
                  "ORGANIZZAZIONE": org_nome or "", "RUOLO_EVENTO": av.get("ruolo_evento") or "da_definire",
                  "STATO_DISPONIBILITA": av.get("stato") or "nuova"}
         async with brevo_client.BrevoClient() as c:
-            lists = await c.lists()
-            lst = next((l for l in lists if (l.get("name") or "").strip().lower() == AVAIL_LIST_NAME.lower()), None)
-            if not lst:
-                folders = await c.folders()
-                lst = await c.create_list(AVAIL_LIST_NAME, folders[0]["id"] if folders else 1)
-            list_id = lst.get("id")
+            list_id = await _ensure_avail_list(c)
             if await c.get_contact(email):
-                await c.add_existing_to_list(email, list_id)
+                # Persona già presente: aggiorna attributi e aggiunge alla lista SENZA resubscribe (no duplicati).
+                await c.update_contact(email, list_id=list_id, attributes=attrs)
             else:
                 await c.create_contact(email, list_id, attributes=attrs)
             if send_template:
@@ -7193,7 +7218,9 @@ async def brevo_create_avail_templates(user: dict = Depends(require_superadmin))
                     continue
                 res = await c.create_email_template(name, subject, _avail_email_html(kind), sender)
                 out.append({"name": name, "template_id": res.get("id"), "created": True})
-            return {"sender": sender, "templates": out, "is_active": False}
+            list_id = await _ensure_avail_list(c)
+            return {"sender": sender, "templates": out, "is_active": False,
+                    "list": {"id": list_id, "name": AVAIL_LIST_NAME}}
     except brevo_client.BrevoError as e:
         raise HTTPException(status_code=502, detail=f"Brevo: impossibile creare i template (HTTP {e.status})")
 
@@ -7204,8 +7231,10 @@ async def brevo_avail_templates_list(user: dict = Depends(require_superadmin)):
     Riservato al Super Admin. Nessuna copia per evento."""
     base = [{"name": AVAIL_TPL_CONFERMA_DISP, "kind": "disponibilita", "type_label": AVAIL_TPL_KIND_LABEL["disponibilita"]},
             {"name": AVAIL_TPL_CONFERMA_PART, "kind": "conferma", "type_label": AVAIL_TPL_KIND_LABEL["conferma"]}]
+    cfg = await db.brevo_config.find_one({"key": "availability"}, {"_id": 0}) or {}
+    lst = {"id": cfg.get("list_id"), "name": cfg.get("list_name") or AVAIL_LIST_NAME}
     if not brevo_client.is_configured():
-        return {"configured": False, "enabled": _brevo_avail_enabled(),
+        return {"configured": False, "enabled": _brevo_avail_enabled(), "list": lst,
                 "templates": [{**b, "template_id": None, "is_active": None, "updated_at": None} for b in base]}
     out = []
     async with brevo_client.BrevoClient() as c:
@@ -7215,7 +7244,7 @@ async def brevo_avail_templates_list(user: dict = Depends(require_superadmin)):
             out.append({**b, "template_id": t.get("id") if t else None,
                         "is_active": t.get("isActive") if t else None,
                         "updated_at": (t.get("modifiedAt") or t.get("createdAt")) if t else None})
-    return {"configured": True, "enabled": _brevo_avail_enabled(), "templates": out}
+    return {"configured": True, "enabled": _brevo_avail_enabled(), "list": lst, "templates": out}
 
 
 @api.get("/brevo/availability-test-events")
