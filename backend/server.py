@@ -34,6 +34,7 @@ import social_ai
 import social_creative
 import instagram_utils
 import leadfinder_scraper
+import seed_leadfinder
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -5368,6 +5369,12 @@ async def _lf_scan_persist(org_id: str, ev: dict, r: dict) -> dict:
     ev_sources = {**(ev.get("sources") or {})}
     ev_sources["endu"] = _lf_src(ev.get("endu_url"))
     ev_set = {"updated_at": now_iso(), "last_scanned_at": now_iso()}
+    if r.get("name") and not ev.get("name"):
+        ev_set["name"] = r["name"]
+    if r.get("date") and not ev.get("date"):
+        ev_set["date"] = r["date"]
+    if r.get("city") and not ev.get("city"):
+        ev_set["city"] = r["city"]
     if official:
         ev_set["website"] = official
         ev_sources["event_site"] = _lf_src(official, "ENDU")
@@ -5480,6 +5487,8 @@ async def _lf_scan_persist(org_id: str, ev: dict, r: dict) -> dict:
         stato = "Da verificare"
     return {
         "event": ev.get("name"), "endu_url": ev.get("endu_url"),
+        "endu_ok": bool(r.get("endu_ok")),
+        "endu_name": r.get("name"), "endu_date": r.get("date"), "endu_city": r.get("city"),
         "organizer": (org or {}).get("name"),
         "organizer_legal": (org or {}).get("legal_name") or site.get("org_name"),
         "event_site": official, "org_site": org_site,
@@ -5492,27 +5501,49 @@ async def _lf_scan_persist(org_id: str, ev: dict, r: dict) -> dict:
 
 async def _lf_run_scan(scan_id: str, org_id: str, event_ids: Optional[list]):
     uq = {"org_id": org_id}
+    # If the platform event DB is empty, auto-seed the controlled 20-event ENDU list (idempotent).
+    seeded = 0
+    if not event_ids and org_id == PLATFORM_ORG_ID:
+        if await db.lf_events.count_documents(uq) == 0:
+            try:
+                await asyncio.to_thread(seed_leadfinder.run)
+                seeded = await db.lf_events.count_documents(uq)
+            except Exception as e:
+                await db.lf_scans.update_one({"id": scan_id}, {"$set": {
+                    "status": "empty", "total": 0, "done": 0,
+                    "message": "Nessun evento acquisito — scansione da verificare",
+                    "reason": f"seed eventi ENDU fallito: {str(e)[:160]}", "finished_at": now_iso()}})
+                return
     q = {**uq}
     if event_ids:
         q["id"] = {"$in": event_ids}
     events = await db.lf_events.find(q, {"_id": 0}).to_list(500)
+    if not events:
+        await db.lf_scans.update_one({"id": scan_id}, {"$set": {
+            "status": "empty", "total": 0, "done": 0,
+            "message": "Nessun evento acquisito — scansione da verificare",
+            "reason": "Nessun evento ENDU presente nel database della piattaforma.",
+            "finished_at": now_iso()}})
+        return
     session = leadfinder_scraper.requests.Session()
     rows = []
-    await db.lf_scans.update_one({"id": scan_id}, {"$set": {"total": len(events)}})
+    await db.lf_scans.update_one({"id": scan_id}, {"$set": {"total": len(events), "seeded": seeded}})
     for i, ev in enumerate(events):
         try:
             r = await asyncio.to_thread(leadfinder_scraper.scan_event, ev.get("endu_url"), session)
             row = await _lf_scan_persist(org_id, ev, r)
         except Exception as e:
             row = {"event": ev.get("name"), "endu_url": ev.get("endu_url"),
-                   "status": "Errore", "reason": str(e)[:160]}
+                   "endu_ok": False, "status": "Errore", "reason": str(e)[:160]}
         rows.append(row)
         await db.lf_scans.update_one({"id": scan_id}, {"$set": {"done": i + 1, "rows": rows, "updated_at": now_iso()}})
-    # aggregate stats
+
     def cnt(pred):
         return sum(1 for x in rows if pred(x))
+    endu_ok = cnt(lambda x: x.get("endu_ok"))
     stats = {
         "events_analyzed": len(rows),
+        "endu_reachable": endu_ok,
         "endu_with_site": cnt(lambda x: x.get("endu_has_site")),
         "endu_with_social": cnt(lambda x: x.get("endu_has_social")),
         "sites_visited": cnt(lambda x: (x.get("site_visited") or 0) > 0),
@@ -5527,8 +5558,14 @@ async def _lf_run_scan(scan_id: str, org_id: str, event_ids: Optional[list]):
         "to_verify": cnt(lambda x: x.get("status") == "Da verificare"),
         "errors": cnt(lambda x: x.get("status") == "Errore"),
     }
+    # Honest final status: if NOT ONE ENDU page could be fetched, this is a failure, not a success.
+    if endu_ok == 0:
+        final = {"status": "empty", "message": "Nessun evento acquisito — scansione da verificare",
+                 "reason": "Nessuna pagina ENDU raggiungibile (possibile blocco rete/anti-bot o struttura cambiata)."}
+    else:
+        final = {"status": "done"}
     await db.lf_scans.update_one({"id": scan_id}, {"$set": {
-        "status": "done", "rows": rows, "stats": stats, "finished_at": now_iso()}})
+        **final, "rows": rows, "stats": stats, "seeded": seeded, "finished_at": now_iso()}})
 
 
 @api.post("/leadfinder/scan-endu")
@@ -5553,6 +5590,16 @@ async def lf_scan_status(scan_id: str, user: dict = Depends(require_org_admin)):
 @api.get("/leadfinder/scans")
 async def lf_scans_list(user: dict = Depends(require_org_admin)):
     return await db.lf_scans.find(oq(user), {"_id": 0, "rows": 0}).sort("created_at", -1).to_list(20)
+
+
+@api.get("/leadfinder/diagnose")
+async def lf_diagnose(url: Optional[str] = None, user: dict = Depends(require_org_admin)):
+    """Single-event end-to-end diagnostic (read-only, no DB writes): HTTP status → ENDU data →
+    official site → social → official reachable. Defaults to a known ENDU event if no url given."""
+    test_url = (url or "").strip() or "https://www.endu.net/events/pisa-half-marathon"
+    if "endu.net" not in test_url:
+        raise HTTPException(status_code=400, detail="Fornisci un URL di una pagina evento ENDU (endu.net)")
+    return await asyncio.to_thread(leadfinder_scraper.diagnose_event, test_url)
 
 
 # ---- AI generation ----

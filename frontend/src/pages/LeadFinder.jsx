@@ -16,7 +16,8 @@ const TABS = [
 ];
 const STATE_LABEL = { da_verificare: "Da verificare", verificato: "Verificato", interessante: "Interessante", contattato: "Contattato", demo_richiesta: "Demo richiesta", trial: "Trial", cliente: "Cliente", non_interessato: "Non interessato", non_contattare: "Non contattare" };
 const SCAN_STAT = [
-  ["events_analyzed", "Eventi analizzati"], ["endu_with_site", "Siti ufficiali su ENDU"],
+  ["events_analyzed", "Eventi analizzati"], ["endu_reachable", "ENDU raggiungibili"],
+  ["endu_with_site", "Siti ufficiali su ENDU"],
   ["endu_with_social", "Social su ENDU"], ["sites_visited", "Siti visitati"],
   ["organizers_identified", "Organizzatori identificati"], ["emails_found", "Email trovate"],
   ["instagram_found", "Instagram"], ["facebook_found", "Facebook"], ["linkedin_found", "LinkedIn"],
@@ -46,6 +47,9 @@ export default function LeadFinder() {
   const [mergeSel, setMergeSel] = useState([]);
   const [scan, setScan] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const [diag, setDiag] = useState(null);
+  const [diagUrl, setDiagUrl] = useState("");
+  const [diagBusy, setDiagBusy] = useState(false);
 
   const load = async () => {
     try {
@@ -97,12 +101,23 @@ export default function LeadFinder() {
         try {
           const { data: s } = await api.get(`/leadfinder/scan/${sid}`);
           setScan(s);
-          if (s.status === "done") { setScanning(false); load(); toast.success("Scansione ENDU completata"); return; }
+          if (s.status === "done" || s.status === "empty") {
+            setScanning(false); load();
+            if (s.status === "empty") toast.error(s.message || "Nessun evento acquisito"); else toast.success("Scansione ENDU completata");
+            return;
+          }
         } catch { /* keep polling */ }
         setTimeout(poll, 2500);
       };
       poll();
     } catch (e) { setScanning(false); toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+
+  const runDiagnose = async () => {
+    setDiagBusy(true); setDiag(null);
+    try { const { data } = await api.get("/leadfinder/diagnose", { params: diagUrl.trim() ? { url: diagUrl.trim() } : {} }); setDiag(data); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+    finally { setDiagBusy(false); }
   };
 
   const Link = ({ url, icon: Icon, label }) => url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-tiffany-fg hover:underline text-sm" data-testid={`lf-link-${label}`}><Icon className="w-4 h-4" />{label}<ExternalLink className="w-3 h-3" /></a> : <span className="inline-flex items-center gap-1 text-slate-400 text-sm"><Icon className="w-4 h-4" />Da verificare</span>;
@@ -199,8 +214,34 @@ export default function LeadFinder() {
               <Button disabled variant="outline" className="opacity-60 cursor-not-allowed" data-testid="lf-brevo-btn-disabled" onClick={brevo}><Send className="w-4 h-4 mr-1" />Esporta/Sincronizza con Brevo (non attivo)</Button>
             </div>
             {scan && (
-              <div className="text-xs text-slate-500" data-testid="lf-scan-progress">
-                Stato: <strong>{scan.status === "done" ? "Completata" : "In corso"}</strong> — {scan.done || 0}/{scan.total || 0} eventi analizzati
+              scan.status === "empty" ? (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2" data-testid="lf-scan-empty">
+                  <strong>Nessun evento acquisito — scansione da verificare.</strong>{scan.reason ? <div className="text-xs mt-1">{scan.reason}</div> : null}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500" data-testid="lf-scan-progress">
+                  Stato: <strong>{scan.status === "done" ? "Completata" : "In corso"}</strong> — {scan.done || 0}/{scan.total || 0} eventi analizzati{scan.seeded ? ` · ${scan.seeded} eventi ENDU importati` : ""}
+                </div>
+              )
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3" data-testid="lf-diagnose">
+            <div className="text-sm font-semibold text-slate-700">Diagnostica su 1 evento ENDU</div>
+            <div className="text-xs text-slate-500">Verifica end-to-end del primo passaggio della pipeline su un singolo evento (nessun dato salvato). Lascia vuoto per usare un evento ENDU noto.</div>
+            <div className="flex flex-wrap gap-2">
+              <input value={diagUrl} onChange={(e) => setDiagUrl(e.target.value)} placeholder="https://www.endu.net/events/…" className={`${FIELD} flex-1 min-w-[260px]`} data-testid="lf-diagnose-url" />
+              <Button variant="outline" onClick={runDiagnose} disabled={diagBusy} data-testid="lf-diagnose-btn"><ShieldCheck className="w-4 h-4 mr-1" />{diagBusy ? "Verifica…" : "Diagnostica"}</Button>
+            </div>
+            {diag && (
+              <div className="text-xs bg-slate-50 rounded-lg border border-slate-200 p-3 space-y-1" data-testid="lf-diagnose-result">
+                <div><span className="text-slate-400">URL ENDU:</span> <a href={diag.endu_url} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.endu_url}</a></div>
+                <div><span className="text-slate-400">HTTP:</span> <strong className={diag.http_status === 200 ? "text-emerald-600" : "text-red-600"}>{diag.http_status ?? "—"}</strong> · {diag.bytes || 0} byte {diag.final_url && diag.final_url !== diag.endu_url ? `→ ${diag.final_url}` : ""}</div>
+                <div><span className="text-slate-400">Evento:</span> {diag.name || "—"} · <span className="text-slate-400">data</span> {diag.date || "—"} · <span className="text-slate-400">città</span> {diag.city || "—"} {diag.province ? `(${diag.province})` : ""}</div>
+                <div><span className="text-slate-400">Sito ufficiale:</span> {diag.official_site ? <a href={diag.official_site} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.official_site}</a> : "—"}</div>
+                <div><span className="text-slate-400">Pagina social:</span> {diag.social_page ? <a href={diag.social_page} target="_blank" rel="noreferrer" className="text-tiffany-fg break-all">{diag.social_page}</a> : "—"} {diag.social_kind ? `(${diag.social_kind})` : ""}</div>
+                <div><span className="text-slate-400">Sito raggiungibile:</span> {diag.official_reachable === null ? "n/d" : diag.official_reachable ? <span className="text-emerald-600 font-medium">Sì</span> : <span className="text-red-600 font-medium">No</span>} · {diag.official_pages_found || 0} pagine · email: {(diag.official_emails || []).join(", ") || "—"}</div>
+                {diag.error ? <div className="text-red-600"><span className="text-slate-400">Errore:</span> {diag.error}</div> : <div className="text-emerald-600">Pipeline ENDU → sito ufficiale OK</div>}
               </div>
             )}
           </div>

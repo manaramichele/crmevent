@@ -11,6 +11,7 @@ Design principles honored (per user brief):
 """
 import re
 import time
+import json
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -143,16 +144,44 @@ def _org_names(text):
     return out
 
 
+def _endu_event_meta(soup):
+    """Extract event name/date/location from ENDU (JSON-LD SportsEvent, fallback og/h1)."""
+    meta = {"name": None, "date": None, "city": None, "province": None, "country": None}
+    for sc in soup.find_all("script", {"type": "application/ld+json"}):
+        try:
+            data = json.loads(sc.get_text())
+        except Exception:
+            continue
+        for it in (data if isinstance(data, list) else [data]):
+            if not isinstance(it, dict) or "Event" not in str(it.get("@type", "")):
+                continue
+            meta["name"] = meta["name"] or it.get("name")
+            sd = it.get("startDate")
+            if sd and not meta["date"]:
+                meta["date"] = sd[:10]
+            loc = it.get("location") or {}
+            addr = (loc.get("address") or {}) if isinstance(loc, dict) else {}
+            meta["city"] = meta["city"] or addr.get("addressLocality")
+            meta["province"] = meta["province"] or addr.get("addressRegion")
+            meta["country"] = meta["country"] or addr.get("addressCountry")
+    if not meta["name"]:
+        og = soup.find("meta", {"property": "og:title"})
+        if og and og.get("content"):
+            meta["name"] = og["content"].split("|")[0].strip()
+    return meta
+
+
 # ---------------------------------------------------------------- ENDU parsing
 def parse_endu_event(html, base_url):
-    """From an ENDU event page, extract the 'Link utili' official site + social page.
-    Returns dict: {official_site, social_page, social_kind, instagram, facebook}.
+    """From an ENDU event page, extract the 'Link utili' official site + social page + event meta.
     Only labeled anchors inside 'Link utili' are considered (ENDU's own footer socials are skipped)."""
     out = {"official_site": None, "social_page": None, "social_kind": None,
-           "instagram": None, "facebook": None, "labels": {}}
+           "instagram": None, "facebook": None, "labels": {},
+           "name": None, "date": None, "city": None, "province": None}
     if not html:
         return out
     soup = BeautifulSoup(html, "lxml")
+    out.update(_endu_event_meta(soup))
     for a in soup.find_all("a", href=True):
         href = a["href"].strip()
         if not href.startswith("http"):
@@ -349,7 +378,8 @@ def scan_event(endu_url, session=None):
     session = session or requests.Session()
     res = {"endu_url": endu_url, "endu_ok": False, "official_site": None,
            "social_page": None, "endu_social_kind": None, "endu_instagram": None,
-           "endu_facebook": None, "site": None}
+           "endu_facebook": None, "site": None, "http_status": None,
+           "name": None, "date": None, "city": None, "province": None}
     html, real = _fetch(endu_url, session)
     if not html:
         return res
@@ -360,7 +390,52 @@ def scan_event(endu_url, session=None):
     res["endu_social_kind"] = links["social_kind"]
     res["endu_instagram"] = links["instagram"]
     res["endu_facebook"] = links["facebook"]
+    res["name"] = links.get("name")
+    res["date"] = links.get("date")
+    res["city"] = links.get("city")
+    res["province"] = links.get("province")
     if links["official_site"]:
         time.sleep(POLITE_DELAY)
         res["site"] = scrape_official_site(links["official_site"], session=session)
     return res
+
+
+def diagnose_event(endu_url, session=None):
+    """Single-event end-to-end diagnostic: HTTP status → ENDU data → official site → social →
+    official site reachable. No DB writes. Used by the /leadfinder/diagnose endpoint."""
+    session = session or requests.Session()
+    out = {"endu_url": endu_url, "http_status": None, "final_url": None, "bytes": 0,
+           "name": None, "date": None, "city": None, "province": None,
+           "official_site": None, "social_page": None, "social_kind": None,
+           "instagram": None, "facebook": None,
+           "official_reachable": None, "official_pages_found": 0,
+           "official_emails": [], "official_socials": {}, "error": None}
+    try:
+        r = session.get(endu_url, headers={"User-Agent": UA, "Accept-Language": "it,en;q=0.8"},
+                        timeout=TIMEOUT, allow_redirects=True)
+        out["http_status"] = r.status_code
+        out["final_url"] = r.url
+        out["bytes"] = len(r.text or "")
+        if r.status_code != 200 or "html" not in (r.headers.get("content-type") or "").lower():
+            out["error"] = f"ENDU ha risposto HTTP {r.status_code} (content-type non HTML)"
+            return out
+        links = parse_endu_event(r.text, r.url)
+        for k in ("name", "date", "city", "province", "official_site", "social_page"):
+            out[k] = links.get(k)
+        out["social_kind"] = links.get("social_kind")
+        out["instagram"] = links.get("instagram")
+        out["facebook"] = links.get("facebook")
+        if not links.get("name") and not links.get("official_site") and not links.get("social_page"):
+            out["error"] = "Pagina ENDU letta ma nessun dato evento/link estratto (struttura cambiata o contenuto JS)"
+        if links.get("official_site"):
+            time.sleep(POLITE_DELAY)
+            st = scrape_official_site(links["official_site"], session=session, max_pages=3)
+            out["official_reachable"] = not st.get("error")
+            out["official_pages_found"] = len(st.get("visited") or [])
+            out["official_emails"] = [e["email"] for e in st.get("emails", [])]
+            out["official_socials"] = {k: st.get(k) for k in ("instagram", "facebook", "linkedin") if st.get(k)}
+            if st.get("error"):
+                out["error"] = (out["error"] + "; " if out["error"] else "") + f"sito ufficiale: {st['error']}"
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {str(e)[:160]}"
+    return out
