@@ -3,6 +3,9 @@
 ## Problem Statement
 CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori, staff e volontari. Single-organization. Centralizza eventi, aziende, persone, sponsor/partner/fornitori/prospect, pipeline commerciale, staff, volontari, team, turni, presenze, mappe/percorsi, attività, follow-up. Accessi differenziati (admin CRM vs area personale staff/volontario). UI italiana, SaaS B2B, bianco + accento Tiffany RAL 6027 (#81D8D0).
 
+> **Stato 2026-06 (ultima sessione)**: Completati e testati in preview — (1) Dashboard membro non mostra più `da contattare` (solo stati operativi), (2) mittente invito `hello@crmevent.it` (fix override in backend/.env), (3) occhio password su `/invito` e `/attiva`, (4) Persone con tab "Referenti aziende" / "Staff & Volontari" (+sotto-filtri) / "Da classificare" (classificazione non distruttiva via flag `is_evento`). ⚠️ PRODUZIONE: il secret `EMAIL_FROM_ADDRESS` è ancora ≠ hello@crmevent.it (confermato dal deployer) → l'utente deve aggiornarlo nel pannello Secrets PRIMA/insieme al redeploy, altrimenti resta noreply.
+
+
 ## Architecture
 - Backend: FastAPI + MongoDB. Route sotto /api. Auth unificata JWT email/password + Emergent Google login. RBAC: admin/member → CRM; staff/volunteer → solo /me/*. `require_admin` gate su tutte le CRUD admin, dashboard, search, settings. Object-check per area volontario.
 - Integrazioni: Resend gestito (email invito/reset), Object storage Emergent (upload mappe), Google Calendar OAuth (per-utente, richiede secrets).

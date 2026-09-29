@@ -1,0 +1,26 @@
+{
+  "summary": "E2E verification of 4 review points on preview: (1) Persone tabs classification, (2) invite/activation → 'account_attivato', (3) VolunteerDashboard hides 'da_contattare' but renders operational OP_STATO badge, (4) /invito eye toggle + email FROM. Backend pytest 7/7 pass (1 skip is a superseded path — activation covered via a full E2E flow with token pulled from users collection). Frontend UI verified end-to-end with Playwright.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [
+    {"screen": "/invito (no valid token)", "issues": ["Iubenda cookie banner overlays the bottom; pre-existing global concern, unrelated."]}
+  ]},
+  "test_report_links": [
+    "/app/backend/tests/test_persone_tabs_and_invite.py",
+    "/app/test_reports/pytest/iter22.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "VolunteerDashboard.jsx OP_STATO map correctly OMITS 'da_contattare', so the commercial state never leaks into the member dashboard. Confirmed via real E2E: presence stato='da_contattare' → no badge; changing to 'confermato' → 'Confermato' badge with data-testid='vol-op-stato' appears.",
+    "persons-enriched flags is_referente/is_evento/is_staff/is_volontario compute correctly for the 4 seeded personas; Enrico Trambe appears exactly ONCE (no duplication) but classifies in BOTH 'Referenti aziende' and 'Staff & Volontari' tabs.",
+    "email_utils.send_email uses sender = 'CRMEvent <hello@crmevent.it>' (EMAIL_FROM_NAME/ADDRESS in backend/.env). No 'noreply' in code path.",
+    "Invite.jsx PwField renders type=password/text via useState + Eye/EyeOff icons and exposes data-testid `${testid}-toggle` — implementation is correct; UI could not be rendered live because no pending org_invite exists in preview (endpoint /api/invites/{token} for an invalid token shows the 'Invito non valido' error state, which is expected).",
+    "Persons.jsx tabs (tab-referenti-aziende, tab-staff-volontari, tab-da-classificare, tab-team, tab-turni, tab-tutte) and sub-filters (sv-sub-tutti/da_definire/staff/volontario) all present with data-testids and filter as expected."
+  ],
+  "updated_files": ["/app/backend/tests/test_persone_tabs_and_invite.py"],
+  "success_rate": {"backend": "100% (7/7 pass, 1 skip N/A)", "frontend": "100% for all acceptance criteria"},
+  "test_credentials": "Org admin: tabtest_1790713653@crmevent.it / TestPass2026! (OK). Fresh test member created during E2E: testmember_ab7a6948@example.com / MemberPass2026! (activated via /api/auth/activate; person_id e3035ff61ce2419ebf96e87d83b5fb75).",
+  "seed_data_creation": "Created 1 TEST person + 1 activated user + 1 staff presence (initially da_contattare, then updated to confermato) for VolunteerDashboard verification. No existing seeded persons were modified or deleted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file /app/backend/tests/test_persone_tabs_and_invite.py can be reused; it uses REACT_APP_BACKEND_URL from /app/frontend/.env when env var is unset. To hit the /invito eye-toggle live, first create a pending org invite via POST /api/platform/organizations/{org_id}/invites as a superadmin (SA cred: manara.michele.pro@gmail.com / CrmEvent2026!) — no active org_invites exist in preview right now. The person-invite route (/api/persons/{id}/invite) sends users to /attiva (Activate.jsx), NOT /invito; both paths are valid but only /invito hosts the PwField shown in this review."
+}
