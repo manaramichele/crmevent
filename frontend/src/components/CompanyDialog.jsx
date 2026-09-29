@@ -91,7 +91,7 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
               <span className="text-sm font-semibold text-slate-700">Referenti</span>
               <Button size="sm" variant="outline" onClick={() => setRefs((r) => [...r, { ...emptyRef }])} data-testid="company-add-referente"><Plus className="w-4 h-4 mr-1" />Aggiungi referente</Button>
             </div>
-            {refs.length === 0 && <p className="text-xs text-slate-400">Puoi aggiungere uno o più referenti; verranno creati o collegati automaticamente in anagrafica Persone.</p>}
+            {refs.length === 0 && <p className="text-xs text-slate-400">Puoi aggiungere uno o più referenti; verranno creati o collegati automaticamente nella sezione Anagrafiche.</p>}
             <div className="space-y-3">
               {refs.map((r, i) => (
                 <div key={i} className="border border-slate-200 rounded-lg p-3 relative" data-testid={`company-ref-${i}`}>

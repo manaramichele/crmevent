@@ -474,7 +474,7 @@ export default function Hospitality() {
         loading ? <p className="text-slate-400">Caricamento...</p> :
         !data ? null : persons.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
-            Nessuna persona collegata a questo evento. Associa staff/volontari dalla sezione <strong>Persone</strong> per gestire ospitalità e pasti.
+            Nessuna persona collegata a questo evento. Associa staff/volontari dalla sezione <strong>Anagrafiche</strong> per gestire ospitalità e pasti.
           </div>
         ) : (
         <>

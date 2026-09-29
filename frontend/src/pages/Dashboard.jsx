@@ -83,7 +83,7 @@ export default function Dashboard() {
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">CRM</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Kpi icon={Building2} label="Aziende totali" value={data.crm.aziende} testid="kpi-aziende" />
-          <Kpi icon={Users} label="Persone totali" value={data.crm.persone} testid="kpi-persone" />
+          <Kpi icon={Users} label="Anagrafiche totali" value={data.crm.persone} testid="kpi-persone" />
           <Kpi icon={UserCheck} label="Nuovi contatti" value={data.crm.nuovi_contatti} color="blue" testid="kpi-nuovi-contatti" />
           <Kpi icon={Target} label="Prospect" value={data.crm.prospect} color="orange" testid="kpi-prospect" />
         </div>

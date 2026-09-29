@@ -13,7 +13,7 @@ const ORG_NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende" },
-  { to: "/persone", label: "Persone", icon: Users, id: "persone" },
+  { to: "/persone", label: "Anagrafiche", icon: Users, id: "persone" },
   { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita" },
   { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor" },
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita" },

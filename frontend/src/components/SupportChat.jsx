@@ -7,7 +7,7 @@ import { Sparkles, Send, ThumbsUp, ThumbsDown, X, LifeBuoy, Check } from "lucide
 import { toast } from "sonner";
 
 const CTX = {
-  "/": "Dashboard", "/eventi": "Eventi", "/aziende": "Aziende", "/persone": "Persone",
+  "/": "Dashboard", "/eventi": "Eventi", "/aziende": "Aziende", "/persone": "Anagrafiche",
   "/sponsor": "Sponsor & Partner", "/attivita": "Attività", "/followup": "Follow-up",
   "/lead": "Lead", "/impostazioni": "Impostazioni", "/supporto": "Supporto", "/profilo": "Profilo",
   "/app": "Area personale — I miei eventi",

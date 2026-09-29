@@ -287,7 +287,7 @@ export default function Persons() {
 
   return (
     <div className="animate-fade-up">
-      <PageHeader title="Persone" subtitle="Anagrafica unica: referenti, staff, volontari, team e turni"
+      <PageHeader title="Anagrafiche" subtitle="Anagrafica unica: referenti, staff, volontari, team e turni"
         action={<PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi persona</PrimaryButton>} />
       <Tabs defaultValue="tutte">
         <TabsList className="mb-4 flex-wrap h-auto">
