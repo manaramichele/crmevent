@@ -1,0 +1,26 @@
+{
+  "summary": "Iter23 - Full review of Staff/Volunteer personal area 'La mia partecipazione'. Backend: 3/3 pytest passed. Frontend E2E on preview covering all 11 review points passed. Scoping verified via API AND UI: only 1 lodging + 1 meal returned for member; admin/economic fields (costo, stato_pagamento, note_amministrative, a_carico_di, codice_prenotazione) absent; markers 'SECRETO-ADMIN', 'SECRETO-MEAL', 'OTHER-LODGING', 'OTHER-MEAL' NEVER appear. 'da contattare' NEVER surfaces in UI/API (badge shows 'Confermato'). Route dialog opens Leaflet with GPX tracciato correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [
+    {"screen": "/evento/:id (mobile)", "issues": ["Iubenda cookie banner overlays the bottom of the page on mobile - global preview concern, not part of this review."]}
+  ]},
+  "test_report_links": [
+    "/app/backend/tests/test_iter23_volunteer_area.py",
+    "/app/test_reports/pytest/iter23.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/me/events/{event_id} correctly scopes lodgings/meals by persona_id=pid and strips economic/admin fields via _STAFF_HIDE. Verified: exactly 1 lodging and 1 meal returned for Marco Verdi, Sara Neri's records not leaked.",
+    "VolunteerEvent.jsx OP_STATO map hides 'da_contattare' - the state badge only renders when a whitelisted state is present. Confirmed 'Confermato' badge shows in both dashboard and detail.",
+    "RouteMapDialog.jsx: GPX fetch via credentials:'include' works with httpOnly cookie; Leaflet renders polyline + OSM tiles (20 tiles loaded). Dialog missing aria-describedby warning surfaces (radix Dialog) - minor accessibility improvement.",
+    "Minor perf: Leaflet Canvas2D warns 'willReadFrequently' repeatedly; harmless but noisy. Consider setting the attribute on renderer canvas.",
+    "Data-testid coverage: vol-back, vol-event-header, vol-event-gmaps, vol-incarico, vol-op-stato, vol-turni, vol-briefing, vol-mappe, vol-ospitalita, vol-pasti, vol-team, route-map-dialog, route-map-canvas all present and unique."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter23_volunteer_area.py"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (all 11 review points verified)"},
+  "test_credentials": "Member: staffmember@tabtest.crmevent.it / MemberTest2026! (seeded by /app/backend/seed_staff_test.py). Event: trail-del-lago-test.",
+  "seed_data_creation": "Ran /app/backend/seed_staff_test.py idempotently (cleans previous _seed_staff rows then re-inserts). Includes second persona Sara Neri whose lodging/meal are verified NOT to leak to Marco Verdi.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression file /app/backend/tests/test_iter23_volunteer_area.py can be reused. It uses REACT_APP_BACKEND_URL from /app/frontend/.env when env var is unset. Login is via POST /api/auth/login (httpOnly cookie). The /api/me/events/{id} payload uses top-level keys: event, presence, shifts, team, team_leader, colleagues, maps, lodgings, meals. To re-seed, run: `python /app/backend/seed_staff_test.py`."
+}
