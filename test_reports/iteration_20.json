@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend E2E testing of the unified 'Tipi di azienda' list and inline quick-create flows (Companies + Deals) in org Nova Events. Verified: (1) Impostazioni page shows the new 'Tipi di azienda' section with add-input-tipi_azienda / add-button-tipi_azienda / rename-tipi_azienda-* / remove testids. (2) Aziende -> Aggiungi azienda -> field-tipo is a dropdown backed by settings.tipi_azienda with field-tipo-add-option '+ Aggiungi nuova tipologia' -> inline input field-tipo-add-input + field-tipo-add-confirm creates the value, auto-selects it, keeps the CompanyDialog open with data preserved. Tipo and Settore remain separate fields. (3) Sponsor & Partner -> Nuova trattativa: deal-dialog field-tipo now uses the SAME list as tipi_azienda (Azienda/Espositore/Istituzione/Partner/Sponsor + added TEST_Tipologia1) and NO LONGER shows the legacy lowercase list (sponsor/partner/fornitore/prospect). '+ Aggiungi nuova tipologia' works from inside the deal dialog too. (4) deal-dialog field-azienda_id has '+ Aggiungi nuova azienda' (add-entity-azienda_id) which opens CompanyDialog OVER the deal dialog; after company-save the CompanyDialog closes, the deal-dialog is still open, the just-created company is auto-selected in field-azienda_id, and other fields (Tipo=Sponsor, Valore=1234) remain intact. (5) Duplicate name check works: creating a company with an existing name triggers window.confirm 'Esiste già un'azienda \"...\". Vuoi crearla comunque?' before creating. (6) No regressions on other EntityManagers: Attivita and Follow-up dialogs still open and render correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/settings", "issue": "Backfill in default_settings/get_settings only adds MISSING KEYS to an existing settings doc; it does NOT merge missing VALUES into an existing list. For org 'nova_events_test_org' the settings.tipi_azienda already existed with only 5 values [Azienda, Espositore, Istituzione, Partner, Sponsor], so the newer defaults 'Fornitore' and 'Prospect' are NOT present. The review request explicitly expects all 7 values (Azienda, Espositore, Fornitore, Istituzione, Partner, Prospect, Sponsor) in the org. Fix by either (a) enhancing backfill to merge missing default values into existing lists (union-preserve-order) at least for tipi_azienda, or (b) explicitly patching the Nova Events seed so tipi_azienda contains all 7."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Follow-up dialog Scadenza field", "issues": ["Uses the browser native date picker (mm/dd/yyyy) instead of the shadcn calendar component. Pre-existing, not introduced by this iteration."]},
+      {"screen": "All admin pages", "issues": ["Iubenda cookie banner still overlays the bottom of the page on first visit; can partially cover 'Salva' on some dialogs on smaller viewports."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Backend: make settings backfill merge missing default VALUES for tipi_azienda into existing org settings, or run a one-off migration/seed on nova_events_test_org to add 'Fornitore' and 'Prospect'. The tipi_azienda list must contain all 7 values as per spec."
+  ],
+  "critical_code_review_comments": [
+    "server.py get_settings backfill logic is intentional (only missing keys) but the review request treats 'Tipi di azienda' as canonical and expects all 7 defaults visible for existing orgs; add a values-level backfill for the newly-introduced list only (idempotent).",
+    "crm.jsx Field for plain select uses ADD_ENTITY sentinel value '__add_entity__'. If a real option ever has that literal value, it would collide - low risk, but a safer sentinel or Symbol wrapping would be more defensive.",
+    "SettingSelect.jsx doAdd re-fetches /settings and PUTs the whole document; two rapid parallel adds could race and drop one. Consider a dedicated POST /api/settings/{key}/values endpoint or optimistic concurrency."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% for the new unification/quick-create flows; 1 data/seed issue on tipi_azienda content"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (working). Set localStorage.acting_org_id='nova_events_test_org' after login.",
+  "seed_data_creation": "Added 'TEST_Tipologia1' to settings.tipi_azienda of Nova Events (via inline SettingSelect add during test). Created 1 company 'TEST_CRMCo_<ts>' via the inline azienda quick-create from the deal dialog. Duplicate attempt was cancelled at window.confirm and no second company was created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Nova Events settings.tipi_azienda now contains: Azienda, Espositore, Istituzione, Partner, Sponsor, TEST_Tipologia1 (missing Fornitore/Prospect - pending main agent fix). Nova Events companies list has an extra TEST_CRMCo_<timestamp> record from this iteration. All unified 'Tipo azienda' UI wiring (SettingSelect+EntityDialog entityCreators) works as designed.",
+  "rca of the issue": "Fornitore/Prospect not shown because default_settings() was updated to include those defaults after the org's settings document was created; get_settings() only backfills missing top-level KEYS, not missing VALUES within existing lists, so pre-existing tipi_azienda lists are never enriched. Mitigation: change get_settings to also union defaults[key] into existing list values for a curated set of keys (at minimum tipi_azienda), or update the Nova Events seed script to $addToSet the missing values."
+}
