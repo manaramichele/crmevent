@@ -1,5 +1,13 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Form pubblico responsive (Dalle/Alle) + due blocchi Brevo distinti + verifica go-live
+- **Responsive form pubblico** (Partecipa.jsx): campi orario Dalle/Alle passati da flex a `grid grid-cols-1 min-[420px]:grid-cols-2` con input `w-full min-w-0` → sotto 420px impilati (Dalle sopra, Alle sotto), zero overflow/sovrapposizioni a 320/360/375/390/430px, compatibili col selettore orario nativo iOS/Android. Nessuna modifica a logica/dati.
+- **Due blocchi distinti** ripristinati sulla stessa pagina (Dashboard piattaforma): "Automazioni email · Funnel Demo CRMEvent" (invariato) e "Automazioni email · Staff & Volontari". Rimosso il route/menu separato `/marketing/disponibilita` (consolidato). Pulsanti separati: "Crea/Verifica lista Brevo" (nuovo endpoint `POST /api/brevo/availability-list/ensure`) e "Crea/Verifica template"; badge "Invii automatici Staff & Volontari: ATTIVI/DISATTIVATI"; trigger mostrati per ogni template.
+- **Causa scomparsa sezione**: nell'iterazione precedente il pannello era stato spostato dalla pagina del Funnel Demo a un route separato e rimosso dalla pagina Funnel → non più visibile lì (più deploy non ancora propagato). Risolto consolidando entrambi i blocchi sulla stessa pagina.
+- **Verifica trigger go-live** (da codice): 1ª email "Disponibilità ricevuta" alla compilazione del form; 2ª email "Partecipazione confermata" solo al passaggio a Confermata (una sola volta); invii transazionali diretti da CRMEvent (nessuna automazione Brevo); invio solo se template `isActive`; mai CF/data nascita/rimborsi a Brevo.
+- **Baseline produzione (deployer)**: BREVO_API_KEY presente; BREVO_AVAILABILITY_ENABLED assente (OFF). Preview: flag impostato a `on` (inerte senza chiave). Go-live: aggiungere il secret in produzione + Re-publish.
+
+
 ## 2026-06 — Evento · Descrizione delle singole giornate + Menu Marketing (Email disponibilità)
 - **Descrizione singole giornate evento** (verificato backend e2e): campo `giorni_descrizioni` (dict ISO-date → testo breve) sul modello Event. In creazione/modifica Evento (Events.jsx) nuovo tipo campo `daydesc`: genera automaticamente una riga per ogni giorno tra Data inizio e Data fine evento (anche evento di 1 solo giorno), campo breve e facoltativo "Descrizione giornata". Le descrizioni sono legate alla data specifica.
 - Pruning automatico (model_validator): al salvataggio mantiene solo le date comprese nell'intervallo evento e non vuote → se cambi le date, le descrizioni delle date che restano nel range sono preservate, quelle fuori range vengono scartate, le nuove partono vuote. Verificato: create scarta date fuori range; update con restringimento a 1 giorno preserva solo la data in range.

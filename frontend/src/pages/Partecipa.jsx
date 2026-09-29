@@ -148,9 +148,15 @@ export default function Partecipa() {
                     </div>
                   </div>
                   {on && (
-                    <div className="flex items-center gap-2 mt-3 pl-8">
-                      <div className="flex-1"><Label className="text-[11px] text-slate-400">Dalle</Label><Input type="time" value={days[d.date]?.dalle || ""} onChange={(e) => setDayTime(d.date, "dalle", e.target.value)} data-testid={`pf-day-from-${d.date}`} /></div>
-                      <div className="flex-1"><Label className="text-[11px] text-slate-400">Alle</Label><Input type="time" value={days[d.date]?.alle || ""} onChange={(e) => setDayTime(d.date, "alle", e.target.value)} data-testid={`pf-day-to-${d.date}`} /></div>
+                    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2 mt-3 pl-8" data-testid={`pf-day-times-${d.date}`}>
+                      <div className="min-w-0">
+                        <Label className="block text-[11px] text-slate-400 mb-1">Dalle</Label>
+                        <Input type="time" className="w-full min-w-0" value={days[d.date]?.dalle || ""} onChange={(e) => setDayTime(d.date, "dalle", e.target.value)} data-testid={`pf-day-from-${d.date}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <Label className="block text-[11px] text-slate-400 mb-1">Alle</Label>
+                        <Input type="time" className="w-full min-w-0" value={days[d.date]?.alle || ""} onChange={(e) => setDayTime(d.date, "alle", e.target.value)} data-testid={`pf-day-to-${d.date}`} />
+                      </div>
                     </div>
                   )}
                 </div>

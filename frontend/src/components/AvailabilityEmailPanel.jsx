@@ -11,10 +11,16 @@ const fmtDate = (iso) => {
   catch { return iso; }
 };
 
+const TRIGGER = {
+  disponibilita: "Trigger: invio corretto del modulo pubblico disponibilità",
+  conferma: "Trigger: Persona + Evento impostata su «Confermata»",
+};
+
 export function AvailabilityEmailPanel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [ensuringList, setEnsuringList] = useState(false);
   const [events, setEvents] = useState([]);
   const [eventId, setEventId] = useState("");
   const [to, setTo] = useState("");
@@ -52,6 +58,16 @@ export function AvailabilityEmailPanel() {
     finally { setCreating(false); }
   };
 
+  const ensureList = async () => {
+    setEnsuringList(true);
+    try {
+      const { data: r } = await api.post("/brevo/availability-list/ensure");
+      toast.success(`Lista Brevo verificata · ${r.list?.name} (ID ${r.list?.id})`);
+      load();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setEnsuringList(false); }
+  };
+
   const sendTest = async (kind) => {
     if (!eventId) { toast.error("Seleziona un Evento di tipo Test"); return; }
     if (!to.trim()) { toast.error("Inserisci l'indirizzo destinatario"); return; }
@@ -75,9 +91,9 @@ export function AvailabilityEmailPanel() {
       <div className="flex items-center gap-4">
         <div className="w-10 h-10 rounded-lg bg-tiffany-light text-tiffany-fg flex items-center justify-center"><MailCheck className="w-5 h-5" /></div>
         <div className="min-w-0">
-          <div className="font-semibold text-slate-800">Email disponibilità eventi</div>
+          <div className="font-semibold text-slate-800">Automazioni email · Staff &amp; Volontari</div>
           <div className="text-xs text-slate-500 mt-0.5">
-            Template master universali per la raccolta disponibilità (guidati da parametri dinamici dell'Evento). Gestione riservata al Super Admin.
+            Gestisce esclusivamente le comunicazioni generate dalla Raccolta disponibilità degli Eventi (template master universali + lista unica Brevo). Gli invii sono gestiti da CRMEvent. Riservato al Super Admin.
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -85,7 +101,7 @@ export function AvailabilityEmailPanel() {
             className={`text-xs font-semibold px-2.5 py-1 rounded-full ${enabled ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-600 border border-slate-200"}`}
             data-testid="availability-auto-status"
           >
-            Invii automatici: {enabled ? "ATTIVI" : "DISATTIVATI"}
+            Invii automatici Staff &amp; Volontari: {enabled ? "ATTIVI" : "DISATTIVATI"}
           </span>
           <Button size="sm" variant="outline" onClick={load} disabled={loading} data-testid="availability-refresh-btn">
             <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />{loading ? "Aggiorno…" : "Aggiorna stato"}
@@ -113,7 +129,10 @@ export function AvailabilityEmailPanel() {
           <tbody>
             {templates.map((t) => (
               <tr key={t.kind} className="border-b border-slate-100" data-testid={`availability-template-row-${t.kind}`}>
-                <td className="py-2.5 px-3 text-slate-800 font-medium">{t.name}</td>
+                <td className="py-2.5 px-3 text-slate-800 font-medium">
+                  {t.name}
+                  <div className="text-[11px] font-normal text-slate-400" data-testid={`availability-trigger-${t.kind}`}>{TRIGGER[t.kind]}</div>
+                </td>
                 <td className="py-2.5 px-3 text-slate-600">{t.type_label}</td>
                 <td className="py-2.5 px-3 text-slate-600 font-mono">{t.template_id ?? "—"}</td>
                 <td className="py-2.5 px-3">
@@ -130,11 +149,14 @@ export function AvailabilityEmailPanel() {
         </table>
       </div>
 
-      <div className="mt-4">
-        <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={createTemplates} disabled={creating || !configured} data-testid="availability-create-templates-btn">
-          <Plus className="w-4 h-4 mr-1.5" />{creating ? "Configuro…" : "Crea/Configura in Brevo"}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={ensureList} disabled={ensuringList || !configured} data-testid="availability-ensure-list-btn">
+          <Plus className="w-4 h-4 mr-1.5" />{ensuringList ? "Verifico…" : "Crea/Verifica lista Brevo"}
         </Button>
-        {!configured && <span className="ml-2 text-[11px] text-slate-400">Disponibile in produzione (Brevo configurato)</span>}
+        <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={createTemplates} disabled={creating || !configured} data-testid="availability-create-templates-btn">
+          <Plus className="w-4 h-4 mr-1.5" />{creating ? "Verifico…" : "Crea/Verifica template"}
+        </Button>
+        {!configured && <span className="text-[11px] text-slate-400 self-center">Disponibile in produzione (Brevo configurato)</span>}
       </div>
 
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="availability-list-info">

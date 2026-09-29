@@ -7205,6 +7205,26 @@ async def avail_confirm_bulk(event_id: str, body: BulkConfirm, user: dict = Depe
     return {"confirmed": confirmed, "emailed": emailed}
 
 
+@api.post("/brevo/availability-list/ensure")
+async def brevo_avail_list_ensure(user: dict = Depends(require_superadmin)):
+    """Crea/verifica la lista unica «CRMEvent · Disponibilità eventi» via API e persiste il List ID.
+    Idempotente: se esiste già riusa l'ID salvato. Nessun duplicato."""
+    if not brevo_client.is_configured():
+        raise HTTPException(status_code=400, detail="Brevo non configurato in questo ambiente (disponibile in produzione).")
+    async with brevo_client.BrevoClient() as c:
+        list_id = await _ensure_avail_list(c)
+        contacts = None
+        try:
+            detail = await c.get_list(list_id)
+            if isinstance(detail, dict):
+                contacts = detail.get("totalSubscribers")
+                if contacts is None:
+                    contacts = detail.get("uniqueSubscribers")
+        except Exception:
+            contacts = None
+    return {"list": {"id": list_id, "name": AVAIL_LIST_NAME, "contacts": contacts}}
+
+
 @api.post("/brevo/create-availability-templates")
 async def brevo_create_avail_templates(user: dict = Depends(require_superadmin)):
     """Create the two availability email templates as DRAFTS (isActive=false). Never sends.
