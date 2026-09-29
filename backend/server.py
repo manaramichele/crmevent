@@ -1470,7 +1470,7 @@ def default_settings(org_id="global"):
     return {"id": org_id,
             "tipologie_evento": ["Fiera", "Congresso", "Concerto", "Festival", "Conferenza", "Workshop", "Gala"],
             "settori": ["Tecnologia", "Food & Beverage", "Moda", "Automotive", "Finanza", "Media", "No Profit"],
-            "tipi_azienda": ["Azienda", "Espositore", "Istituzione", "Partner", "Sponsor"],
+            "tipi_azienda": ["Azienda", "Espositore", "Fornitore", "Istituzione", "Partner", "Prospect", "Sponsor"],
             "ruoli_staff": ["Coordinatore", "Hostess", "Tecnico", "Sicurezza", "Accoglienza", "Logistica"],
             "aree_operative": ["Expo", "Palco", "Ingresso", "Ristoro", "Logistica", "Parcheggi", "Percorso"],
             "livelli_sponsorship": ["Main Sponsor", "Gold", "Silver", "Bronze", "Technical Partner"],

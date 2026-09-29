@@ -27,6 +27,14 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
     if (!f.nome) { toast.error("Ragione sociale obbligatoria"); return; }
     setSaving(true);
     try {
+      if (!editing) {
+        try {
+          const { data: existing } = await api.get("/companies");
+          const nn = (s) => (s || "").trim().toLowerCase();
+          const dup = (existing || []).find((c) => nn(c.nome) === nn(f.nome));
+          if (dup && !window.confirm(`Esiste già un'azienda "${dup.nome}". Vuoi crearla comunque?`)) { setSaving(false); return; }
+        } catch {}
+      }
       let company;
       if (editing) { const { data } = await api.put(`/companies/${initial.id}`, f); company = data; }
       else { const { data } = await api.post("/companies", f); company = data; }

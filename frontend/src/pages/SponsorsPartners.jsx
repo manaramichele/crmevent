@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import api from "@/lib/api";
+import CompanyDialog from "@/components/CompanyDialog";
 
 const FASI = ["prospect", "contattato", "proposta_inviata", "in_trattativa", "confermato", "perso"];
 const FASE_LABEL = { prospect: "Prospect", contattato: "Contattato", proposta_inviata: "Proposta inviata", in_trattativa: "In trattativa", confermato: "Confermato", perso: "Perso" };
@@ -16,7 +17,7 @@ const TIPO_LABEL = { sponsor: "Sponsor", partner: "Partner", fornitore: "Fornito
 
 export default function SponsorsPartners() {
   const { items: deals, loading, create, update, remove, setItems } = useCollection("/deals");
-  const { items: companies } = useCollection("/companies");
+  const { items: companies, setItems: setCompanies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
   const { items: persons } = useCollection("/persons");
   const settings = useSettings();
@@ -27,9 +28,9 @@ export default function SponsorsPartners() {
   const eventName = (id) => events.find((e) => e.id === id)?.nome || "";
 
   const fields = [
-    { name: "azienda_id", label: "Azienda", required: true, type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })) },
+    { name: "azienda_id", label: "Azienda", required: true, type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })), addEntity: "Aggiungi nuova azienda", placeholder: "Seleziona azienda..." },
     { name: "evento_id", label: "Evento", required: true, type: "select", options: events.map((e) => ({ value: e.id, label: e.nome })) },
-    { name: "tipo", label: "Tipo", keepOrder: true, type: "select", options: Object.keys(TIPO_LABEL).map((v) => ({ value: v, label: TIPO_LABEL[v] })) },
+    { name: "tipo", label: "Tipo", type: "select", settingKey: "tipi_azienda", options: settings?.tipi_azienda || [], addLabel: "Aggiungi nuova tipologia", placeholder: "Seleziona tipo..." },
     { name: "fase", label: "Fase pipeline", keepOrder: true, type: "select", options: FASI.map((v) => ({ value: v, label: FASE_LABEL[v] })) },
     { name: "valore", label: "Valore (€)", type: "number" },
     { name: "valore_confermato", label: "Valore confermato (€)", type: "number" },
@@ -119,6 +120,12 @@ export default function SponsorsPartners() {
         open={open} onOpenChange={setOpen}
         title={editing ? "Modifica trattativa" : "Nuova trattativa"}
         fields={fields} initial={editing} onSubmit={onSubmit} testid="deal"
+        entityCreators={{
+          azienda_id: ({ onClose, onCreated }) => (
+            <CompanyDialog open onOpenChange={(o) => { if (!o) onClose(); }}
+              onSaved={(c) => { if (c?.id) setCompanies((p) => [c, ...p.filter((x) => x.id !== c.id)]); onCreated(c); }} />
+          ),
+        }}
       />
     </div>
   );

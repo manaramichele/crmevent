@@ -210,7 +210,7 @@ export function PrimaryButton({ children, ...props }) {
   );
 }
 
-function Field({ field, value, onChange, options }) {
+function Field({ field, value, onChange, options, onAddEntity }) {
   const common = { id: field.name, "data-testid": `field-${field.name}` };
   if (field.type === "image") {
     return <ImageUpload value={value} onChange={(u) => onChange(field.name, u)} testid={`field-${field.name}`} />;
@@ -225,13 +225,15 @@ function Field({ field, value, onChange, options }) {
   }
   if (field.type === "select") {
     const opts = sortOptions(field.options || options?.[field.source] || [], field.keepOrder);
+    const ADD_ENTITY = "__add_entity__";
     return (
-      <Select value={value || ""} onValueChange={(v) => onChange(field.name, v)}>
+      <Select value={value || ""} onValueChange={(v) => { if (v === ADD_ENTITY) { onAddEntity && onAddEntity(field); } else { onChange(field.name, v); } }}>
         <SelectTrigger data-testid={`field-${field.name}`}><SelectValue placeholder={field.placeholder || "Seleziona..."} /></SelectTrigger>
         <SelectContent>
           {opts.map((o) => (
             <SelectItem key={o.value} value={o.value} data-testid={`option-${field.name}-${o.value}`}>{o.label}</SelectItem>
           ))}
+          {field.addEntity && <SelectItem value={ADD_ENTITY} data-testid={`add-entity-${field.name}`} className="text-tiffany-active font-semibold">+ {field.addEntity}</SelectItem>}
         </SelectContent>
       </Select>
     );
@@ -247,9 +249,10 @@ function Field({ field, value, onChange, options }) {
   );
 }
 
-export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity" }) {
+export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity", entityCreators }) {
   const [form, setForm] = useState(initial || {});
   const [saving, setSaving] = useState(false);
+  const [addField, setAddField] = useState(null);
   useEffect(() => { setForm(initial || {}); }, [initial, open]);
 
   const change = (name, val) => setForm((f) => ({ ...f, [name]: val }));
@@ -270,25 +273,31 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid={`${testid}-dialog`}>
-        <DialogHeader><DialogTitle className="font-display">{title}</DialogTitle><DialogDescription className="sr-only">Compila i campi e salva.</DialogDescription></DialogHeader>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
-          {fields.map((f) => (
-            <div key={f.name} className={f.full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}>
-              <Label htmlFor={f.name} className="text-xs font-medium text-slate-600">
-                {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
-              </Label>
-              <Field field={f} value={form[f.name]} onChange={change} options={options} />
-            </div>
-          ))}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid={`${testid}-cancel`}>Annulla</Button>
-          <PrimaryButton onClick={submit} disabled={saving} data-testid={`${testid}-save`}>{saving ? "Salvataggio..." : "Salva"}</PrimaryButton>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid={`${testid}-dialog`}>
+          <DialogHeader><DialogTitle className="font-display">{title}</DialogTitle><DialogDescription className="sr-only">Compila i campi e salva.</DialogDescription></DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+            {fields.map((f) => (
+              <div key={f.name} className={f.full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}>
+                <Label htmlFor={f.name} className="text-xs font-medium text-slate-600">
+                  {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
+                </Label>
+                <Field field={f} value={form[f.name]} onChange={change} options={options} onAddEntity={setAddField} />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)} data-testid={`${testid}-cancel`}>Annulla</Button>
+            <PrimaryButton onClick={submit} disabled={saving} data-testid={`${testid}-save`}>{saving ? "Salvataggio..." : "Salva"}</PrimaryButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {addField && entityCreators?.[addField.name] && entityCreators[addField.name]({
+        onClose: () => setAddField(null),
+        onCreated: (item) => { if (item?.id) change(addField.name, item.id); setAddField(null); },
+      })}
+    </>
   );
 }
 
