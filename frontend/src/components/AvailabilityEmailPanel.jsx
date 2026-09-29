@@ -21,6 +21,7 @@ export function AvailabilityEmailPanel() {
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [ensuringList, setEnsuringList] = useState(false);
+  const [activatingKind, setActivatingKind] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventId, setEventId] = useState("");
   const [to, setTo] = useState("");
@@ -56,6 +57,16 @@ export function AvailabilityEmailPanel() {
       load();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     finally { setCreating(false); }
+  };
+
+  const activate = async (kind) => {
+    setActivatingKind(kind);
+    try {
+      await api.post("/brevo/availability-templates/activate", { kind });
+      toast.success("Template attivato in Brevo");
+      load();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setActivatingKind(null); }
   };
 
   const ensureList = async () => {
@@ -140,7 +151,14 @@ export function AvailabilityEmailPanel() {
                     ? <span className="text-slate-400">Non creato</span>
                     : t.is_active
                       ? <span className="text-emerald-600 font-medium">Attivo</span>
-                      : <span className="text-amber-600 font-medium">Bozza</span>}
+                      : (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-amber-600 font-medium">Bozza</span>
+                          <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => activate(t.kind)} disabled={activatingKind === t.kind || !configured} data-testid={`availability-activate-${t.kind}`}>
+                            {activatingKind === t.kind ? "Attivo…" : "Attiva in Brevo"}
+                          </Button>
+                        </span>
+                      )}
                 </td>
                 <td className="py-2.5 px-3 text-slate-500">{fmtDate(t.updated_at)}</td>
               </tr>

@@ -148,3 +148,8 @@ class BrevoClient:
         if tag:
             payload["tag"] = tag
         return await self._req("POST", "/smtp/templates", json=payload)
+
+    async def activate_template(self, template_id):
+        """Attiva un template transazionale (Bozza -> Attivo) via API Brevo.
+        PUT /smtp/templates/{id} {isActive:true} -> 204. Non tocca il DB CRMEvent."""
+        return await self._req("PUT", f"/smtp/templates/{template_id}", json={"isActive": True})

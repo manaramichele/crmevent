@@ -7225,6 +7225,34 @@ async def brevo_avail_list_ensure(user: dict = Depends(require_superadmin)):
     return {"list": {"id": list_id, "name": AVAIL_LIST_NAME, "contacts": contacts}}
 
 
+class AvailTplActivate(BaseModel):
+    kind: str = "all"
+
+
+@api.post("/brevo/availability-templates/activate")
+async def brevo_avail_templates_activate(body: AvailTplActivate, user: dict = Depends(require_superadmin)):
+    """Attiva in Brevo (Bozza -> Attivo) i template master via API (PUT /smtp/templates/{id} isActive=true).
+    Attivazione REALE su Brevo, nessuna forzatura dello stato nel DB CRMEvent. Idempotente."""
+    if not brevo_client.is_configured():
+        raise HTTPException(status_code=400, detail="Brevo non configurato in questo ambiente (disponibile in produzione).")
+    want = {"disponibilita": [AVAIL_TPL_CONFERMA_DISP],
+            "conferma": [AVAIL_TPL_CONFERMA_PART]}.get(body.kind, [AVAIL_TPL_CONFERMA_DISP, AVAIL_TPL_CONFERMA_PART])
+    out = []
+    async with brevo_client.BrevoClient() as c:
+        tpls = await c.get_templates()
+        for name in want:
+            t = next((x for x in tpls if (x.get("name") or "").strip().lower() == name.lower()), None)
+            if not t:
+                out.append({"name": name, "template_id": None, "activated": False, "error": "non trovato"})
+                continue
+            if t.get("isActive"):
+                out.append({"name": name, "template_id": t.get("id"), "activated": True, "already": True})
+                continue
+            await c.activate_template(t.get("id"))
+            out.append({"name": name, "template_id": t.get("id"), "activated": True})
+    return {"templates": out}
+
+
 @api.post("/brevo/create-availability-templates")
 async def brevo_create_avail_templates(user: dict = Depends(require_superadmin)):
     """Create the two availability email templates as DRAFTS (isActive=false). Never sends.

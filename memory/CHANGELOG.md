@@ -1,5 +1,12 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Fix orari mobile compatti + attivazione template Brevo via API
+- **Campi orario mobile** (Partecipa.jsx): input `type="time"` ora con `style={{width:150, maxWidth:"100%"}}` (inline → sovrascrive il `w-full` di shadcn), impilati (Dalle sopra, Alle sotto). Larghezza compatta ~150px, mai oltre la card a 375/390px. Nessuna modifica alla logica disponibilità.
+- **Attivazione template Brevo (Bozza→Attivo)**: nuovo `POST /api/brevo/availability-templates/activate` (superadmin) → `PUT /smtp/templates/{id} {isActive:true}` via API Brevo (attivazione REALE su Brevo, nessuna forzatura del DB CRMEvent). `brevo_client.activate_template()`. Nel pannello, accanto allo stato "Bozza" compare il pulsante **"Attiva in Brevo"** per ciascun template; dopo l'attivazione "Aggiorna stato" rileva automaticamente Attivo (il pannello legge lo stato reale via `get_templates().isActive`).
+- Flag `BREVO_AVAILABILITY_ENABLED` mantenuto **OFF** (preview e produzione). Nessun invio automatico attivato.
+- ⚠️ Le due correzioni sono in preview: serve un nuovo deploy per averle in produzione (compresi input compatti e pulsante "Attiva in Brevo").
+
+
 ## 2026-06 — Form pubblico responsive (Dalle/Alle) + due blocchi Brevo distinti + verifica go-live
 - **Responsive form pubblico** (Partecipa.jsx): campi orario Dalle/Alle passati da flex a `grid grid-cols-1 min-[420px]:grid-cols-2` con input `w-full min-w-0` → sotto 420px impilati (Dalle sopra, Alle sotto), zero overflow/sovrapposizioni a 320/360/375/390/430px, compatibili col selettore orario nativo iOS/Android. Nessuna modifica a logica/dati.
 - **Due blocchi distinti** ripristinati sulla stessa pagina (Dashboard piattaforma): "Automazioni email · Funnel Demo CRMEvent" (invariato) e "Automazioni email · Staff & Volontari". Rimosso il route/menu separato `/marketing/disponibilita` (consolidato). Pulsanti separati: "Crea/Verifica lista Brevo" (nuovo endpoint `POST /api/brevo/availability-list/ensure`) e "Crea/Verifica template"; badge "Invii automatici Staff & Volontari: ATTIVI/DISATTIVATI"; trigger mostrati per ogni template.
