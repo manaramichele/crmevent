@@ -1,5 +1,13 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Super Admin · Email disponibilità eventi (scheda Marketing/Brevo) — verificato frontend 100%
+- Nuova sezione "Email disponibilità eventi" in /piattaforma (`AvailabilityEmailPanel.jsx`), **riservata al Super Admin** (org-admin/utenti NON la vedono; architettura multi-tenant ready per CRMEvent Pro futuro, senza esporre nulla in UI pubblica).
+- Mostra i 2 template master universali (`CRMEvent · Disponibilità ricevuta`, `CRMEvent · Partecipazione confermata`) con: nome, tipo (Disponibilità/Conferma), Template ID Brevo, stato Attivo/Bozza/Non creato, ultimo aggiornamento (modifiedAt Brevo). Badge stato generale "Invii automatici: ATTIVI/DISATTIVATI" da `BREVO_AVAILABILITY_ENABLED` (resta **off** → DISATTIVATI).
+- Pulsanti: **Aggiorna stato** (reload), **Crea template in Brevo** (solo se mancanti; anti-duplicato: se i 2 master esistono già riusa i Template ID), **Invia email di test** per ciascun template (scelta Evento di Organizzazione tipo Test + email destinatario; usa i dati reali dell'Evento incluso il logo via HTML master inline, indipendente dallo stato attivo/bozza; l'invio manuale NON attiva gli automatismi e NON dipende dal flag).
+- Endpoint tutti blindati a `require_superadmin`: `GET /api/brevo/availability-templates` (esteso: type_label + updated_at), `GET /api/brevo/availability-test-events` (eventi di org type=test), `POST /api/brevo/availability-test-email` (invio reale transazionale, no-op informativo se BREVO_API_KEY assente), `POST /api/brevo/create-availability-templates`.
+- In preview (BREVO_API_KEY vuota): configured=false → avviso "Brevo non configurato…"; pulsante test resta visibile e mostra messaggio informativo senza errori. Codice Fiscale MAI inviato a Brevo; chiave API mai esposta.
+
+
 ## 2026-06 — Marketing · Social — SEPARAZIONE SCOPE Platform vs Organization
 - Introdotto scope esplicito senza duplicare la logica: `require_admin`/`require_org_admin` onorano `?scope=platform` → solo Super Admin → org_id sentinella `__platform__` (bypassa X-Org-Id/org attiva). Tutti gli endpoint social + pubblicazione IG funzionano in platform scope indipendentemente dall'org attiva.
 - Frontend: nuovo client `lib/platformApi.js` (forza `scope=platform`). Le pagine Social/SocialCalendar/SocialSettings usano platformApi. Menu spostato nel gruppo Super Admin "Marketing CRMEvent — Piattaforma"; rimosso per Admin Org/Utenti (CRMEvent Pro futuro, codice mantenuto). Badge "Marketing CRMEvent — Piattaforma" nell'header.

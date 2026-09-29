@@ -218,3 +218,9 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 ### Backlog aggiornato (P1)
 - Attivazione invii Brevo disponibilità (dopo approvazione utente): BREVO_AVAILABILITY_ENABLED=on in produzione + attivazione template + test invio singolo.
 - Consultazione disponibilità in creazione Team/Turni; alimentazione Briefing da assegnazione reale.
+
+## Super Admin · Scheda "Email disponibilità eventi" (Marketing/Brevo) — 2026-06 (verificato frontend 100%)
+- Sezione in /piattaforma (`AvailabilityEmailPanel.jsx`) SOLO Super Admin (org-admin/utenti esclusi; multi-tenant ready per CRMEvent Pro futuro, nessun riferimento Pro in UI pubblica). Mostra i 2 template master (nome, tipo Disponibilità/Conferma, Template ID, stato Attivo/Bozza/Non creato, ultimo aggiornamento) + badge "Invii automatici ATTIVI/DISATTIVATI" (da BREVO_AVAILABILITY_ENABLED, resta off).
+- Pulsanti: Aggiorna stato · Crea template in Brevo (anti-duplicato, riusa Template ID esistenti) · Invia email di test per template (Evento di org type=test + email destinatario, dati reali evento+logo via HTML inline; invio manuale indipendente dal flag).
+- Endpoint require_superadmin: GET /api/brevo/availability-templates (esteso type_label+updated_at), GET /api/brevo/availability-test-events, POST /api/brevo/availability-test-email (no-op informativo se BREVO_API_KEY assente), POST /api/brevo/create-availability-templates. CF mai a Brevo; chiave mai esposta.
+- ORDINE GO-LIVE concordato (produzione): 1) Deploy 2) Crea 2 template master 3) Invio test reale (evento org Test) 4) Verifica utente (mittente/oggetto/logo/nome/data/località/grafica/no Emergent) 5) Attiva template in Brevo 6) Solo dopo conferma utente: BREVO_AVAILABILITY_ENABLED=on. Durante i test in produzione il flag resta off.

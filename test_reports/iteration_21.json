@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only E2E of the new Super Admin 'Email disponibilità eventi' section on /piattaforma (AvailabilityEmailPanel). Logged in as Super Admin manara.michele.pro@gmail.com, navigated to /piattaforma. Verified: (1) [data-testid='availability-email-panel'] renders above FunnelPanel. (2) Status badge [data-testid='availability-auto-status'] shows exactly 'Invii automatici: DISATTIVATI' (BREVO_AVAILABILITY_ENABLED off). (3) Amber warning [data-testid='availability-not-configured'] visible with copy 'Brevo non configurato in questo ambiente. La creazione dei template e l'invio reale sono disponibili in produzione.'. (4) Table [data-testid='availability-templates-table'] renders 2 rows -availability-template-row-disponibilita ('CRMEvent · Disponibilità ricevuta', tipo 'Disponibilità', Template ID '—', stato 'Non creato', updated '—') and -availability-template-row-conferma ('CRMEvent · Partecipazione confermata', tipo 'Conferma', same '—/Non creato/—'). (5) [data-testid='availability-test-event-select'] populated with 4 options from Test orgs: 'Bologna City Run 2026 — Demo', 'Green Trail Experience 2026 — Demo', 'Sunset Triathlon 2027 — Demo', 'Nova Run Festival — Nova Events'. (6) Filling [data-testid='availability-test-to-input']='test@example.com' and clicking both [data-testid='availability-send-test-disponibilita'] and [data-testid='availability-send-test-conferma'] does NOT throw any error: [data-testid='availability-test-result'] shows 'Invio non eseguito · <kind> — Brevo non configurato in questo ambiente. L'invio reale è disponibile in produzione.' and a sonner warning toast with the same copy is shown. (7) API isolation via direct fetch: GET /api/brevo/availability-templates with SA cookie → 200; POST /api/brevo/availability-test-email with SA cookie → 200 body {ok:false, configured:false, message:'Brevo non configurato...'}; both endpoints without session → 401. No console errors related to the panel; only expected 401 (auth/me pre-login) and 428 (billing gate on /app for SA) noise unrelated to the panel.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/piattaforma", "issues": ["Iubenda cookie banner overlays the bottom of the panel on first visit and can cover the 'Invia test' button in the second table row; accepting/rifiutando the banner resolves it. Pre-existing, not introduced by this iteration."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AvailabilityEmailPanel.load() catches per-request rejection but always calls setLoading(false); OK. formatApiError is invoked on t.reason?.response?.data?.detail — when the templates endpoint fails without a response (network error) the toast will render 'undefined'; consider a fallback string.",
+    "The 'Crea template in Brevo' button is disabled while !configured (correct for preview), but there is no data-testid guarantee for the 'template already present' state — kept as design decision.",
+    "sendTest uses toast.warning for r.ok===false which is exactly the required UX (no error). Confirmed working end-to-end against the mocked backend response."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request; 3 API auth spot-checks passed: 200 SA + 401 no-auth on both endpoints)", "frontend": "100% for all acceptance criteria in the review request"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (working). No non-superadmin credentials available in /app/memory/test_credentials.md to positively assert the 403 branch via a real login — that path is enforced by require_superadmin in server.py and was previously validated by the main agent via curl.",
+  "seed_data_creation": "None. Two test-email POSTs were sent but the backend is a no-op in preview (configured=false).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "AvailabilityEmailPanel is stable in preview. If BREVO_API_KEY gets populated, retest: (a) 'Crea template in Brevo' button becomes enabled when at least one template_id is null, (b) after creation both rows show Template ID and stato 'Attivo/Bozza', (c) 'Invia test' returns {ok:true, messageId} and the result box switches to emerald. For the 403 branch, seed/obtain a real org-admin login (currently only Super Admin credentials are documented)."
+}

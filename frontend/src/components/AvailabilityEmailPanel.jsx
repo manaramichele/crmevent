@@ -29,7 +29,7 @@ export function AvailabilityEmailPanel() {
         api.get("/brevo/availability-test-events"),
       ]);
       if (t.status === "fulfilled") setData(t.value.data);
-      else toast.error(formatApiError(t.reason?.response?.data?.detail));
+      else toast.error(formatApiError(t.reason?.response?.data?.detail) || "Errore nel caricamento dei template Brevo");
       if (e.status === "fulfilled") {
         const evs = e.value.data.events || [];
         setEvents(evs);
