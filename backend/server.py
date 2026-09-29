@@ -2393,8 +2393,19 @@ async def my_event_detail(event_id: str, user: dict = Depends(get_current_user))
     maps = await db.event_maps.find({"evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(200)
     prio = [m for m in maps if m.get("team_id") == presence.get("team_id") or m.get("area") == presence.get("area")]
     others = [m for m in maps if m not in prio]
+    # Ospitalità e pasti: SOLO le assegnazioni di questa persona. I campi economici/amministrativi
+    # non vengono mai esposti allo staff (scoping lato API, non solo nel frontend).
+    my_lodgings = await db.lodgings.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(100)
+    my_meals = await db.meals.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(500)
+    _STAFF_HIDE = ("costo", "stato_pagamento", "note_amministrative", "a_carico_di", "codice_prenotazione")
+    for x in my_lodgings + my_meals:
+        for f in _STAFF_HIDE:
+            x.pop(f, None)
+    await _attach_structures(my_lodgings + my_meals, oid)
+    my_meals.sort(key=lambda m: ((m.get("data") or ""), (m.get("orario") or "")))
     return {"event": event, "presence": presence, "shifts": my_shifts, "team": team,
-            "team_leader": leader, "colleagues": colleagues, "maps": prio + others}
+            "team_leader": leader, "colleagues": colleagues, "maps": prio + others,
+            "lodgings": my_lodgings, "meals": my_meals}
 
 
 @api.get("/me/shifts")
