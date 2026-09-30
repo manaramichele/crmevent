@@ -304,3 +304,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Pulsanti: Aggiorna stato · Crea template in Brevo (anti-duplicato, riusa Template ID esistenti) · Invia email di test per template (Evento di org type=test + email destinatario, dati reali evento+logo via HTML inline; invio manuale indipendente dal flag).
 - Endpoint require_superadmin: GET /api/brevo/availability-templates (esteso type_label+updated_at), GET /api/brevo/availability-test-events, POST /api/brevo/availability-test-email (no-op informativo se BREVO_API_KEY assente), POST /api/brevo/create-availability-templates. CF mai a Brevo; chiave mai esposta.
 - ORDINE GO-LIVE concordato (produzione): 1) Deploy 2) Crea 2 template master 3) Invio test reale (evento org Test) 4) Verifica utente (mittente/oggetto/logo/nome/data/località/grafica/no Emergent) 5) Attiva template in Brevo 6) Solo dopo conferma utente: BREVO_AVAILABILITY_ENABLED=on. Durante i test in produzione il flag resta off.
+
+## FASE C — Acquisto reale crediti (Stripe TEST) — 2026-06-30 ✅ COMPLETATO e VERIFICATO
+- Ricarica crediti dall'Area Account con Checkout Stripe (SOLO TEST): scelta taglio, breakdown IVA 22% esclusa (TaxRate manuale, no automatic_tax), pagamento, ritorno, accredito automatico. Crediti accreditati SOLO dopo conferma server-side (webhook autorevole + fallback confirmation con retrieve su Stripe). Atomico, idempotente (no doppio accredito), org-scoped, registrato nel ledger. Snapshot pacchetto immutabile. Bonus senza valore economico in fattura. Storico acquisti + fattura (simulazione FIC TEST). 6 tagli da credit_packages modificabili dal Super Admin.
+- Endpoint: POST /api/credits/checkout, GET /api/credits/checkout-confirmation, GET /api/credits/purchases; webhook kind=credit_purchase.
+
+### Backlog aperto (in attesa autorizzazione utente)
+- FASE D — Sostituzione modello commerciale: rimuovere listino per-evento, sostituire /prezzi con acquisto Crediti, ripulire EventPlanManager, aggiornare /demo, migrare le org esistenti (+100 crediti). (P0, NON avviare senza ok utente)
+- FASE E — Pagamenti LIVE: Stripe LIVE per i pacchetti crediti + Fatture in Cloud reale per ricariche + auto-ricarica. (P1)
+- Attivazione consumi reali (era FASE C nel piano originale, ora rinviata): agganciare reserve→settle ai servizi IA/briefing/automazioni/email/Calendar/WhatsApp. credit_services restano DISATTIVATI finché l'utente non autorizza. (P0)
+- Config Stripe account per checkout in EUR puro (opzionale).
