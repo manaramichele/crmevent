@@ -557,3 +557,11 @@ Task 2 — Creatività manuale:
 - /prezzi ora legge i prezzi da GET /api/pricing (niente hardcoding; fallback locale se API non risponde).
 - TEST superati: fascia 1-3/4°, purchase starter/professional/premium, webhook idempotente, upgrade math (49→79 diff 30; 79→99 diff 20), price-change→nuovo Stripe Price, snapshot storico immutabile.
 - NON modificati: Fatture in Cloud, Stripe LIVE (chiave sk_test_).
+
+## 2026-06-30 (FASE 2 STEP 5 — UI Attiva/Upgrade cliccabile, Stripe TEST)
+- Nuovo componente EventPlanManager (frontend): stato commerciale per evento (Prova Premium+giorni / Starter/Professional/Premium / Prova scaduta sola-lettura) + snapshot (piano, prezzo pagato, data, fascia, anno). Integrato in Eventi ("Stato commerciale eventi", gestisce il ritorno da Stripe) e in Account ("Piani e acquisti").
+- Dialog scelta/upgrade con riepilogo (imponibile/IVA/totale IVA incl.; upgrade: attuale→nuovo, già pagato, differenza). Calcolo validato SEMPRE dal backend.
+- Backend: GET /api/event-plans/status, GET /api/event-plans/checkout-confirmation (attivazione server-side idempotente al ritorno da Stripe, non fidandosi del browser). Rinominati sotto /event-plans per evitare collisione con /events/{id}.
+- Stripe account usa Stripe Tax: passato a automatic_tax enabled + prezzi tax_behavior=exclusive (rimosse tax rate manuali).
+- Test: plan-status (trial), checkout Starter/Professional (session Stripe TEST, fascia small 49/79), attivazione+idempotenza+upgrade (49→79 diff 30; 79→99 diff 20) via simulazione webhook, price-change→nuovo Stripe Price, UI dialog verificato. Annullamento mantiene lo stato.
+- NON modificati: Fatture in Cloud, Stripe LIVE (sk_test_).

@@ -15,6 +15,7 @@ import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, Refr
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import AvailabilityDialog from "@/components/AvailabilityDialog";
+import EventPlanManager from "@/components/EventPlanManager";
 
 const STATO = { attivo: "green", pianificato: "tiffany", concluso: "gray", annullato: "red" };
 const STATO_LABEL = { attivo: "Attivo", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
@@ -304,6 +305,10 @@ export default function Events() {
 
   return (
     <>
+      <div className="mb-5 bg-slate-50 border border-slate-200 rounded-xl p-4" data-testid="events-plan-section">
+        <div className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-3">Stato commerciale eventi</div>
+        <EventPlanManager handleReturn />
+      </div>
       <EntityManager title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event"
         searchKeys={["nome", "citta", "tipologia"]} rowActions={rowActions} />

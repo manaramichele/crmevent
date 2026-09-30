@@ -8074,7 +8074,8 @@ async def event_checkout(event_id: str, body: EventCheckoutIn, user: dict = Depe
     cust_id = await _ensure_stripe_customer(org, user)
     session = stripe_sdk.checkout.Session.create(
         mode="payment", customer=cust_id,
-        line_items=[{"price": price_id, "quantity": 1, "tax_rates": [_get_tax_rate_id()]}],
+        line_items=[{"price": price_id, "quantity": 1}],
+        automatic_tax={"enabled": True},
         success_url=f"{body.origin_url}/eventi?purchase=success&session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{body.origin_url}/eventi?purchase=cancel",
         metadata={"kind": "event_purchase", "org_id": org["id"], "event_id": event_id,
@@ -8117,8 +8118,9 @@ async def event_upgrade(event_id: str, body: EventUpgradeIn, user: dict = Depend
     session = stripe_sdk.checkout.Session.create(
         mode="payment", customer=cust_id,
         line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(diff * 100)), "tax_behavior": "exclusive",
-                     "product_data": {"name": f"Upgrade a {PLAN_LABEL.get(body.plan)} – {ev.get('nome', 'Evento')}"}},
-                     "quantity": 1, "tax_rates": [_get_tax_rate_id()]}],
+                     "product_data": {"name": f"Upgrade a {PLAN_LABEL.get(body.plan)} – {ev.get('nome', 'Evento')}", "tax_code": "txcd_10103001"}},
+                     "quantity": 1}],
+        automatic_tax={"enabled": True},
         success_url=f"{body.origin_url}/eventi?upgrade=success&session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{body.origin_url}/eventi?upgrade=cancel",
         metadata={"kind": "event_upgrade", "org_id": org["id"], "event_id": event_id,
@@ -8163,6 +8165,74 @@ async def _activate_event_from_session(sess: dict):
            "invoice_id": None, "purchased_at": now_iso(), "upgrade_amount_paid": upgrade_paid,
            "pricing_plan_version": version}
     await db.events.update_one({"id": md.get("event_id")}, {"$set": {"entitlement": ent, "updated_at": now_iso()}})
+
+
+@api.get("/event-plans/status")
+async def events_plan_status(user: dict = Depends(require_admin)):
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    sub = _sub_summary(org)
+    trial = sub.get("status") == "trial" and sub.get("access") == "full"
+    rows = await db.pricing_plans.find({"status": "active"}, {"_id": 0}).to_list(50)
+    price_map = {(r["plan"], r["fascia"]): r["net"] for r in rows}
+    evs = await db.events.find(oq(user), {"_id": 0}).sort("data_inizio", -1).to_list(2000)
+
+    def pkg(p, kind, net):
+        return {"plan": p, "kind": kind, "net": net, "vat": round(net * PRICING_VAT_RATE / 100, 2), "gross": round(net * (1 + PRICING_VAT_RATE / 100), 2)}
+
+    out = []
+    for ev in evs:
+        di = ev.get("data_inizio") or ""
+        year = int(di[:4]) if di[:4].isdigit() else None
+        tier = compute_tier(await _events_in_year(user["org_id"], year)) if year else "small"
+        ent = ev.get("entitlement") or {}
+        purchased = ent.get("source") == "purchased"
+        cur = ent.get("plan") or "free"
+        eff = "premium" if trial else (cur if purchased else "free")
+        options = []
+        if purchased:
+            already = float(ent.get("amount_net") or 0)
+            ptier = ent.get("price_tier") or tier
+            for p in PRICING_PLANS_LIST:
+                if PLAN_RANK[p] > PLAN_RANK.get(cur, 0):
+                    net = price_map.get((p, ptier))
+                    if net is None:
+                        continue
+                    o = pkg(p, "upgrade", net)
+                    o["diff"] = round(net - already, 2)
+                    o["already_paid"] = already
+                    options.append(o)
+        else:
+            for p in PRICING_PLANS_LIST:
+                net = price_map.get((p, tier))
+                if net is not None:
+                    options.append(pkg(p, "purchase", net))
+        out.append({
+            "id": ev["id"], "nome": ev.get("nome"), "data_inizio": ev.get("data_inizio"),
+            "current_plan": cur, "effective_plan": eff, "purchased": purchased,
+            "readonly": (not trial) and (not purchased),
+            "tier": (ent.get("price_tier") if purchased else tier), "year": year,
+            "snapshot": ({"plan": ent.get("plan"), "net": ent.get("amount_net"), "gross": ent.get("amount_gross"),
+                          "purchased_at": ent.get("purchased_at"), "tier": ent.get("price_tier"), "year": ent.get("year")} if purchased else None),
+            "options": options})
+    return {"trial": trial, "days_left": sub.get("days_left"), "status": sub.get("status"), "events": out}
+
+
+@api.get("/event-plans/checkout-confirmation")
+async def event_checkout_confirmation(session_id: str, user: dict = Depends(require_admin)):
+    try:
+        sess = stripe_sdk.checkout.Session.retrieve(session_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Sessione non trovata")
+    md = sess.get("metadata") or {}
+    if md.get("org_id") != user["org_id"]:
+        raise HTTPException(status_code=403, detail="Sessione non associata all'organizzazione")
+    paid = sess.get("payment_status") == "paid"
+    if paid:
+        await _activate_event_from_session(sess)  # attivazione server-side idempotente
+    ev = await db.events.find_one({"id": md.get("event_id")}, {"_id": 0})
+    return {"paid": paid, "plan": md.get("plan"), "kind": md.get("kind"),
+            "event_id": md.get("event_id"), "event_name": (ev or {}).get("nome"),
+            "current_plan": ((ev or {}).get("entitlement") or {}).get("plan")}
 
 
 app.include_router(api)

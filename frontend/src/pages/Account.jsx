@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
+import EventPlanManager from "@/components/EventPlanManager";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
@@ -171,6 +172,13 @@ export default function Account() {
             <p className="text-xs text-slate-400 mt-2">Pagamenti sicuri gestiti tramite Stripe · Rinnovo automatico · Cancella quando vuoi.</p>
           </>
         )}
+      </div>
+
+      {/* Piani e acquisti (per evento) */}
+      <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4" data-testid="account-plans-purchases">
+        <div className="flex items-center gap-2 mb-1"><ReceiptText className="w-4 h-4 text-tiffany-active" /><h2 className="font-semibold text-slate-800">Piani e acquisti</h2></div>
+        <p className="text-xs text-slate-400 mb-4">Stato commerciale di ogni evento. Il piano si attiva solo dopo conferma del pagamento (Stripe TEST).</p>
+        <EventPlanManager />
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4" data-testid="invoices-card">
