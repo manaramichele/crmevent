@@ -1,5 +1,14 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Migrazione email transazionali verso Brevo (Resend come fallback)
+- **Provider centralizzato (`email_utils.py`)**: nuovo interruttore `EMAIL_PROVIDER` (default `resend`). `send_email()` ora sceglie il provider primario e prova i fallback in ordine: `brevo → resend → managed` (se EMAIL_PROVIDER=brevo) oppure `resend → managed` (default). Nessuna chiamata Resend/Brevo sparsa: tutto passa da `send_email()`.
+- **Nuovo provider Brevo transazionale** `_send_via_brevo`: POST `https://api.brevo.com/v3/smtp/email`, header `api-key`, sender fisso `CRMEvent <hello@crmevent.it>`, `htmlContent` (layout master unico già in codice, logo CRMEvent). SOLO endpoint transazionale: NON aggiunge il destinatario a nessuna lista/contatto (un invito non è iscrizione newsletter). Le liste Eventi (disponibilità/partecipazione) restano separate e intatte.
+- **Tracciamento sicuro**: log strutturati con provider, template (inline), esito, message_id/errore ed email mascherata. MAI loggati api-key, token invito o HTML completo.
+- **Fallback Resend mantenuto**: `EMAIL_PROVIDER=resend` (default) → produzione invariata. Per migrare basta impostare il secret `EMAIL_PROVIDER=brevo` (con `BREVO_API_KEY` presente in prod), senza modifiche al codice.
+- **Email coinvolte (tutte via `send_email`)**: invito Organizzazione (`/invito`), invito/attivazione persona (`/attiva`), reset password, email demo al lead, notifica interna richiesta demo. Le email Staff & Volontari NON toccate.
+- **Test (senza invio reale, come da richiesta utente)**: `/app/backend/tests/test_email_provider_routing.py` — 8/8 pass: ordine provider, Brevo primario, fallback a Resend su errore Brevo, Brevo saltato se non configurato, default resend non usa mai Brevo, raise se tutti falliscono, e shape corretta del payload Brevo (URL/headers/sender/to/htmlContent, nessun listIds/contacts). ⚠️ `BREVO_API_KEY` VUOTA in preview → invio reale Brevo da testare in produzione dall'utente.
+
+
 ## 2026-06 — Revisione completa area personale Staff/Volontario ("La mia partecipazione")
 - **Rinomina + riorganizzazione (VolunteerEvent.jsx, route /evento/:id)**: la pagina è ora "La mia partecipazione", hub unico mobile-first con blocchi in ordine: Evento (logo, nome, località, date, Apri in Google Maps) → Il mio incarico (Staff/Volontario, ruolo, area, team, Team Leader, referente, luogo/ritrovo, arrivo/partenza, note operative) → I miei turni (giorno, ora, ruolo/area, luogo/ritrovo, note) → Briefing evento (descrizioni per giornata + nota evento) → Percorsi e mappe → La mia ospitalità → I miei pasti → Il mio Team.
 - **"da contattare" eliminato ovunque nell'area staff**: sia VolunteerDashboard che VolunteerEvent usano la mappa `OP_STATO`; lo stato commerciale/iniziale non viene mai mostrato, solo stati operativi utili.

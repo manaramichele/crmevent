@@ -25,6 +25,18 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 EMAIL_FROM_ADDRESS = os.environ.get("EMAIL_FROM_ADDRESS", "hello@crmevent.it")
 RESEND_BASE_URL = "https://api.resend.com"
 
+# Brevo (Sendinblue) v3 transactional email. Uses the SAME verified sender
+# (CRMEvent <hello@crmevent.it>). Sends ONLY via the transactional endpoint
+# /v3/smtp/email: it never adds the recipient to any contact list (an invite is
+# not a newsletter subscription). Marketing/event lists remain fully separate.
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
+BREVO_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
+
+# Central switch for the transactional provider. Default "resend" so production
+# behaviour is unchanged until the migration is explicitly flipped to "brevo".
+# Set EMAIL_PROVIDER=brevo (no code change) to make Brevo primary with Resend fallback.
+EMAIL_PROVIDER = (os.environ.get("EMAIL_PROVIDER") or "resend").strip().lower()
+
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 _CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
              "send us your password", "enter your password below", "confirm your card number",
@@ -110,6 +122,24 @@ async def _send_via_resend(to: str, subject: str, html: str) -> str | None:
     return resp.json().get("id")
 
 
+async def _send_via_brevo(to: str, subject: str, html: str) -> str | None:
+    # Transactional only — no contact/list mutation. Sender is the verified CRMEvent mailbox.
+    payload = {
+        "sender": {"name": EMAIL_FROM_NAME, "email": EMAIL_FROM_ADDRESS},
+        "to": [{"email": to}],
+        "subject": subject,
+        "htmlContent": html,
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            BREVO_EMAIL_URL,
+            headers={"accept": "application/json", "content-type": "application/json", "api-key": BREVO_API_KEY},
+            json=payload,
+        )
+    resp.raise_for_status()  # error body never contains the api-key
+    return (resp.json() or {}).get("messageId")
+
+
 async def _send_via_managed(to: str, subject: str, html: str) -> str | None:
     payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
     if EMAIL_REPLY_TO:
@@ -121,11 +151,63 @@ async def _send_via_managed(to: str, subject: str, html: str) -> str | None:
     return resp.json().get("id")
 
 
+_SENDERS = {"brevo": _send_via_brevo, "resend": _send_via_resend, "managed": _send_via_managed}
+
+
+def _provider_configured(provider: str) -> bool:
+    if provider == "brevo":
+        return bool(BREVO_API_KEY and EMAIL_FROM_ADDRESS)
+    if provider == "resend":
+        return bool(RESEND_API_KEY and EMAIL_FROM_ADDRESS)
+    if provider == "managed":
+        return bool(EMAIL_KEY)
+    return False
+
+
+def _provider_order() -> list[str]:
+    """Ordered providers to try: primary first, then fallbacks (Resend stays available
+    as fallback during the migration). Default 'resend' keeps production unchanged."""
+    if EMAIL_PROVIDER == "brevo":
+        return ["brevo", "resend", "managed"]
+    if EMAIL_PROVIDER == "managed":
+        return ["managed", "resend"]
+    return ["resend", "managed"]
+
+
+def _mask_email(addr: str) -> str:
+    try:
+        local, _, dom = (addr or "").partition("@")
+        head = local[:2] if len(local) > 2 else local[:1]
+        return f"{head}***@{dom}" if dom else "***"
+    except Exception:
+        return "***"
+
+
 async def send_email(*, to: str, subject: str, html: str) -> str | None:
+    """Send a transactional email through the configured provider with fallback.
+    Tracking logs record provider, template (inline), timestamp, outcome and error —
+    never the API key, the recipient's full address, the full HTML, or invite tokens."""
     _assert_safe_email(subject, html)
-    if RESEND_API_KEY and EMAIL_FROM_ADDRESS:
-        return await _send_via_resend(to, subject, html)
-    return await _send_via_managed(to, subject, html)
+    last_exc = None
+    tried = []
+    for provider in _provider_order():
+        if not _provider_configured(provider):
+            continue
+        tried.append(provider)
+        try:
+            message_id = await _SENDERS[provider](to, subject, html)
+            logger.info("email_sent provider=%s template=inline to=%s subject=%r message_id=%s status=ok",
+                        provider, _mask_email(to), subject, message_id)
+            return message_id
+        except Exception as exc:  # noqa: BLE001 — try the next provider
+            last_exc = exc
+            detail = getattr(getattr(exc, "response", None), "status_code", type(exc).__name__)
+            logger.warning("email_send_failed provider=%s template=inline to=%s subject=%r status=error error=%s",
+                           provider, _mask_email(to), subject, detail)
+            continue
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Nessun provider email configurato (EMAIL_PROVIDER={EMAIL_PROVIDER}, tentati={tried})")
 
 
 def _shell(content_html: str) -> str:
