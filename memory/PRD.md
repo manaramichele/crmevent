@@ -347,3 +347,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Aggiornare copy pubblico Home/prezzi al modello "attivi l'evento con i crediti". (P1)
 - Futura funzione "contenuti evento" lato org che usi ai_content. UI trasparenza consumi lato org quando esisterà. (P1)
 - Stripe LIVE + FIC reale. (P1)
+
+## Modello crediti — regole DEFINITIVE (agg. 2026-06)
+- Attivazione evento: 20 crediti UNA TANTUM, copre fino alla data evento. Nessun rinnovo 30gg, nessuno stato 'sospeso'.
+- Primo evento di ogni org: attivazione GRATIS (flag org welcome_event_activation_used, una volta per org). 100 crediti benvenuto restano interi.
+- Stati evento: In preparazione | Attivo (fino alla data) | Concluso (data trascorsa).
+- Saldo minimo: org su modello crediti deve avere saldo>0 per scritture (saldo 0 = sola consultazione; ripristino automatico dopo ricarica, nessuna riattivazione). Creare evento richiede saldo>=1, nessun consumo. Guardie backend: _assert_org_operational, _assert_can_create_event, _assert_event_operational.
+- Legacy org/eventi (senza signup_bonus_granted): esentati, non bloccati.
+- Servizio catalogo: key event_active_period, nome 'Attivazione evento', 20 crediti (configurabile da superadmin).
+- run_event_renewals: solo manuale (superadmin), conclude eventi a data trascorsa. NESSUN cron. Stripe TEST.
+- Account test preview Demo: demo.crmevent@gmail.com / DemoCrm#2026pv (org 4cdfbd7aed3d43b882032892885feef3).

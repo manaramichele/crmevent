@@ -671,3 +671,14 @@ Task 2 — Creatività manuale:
   - preparazione (0 crediti) → activate 20 crediti → attivo (saldo 100→80) + next_renewal_at +30gg; saldo aggiornato immediato; guard _assert_event_operational blocca scritture su preparazione/sospeso (403).
 - Verificato: NESSUN cron rinnovi in .emergent/crons.yml (solo brevo-funnel-tick preesistente). run_event_renewals solo manuale (superadmin).
 - Deploy produzione avviato (vincoli: no cron, Stripe TEST, no migrazione eventi/org legacy, Home/prezzi invariati).
+
+## 2026-06 — Correzioni modello crediti (attivazione una-tantum + saldo minimo + primo evento gratis)
+- Attivazione evento ora è UNA TANTUM (20 crediti) e copre fino alla data evento. RIMOSSI: rinnovo 30gg, next_renewal_at nel flusso, stato 'sospeso', messaggi 'Prossimo rinnovo'. run_event_renewals ora conclude solo eventi a data trascorsa (nessun addebito). Nessun cron.
+- PRIMO evento di ogni org attivabile GRATIS (flag org welcome_event_activation_used, atomico, una volta per org). Ledger 'welcome_event_activation' amount 0, saldo invariato.
+- Stati evento semplificati: In preparazione | Attivo | Concluso (per data).
+- Regola SALDO MINIMO centralizzata backend: _assert_org_operational (saldo>0 per scritture; saldo 0 = sola consultazione, ripristino automatico dopo ricarica senza riattivazione), _assert_can_create_event (saldo>=1 per creare, nessun consumo). Org legacy esentate (non bloccate).
+- UI: rimosso EventPlanManager/'Stato commerciale eventi' dalla pagina Eventi; nuova colonna 'Attivazione' con badge; popup 'Crediti insufficienti' su creazione a saldo 0; banner 'Crediti esauriti' (header app + Account). EventCreditDialog riscritto (welcome/paid/attivo/concluso).
+- Super Admin: rimossa voce menu 'Piani e prezzi'; servizio catalogo rinominato 'Attivazione evento' (key event_active_period, 20 crediti, configurabile).
+- Header: più respiro verticale + safe-area (app Layout + Home).
+- Audit: log cambio data evento (event_date_change).
+- Testing: 16/16 pytest backend + UI verificata. Demo org pristina (saldo 100, 0 eventi, welcome disponibile).
