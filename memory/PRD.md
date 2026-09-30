@@ -223,10 +223,19 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - FASE 2 da fare per rendere Plus/Premium acquistabili: vedi ROADMAP.
 
 
+
+### MODELLO COMMERCIALE DEFINITIVO (2026-06-30) — SUPERSEDES tutte le regole FREE
+- ❌ PIANO FREE ELIMINATO. Rimosse tutte le regole precedenti su FREE (1 evento gratuito/anno, gating FREE, downgrade a FREE). Non vanno implementate.
+- ✅ 3 piani A PAGAMENTO per evento (prezzo per anno solare):
+  - STARTER 49/99 · PROFESSIONAL 79/149 · PREMIUM 99/199 (€ + IVA, fino a 3 / oltre 3 eventi/anno).
+- ✅ TRIAL 14 giorni con accesso PREMIUM sostituisce FREE. Alla scadenza senza acquisto → account in SOLA LETTURA (eventi non modificabili), nessun dato cancellato, CTA per acquistare un piano.
+- ✅ Gating rivisto: STARTER=gestione staff · PROFESSIONAL=+gestione evento · PREMIUM=+organizzazione avanzata+marketing/social. Org-level sul miglior piano attivo (Professional/Premium) con evento attivo nell'anno.
+- 🆕 FASE 2 — "Piani e prezzi" (Super Admin): listino prezzi gestibile da DB (NO hardcoding), 6 prezzi (3 piani × 2 fasce), sync Stripe con NUOVO Price ad ogni variazione (vecchi Price archiviati per riconciliazione), storico variazioni prezzo, snapshot immutabile del prezzo su ogni acquisto evento. Solo ruolo Super Admin. Gestione sicura errori di sync (DB e Stripe mai divergenti).
+
 ### FASE 2 — Logica TRIAL 14 giorni (da implementare, NON ancora fatta)
 - Alla registrazione: 14 giorni di prova gratuita con accesso alle funzionalità PREMIUM (prova intera piattaforma).
 - Nessuna carta richiesta per iniziare.
-- Allo scadere dei 14 giorni senza acquisto: account resta ATTIVO ma passa alle funzionalità del piano FREE. I dati inseriti NON vengono cancellati.
+- Allo scadere dei 14 giorni senza acquisto: [SUPERSEDED] account resta ATTIVO ma in SOLA LETTURA (nessun piano FREE): l'utente deve scegliere Starter/Professional/Premium per continuare. I dati NON vengono cancellati.
 - Per continuare con Plus/Premium l'utente acquista il piano per l'evento (modello per-evento).
 - Da implementare in FASE 2 insieme all'adeguamento Stripe + Fatture in Cloud. In FASE 1 aggiornati solo testi/CTA della pagina prezzi.
 

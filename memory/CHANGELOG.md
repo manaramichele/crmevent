@@ -515,3 +515,14 @@ Task 2 — Creatività manuale:
 - CTA aggiornate: FREE "Crea account"; PLUS/PREMIUM "Prova gratis 14 giorni" + sottotesto "Nessuna carta richiesta" (sia nelle card sia nella riga finale della tabella). CTA → /registrati.
 - Comunicata la prova gratuita di 14 giorni. Nessuna logica trial/pagamenti implementata lato backend.
 - FASE 1 pagina prezzi CONCLUSA. Selettore e gating invariati.
+
+## 2026-06-30 (Modello commerciale aggiornato — ELIMINATO FREE, nuovi piani STARTER/PROFESSIONAL/PREMIUM)
+- Pagina /prezzi (Pricing.jsx) aggiornata: rimosso piano FREE. Nuovi 3 piani a pagamento:
+  - STARTER: 49€ (fino a 3 eventi/anno) / 99€ (più di 3) + IVA / evento
+  - PROFESSIONAL: 79€ / 149€ + IVA / evento (card EVIDENZIATA "Miglior rapporto qualità-prezzo")
+  - PREMIUM: 99€ / 199€ + IVA / evento
+- Selettore: "Quanti eventi organizzi all'anno?" (Fino a 3 / Più di 3). Conteggio per anno solare (data evento).
+- Tutte e 3 le CTA: "Prova gratis 14 giorni" + "Nessuna carta richiesta" (card + riga finale tabella).
+- Tabella comparativa aggiornata: colonne STARTER/PROFESSIONAL/PREMIUM. Redistribuzione: STARTER=gestione staff, PROFESSIONAL=+gestione evento, PREMIUM=+organizzazione avanzata+marketing/social.
+- La prova gratuita 14gg (accesso Premium) sostituisce completamente il piano FREE. Alla scadenza: nessuna cancellazione dati, eventi in SOLA LETTURA finché non si acquista un piano.
+- Solo frontend + documentazione. NESSUNA modifica a backend, DB, Stripe, Checkout, webhook, Fatture in Cloud.

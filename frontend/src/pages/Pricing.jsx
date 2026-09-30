@@ -4,38 +4,35 @@ import Footer from "@/components/Footer";
 import { trackEvent } from "@/lib/analytics";
 import { Check, Sparkles, Zap, Users, CalendarCheck, Megaphone, Menu, X, ChevronDown, Minus } from "lucide-react";
 
-// Prezzi legati al numero di eventi (solo visualizzazione — nessuna logica Stripe qui).
+// Prezzi legati al numero di eventi/anno (solo visualizzazione — nessuna logica Stripe qui).
+// NB: in FASE 2 questi valori arriveranno dal listino gestito dal Super Admin (DB), non hardcoded.
 const PRICING = {
-  small: { plus: 49, premium: 99 },   // Fino a 3 eventi
-  large: { plus: 79, premium: 149 },  // Più di 3 eventi
+  small: { starter: 49, professional: 79, premium: 99 },   // Fino a 3 eventi/anno
+  large: { starter: 99, professional: 149, premium: 199 },  // Più di 3 eventi/anno
 };
 
 const PLANS = {
-  free: {
-    id: "free",
-    kicker: "Gestisci le persone",
+  starter: {
+    id: "starter",
+    kicker: "Gestisci il team",
     kickerIcon: Users,
-    title: "FREE",
+    title: "STARTER",
     subtitle: "Per gestire il tuo team",
-    description: "Inizia gratuitamente a organizzare staff e volontari del tuo evento.",
+    description: "Organizza staff e volontari del tuo evento: team, turni e disponibilità.",
     intro: null,
-    features: ["1 evento", "Staff e volontari", "Team", "Turni", "Disponibilità e conferme", "Informazioni allo staff"],
-    cta: "Crea account",
-    note: null,
-    ctaTestid: "plan-free-cta",
+    features: ["Staff e volontari", "Team", "Turni", "Disponibilità e conferme", "Informazioni allo staff"],
+    ctaTestid: "plan-starter-cta",
   },
-  plus: {
-    id: "plus",
+  professional: {
+    id: "professional",
     kicker: "Gestisci l'evento",
     kickerIcon: CalendarCheck,
-    title: "PLUS",
+    title: "PROFESSIONAL",
     subtitle: "Per organizzare il tuo evento",
     description: null,
-    intro: "Tutto ciò che trovi nel Free, più:",
-    features: ["Aziende e contatti", "Sponsor e partner", "Ospitalità e pernottamenti", "Pasti", "Attività e follow-up", "Briefing", "Documenti", "Mappe e percorsi"],
-    cta: "Prova gratis 14 giorni",
-    note: "Nessuna carta richiesta",
-    ctaTestid: "plan-plus-cta",
+    intro: "Tutto ciò che trovi in Starter, più:",
+    features: ["Aziende e contatti", "Sponsor e partner", "Attività e follow-up", "Ospitalità e pernottamenti", "Pasti", "Briefing", "Documenti", "Mappe e percorsi"],
+    ctaTestid: "plan-professional-cta",
   },
   premium: {
     id: "premium",
@@ -44,151 +41,13 @@ const PLANS = {
     title: "PREMIUM",
     subtitle: "Per organizzare e promuovere il tuo evento",
     description: null,
-    intro: "Tutto ciò che trovi nel Plus, più:",
-    features: ["Checklist completa dell'evento", "Pipeline organizzativa pre-evento", "Scadenze e controllo avanzamento", "Marketing dell'evento", "Piano editoriale", "Calendario social", "Gestione social", "Creazione contenuti", "Libreria media", "Pubblicazione social"],
-    cta: "Prova gratis 14 giorni",
-    note: "Nessuna carta richiesta",
+    intro: "Tutto ciò che trovi in Professional, più:",
+    features: ["Checklist completa dell'evento", "Pipeline organizzativa pre-evento", "Scadenze e controllo avanzamento", "Responsabili delle attività", "Marketing dell'evento", "Piano editoriale", "Calendario social", "Libreria media", "Creazione contenuti", "Gestione e pubblicazione social"],
     ctaTestid: "plan-premium-cta",
   },
 };
 
-// Tabella di confronto — SOLO funzionalità già esistenti / previste nello sviluppo CRMEvent.
-// Logica: FREE = gestione staff · PLUS = FREE + gestione completa evento · PREMIUM = PLUS + organizzazione avanzata + marketing/social.
-const COMPARISON = [
-  { area: "Gestione staff", rows: [
-    ["Staff e volontari", true, true, true],
-    ["Team", true, true, true],
-    ["Turni", true, true, true],
-    ["Disponibilità e conferme", true, true, true],
-    ["Informazioni allo staff", true, true, true],
-  ]},
-  { area: "Gestione evento", rows: [
-    ["Aziende e contatti", false, true, true],
-    ["Sponsor e partner", false, true, true],
-    ["Attività e follow-up", false, true, true],
-    ["Ospitalità", false, true, true],
-    ["Pernottamenti", false, true, true],
-    ["Pasti", false, true, true],
-    ["Briefing", false, true, true],
-    ["Documenti", false, true, true],
-    ["Mappe e percorsi", false, true, true],
-  ]},
-  { area: "Organizzazione avanzata", rows: [
-    ["Checklist dell'evento", false, false, true],
-    ["Pipeline organizzativa", false, false, true],
-    ["Scadenze", false, false, true],
-    ["Responsabili delle attività", false, false, true],
-    ["Controllo avanzamento", false, false, true],
-  ]},
-  { area: "Marketing e social", rows: [
-    ["Piano editoriale", false, false, true],
-    ["Calendario social", false, false, true],
-    ["Libreria media", false, false, true],
-    ["Creazione contenuti", false, false, true],
-    ["Gestione social", false, false, true],
-    ["Pubblicazione social", false, false, true],
-  ]},
-];
-
-function Cell({ on, plus }) {
-  return (
-    <div className={`flex items-center justify-center py-3 ${plus ? "bg-tiffany-light/40" : ""}`}>
-      {on
-        ? <span className="w-5 h-5 rounded-full bg-tiffany-light text-tiffany-active flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>
-        : <Minus className="w-4 h-4 text-slate-300" />}
-    </div>
-  );
-}
-
-function ComparisonTable({ prices }) {
-  const GRID = "grid grid-cols-[1fr_repeat(3,minmax(56px,1fr))] sm:grid-cols-[1.6fr_repeat(3,1fr)]";
-  return (
-    <section id="confronto" className="max-w-4xl mx-auto px-6 pt-14 pb-4" data-testid="comparison-section">
-      <div className="text-center mb-8">
-        <h2 className="font-display text-3xl font-bold">Confronta i piani nel dettaglio</h2>
-        <p className="text-slate-500 mt-3 text-sm md:text-base">Tutto ciò che è incluso in FREE, PLUS e PREMIUM, area per area.</p>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        {/* Intestazione piani (sticky) */}
-        <div className={`${GRID} sticky top-16 z-20 bg-white border-b border-slate-200`} data-testid="comparison-header">
-          <div className="py-3 px-3 sm:px-4" />
-          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-700">FREE</div>
-          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-900 bg-tiffany-light/40 border-x border-tiffany/30">
-            PLUS
-            <span className="hidden sm:flex items-center justify-center gap-1 text-[10px] font-semibold text-tiffany-fg mt-0.5"><Zap className="w-3 h-3" fill="currentColor" />Consigliato</span>
-          </div>
-          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-700">PREMIUM</div>
-        </div>
-
-        {COMPARISON.map((group, gi) => (
-          <div key={group.area}>
-            <div className={`${GRID} bg-slate-50 border-b border-slate-100`}>
-              <div className="col-span-4 py-2.5 px-3 sm:px-4 text-[11px] font-bold uppercase tracking-wide text-slate-500" data-testid={`comparison-area-${gi}`}>{group.area}</div>
-            </div>
-            {group.rows.map(([label, f, p, pr], ri) => (
-              <div key={label} className={`${GRID} ${ri % 2 ? "bg-white" : "bg-slate-50/40"} border-b border-slate-100 last:border-0 items-center`} data-testid="comparison-row">
-                <div className="py-3 px-3 sm:px-4 text-sm text-slate-700">{label}</div>
-                <Cell on={f} />
-                <Cell on={p} plus />
-                <Cell on={pr} />
-              </div>
-            ))}
-          </div>
-        ))}
-
-        {/* Riga finale di scelta — prezzi dinamici coerenti con il selettore */}
-        <div className="grid grid-cols-1 sm:grid-cols-[1.6fr_repeat(3,1fr)] border-t-2 border-slate-200 bg-white" data-testid="comparison-choice-row">
-          <div className="hidden sm:flex items-center px-4 text-sm font-semibold text-slate-700">Scegli il tuo piano</div>
-
-          {/* FREE */}
-          <div className="flex flex-col items-center gap-2 text-center p-4 border-t border-slate-100 sm:border-t-0">
-            <span className="sm:hidden text-xs font-bold uppercase tracking-wide text-slate-500">Free</span>
-            <div className="font-display text-2xl font-bold text-slate-900">0 €</div>
-            <Link to="/registrati" data-testid="choice-free-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "free", where: "table" })}
-              className="w-full max-w-[180px] inline-flex items-center justify-center h-10 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-all active:scale-[0.98]">Crea account</Link>
-          </div>
-
-          {/* PLUS (evidenziato) */}
-          <div className="flex flex-col items-center gap-2 text-center p-4 border-t border-slate-100 sm:border-t-0 bg-tiffany-light/40 sm:border-x sm:border-tiffany/30">
-            <span className="sm:hidden inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-tiffany-fg"><Zap className="w-3 h-3" fill="currentColor" />Plus</span>
-            <div>
-              <span className="font-display text-2xl font-bold text-slate-900">{prices.plus} €</span>
-              <span className="text-slate-500 text-xs font-medium ml-1">+ IVA</span>
-              <div className="text-xs text-slate-400">/ evento</div>
-            </div>
-            <Link to="/registrati" data-testid="choice-plus-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "plus", where: "table" })}
-              className="w-full max-w-[200px] inline-flex items-center justify-center py-2.5 px-3 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-xs sm:text-sm font-semibold shadow-sm transition-all active:scale-[0.98] text-center leading-tight">Prova gratis 14 giorni</Link>
-            <span className="text-[11px] text-slate-400">Nessuna carta richiesta</span>
-          </div>
-
-          {/* PREMIUM */}
-          <div className="flex flex-col items-center gap-2 text-center p-4 border-t border-slate-100 sm:border-t-0">
-            <span className="sm:hidden text-xs font-bold uppercase tracking-wide text-slate-500">Premium</span>
-            <div>
-              <span className="font-display text-2xl font-bold text-slate-900">{prices.premium} €</span>
-              <span className="text-slate-500 text-xs font-medium ml-1">+ IVA</span>
-              <div className="text-xs text-slate-400">/ evento</div>
-            </div>
-            <Link to="/registrati" data-testid="choice-premium-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "premium", where: "table" })}
-              className="w-full max-w-[200px] inline-flex items-center justify-center py-2.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold transition-all active:scale-[0.98] text-center leading-tight">Prova gratis 14 giorni</Link>
-            <span className="text-[11px] text-slate-400">Nessuna carta richiesta</span>
-          </div>
-        </div>
-      </div>
-      <p className="text-xs text-slate-400 mt-4 text-center">FREE = gestione staff · PLUS = gestione completa dell'evento · PREMIUM = tutto Plus + organizzazione avanzata + marketing/social.</p>
-    </section>
-  );
-}
-
 function PriceBlock({ amount }) {
-  if (amount === 0) {
-    return (
-      <div className="flex items-baseline gap-1.5">
-        <span className="font-display text-5xl font-bold text-slate-900" data-testid="price-value">0 €</span>
-      </div>
-    );
-  }
   return (
     <div>
       <div className="flex items-baseline gap-1.5">
@@ -212,7 +71,7 @@ function PlanCard({ plan, amount, highlighted }) {
       }`}
     >
       {highlighted && (
-        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap" data-testid="plan-plus-badge">
+        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap" data-testid="plan-professional-badge">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-tiffany text-slate-900 px-3.5 py-1.5 text-xs font-bold shadow-sm">
             <Zap className="w-3.5 h-3.5" fill="currentColor" />Miglior rapporto qualità-prezzo
           </span>
@@ -252,15 +111,129 @@ function PlanCard({ plan, amount, highlighted }) {
             : "bg-slate-900 hover:bg-slate-800 text-white"
         }`}
       >
-        {plan.cta}
+        Prova gratis 14 giorni
       </Link>
-      {plan.note && <p className="text-xs text-slate-400 mt-2 text-center" data-testid={`${plan.ctaTestid}-note`}>{plan.note}</p>}
+      <p className="text-xs text-slate-400 mt-2 text-center" data-testid={`${plan.ctaTestid}-note`}>Nessuna carta richiesta</p>
     </div>
   );
 }
 
+// Tabella di confronto — SOLO funzionalità già esistenti / previste nello sviluppo CRMEvent.
+// Logica: STARTER = gestione staff · PROFESSIONAL = gestione completa evento · PREMIUM = PROFESSIONAL + organizzazione avanzata + marketing/social.
+const COMPARISON = [
+  { area: "Gestione staff", rows: [
+    ["Staff e volontari", true, true, true],
+    ["Team", true, true, true],
+    ["Turni", true, true, true],
+    ["Disponibilità e conferme", true, true, true],
+    ["Informazioni allo staff", true, true, true],
+  ]},
+  { area: "Gestione evento", rows: [
+    ["Aziende e contatti", false, true, true],
+    ["Sponsor e partner", false, true, true],
+    ["Attività e follow-up", false, true, true],
+    ["Ospitalità", false, true, true],
+    ["Pernottamenti", false, true, true],
+    ["Pasti", false, true, true],
+    ["Briefing", false, true, true],
+    ["Documenti", false, true, true],
+    ["Mappe e percorsi", false, true, true],
+  ]},
+  { area: "Organizzazione avanzata", rows: [
+    ["Checklist dell'evento", false, false, true],
+    ["Pipeline organizzativa", false, false, true],
+    ["Scadenze", false, false, true],
+    ["Responsabili delle attività", false, false, true],
+    ["Controllo avanzamento", false, false, true],
+  ]},
+  { area: "Marketing e social", rows: [
+    ["Piano editoriale", false, false, true],
+    ["Calendario social", false, false, true],
+    ["Libreria media", false, false, true],
+    ["Creazione contenuti", false, false, true],
+    ["Gestione social", false, false, true],
+    ["Pubblicazione social", false, false, true],
+  ]},
+];
+
+function Cell({ on, pro }) {
+  return (
+    <div className={`flex items-center justify-center py-3 ${pro ? "bg-tiffany-light/40" : ""}`}>
+      {on
+        ? <span className="w-5 h-5 rounded-full bg-tiffany-light text-tiffany-active flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>
+        : <Minus className="w-4 h-4 text-slate-300" />}
+    </div>
+  );
+}
+
+function ComparisonTable({ prices }) {
+  const GRID = "grid grid-cols-[1fr_repeat(3,minmax(56px,1fr))] sm:grid-cols-[1.6fr_repeat(3,1fr)]";
+  return (
+    <section id="confronto" className="max-w-4xl mx-auto px-6 pt-14 pb-4" data-testid="comparison-section">
+      <div className="text-center mb-8">
+        <h2 className="font-display text-3xl font-bold">Confronta i piani nel dettaglio</h2>
+        <p className="text-slate-500 mt-3 text-sm md:text-base">Tutto ciò che è incluso in Starter, Professional e Premium, area per area.</p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        {/* Intestazione piani (sticky) */}
+        <div className={`${GRID} sticky top-16 z-20 bg-white border-b border-slate-200`} data-testid="comparison-header">
+          <div className="py-3 px-3 sm:px-4" />
+          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-700">STARTER</div>
+          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-900 bg-tiffany-light/40 border-x border-tiffany/30">
+            PROFESSIONAL
+            <span className="hidden sm:flex items-center justify-center gap-1 text-[10px] font-semibold text-tiffany-fg mt-0.5"><Zap className="w-3 h-3" fill="currentColor" />Consigliato</span>
+          </div>
+          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-700">PREMIUM</div>
+        </div>
+
+        {COMPARISON.map((group, gi) => (
+          <div key={group.area}>
+            <div className={`${GRID} bg-slate-50 border-b border-slate-100`}>
+              <div className="col-span-4 py-2.5 px-3 sm:px-4 text-[11px] font-bold uppercase tracking-wide text-slate-500" data-testid={`comparison-area-${gi}`}>{group.area}</div>
+            </div>
+            {group.rows.map(([label, s, p, pr], ri) => (
+              <div key={label} className={`${GRID} ${ri % 2 ? "bg-white" : "bg-slate-50/40"} border-b border-slate-100 last:border-0 items-center`} data-testid="comparison-row">
+                <div className="py-3 px-3 sm:px-4 text-sm text-slate-700">{label}</div>
+                <Cell on={s} />
+                <Cell on={p} pro />
+                <Cell on={pr} />
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {/* Riga finale di scelta — prezzi dinamici coerenti con il selettore */}
+        <div className="grid grid-cols-1 sm:grid-cols-[1.6fr_repeat(3,1fr)] border-t-2 border-slate-200 bg-white" data-testid="comparison-choice-row">
+          <div className="hidden sm:flex items-center px-4 text-sm font-semibold text-slate-700">Scegli il tuo piano</div>
+          {["starter", "professional", "premium"].map((id) => {
+            const pro = id === "professional";
+            const label = id === "starter" ? "Starter" : id === "professional" ? "Professional" : "Premium";
+            return (
+              <div key={id} className={`flex flex-col items-center gap-2 text-center p-4 border-t border-slate-100 sm:border-t-0 ${pro ? "bg-tiffany-light/40 sm:border-x sm:border-tiffany/30" : ""}`}>
+                <span className={`sm:hidden inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide ${pro ? "text-tiffany-fg" : "text-slate-500"}`}>
+                  {pro && <Zap className="w-3 h-3" fill="currentColor" />}{label}
+                </span>
+                <div>
+                  <span className="font-display text-2xl font-bold text-slate-900">{prices[id]} €</span>
+                  <span className="text-slate-500 text-xs font-medium ml-1">+ IVA</span>
+                  <div className="text-xs text-slate-400">/ evento</div>
+                </div>
+                <Link to="/registrati" data-testid={`choice-${id}-cta`} onClick={() => trackEvent("pricing_cta_click", { plan: id, where: "table" })}
+                  className={`w-full max-w-[200px] inline-flex items-center justify-center py-2.5 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all active:scale-[0.98] text-center leading-tight ${pro ? "bg-tiffany hover:bg-tiffany-hover text-slate-900 shadow-sm" : "bg-slate-900 hover:bg-slate-800 text-white"}`}>Prova gratis 14 giorni</Link>
+                <span className="text-[11px] text-slate-400">Nessuna carta richiesta</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className="text-xs text-slate-400 mt-4 text-center">STARTER = gestione staff · PROFESSIONAL = gestione completa dell'evento · PREMIUM = tutto Professional + organizzazione avanzata + marketing/social.</p>
+    </section>
+  );
+}
+
 export default function Pricing() {
-  const [tier, setTier] = useState("small"); // small = fino a 3 eventi | large = più di 3
+  const [tier, setTier] = useState("small"); // small = fino a 3 eventi/anno | large = più di 3
   const [open, setOpen] = useState(false);
   const prices = PRICING[tier];
   useEffect(() => { trackEvent("pricing_view"); }, []);
@@ -298,13 +271,13 @@ export default function Pricing() {
           <Sparkles className="w-3.5 h-3.5" />14 giorni di prova gratuita · Nessuna carta richiesta
         </div>
         <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight">Scegli il piano giusto per il tuo evento.</h1>
-        <p className="text-base md:text-lg text-slate-500 mt-4 max-w-xl mx-auto">Dalla gestione dello staff all'organizzazione completa e alla promozione: paghi in base a quanti eventi organizzi.</p>
+        <p className="text-base md:text-lg text-slate-500 mt-4 max-w-xl mx-auto">Dalla gestione dello staff all'organizzazione completa e alla promozione: paghi in base a quanti eventi organizzi ogni anno.</p>
       </section>
 
       {/* Selettore numero eventi */}
       <section className="max-w-3xl mx-auto px-6 pb-2">
         <div className="flex flex-col items-center gap-3" data-testid="pricing-selector">
-          <label htmlFor="events-select" className="text-sm font-semibold text-slate-800">Quanti eventi organizzi?</label>
+          <label htmlFor="events-select" className="text-sm font-semibold text-slate-800">Quanti eventi organizzi all'anno?</label>
           <div className="relative w-full sm:w-72">
             <select
               id="events-select"
@@ -324,12 +297,12 @@ export default function Pricing() {
       {/* 3 piani */}
       <section className="max-w-6xl mx-auto px-6 pt-10 pb-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-stretch">
-          <PlanCard plan={PLANS.free} amount={0} highlighted={false} />
-          <PlanCard plan={PLANS.plus} amount={prices.plus} highlighted={true} />
+          <PlanCard plan={PLANS.starter} amount={prices.starter} highlighted={false} />
+          <PlanCard plan={PLANS.professional} amount={prices.professional} highlighted={true} />
           <PlanCard plan={PLANS.premium} amount={prices.premium} highlighted={false} />
         </div>
         <p className="text-xs text-slate-400 mt-8 text-center max-w-2xl mx-auto">
-          Prezzi IVA esclusa, per evento. Il trattamento IVA sarà applicato secondo la normativa vigente in base alla configurazione fiscale definita all'attivazione dell'abbonamento.
+          Prezzi IVA esclusa, per evento. La fascia è determinata dal numero di eventi organizzati nello stesso anno solare. Il trattamento IVA sarà applicato secondo la normativa vigente.
         </p>
       </section>
 
@@ -339,11 +312,11 @@ export default function Pricing() {
       {/* Final CTA */}
       <section className="max-w-3xl mx-auto px-6 py-16 mt-6 text-center">
         <h2 className="font-display text-3xl font-bold">Inizia oggi, senza pensieri.</h2>
-        <p className="text-slate-500 mt-3">14 giorni gratis con il piano Free. Nessuna carta richiesta. Passa a Plus o Premium quando vuoi.</p>
+        <p className="text-slate-500 mt-3">14 giorni di prova gratuita con accesso a tutte le funzionalità Premium. Nessuna carta richiesta.</p>
         <div className="mt-7 flex justify-center">
           <Link to="/registrati" data-testid="pricing-cta-bottom"
             className="inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-tiffany hover:bg-tiffany-hover text-slate-900 text-base font-semibold shadow-sm transition-all active:scale-[0.98]">
-            <Sparkles className="w-5 h-5" />Crea account gratis
+            <Sparkles className="w-5 h-5" />Prova gratis 14 giorni
           </Link>
         </div>
         <p className="text-xs text-slate-400 mt-6">
