@@ -1,5 +1,12 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Audit finale migrazione Brevo (produzione) ✅
+- Deployer (run attivo) conferma PRODUZIONE: `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY` presente, `EMAIL_FROM_ADDRESS=hello@crmevent.it`, `RESEND_API_KEY` ancora presente (solo fallback).
+- Audit codice: unico uso Resend = `_send_via_resend` in `email_utils.py`, raggiungibile SOLO via `send_email()`; nessuna chiamata diretta ad api.resend.com che bypassa EMAIL_PROVIDER. `send_email` ritorna al primo provider riuscito → con brevo primario un invio OK non chiama mai Resend.
+- Esito: (1) test via Brevo ✅, (2) nessun fallback Resend ✅, (3) tutte le transazionali su EMAIL_PROVIDER=brevo ✅, (4) Staff&Volontari su Brevo (brevo_funnel) ✅, (5) nessun bypass Resend ✅, (6) `RESEND_API_KEY` rimovibile senza interruzioni ✅ (perdendo solo la rete di fallback Resend; resta `managed`/EMERGENT_EMAIL_KEY come ultima sicurezza).
+- Secret Resend rimovibile: SOLO `RESEND_API_KEY`. Da aggiornare (non-runtime): testo privacy in `frontend/src/pages/Legal.jsx` che cita "Resend".
+
+
 ## 2026-06 — Migrazione email transazionali verso Brevo (Resend come fallback)
 - **Provider centralizzato (`email_utils.py`)**: nuovo interruttore `EMAIL_PROVIDER` (default `resend`). `send_email()` ora sceglie il provider primario e prova i fallback in ordine: `brevo → resend → managed` (se EMAIL_PROVIDER=brevo) oppure `resend → managed` (default). Nessuna chiamata Resend/Brevo sparsa: tutto passa da `send_email()`.
 - **Nuovo provider Brevo transazionale** `_send_via_brevo`: POST `https://api.brevo.com/v3/smtp/email`, header `api-key`, sender fisso `CRMEvent <hello@crmevent.it>`, `htmlContent` (layout master unico già in codice, logo CRMEvent). SOLO endpoint transazionale: NON aggiunge il destinatario a nessuna lista/contatto (un invito non è iscrizione newsletter). Le liste Eventi (disponibilità/partecipazione) restano separate e intatte.
