@@ -398,6 +398,7 @@ export default function LandingPage() {
         <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-slate-200">
           <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />14 giorni di prova gratuita</div>
           <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Nessuna carta richiesta</div>
+          <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Aggiornamenti inclusi in tutti i piani</div>
         </div>
       </Section>
 

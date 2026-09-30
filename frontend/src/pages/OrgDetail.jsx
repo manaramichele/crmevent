@@ -287,12 +287,36 @@ export default function OrgDetail() {
       {tab === "eventi" && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden" data-testid="org-eventi-tab">
           <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider"><th className="text-left px-4 py-2.5">Evento</th><th className="text-left px-4 py-2.5">Città</th><th className="text-left px-4 py-2.5">Stato</th></tr></thead>
+            <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+              <th className="text-left px-4 py-2.5">Evento</th>
+              <th className="text-left px-4 py-2.5">Data</th>
+              <th className="text-left px-4 py-2.5">Piano</th>
+              <th className="text-left px-4 py-2.5">Commerciale</th>
+              <th className="text-left px-4 py-2.5">Attivazione</th>
+            </tr></thead>
             <tbody>
-              {events.length === 0 ? <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">Nessun evento in questa organizzazione.</td></tr> :
-                events.map((e) => <tr key={e.id} className="border-t border-slate-100"><td className="px-4 py-2.5 font-medium text-slate-800">{e.nome}</td><td className="px-4 py-2.5 text-slate-600">{e.citta || "—"}</td><td className="px-4 py-2.5 text-slate-600">{e.stato || "—"}</td></tr>)}
+              {events.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nessun evento in questa organizzazione.</td></tr> :
+                events.map((e) => {
+                  const ent = e.entitlement || {};
+                  const purchased = ent.source === "purchased";
+                  const orgTrial = org?.subscription?.status === "trial" && (org?.subscription?.days_left ?? 0) > 0;
+                  const PL = { starter: "Starter", professional: "Professional", premium: "Premium" };
+                  const plan = purchased ? (PL[ent.plan] || ent.plan) : (orgTrial ? "Premium (prova)" : "—");
+                  const commColor = purchased ? "green" : (orgTrial ? "tiffany" : "red");
+                  const commLabel = purchased ? "Acquistato" : (orgTrial ? "Prova Premium" : "Nessun piano");
+                  return (
+                    <tr key={e.id} className="border-t border-slate-100" data-testid={`org-event-row-${e.id}`}>
+                      <td className="px-4 py-2.5 font-medium text-slate-800">{e.nome}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{fmt(e.data_inizio)}</td>
+                      <td className="px-4 py-2.5 text-slate-700">{plan}</td>
+                      <td className="px-4 py-2.5"><StatusBadge color={commColor}>{commLabel}</StatusBadge></td>
+                      <td className="px-4 py-2.5 text-slate-600">{purchased ? fmt(ent.purchased_at) : "—"}</td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table></div>
+          <p className="text-xs text-slate-400 px-4 py-3 border-t border-slate-100">Stato commerciale per singolo evento. I dati legacy di abbonamento restano separati fino alla migrazione Stripe.</p>
         </div>
       )}
 

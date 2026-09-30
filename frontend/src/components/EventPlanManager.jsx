@@ -71,23 +71,22 @@ export default function EventPlanManager({ handleReturn = false, compact = false
               <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                 <span>Evento: {dmy(ev.data_inizio)}</span>
                 {ev.purchased && ev.snapshot && <>
+                  <span>Piano: {PLABEL[ev.snapshot.plan] || PLABEL[ev.current_plan]}</span>
                   <span>Pagato: {eur(ev.snapshot.net)} + IVA</span>
                   <span>Acquisto: {ev.snapshot.purchased_at ? new Date(ev.snapshot.purchased_at).toLocaleDateString("it-IT") : "—"}</span>
-                  <span>Fascia: {ev.snapshot.tier === "large" ? "Più di 3 eventi" : "Fino a 3 eventi"}</span>
-                  <span>Anno: {ev.snapshot.year || ev.year}</span>
                 </>}
                 {ev.readonly && <span className="text-red-600 inline-flex items-center gap-1"><Lock className="w-3 h-3" />Sola lettura</span>}
               </div>
             </div>
             <div className="shrink-0">
               {trial ? (
-                <Button size="sm" onClick={() => setDlg(ev)} data-testid={`choose-plan-${ev.id}`} className="bg-tiffany hover:bg-tiffany-hover text-slate-900"><Sparkles className="w-4 h-4 mr-1" />Scegli il tuo piano</Button>
+                <Button size="sm" onClick={() => setDlg(ev)} data-testid={`choose-plan-${ev.id}`} className="bg-tiffany hover:bg-tiffany-hover text-slate-900"><Sparkles className="w-4 h-4 mr-1" />Attiva un piano</Button>
               ) : ev.current_plan === "premium" && ev.purchased ? (
                 <span className="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1"><CheckCircle2 className="w-4 h-4" />Piano completo</span>
               ) : ev.purchased ? (
                 <Button size="sm" onClick={() => setDlg(ev)} data-testid={`upgrade-plan-${ev.id}`} className="bg-slate-900 hover:bg-slate-800 text-white"><ArrowUpRight className="w-4 h-4 mr-1" />{ev.current_plan === "starter" ? "Passa a Professional o Premium" : "Passa a Premium"}</Button>
               ) : (
-                <Button size="sm" onClick={() => setDlg(ev)} data-testid={`choose-plan-${ev.id}`} className="bg-tiffany hover:bg-tiffany-hover text-slate-900">Scegli il piano</Button>
+                <Button size="sm" onClick={() => setDlg(ev)} data-testid={`choose-plan-${ev.id}`} className="bg-tiffany hover:bg-tiffany-hover text-slate-900">Attiva piano</Button>
               )}
             </div>
           </div>

@@ -285,9 +285,14 @@ export default function Pricing() {
 
       {/* Sottotitolo modello per-evento */}
       <section className="max-w-3xl mx-auto px-6 pb-2 text-center" data-testid="pricing-selector">
-        <p className="inline-flex items-center gap-2 rounded-full bg-slate-100 text-slate-600 px-4 py-2 text-sm font-medium">
-          <Sparkles className="w-4 h-4 text-tiffany-active" />Nessun abbonamento mensile · paghi per singolo evento
-        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <p className="inline-flex items-center gap-2 rounded-full bg-slate-100 text-slate-600 px-4 py-2 text-sm font-medium">
+            <Sparkles className="w-4 h-4 text-tiffany-active" />Nessun abbonamento mensile · paghi per singolo evento
+          </p>
+          <p className="inline-flex items-center gap-2 rounded-full bg-tiffany-light text-tiffany-fg px-4 py-2 text-sm font-semibold" data-testid="pricing-updates-included">
+            <Check className="w-4 h-4" />Aggiornamenti inclusi in tutti i piani
+          </p>
+        </div>
       </section>
 
       {/* 3 piani */}
