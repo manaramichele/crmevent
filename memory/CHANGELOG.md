@@ -1,5 +1,14 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Lead Finder: modifica ed eliminazione Organizzatori (FASE 1) ✅
+- Colonna "Azioni" (Modifica/Elimina) nel tab Organizzatori (`LeadFinder.jsx`).
+- Modale "Modifica" completo (nome, email, sito, Instagram, LinkedIn, regione, sport, stato/verifica) via `PUT /leadfinder/organizers/{id}` con `_manual`; fonte/tracciabilità mantenute; nessun nome auto-derivato dall'email (record senza nome restano "Da completare").
+- Eliminazione singola con conferma + avviso relazioni (`GET /leadfinder/organizers/{id}/relations`): eventi collegati vengono SCOLLEGATI (non eliminati), il contatto Brevo NON viene mai eliminato.
+- Eliminazione multipla `POST /leadfinder/organizers/delete-bulk` con conferma e conteggio.
+- Endpoint superadmin (scope=platform), nessuna modifica a dedup/approvazione/sync Brevo. Verificato: backend via curl + testing agent iter24 frontend 100%.
+- FASE 2 (unificazione Lead dentro Organizzatori) da avviare successivamente.
+
+
 ## 2026-06 — Audit finale migrazione Brevo (produzione) ✅
 - Deployer (run attivo) conferma PRODUZIONE: `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY` presente, `EMAIL_FROM_ADDRESS=hello@crmevent.it`, `RESEND_API_KEY` ancora presente (solo fallback).
 - Audit codice: unico uso Resend = `_send_via_resend` in `email_utils.py`, raggiungibile SOLO via `send_email()`; nessuna chiamata diretta ad api.resend.com che bypassa EMAIL_PROVIDER. `send_email` ritorna al primo provider riuscito → con brevo primario un invio OK non chiama mai Resend.

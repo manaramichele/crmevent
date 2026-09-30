@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only UI testing of Lead Finder → tab Organizzatori for FASE 1 (modifica/eliminazione anagrafiche). Created 3 test organizers via POST /api/leadfinder/organizers/manual?scope=platform (2 with name, 1 email-only) and exercised all requested UI flows via Playwright as superadmin at /marketing/organizzatori. All acceptance criteria met.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "lf-edit-modal / lf-delete-modal / lf-bulk-delete-modal", "issues": ["Radix DialogContent warning: 'Missing Description or aria-describedby' — a11y warning only, not blocking. Consider adding <DialogDescription> to each modal."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LeadFinder.jsx is very large (>600 lines with many modals). Consider splitting into subcomponents (OrganizersTable, EditOrganizerModal, DeleteConfirmModal, BulkDeleteModal) for maintainability.",
+    "Add DialogDescription (or aria-describedby) to the three new modals to silence Radix a11y warnings."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped as requested)", "frontend": "100%"},
+  "test_credentials": "manara.michele.pro@gmail.com / CrmEvent2026! (superadmin) — verified working",
+  "seed_data_creation": "Created and cleaned up 6 test organizers (TEST_ prefix + timestamp) via POST /api/leadfinder/organizers/manual?scope=platform. All test data deleted at end of runs via bulk delete.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FASE 1 UI verified: (1) Route is /marketing/organizzatori (LeadFinder page, tab 'Organizzatori'). (2) lf-edit-{id} opens lf-edit-modal prefilled; editing name/instagram/region and clicking lf-edit-submit persists (verified via full page reload + re-search). (3) lf-delete-{id} opens lf-delete-modal with exact text 'Vuoi eliminare l'organizzatore <Nome>? Questa operazione non può essere annullata.'; lf-delete-cancel closes without deleting; lf-delete-confirm removes the row. lf-delete-warning correctly hidden when no relations. (4) Bulk: selecting lf-merge-check-{id} shows lf-bulk-delete-btn with 'Elimina N'; lf-bulk-delete-modal shows correct count and text 'Gli eventi collegati verranno scollegati (non eliminati). I contatti su Brevo NON vengono eliminati.'; lf-bulk-delete-confirm removes all selected rows. (5) Email-only record correctly appears with email in the Organizzazione column and status 'Da completare' — no email used as name.",
+  "detailed_verifications": {
+    "edit_flow": "Prefill OK (name='TEST Org 10466 A'). After edit to 'TEST Org 10466 A EDITED' + Instagram + Regione='Lombardia' and page reload, both EDITED and Lombardia present in table.",
+    "single_delete_flow": "Modal text: 'Vuoi eliminare l'organizzatore TEST Org 10466 B? Questa operazione non può essere annullata.' Cancel closes modal without deletion. Confirm removes row from UI.",
+    "warning_visibility": "lf-delete-warning correctly ABSENT for organizer with 0 events and not synced to Brevo (as expected).",
+    "bulk_delete_flow": "lf-bulk-delete-btn shows 'Elimina 3'; modal count matches; toast 'Eliminati 3 organizzatori' displayed; rows disappear.",
+    "email_only_status": "Row for test.orgc*****@example.com shows email in Organizzazione column, Fonte 'Inserimento manuale', Stato 'Da completare', Brevo 'Non approvato' — no invented name."
+  }
+}
