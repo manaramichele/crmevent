@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Coins, Save, Search } from "lucide-react";
+import { Coins, Save, Search, Users2, AlertTriangle, PlayCircle } from "lucide-react";
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleString("it-IT") : "—");
-const TABS = [["servizi", "Servizi"], ["ricariche", "Ricariche"], ["org", "Organizzazioni"]];
+const TABS = [["servizi", "Servizi"], ["ricariche", "Ricariche"], ["org", "Organizzazioni"], ["migrazione", "Migrazione"]];
 
 function ServicesTab() {
   const [rows, setRows] = useState([]);
@@ -141,6 +141,73 @@ function OrgsTab() {
   );
 }
 
+function MigrationTab() {
+  const [d, setD] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const { data } = await api.get("/platform/credits/migration-dryrun"); setD(data); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const Table = ({ rows, testid }) => (
+    <div className="overflow-x-auto mt-2"><table className="w-full text-sm" data-testid={testid}>
+      <thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100">
+        <th className="py-2 pr-3">Organizzazione</th><th className="py-2 pr-3">Tipo</th><th className="py-2 pr-3 text-right">Saldo attuale</th><th className="py-2 pr-3 text-right">Saldo simulato</th></tr></thead>
+      <tbody>{rows.map((r) => (
+        <tr key={r.id} className="border-b border-slate-50">
+          <td className="py-2 pr-3"><div className="font-medium text-slate-800">{r.nome || "—"}</div><div className="text-xs text-slate-400">{r.id}</div></td>
+          <td className="py-2 pr-3 text-slate-500">{r.type || "—"}</td>
+          <td className="py-2 pr-3 text-right text-slate-600">{r.balance}</td>
+          <td className={`py-2 pr-3 text-right font-semibold ${r.projected_balance !== r.balance ? "text-emerald-600" : "text-slate-500"}`}>{r.projected_balance}{r.projected_balance !== r.balance ? " (+100)" : ""}</td>
+        </tr>
+      ))}</tbody>
+    </table></div>
+  );
+
+  return (
+    <div data-testid="migration-tab">
+      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 mb-4">
+        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <div><b>Dry-run (sola lettura).</b> Regola: +100 crediti una tantum alle organizzazioni reali che non hanno mai ricevuto il bonus. Org Test/Demo/interne sono escluse. La migrazione NON viene eseguita finché non la si conferma esplicitamente.</div>
+      </div>
+      <Button size="sm" variant="outline" onClick={load} disabled={loading} data-testid="migration-refresh">{loading ? "Calcolo…" : "Ricalcola dry-run"}</Button>
+      {d && (
+        <div className="mt-4 space-y-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-400 uppercase">Org totali</div><div className="text-2xl font-bold text-slate-900" data-testid="mig-total">{d.total_orgs}</div></div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs text-emerald-600 uppercase">Idonee (+100)</div><div className="text-2xl font-bold text-emerald-700" data-testid="mig-eligible">{d.eligible_count}</div></div>
+            <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-400 uppercase">Escluse (test/interne)</div><div className="text-2xl font-bold text-slate-900" data-testid="mig-excluded">{d.excluded_count}</div></div>
+            <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-400 uppercase">Già col bonus</div><div className="text-2xl font-bold text-slate-900" data-testid="mig-already">{d.already_granted_count}</div></div>
+          </div>
+          <div className="rounded-xl border border-tiffany-border bg-tiffany-light/40 p-4 text-sm text-slate-700">
+            Crediti totali che verrebbero accreditati: <b data-testid="mig-credits-total">{d.total_credits_to_grant}</b> ({d.eligible_count} org × {d.bonus_amount})
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Users2 className="w-4 h-4 text-emerald-600" />Idonee ({d.eligible_count})</div>
+            {d.eligible.length ? <Table rows={d.eligible} testid="mig-eligible-table" /> : <p className="text-sm text-slate-400 mt-1">Nessuna org idonea.</p>}
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><AlertTriangle className="w-4 h-4 text-amber-500" />Escluse (Test/Demo/interne) ({d.excluded_count})</div>
+            {d.excluded.length ? <Table rows={d.excluded} testid="mig-excluded-table" /> : <p className="text-sm text-slate-400 mt-1">Nessuna.</p>}
+          </div>
+          {d.already_granted_count > 0 && (
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">Già col bonus ({d.already_granted_count})</div>
+              <Table rows={d.already_granted} testid="mig-already-table" />
+            </div>
+          )}
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+            <PlayCircle className="w-4 h-4 shrink-0" />L'esecuzione della migrazione è in attesa di autorizzazione. Verrà abilitata dopo approvazione del dry-run.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PlatformCredits() {
   const [tab, setTab] = useState("servizi");
   return (
@@ -156,6 +223,7 @@ export default function PlatformCredits() {
         {tab === "servizi" && <ServicesTab />}
         {tab === "ricariche" && <PackagesTab />}
         {tab === "org" && <OrgsTab />}
+        {tab === "migrazione" && <MigrationTab />}
       </div>
     </div>
   );

@@ -1,16 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import api, { formatApiError } from "@/lib/api";
-import EventPlanManager from "@/components/EventPlanManager";
 import CreditsSection from "@/components/CreditsSection";
 import { toast } from "sonner";
-import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarClock, CheckCircle2, AlertTriangle, Building2, Save, ReceiptText } from "lucide-react";
+import { Building2, Save, ReceiptText } from "lucide-react";
 
-const STATUS_LABEL = { trial: "Prova gratuita", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pagamento non riuscito", suspended: "Sospeso" };
-const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange" };
 const PAESI = ["IT", "SM", "VA", "FR", "DE", "ES", "CH", "AT", "GB", "US", "Altro"];
 
 const BFIELDS = [
@@ -47,7 +43,6 @@ export default function Account() {
   }, [load]);
 
   if (!data || !billing) return <div className="text-slate-400">Caricamento...</div>;
-  const s = data.subscription;
   const isItaly = (billing.paese || "IT") === "IT";
   const isAzienda = billing.tipo === "azienda";
 
@@ -62,29 +57,12 @@ export default function Account() {
 
   return (
     <div className="max-w-3xl animate-fade-up" data-testid="account-page">
-      <h1 className="font-display text-3xl font-bold text-slate-900">Account e licenze</h1>
-      <p className="text-slate-500 mt-1 mb-6">Ogni evento ha la sua licenza. Gestisci prova, piani per evento e dati di fatturazione.</p>
+      <h1 className="font-display text-3xl font-bold text-slate-900">Account e crediti</h1>
+      <p className="text-slate-500 mt-1 mb-6">Gestisci i tuoi crediti CRMEvent e i dati di fatturazione.</p>
 
       <div className="bg-white border border-slate-200 rounded-xl p-6 mb-4">
         <div className="flex items-center gap-2 text-slate-500 text-sm"><Building2 className="w-4 h-4" />Organizzazione</div>
         <div className="text-xl font-semibold text-slate-900 mt-1" data-testid="account-org-name">{data.organization.nome}</div>
-      </div>
-
-      {/* Subscription status */}
-      <div className={`rounded-xl p-6 border mb-4 ${s.access !== "full" ? "border-red-200 bg-red-50" : s.status === "trial" ? "border-tiffany-border bg-tiffany-light/40" : "border-emerald-200 bg-emerald-50"}`} data-testid="account-subscription">
-        <div className="flex items-center gap-2"><span className="text-sm text-slate-500">Stato organizzazione</span>
-          <StatusBadge color={STATUS_COLOR[s.status] || "gray"} data-testid="account-status">{STATUS_LABEL[s.status] || s.status}</StatusBadge></div>
-        {s.status === "trial"
-          ? <>
-              <div className="text-2xl font-bold text-slate-900 mt-2 font-display">Prova gratuita CRMEvent Premium</div>
-              <div className="mt-3 flex items-center gap-2 text-tiffany-fg font-semibold" data-testid="account-trial-remaining"><CalendarClock className="w-5 h-5" />{s.days_left} giorni rimanenti · tutte le funzionalità Premium</div>
-              <p className="text-sm text-slate-600 mt-2">Alla fine della prova i tuoi dati restano al sicuro. Per continuare a operare un evento, attiva un piano dedicato qui sotto.</p>
-            </>
-          : <>
-              <div className="text-2xl font-bold text-slate-900 mt-2 font-display">Licenze per evento</div>
-              <div className="mt-2 flex items-start gap-2 text-slate-700 text-sm"><CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-500 shrink-0" />Nessun abbonamento. Ogni evento si attiva con Starter, Professional o Premium.</div>
-              {s.access !== "full" && <div className="mt-3 flex items-start gap-2 text-red-700 text-sm" data-testid="account-expired-note"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />La prova gratuita è terminata. I tuoi dati sono conservati. Attiva un piano per ciascun evento per continuare a operarlo.</div>}
-            </>}
       </div>
 
       {/* Crediti CRMEvent */}
@@ -116,18 +94,11 @@ export default function Account() {
         <Button onClick={saveBilling} disabled={saving} data-testid="billing-save" className="mt-4 bg-slate-900 hover:bg-slate-800 text-white"><Save className="w-4 h-4 mr-2" />{saving ? "Salvataggio..." : "Salva dati"}</Button>
       </div>
 
-      {/* Piani e acquisti (per evento) */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4" data-testid="account-plans-purchases">
-        <div className="flex items-center gap-2 mb-1"><ReceiptText className="w-4 h-4 text-tiffany-active" /><h2 className="font-semibold text-slate-800">Piani e acquisti</h2></div>
-        <p className="text-xs text-slate-400 mb-4">Stato commerciale di ogni evento. Il piano si attiva solo dopo conferma del pagamento (Stripe TEST).</p>
-        <EventPlanManager />
-      </div>
-
       <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4" data-testid="invoices-card">
         <div className="flex items-center gap-2 mb-1"><ReceiptText className="w-4 h-4 text-tiffany-active" /><h2 className="font-semibold text-slate-800">Fatture</h2></div>
         <p className="text-xs text-slate-400 mb-4">La <b>simulazione (TEST)</b> verifica il documento internamente: <b>nessun</b> documento reale su Fatture in Cloud e <b>nessun</b> invio SDI.</p>
         {invoices.length === 0 ? (
-          <p className="text-sm text-slate-500" data-testid="invoices-empty">Nessuna fattura ancora. Dopo un pagamento Stripe TEST comparirà qui.</p>
+          <p className="text-sm text-slate-500" data-testid="invoices-empty">Nessuna fattura ancora. Dopo una ricarica crediti (Stripe TEST) comparirà qui.</p>
         ) : (
           <div className="space-y-2">
             {invoices.map((iv) => (
@@ -148,14 +119,14 @@ export default function Account() {
               <div><span className="text-slate-500">Intestazione:</span> {sim.intestazione || "—"}</div>
               <div><span className="text-slate-500">Numero simulato:</span> {sim.numero_simulato}</div>
               <div><span className="text-slate-500">Data simulata:</span> {sim.data_simulata}</div>
-              <div><span className="text-slate-500">Piano:</span> {sim.piano || "—"}</div>
+              <div><span className="text-slate-500">Descrizione:</span> {sim.descrizione || sim.piano || "—"}</div>
               <div><span className="text-slate-500">Imponibile:</span> {Number(sim.imponibile ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
               <div><span className="text-slate-500">Aliquota IVA:</span> {Number(sim.aliquota_iva ?? 0).toFixed(0)}%</div>
               <div><span className="text-slate-500">Importo IVA:</span> {Number(sim.importo_iva ?? sim.iva ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
               <div><span className="text-slate-500">Totale:</span> {Number(sim.totale ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
               <div><span className="text-slate-500">Stato:</span> {sim.stato_fattura || "—"}</div>
               <div><span className="text-slate-500">Coerenza (imponibile + IVA = totale):</span> {sim.coerente ? <span className="text-green-700 font-medium" data-testid="sim-coherent">OK ✓</span> : <span className="text-red-700 font-medium" data-testid="sim-incoherent">INCOERENTE</span>}</div>
-              <div className="sm:col-span-2"><span className="text-slate-500">Rif. Stripe:</span> {sim.riferimento_stripe?.numero_stripe || sim.riferimento_stripe?.stripe_invoice_id || "—"}</div>
+              <div className="sm:col-span-2"><span className="text-slate-500">Rif. Stripe:</span> {sim.riferimento_stripe?.numero_stripe || sim.riferimento_stripe?.payment_intent || sim.riferimento_stripe?.stripe_invoice_id || "—"}</div>
             </div>
             <details className="mt-2">
               <summary className="text-xs text-tiffany-active cursor-pointer">Payload FIC che sarebbe stato inviato (sicuro, senza secret)</summary>

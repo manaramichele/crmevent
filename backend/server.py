@@ -4822,6 +4822,7 @@ async def _fic_simulate(inv: dict) -> dict:
             "importo_iva": a["importo_iva"], "iva": a["importo_iva"],
             "totale": a["totale"], "valuta": a["valuta"], "coerente": a["coerente"],
             "piano": inv.get("piano") or (org.get("subscription") or {}).get("plan"),
+            "descrizione": inv.get("descrizione") or _invoice_line_name(inv, org),
             "riferimento_stripe": inv.get("riferimento_stripe") or {
                 "stripe_invoice_id": inv.get("stripe_invoice_id"),
                 "numero_stripe": inv.get("numero_stripe"),
@@ -8043,6 +8044,67 @@ async def _grant_signup_bonus(org_id: str, org_name: Optional[str] = None):
         idempotency_key=f"signup_bonus:{org_id}", note="Bonus 100 crediti alla registrazione")
 
 
+def _is_test_or_internal_org(o: dict) -> bool:
+    """Org Test/Demo/interne o con nome chiaramente di prova: escluse dalla migrazione bonus."""
+    t = (o.get("type") or "").lower()
+    if t in ("test", "interna", "demo"):
+        return True
+    name = (o.get("nome") or "").lower()
+    return any(k in name for k in ["test", "demo", "qa", "tab", "sandbox", "prova"])
+
+
+async def _credits_migration_analysis():
+    orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "type": 1, "status": 1, "credits": 1, "created_at": 1}).to_list(5000)
+    eligible, excluded, already = [], [], []
+    for o in orgs:
+        c = o.get("credits") or {}
+        granted = bool(c.get("signup_bonus_granted"))
+        bal = c.get("balance", 0) or 0
+        row = {"id": o["id"], "nome": o.get("nome"), "type": o.get("type"), "status": o.get("status"),
+               "balance": bal, "signup_bonus_granted": granted,
+               "projected_balance": bal if granted else bal + SIGNUP_BONUS_CREDITS}
+        if granted:
+            already.append(row)
+        elif _is_test_or_internal_org(o):
+            excluded.append(row)
+        else:
+            eligible.append(row)
+    return {"bonus_amount": SIGNUP_BONUS_CREDITS, "total_orgs": len(orgs),
+            "eligible_count": len(eligible), "excluded_count": len(excluded),
+            "already_granted_count": len(already),
+            "total_credits_to_grant": len(eligible) * SIGNUP_BONUS_CREDITS,
+            "eligible": eligible, "excluded": excluded, "already_granted": already}
+
+
+@api.get("/platform/credits/migration-dryrun")
+async def credits_migration_dryrun(admin: dict = Depends(require_superadmin)):
+    """DRY-RUN (sola lettura): chi riceverebbe il bonus, chi è escluso, saldi attuali e simulati.
+    NON esegue alcuna scrittura."""
+    return await _credits_migration_analysis()
+
+
+class CreditsMigrateIn(BaseModel):
+    confirm: bool = False
+    exclude_ids: List[str] = []
+
+
+@api.post("/platform/credits/migrate")
+async def credits_migrate(body: CreditsMigrateIn, admin: dict = Depends(require_superadmin)):
+    """Migrazione una tantum: +100 crediti alle org reali che non hanno mai ricevuto il bonus.
+    Idempotente (signup_bonus_granted). Richiede conferma esplicita."""
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="Conferma richiesta per eseguire la migrazione")
+    analysis = await _credits_migration_analysis()
+    granted = []
+    for row in analysis["eligible"]:
+        if row["id"] in (body.exclude_ids or []):
+            continue
+        await _grant_signup_bonus(row["id"], row.get("nome"))
+        granted.append(row["id"])
+    await record_audit(admin, "credits_migration_run", meta={"granted_count": len(granted), "excluded_ids": body.exclude_ids})
+    return {"granted_count": len(granted), "granted_ids": granted, "bonus_amount": SIGNUP_BONUS_CREDITS}
+
+
 # ---------------- API org-side (saldo + storico) ----------------
 @api.get("/credits/balance")
 async def credits_balance(user: dict = Depends(require_admin)):
@@ -8194,6 +8256,14 @@ async def _ensure_credit_packages_seeded():
                 "bonus_pct": pct, "credits_total": base + bonus, "active": True, "sort": i + 1,
                 "badge": ("Più conveniente" if pct == 25 else (f"+{pct}%" if pct else None)),
                 "highlight": pct == 20, "created_at": now_iso(), "updated_at": now_iso()})
+
+
+@api.get("/credits/packages-public")
+async def credits_packages_public_open():
+    """Catalogo pubblico dei tagli attivi per la pagina /prezzi (nessuna autenticazione)."""
+    await _ensure_credit_packages_seeded()
+    rows = await db.credit_packages.find({"active": True}, {"_id": 0}).sort("sort", 1).to_list(100)
+    return {"packages": rows, "credit_unit_eur": 0.20}
 
 
 @api.get("/credits/packages")

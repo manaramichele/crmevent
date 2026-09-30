@@ -39,7 +39,7 @@ export default function DemoPage() {
           </Link>
           <div className="flex items-center gap-2">
             <Link to="/login" data-testid="demo-login-cta" className="h-10 px-4 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 text-sm font-semibold inline-flex items-center gap-1.5"><LogIn className="w-4 h-4" />Accedi</Link>
-            <Link to="/registrati" data-testid="demo-try-cta" className="h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm inline-flex items-center gap-1.5">Prova CRMEvent gratis <ArrowRight className="w-4 h-4" /></Link>
+            <Link to="/registrati" data-testid="demo-try-cta" className="h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm inline-flex items-center gap-1.5">Inizia gratuitamente <ArrowRight className="w-4 h-4" /></Link>
           </div>
         </div>
       </header>
@@ -83,18 +83,18 @@ export default function DemoPage() {
         {/* Persistent conversion CTA */}
         <div className="mt-10 rounded-2xl bg-slate-900 text-white p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
           <div>
-            <div className="font-display text-xl sm:text-2xl font-bold">Ora porta il tuo evento su CRMEvent</div>
-            <p className="text-slate-300 text-sm mt-1.5">Inizia la prova gratuita e scopri quanto è semplice gestire il tuo evento da un'unica piattaforma.</p>
+            <div className="font-display text-xl sm:text-2xl font-bold">Vuoi usare CRMEvent con il tuo evento?</div>
+            <p className="text-slate-300 text-sm mt-1.5">Registrati gratuitamente e ricevi 100 crediti CRMEvent. Nessuna carta richiesta.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Link to="/login" className="h-11 px-5 rounded-lg border border-white/25 hover:bg-white/10 text-white text-sm font-semibold inline-flex items-center">Accedi</Link>
-            <Link to="/registrati" data-testid="demo-try-cta-bottom" className="h-11 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold inline-flex items-center gap-1.5">Prova CRMEvent gratis <ArrowRight className="w-4 h-4" /></Link>
+            <Link to="/registrati" data-testid="demo-try-cta-bottom" className="h-11 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold inline-flex items-center gap-1.5">Inizia gratuitamente <ArrowRight className="w-4 h-4" /></Link>
           </div>
         </div>
       </main>
 
       {/* Floating CTA — always reachable on mobile without disturbing the demo */}
-      <Link to="/registrati" data-testid="demo-try-cta-floating" className="sm:hidden fixed bottom-4 inset-x-4 z-40 h-12 rounded-xl bg-tiffany text-slate-900 font-semibold shadow-lg flex items-center justify-center gap-1.5">Prova CRMEvent gratis <ArrowRight className="w-4 h-4" /></Link>
+      <Link to="/registrati" data-testid="demo-try-cta-floating" className="sm:hidden fixed bottom-4 inset-x-4 z-40 h-12 rounded-xl bg-tiffany text-slate-900 font-semibold shadow-lg flex items-center justify-center gap-1.5">Inizia gratuitamente <ArrowRight className="w-4 h-4" /></Link>
     </div>
   );
 }
