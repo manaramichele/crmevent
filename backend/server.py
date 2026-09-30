@@ -5618,6 +5618,11 @@ async def lf_update_event(eid: str, body: dict, user: dict = Depends(require_org
 async def lf_dashboard(user: dict = Depends(require_org_admin)):
     orgs = await db.lf_organizers.find(oq(user), {"_id": 0}).to_list(3000)
     events = await db.lf_events.find(oq(user), {"_id": 0}).to_list(5000)
+    leads = await db.leads.find({}, {"_id": 0}).to_list(5000)
+    leads_demo = sum(1 for l in leads if _lead_origine(l) == "demo_sito")
+    leads_manual = sum(1 for l in leads if _lead_origine(l) == "manuale")
+    leads_lf = sum(1 for l in leads if _lead_origine(l) == "lead_finder")
+    brevo_synced = sum(1 for o in orgs if o.get("brevo_status") in ("sincronizzato", "gia_presente"))
     def dist(items, key):
         d = {}
         for it in items:
@@ -5628,6 +5633,11 @@ async def lf_dashboard(user: dict = Depends(require_org_admin)):
         "organizers_total": len(orgs),
         "organizers_verified": sum(1 for o in orgs if o.get("status") == "verificato"),
         "organizers_to_verify": sum(1 for o in orgs if o.get("status") == "da_verificare"),
+        "leads_total": len(leads),
+        "leads_demo": leads_demo,
+        "leads_manual": leads_manual,
+        "leads_lead_finder": leads_lf,
+        "brevo_synced": brevo_synced,
         "events_total": len(events),
         "with_email": sum(1 for o in orgs if o.get("emails")),
         "with_instagram": sum(1 for o in orgs if o.get("instagram_url")),

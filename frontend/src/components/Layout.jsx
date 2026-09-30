@@ -28,12 +28,11 @@ const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account");
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
-  { to: "/lead", label: "Lead", icon: Inbox, id: "lead" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];
 
-const PLATFORM_PATHS = ["/piattaforma", "/lead", "/supporto", "/audit"];
+const PLATFORM_PATHS = ["/piattaforma", "/supporto", "/audit"];
 
 const MARKETING_NAV = [
   { to: "/marketing/organizzatori", label: "Organizzatori", icon: Building2, id: "organizzatori" },

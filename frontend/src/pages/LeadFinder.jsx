@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/platformApi";
+import { useSearchParams } from "react-router-dom";
 import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,9 @@ import Leads from "@/pages/Leads";
 import { Building2, Users, CalendarRange, Search, ShieldCheck, ExternalLink, GitMerge, Send, Instagram, Linkedin, Mail, Globe, Plus, Upload, Sparkles, Pencil, Trash2, UserCheck } from "lucide-react";
 
 const FIELD = "w-full h-10 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
+const KPI = "text-left rounded-xl border border-slate-200 bg-white p-4 hover:border-tiffany hover:shadow-sm transition-colors";
+const KPIV = "text-2xl font-bold text-slate-800";
+const KPIL = "text-xs text-slate-500 mt-0.5";
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: ShieldCheck },
   { id: "leads", label: "Lead", icon: Mail },
@@ -41,7 +45,10 @@ function Dist({ title, data }) {
 }
 
 export default function LeadFinder() {
-  const [tab, setTab] = useState("dashboard");
+  const [sp] = useSearchParams();
+  const [tab, setTab] = useState(sp.get("tab") || "dashboard");
+  const [leadOrigine, setLeadOrigine] = useState("");
+  const [fBrevo, setFBrevo] = useState("");
   const [dash, setDash] = useState(null);
   const [orgs, setOrgs] = useState([]);
   const [events, setEvents] = useState([]);
@@ -126,6 +133,7 @@ export default function LeadFinder() {
   const sports = [...new Set(events.map((e) => e.sport).filter(Boolean))].sort();
 
   const filtered = orgs.filter((o) => {
+    if (fBrevo && (o.brevo_status || "non_approvato") !== fBrevo) return false;
     if (fRegion && o.region !== fRegion) return false;
     if (fStatus && o.status !== fStatus) return false;
     if (fSport && !(o.sports || []).includes(fSport)) return false;
@@ -259,14 +267,15 @@ export default function LeadFinder() {
 
       {tab === "dashboard" && dash && (
         <div className="space-y-4" data-testid="lf-dashboard">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Stat label="Organizzatori" value={dash.organizers_total} />
-            <Stat label="Verificati" value={dash.organizers_verified} />
-            <Stat label="Eventi censiti" value={dash.events_total} />
-            <Stat label="Da verificare" value={dash.organizers_to_verify} />
-            <Stat label="Con email" value={dash.with_email} />
-            <Stat label="Con Instagram" value={dash.with_instagram} />
-            <Stat label="Con LinkedIn" value={dash.with_linkedin} />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="lf-kpis">
+            <button onClick={() => { setLeadOrigine(""); setTab("leads"); }} data-testid="lf-kpi-leads-total" className={KPI}><div className={KPIV}>{dash.leads_total ?? 0}</div><div className={KPIL}>Lead totali</div></button>
+            <button onClick={() => { setLeadOrigine("demo_sito"); setTab("leads"); }} data-testid="lf-kpi-leads-demo" className={KPI}><div className={KPIV}>{dash.leads_demo ?? 0}</div><div className={KPIL}>Richieste Demo</div></button>
+            <button onClick={() => { setLeadOrigine("manuale"); setTab("leads"); }} data-testid="lf-kpi-leads-manual" className={KPI}><div className={KPIV}>{dash.leads_manual ?? 0}</div><div className={KPIL}>Lead manuali</div></button>
+            <button onClick={() => { setLeadOrigine("lead_finder"); setTab("leads"); }} data-testid="lf-kpi-leads-lf" className={KPI}><div className={KPIV}>{dash.leads_lead_finder ?? 0}</div><div className={KPIL}>Lead da Lead Finder</div></button>
+            <button onClick={() => { setFBrevo(""); setFStatus(""); setTab("organizers"); }} data-testid="lf-kpi-organizers" className={KPI}><div className={KPIV}>{dash.organizers_total}</div><div className={KPIL}>Organizzatori</div></button>
+            <button onClick={() => setTab("events")} data-testid="lf-kpi-events" className={KPI}><div className={KPIV}>{dash.events_total}</div><div className={KPIL}>Eventi trovati</div></button>
+            <button onClick={() => { setFBrevo(""); setFStatus("da_verificare"); setTab("organizers"); }} data-testid="lf-kpi-review" className={KPI}><div className={KPIV}>{dash.organizers_to_verify}</div><div className={KPIL}>Da verificare</div></button>
+            <button onClick={() => { setFStatus(""); setFBrevo("sincronizzato"); setTab("organizers"); }} data-testid="lf-kpi-brevo" className={KPI}><div className={KPIV}>{dash.brevo_synced ?? 0}</div><div className={KPIL}>Sincronizzati Brevo</div></button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Dist title="Per sport" data={dash.by_sport} />
@@ -284,6 +293,7 @@ export default function LeadFinder() {
               <select value={fRegion} onChange={(e) => setFRegion(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-region"><option value="">Regione</option>{regions.map((r) => <option key={r}>{r}</option>)}</select>
               <select value={fSport} onChange={(e) => setFSport(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-sport"><option value="">Sport</option>{sports.map((s) => <option key={s}>{s}</option>)}</select>
               <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-status"><option value="">Stato</option>{Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+              <select value={fBrevo} onChange={(e) => setFBrevo(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-brevo"><option value="">Brevo</option><option value="sincronizzato">Sincronizzati</option><option value="approvato">Approvati</option><option value="non_approvato">Non approvati</option></select>
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fEmail} onChange={(e) => setFEmail(e.target.checked)} data-testid="lf-filter-email" />Email</label>
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fIg} onChange={(e) => setFIg(e.target.checked)} />Instagram</label>
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fLi} onChange={(e) => setFLi(e.target.checked)} />LinkedIn</label>
@@ -334,7 +344,7 @@ export default function LeadFinder() {
         </div>
       )}
 
-      {tab === "leads" && <Leads embedded />}
+      {tab === "leads" && <Leads embedded initialOrigine={leadOrigine} />}
 
       {tab === "events" && (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="lf-events">

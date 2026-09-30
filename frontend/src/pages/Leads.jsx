@@ -14,11 +14,21 @@ const STOP_LABEL = { trial_started: "prova gratuita avviata", cliente: "diventat
 const inputCls = "h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-tiffany focus:ring-2 focus:ring-tiffany/30";
 const ORIGINE = { demo_sito: { label: "Demo sito", color: "tiffany" }, manuale: { label: "Inserimento manuale", color: "gray" }, lead_finder: { label: "Lead Finder", color: "blue" }, area_personale: { label: "Area personale", color: "gray" } };
 
-export default function Leads({ embedded = false }) {
+export default function Leads({ embedded = false, initialOrigine = "" }) {
   const [leads, setLeads] = useState([]);
   const [orgs, setOrgs] = useState([]);
   const [sel, setSel] = useState(null); // lead detail {lead, account, linked}
   const [assign, setAssign] = useState({ org_id: "", role: "user" });
+  const [fOrig, setFOrig] = useState(initialOrigine);
+  const [fStato, setFStato] = useState("");
+  const [q, setQ] = useState("");
+  useEffect(() => { setFOrig(initialOrigine); }, [initialOrigine]);
+  const filtered = leads.filter((l) => {
+    if (fOrig && (l.origine || "manuale") !== fOrig) return false;
+    if (fStato && l.stato !== fStato) return false;
+    if (q) { const s = `${l.nome} ${l.cognome || ""} ${l.organizzazione || ""} ${l.email || ""}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
+    return true;
+  });
 
   const load = useCallback(() => api.get("/leads").then(({ data }) => setLeads(data)).catch((e) => toast.error(formatApiError(e.response?.data?.detail))), []);
   useEffect(() => { load(); api.get("/platform/organizations").then(({ data }) => setOrgs(data)).catch(() => {}); }, [load]);
@@ -41,14 +51,20 @@ export default function Leads({ embedded = false }) {
         <p className="text-slate-500 mt-1 mb-6">Richieste demo e pipeline commerciale. Un Lead è un contatto commerciale, distinto da Utente e Organizzazione.</p>
       </>}
 
+      <div className="flex flex-wrap gap-2 items-center mb-3" data-testid="leads-filters">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca nome, organizzazione, email…" className={`${inputCls} w-64`} data-testid="leads-search" />
+        <select value={fOrig} onChange={(e) => setFOrig(e.target.value)} className={inputCls} data-testid="leads-filter-origine"><option value="">Tutte le origini</option><option value="demo_sito">Demo sito</option><option value="manuale">Inserimento manuale</option><option value="lead_finder">Lead Finder</option></select>
+        <select value={fStato} onChange={(e) => setFStato(e.target.value)} className={inputCls} data-testid="leads-filter-stato"><option value="">Tutti gli stati</option>{Object.keys(STATO_LABEL).map((v) => <option key={v} value={v}>{STATO_LABEL[v]}</option>)}</select>
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
             <th className="text-left px-4 py-2.5">Nome</th><th className="text-left px-4 py-2.5">Organizzazione</th><th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Origine</th><th className="text-left px-4 py-2.5">Data</th><th className="text-left px-4 py-2.5">Stato</th>
           </tr></thead>
           <tbody>
-            {leads.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nessun lead.</td></tr> :
-              leads.map((l) => (
+            {filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nessun lead.</td></tr> :
+              filtered.map((l) => (
                 <tr key={l.id} onClick={() => openLead(l.id)} className="border-t border-slate-100 cursor-pointer hover:bg-slate-50" data-testid={`lead-row-${l.id}`}>
                   <td className="px-4 py-2.5 font-medium text-slate-800">{l.nome} {l.cognome || ""}</td>
                   <td className="px-4 py-2.5 text-slate-600">{l.organizzazione || "—"}</td>

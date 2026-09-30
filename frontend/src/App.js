@@ -118,7 +118,7 @@ function Shell() {
         <Route path="/sponsor" element={<Protected><AdminOnly><SponsorsPartners /></AdminOnly></Protected>} />
         <Route path="/attivita" element={<Protected><AdminOnly><Activities /></AdminOnly></Protected>} />
         <Route path="/followup" element={<Protected><AdminOnly><Followups /></AdminOnly></Protected>} />
-        <Route path="/lead" element={<Protected><SuperAdminOnly><Leads /></SuperAdminOnly></Protected>} />
+        <Route path="/lead" element={<Navigate to="/marketing/organizzatori?tab=leads" replace />} />
         <Route path="/supporto" element={<Protected><SuperAdminOnly><Support /></SuperAdminOnly></Protected>} />
         <Route path="/impostazioni" element={<Protected><AdminOnly><SettingsPage /></AdminOnly></Protected>} />
         <Route path="/marketing/organizzatori" element={<Protected><AdminOnly><LeadFinder /></AdminOnly></Protected>} />
