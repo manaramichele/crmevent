@@ -1,5 +1,14 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Lead Finder FASE 2: unificazione Lead + a11y fix ✅
+- Nuovo tab **"Lead"** dentro Lead Finder (`LeadFinder.jsx`) che riusa il componente `Leads` in modalità `embedded` (zero duplicazione di logica) — mantiene tutte le funzioni esistenti (stato, collega account, assegna org, invito, vista Funnel).
+- Colonna **Origine** nei Lead (`Leads.jsx`): Demo sito / Inserimento manuale / Lead Finder. Derivazione NON distruttiva a lettura (`_lead_origine` nel backend): demo → "Demo sito" (via funnel_ts_demo_requested/source), convertiti → "Lead Finder", altrimenti "Inserimento manuale".
+- Azione **"Converti in Lead"** sull'organizzatore (`POST /leadfinder/organizers/{id}/convert-to-lead`): crea il Lead con `origine=lead_finder` e link bidirezionale `lead_finder_organizer_id`↔`lead_id`; rilevamento duplicati per email con modale "Contatto già presente" → "Collega al Lead esistente" (nessuna duplicazione). **Non enrolla il Demo funnel né tocca Brevo.**
+- Fix a11y: aggiunto `DialogDescription` ai modali Modifica/Elimina/Bulk (FASE 1) e al modale duplicati.
+- Vincolo Brevo rispettato: nessuna modifica a create_lead demo, _enroll_lead, brevo_funnel, trigger/lista/template/webhook. Vecchia voce menu "Lead" NON rimossa (come richiesto).
+- Verificato: backend via curl (convert new/duplicate/link, origine, nessun funnel enroll) + testing agent iter25/26 frontend 100%.
+
+
 ## 2026-06 — Lead Finder: modifica ed eliminazione Organizzatori (FASE 1) ✅
 - Colonna "Azioni" (Modifica/Elimina) nel tab Organizzatori (`LeadFinder.jsx`).
 - Modale "Modifica" completo (nome, email, sito, Instagram, LinkedIn, regione, sport, stato/verifica) via `PUT /leadfinder/organizers/{id}` con `_manual`; fonte/tracciabilità mantenute; nessun nome auto-derivato dall'email (record senza nome restano "Da completare").

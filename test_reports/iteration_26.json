@@ -1,0 +1,24 @@
+{
+  "summary": "RETEST of FASE 2 'Converti in Lead' duplicate-detection flow after fix (adding lf-convert-dup-modal in /app/frontend/src/pages/LeadFinder.jsx). All acceptance criteria now PASS. E2E via Playwright as superadmin at /marketing/organizzatori: (1) POST /api/leadfinder/organizers/manual?scope=platform created a Retest Dup Org organizer. (2) Opened detail, clicked lf-convert-lead-btn (1st time) → lead created with origine='lead_finder' (verified via GET /api/leads: retest.dup.1790760602@test.it, origine=lead_finder). (3) Re-clicked lf-convert-lead-btn on same organizer → the modal 'Contatto già presente' (data-testid=lf-convert-dup-modal) NOW appears correctly, with the 'Collega al Lead esistente' button (data-testid=lf-convert-link-btn) visible. (4) Clicked lf-convert-link-btn → modal closed, no error, and no duplicate was created (only 1 lead exists for that email). (5) Seed leads verified via API and preserved: demo.origine@test.it (origine=demo_sito), manuale.origine@test.it (origine=manuale). The bug reported in iteration_25 (CRITICAL: missing dup modal in JSX) is FIXED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Modal implementation at LeadFinder.jsx L655-660 is correct: uses convDup state, wires lf-convert-link-btn to convertToLead(convDup.org, true), includes a DialogDescription (no Radix a11y warning), and has Annulla button that resets state. Well done.",
+    "LeadFinder.jsx is now ~665 lines - still under threshold but growing; consider extracting the convert-to-lead subcomponent when new features arrive.",
+    "Minor: toast text was not captured via [role=status]/li[data-state] selectors in Playwright — verify the toast component (sonner?) uses accessible role/data-testid so future automated regression can assert the toast content ('Convertito in Lead' / 'Collegato al Lead esistente'). Not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% — 6/6 FASE 2 duplicate-detection criteria pass"},
+  "test_credentials": "manara.michele.pro@gmail.com / CrmEvent2026! (superadmin) — verified",
+  "seed_data_creation": "Test-only Retest Dup Org organizers created via POST /api/leadfinder/organizers/manual?scope=platform during multiple runs; all cleaned up at end (3 stale orgs + 1 retest lead deleted). Seed leads demo.origine@test.it and manuale.origine@test.it preserved and verified via GET /api/leads.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FASE 2 complete: lf-tab-leads, Origine column, first Converti in Lead, and duplicate-detection modal (lf-convert-dup-modal + lf-convert-link-btn) are all PASS. All FASE 1 modals a11y already OK from iteration_25. Backend endpoint /api/leadfinder/organizers/{oid}/convert-to-lead returns duplicate=true on re-convert; frontend now renders the correct modal and honors the link-existing path (no duplicate created). Seed leads demo.origine@test.it (origine=demo_sito) and manuale.origine@test.it (origine=manuale) exist. No further action required on this flow.",
+  "rca of the issue": "Previous iteration's CRITICAL bug (missing dup modal) was root-caused as 'orphan convDup state without JSX consumer'. Main agent added <Dialog data-testid='lf-convert-dup-modal'> at ~L655 with proper title, DialogDescription, Annulla and lf-convert-link-btn (→ convertToLead(convDup.org, true)). Retest confirms: 2nd click opens modal, link button creates NO duplicate (existing lead is linked instead), modal closes cleanly. Fix verified."
+}
