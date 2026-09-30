@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Footer from "@/components/Footer";
 import { trackEvent } from "@/lib/analytics";
-import { Check, Sparkles, Zap, Users, CalendarCheck, Megaphone, Menu, X, ChevronDown } from "lucide-react";
+import { Check, Sparkles, Zap, Users, CalendarCheck, Megaphone, Menu, X, ChevronDown, Minus } from "lucide-react";
 
 // Prezzi legati al numero di eventi (solo visualizzazione — nessuna logica Stripe qui).
 const PRICING = {
@@ -48,6 +48,96 @@ const PLANS = {
     ctaTestid: "plan-premium-cta",
   },
 };
+
+// Tabella di confronto — SOLO funzionalità già esistenti / previste nello sviluppo CRMEvent.
+// Logica: FREE = gestione staff · PLUS = FREE + gestione completa evento · PREMIUM = PLUS + organizzazione avanzata + marketing/social.
+const COMPARISON = [
+  { area: "Gestione staff", rows: [
+    ["Staff e volontari", true, true, true],
+    ["Team", true, true, true],
+    ["Turni", true, true, true],
+    ["Disponibilità e conferme", true, true, true],
+    ["Informazioni allo staff", true, true, true],
+  ]},
+  { area: "Gestione evento", rows: [
+    ["Aziende e contatti", false, true, true],
+    ["Sponsor e partner", false, true, true],
+    ["Attività e follow-up", false, true, true],
+    ["Ospitalità", false, true, true],
+    ["Pernottamenti", false, true, true],
+    ["Pasti", false, true, true],
+    ["Briefing", false, true, true],
+    ["Documenti", false, true, true],
+    ["Mappe e percorsi", false, true, true],
+  ]},
+  { area: "Organizzazione avanzata", rows: [
+    ["Checklist dell'evento", false, false, true],
+    ["Pipeline organizzativa", false, false, true],
+    ["Scadenze", false, false, true],
+    ["Responsabili delle attività", false, false, true],
+    ["Controllo avanzamento", false, false, true],
+  ]},
+  { area: "Marketing e social", rows: [
+    ["Piano editoriale", false, false, true],
+    ["Calendario social", false, false, true],
+    ["Libreria media", false, false, true],
+    ["Creazione contenuti", false, false, true],
+    ["Gestione social", false, false, true],
+    ["Pubblicazione social", false, false, true],
+  ]},
+];
+
+function Cell({ on, plus }) {
+  return (
+    <div className={`flex items-center justify-center py-3 ${plus ? "bg-tiffany-light/40" : ""}`}>
+      {on
+        ? <span className="w-5 h-5 rounded-full bg-tiffany-light text-tiffany-active flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>
+        : <Minus className="w-4 h-4 text-slate-300" />}
+    </div>
+  );
+}
+
+function ComparisonTable() {
+  const GRID = "grid grid-cols-[1fr_repeat(3,minmax(56px,1fr))] sm:grid-cols-[1.6fr_repeat(3,1fr)]";
+  return (
+    <section id="confronto" className="max-w-4xl mx-auto px-6 pt-14 pb-4" data-testid="comparison-section">
+      <div className="text-center mb-8">
+        <h2 className="font-display text-3xl font-bold">Confronta i piani nel dettaglio</h2>
+        <p className="text-slate-500 mt-3 text-sm md:text-base">Tutto ciò che è incluso in FREE, PLUS e PREMIUM, area per area.</p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        {/* Intestazione piani (sticky) */}
+        <div className={`${GRID} sticky top-16 z-20 bg-white border-b border-slate-200`} data-testid="comparison-header">
+          <div className="py-3 px-3 sm:px-4" />
+          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-700">FREE</div>
+          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-900 bg-tiffany-light/40 border-x border-tiffany/30">
+            PLUS
+            <span className="hidden sm:flex items-center justify-center gap-1 text-[10px] font-semibold text-tiffany-fg mt-0.5"><Zap className="w-3 h-3" fill="currentColor" />Consigliato</span>
+          </div>
+          <div className="py-3 text-center text-xs sm:text-sm font-bold text-slate-700">PREMIUM</div>
+        </div>
+
+        {COMPARISON.map((group, gi) => (
+          <div key={group.area}>
+            <div className={`${GRID} bg-slate-50 border-b border-slate-100`}>
+              <div className="col-span-4 py-2.5 px-3 sm:px-4 text-[11px] font-bold uppercase tracking-wide text-slate-500" data-testid={`comparison-area-${gi}`}>{group.area}</div>
+            </div>
+            {group.rows.map(([label, f, p, pr], ri) => (
+              <div key={label} className={`${GRID} ${ri % 2 ? "bg-white" : "bg-slate-50/40"} border-b border-slate-100 last:border-0 items-center`} data-testid="comparison-row">
+                <div className="py-3 px-3 sm:px-4 text-sm text-slate-700">{label}</div>
+                <Cell on={f} />
+                <Cell on={p} plus />
+                <Cell on={pr} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-slate-400 mt-4 text-center">FREE = gestione staff · PLUS = gestione completa dell'evento · PREMIUM = tutto Plus + organizzazione avanzata + marketing/social.</p>
+    </section>
+  );
+}
 
 function PriceBlock({ amount }) {
   if (amount === 0) {
@@ -200,11 +290,8 @@ export default function Pricing() {
         </p>
       </section>
 
-      {/* ============================================================
-          FASE 2 — Tabella di confronto completa delle funzionalità.
-          La struttura della pagina è già predisposta: inserire qui la
-          <section id="confronto"> con la tabella FREE / PLUS / PREMIUM.
-          ============================================================ */}
+      {/* Tabella di confronto completa (FASE 1) */}
+      <ComparisonTable />
 
       {/* Final CTA */}
       <section className="max-w-3xl mx-auto px-6 py-16 mt-6 text-center">

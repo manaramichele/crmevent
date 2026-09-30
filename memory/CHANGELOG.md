@@ -506,3 +506,7 @@ Task 2 — Creatività manuale:
 - PLUS evidenziato (bordo Tiffany + badge "Miglior rapporto qualità-prezzo"); kicker gerarchia commerciale (Gestisci le persone / Gestisci l'evento / Organizza e promuovi l'evento). Responsive grid 1→3 colonne, nessuno scroll orizzontale.
 - Predisposta area FASE 2 per la tabella di confronto (commento in pagina, `id="confronto"`).
 - ⚠️ NESSUNA modifica a Stripe, Checkout, webhook, Fatture in Cloud, prodotti/prezzi Stripe. La pagina è puramente marketing: i CTA puntano a `/registrati`.
+
+## 2026-06-30 (Pagina /prezzi — Tabella di confronto FASE 1 + correzione backlog)
+- Aggiunta tabella di confronto responsive FREE/PLUS/PREMIUM sotto le card (aree: Gestione staff, Gestione evento, Organizzazione avanzata, Marketing e social) con ✓/—. Colonna PLUS evidenziata + header piani sticky. Prezzi/selettore/card invariati.
+- Backlog corretto: abbandonato il modello "Abbonamento mensile/annuale" → nuovo modello PER EVENTO. In FASE 2 andranno adeguati Stripe e Fatture in Cloud al modello per-evento (NON toccati ora).

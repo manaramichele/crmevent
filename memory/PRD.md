@@ -222,6 +222,11 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - 3 piani FREE/PLUS/PREMIUM con selettore eventi (Fino a 3 / Più di 3) e prezzi dinamici. Solo frontend, Stripe intatto.
 - FASE 2 da fare per rendere Plus/Premium acquistabili: vedi ROADMAP.
 
+
+### FASE 2 — Modello commerciale PER EVENTO (sostituisce mensile/annuale)
+- Il nuovo modello NON è più ad abbonamento mensile/annuale ma a **prezzo per evento** su 3 piani FREE/PLUS/PREMIUM (fino a 3 eventi vs più di 3).
+- Da adeguare in FASE 2: **Stripe** (nuovi prodotti/prezzi per-evento, checkout per piano+tier) e **Fatture in Cloud** (descrizione riga per piano, importo per-evento). Non ancora toccati.
+
 ### Backlog aggiornato (P1)
 - Attivazione invii Brevo disponibilità (dopo approvazione utente): BREVO_AVAILABILITY_ENABLED=on in produzione + attivazione template + test invio singolo.
 - Consultazione disponibilità in creazione Team/Turni; alimentazione Briefing da assegnazione reale.
