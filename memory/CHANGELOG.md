@@ -510,3 +510,8 @@ Task 2 — Creatività manuale:
 ## 2026-06-30 (Pagina /prezzi — Tabella di confronto FASE 1 + correzione backlog)
 - Aggiunta tabella di confronto responsive FREE/PLUS/PREMIUM sotto le card (aree: Gestione staff, Gestione evento, Organizzazione avanzata, Marketing e social) con ✓/—. Colonna PLUS evidenziata + header piani sticky. Prezzi/selettore/card invariati.
 - Backlog corretto: abbandonato il modello "Abbonamento mensile/annuale" → nuovo modello PER EVENTO. In FASE 2 andranno adeguati Stripe e Fatture in Cloud al modello per-evento (NON toccati ora).
+
+## 2026-06-30 (Pagina /prezzi — CTA trial 14 giorni, FASE 1 conclusa)
+- CTA aggiornate: FREE "Crea account"; PLUS/PREMIUM "Prova gratis 14 giorni" + sottotesto "Nessuna carta richiesta" (sia nelle card sia nella riga finale della tabella). CTA → /registrati.
+- Comunicata la prova gratuita di 14 giorni. Nessuna logica trial/pagamenti implementata lato backend.
+- FASE 1 pagina prezzi CONCLUSA. Selettore e gating invariati.

@@ -223,6 +223,13 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - FASE 2 da fare per rendere Plus/Premium acquistabili: vedi ROADMAP.
 
 
+### FASE 2 — Logica TRIAL 14 giorni (da implementare, NON ancora fatta)
+- Alla registrazione: 14 giorni di prova gratuita con accesso alle funzionalità PREMIUM (prova intera piattaforma).
+- Nessuna carta richiesta per iniziare.
+- Allo scadere dei 14 giorni senza acquisto: account resta ATTIVO ma passa alle funzionalità del piano FREE. I dati inseriti NON vengono cancellati.
+- Per continuare con Plus/Premium l'utente acquista il piano per l'evento (modello per-evento).
+- Da implementare in FASE 2 insieme all'adeguamento Stripe + Fatture in Cloud. In FASE 1 aggiornati solo testi/CTA della pagina prezzi.
+
 ### FASE 2 — Modello commerciale PER EVENTO (sostituisce mensile/annuale)
 - Il nuovo modello NON è più ad abbonamento mensile/annuale ma a **prezzo per evento** su 3 piani FREE/PLUS/PREMIUM (fino a 3 eventi vs più di 3).
 - Da adeguare in FASE 2: **Stripe** (nuovi prodotti/prezzi per-evento, checkout per piano+tier) e **Fatture in Cloud** (descrizione riga per piano, importo per-evento). Non ancora toccati.

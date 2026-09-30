@@ -21,6 +21,7 @@ const PLANS = {
     intro: null,
     features: ["1 evento", "Staff e volontari", "Team", "Turni", "Disponibilità e conferme", "Informazioni allo staff"],
     cta: "Crea account",
+    note: null,
     ctaTestid: "plan-free-cta",
   },
   plus: {
@@ -32,7 +33,8 @@ const PLANS = {
     description: null,
     intro: "Tutto ciò che trovi nel Free, più:",
     features: ["Aziende e contatti", "Sponsor e partner", "Ospitalità e pernottamenti", "Pasti", "Attività e follow-up", "Briefing", "Documenti", "Mappe e percorsi"],
-    cta: "Scegli Plus",
+    cta: "Prova gratis 14 giorni",
+    note: "Nessuna carta richiesta",
     ctaTestid: "plan-plus-cta",
   },
   premium: {
@@ -44,7 +46,8 @@ const PLANS = {
     description: null,
     intro: "Tutto ciò che trovi nel Plus, più:",
     features: ["Checklist completa dell'evento", "Pipeline organizzativa pre-evento", "Scadenze e controllo avanzamento", "Marketing dell'evento", "Piano editoriale", "Calendario social", "Gestione social", "Creazione contenuti", "Libreria media", "Pubblicazione social"],
-    cta: "Scegli Premium",
+    cta: "Prova gratis 14 giorni",
+    note: "Nessuna carta richiesta",
     ctaTestid: "plan-premium-cta",
   },
 };
@@ -155,7 +158,8 @@ function ComparisonTable({ prices }) {
               <div className="text-xs text-slate-400">/ evento</div>
             </div>
             <Link to="/registrati" data-testid="choice-plus-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "plus", where: "table" })}
-              className="w-full max-w-[180px] inline-flex items-center justify-center h-10 px-4 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98]">Scegli Plus</Link>
+              className="w-full max-w-[200px] inline-flex items-center justify-center py-2.5 px-3 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-xs sm:text-sm font-semibold shadow-sm transition-all active:scale-[0.98] text-center leading-tight">Prova gratis 14 giorni</Link>
+            <span className="text-[11px] text-slate-400">Nessuna carta richiesta</span>
           </div>
 
           {/* PREMIUM */}
@@ -167,7 +171,8 @@ function ComparisonTable({ prices }) {
               <div className="text-xs text-slate-400">/ evento</div>
             </div>
             <Link to="/registrati" data-testid="choice-premium-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "premium", where: "table" })}
-              className="w-full max-w-[180px] inline-flex items-center justify-center h-10 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-all active:scale-[0.98]">Scegli Premium</Link>
+              className="w-full max-w-[200px] inline-flex items-center justify-center py-2.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold transition-all active:scale-[0.98] text-center leading-tight">Prova gratis 14 giorni</Link>
+            <span className="text-[11px] text-slate-400">Nessuna carta richiesta</span>
           </div>
         </div>
       </div>
@@ -249,6 +254,7 @@ function PlanCard({ plan, amount, highlighted }) {
       >
         {plan.cta}
       </Link>
+      {plan.note && <p className="text-xs text-slate-400 mt-2 text-center" data-testid={`${plan.ctaTestid}-note`}>{plan.note}</p>}
     </div>
   );
 }
