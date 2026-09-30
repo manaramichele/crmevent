@@ -1,0 +1,23 @@
+{
+  "summary": "Frontend-only testing (FASE B credit system UI). Verified: (1) /account CreditsSection for org admin qa.eventi@crmeventqa.it shows balance 120, 'I crediti non scadono', low-balance threshold, ledger with 'Accredito demo' row. (2) Recharge dialog opens with 6 packages, all 6 buy buttons DISABLED with label 'Non disponibile in preview', 'Contattaci' and 'Ricarica automatica — prossimamente' present. (3) Preexisting Account sections (fatturazione, piani per evento) still present without errors. (4) Super Admin /piattaforma/crediti loads with 3 tabs. (5) Servizi tab lists all 9 services (ai_analysis, ai_content, ai_briefing, image_generation, automation_run, newsletter_email, google_calendar, whatsapp_send, sms_send); saving a service shows toast 'Servizio ... aggiornato'. (6) Ricariche tab has 6 packages, total recomputes live on edit (100→110), save toast 'Taglio aggiornato'. (7) Organizzazioni tab: search org_qa_eventi shows balance 120, empty causale triggers 'La causale è obbligatoria', valid adjust (+5) registers movement, balance updates 120→125, restore -5 returns to 120. All data-testid selectors work as expected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CreditsSection.jsx uses 'if (!bal) return null' which hides the whole section during initial load and also silently on error — consider a loading skeleton and explicit error state.",
+    "PlatformCredits.jsx OrgsTab: 'load' function shadows outer 'data' variable name with destructured 'const { data } = await api.get(...)'; works but slightly confusing.",
+    "Recharge buy buttons rely on visual 'disabled' — good; however the disabled state is not surfaced via aria-disabled attribute (already handled by shadcn Button)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! ; manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Created and rolled back adjust movements (+5 then -5) on org_qa_eventi with note 'TEST rettifica QA' / 'TEST ripristino QA'. Final org balance restored to 120. Also modified one recharge package's credits_base (+10) and reverted to original value. Servizi save on ai_analysis was executed and version incremented (no revert performed — cost value unchanged from previous empty state).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All FASE B UI flows verified end-to-end on preview URL. No blockers. Note: Servizi tab 'unit_cost' was initially empty for ai_analysis; the save operation succeeded regardless. If needed, main agent can seed initial costs. Iubenda cookie banner accept selector works with locator 'Accetta'."
+}

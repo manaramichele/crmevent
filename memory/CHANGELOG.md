@@ -1,5 +1,15 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Sistema a Crediti FASE B (UI + catalogo ricariche + motore) ✅ (frontend testing 100%)
+- **Area Account · "Crediti CRMEvent"** (`CreditsSection.jsx`): saldo, "I crediti non scadono", soglia saldo basso, banner saldo basso, storico movimenti paginato (data/causale-servizio/evento/±crediti/saldo), pulsante "Ricarica crediti".
+- **Finestra "Ricarica crediti"**: 6 tagli letti da backend (`/api/credits/packages`), bonus e crediti totali evidenziati, bottoni acquisto DISABILITATI ("Non disponibile in preview"), "Contattaci" + "Ricarica automatica — prossimamente". Nessun pagamento reale.
+- **Catalogo ricariche configurabile** (`credit_packages` + `credit_package_history` audit): prezzo, crediti base, bonus, % bonus, totale, attivo, ordine, badge, highlight. Seed 6 tagli (€20/50/100/200/500/1000 → 100…6250, 1 credito = €0,20).
+- **Super Admin · "Servizi e crediti"** (`/piattaforma/crediti`, `PlatformCredits.jsx`) 3 tab: Servizi (9 servizi Fase A, edit modalità/costo/attivo), Ricariche (edit tagli), Organizzazioni (ricerca per ID, saldo/assegnati/utilizzati/storico, accredito/rettifica con **causale obbligatoria** + audit). Voce di menu piattaforma aggiunta.
+- **Motore consumo** `estimate → reserve → settle → release` (predisposto, NON collegato ad alcuna funzione): atomico, idempotente, sicuro in concorrenza, no saldo negativo. Endpoint `POST /api/credits/estimate`. Settings soglia: `PUT /api/credits/settings`.
+- **Test**: motore/pacchetti 11/11 PASS (incl. concorrenza 9/9 senza negativi, idempotenza, 402 insufficiente); frontend 100% (saldo, ledger, finestra ricariche, tab Super Admin, accredito con causale, nessun impatto su sezioni esistenti). Servizi riportati tutti inattivi a fine test.
+- Non toccati: Stripe, Fatture in Cloud, /prezzi, Brevo, Google Calendar/OAuth, WhatsApp, sistema commerciale per-evento. Org esistenti NON migrate (in attesa di autorizzazione).
+
+
 ## 2026-06 — Sistema a Crediti FASE A (fondamenta) implementata e testata ✅
 - **Schema**: `organizations.credits` (balance/reserved/lifetime_granted/lifetime_spent/signup_bonus_granted/low_balance_threshold), `credit_ledger` (immutabile: type/status/amount/balance_after/reason_code/service_key/quantity/unit_cost/event_id/user_id/idempotency_key/created_at), `credit_services` (catalogo configurabile), `credit_service_history` (append-only). Indici: ledger {org_id,created_at}, unique {org_id,idempotency_key}, services unique {key}.
 - **Bonus 100 crediti** assegnato automaticamente in `_create_organization` (idempotente: flag `signup_bonus_granted` + idempotency_key). Org esistenti NON accreditate (migrazione da concordare).
