@@ -8163,6 +8163,214 @@ async def platform_org_credits_adjust(org_id: str, body: CreditAdjustIn, admin: 
     return {"ok": True, "movement": mv}
 
 
+# ---------------- Catalogo RICARICHE (credit_packages) ----------------
+# price, credits_base, credits_bonus, bonus_pct (display)
+CREDIT_PACKAGES_SEED = [
+    (20, 100, 0, 0), (50, 250, 0, 0), (100, 500, 50, 10),
+    (200, 1000, 150, 15), (500, 2500, 500, 20), (1000, 5000, 1250, 25),
+]
+
+
+async def _ensure_credit_packages_seeded():
+    try:
+        await db.credit_packages.create_index([("sort", 1)])
+    except Exception:
+        pass
+    if await db.credit_packages.count_documents({}) == 0:
+        for i, (price, base, bonus, pct) in enumerate(CREDIT_PACKAGES_SEED):
+            await db.credit_packages.insert_one({
+                "id": new_id(), "price": price, "credits_base": base, "credits_bonus": bonus,
+                "bonus_pct": pct, "credits_total": base + bonus, "active": True, "sort": i + 1,
+                "badge": ("Più conveniente" if pct == 25 else (f"+{pct}%" if pct else None)),
+                "highlight": pct == 20, "created_at": now_iso(), "updated_at": now_iso()})
+
+
+@api.get("/credits/packages")
+async def credits_packages_public(user: dict = Depends(require_admin)):
+    await _ensure_credit_packages_seeded()
+    rows = await db.credit_packages.find({"active": True}, {"_id": 0}).sort("sort", 1).to_list(100)
+    return {"packages": rows, "credit_unit_eur": 0.20}
+
+
+@api.get("/platform/credit-packages")
+async def platform_credit_packages(admin: dict = Depends(require_superadmin)):
+    await _ensure_credit_packages_seeded()
+    rows = await db.credit_packages.find({}, {"_id": 0}).sort("sort", 1).to_list(100)
+    return {"packages": rows}
+
+
+class CreditPackageIn(BaseModel):
+    price: Optional[float] = None
+    credits_base: Optional[int] = None
+    credits_bonus: Optional[int] = None
+    bonus_pct: Optional[float] = None
+    active: Optional[bool] = None
+    sort: Optional[int] = None
+    badge: Optional[str] = None
+    highlight: Optional[bool] = None
+
+
+@api.post("/platform/credit-packages")
+async def create_credit_package(body: CreditPackageIn, admin: dict = Depends(require_superadmin)):
+    await _ensure_credit_packages_seeded()
+    base = body.credits_base or 0
+    bonus = body.credits_bonus or 0
+    doc = {"id": new_id(), "price": body.price or 0, "credits_base": base, "credits_bonus": bonus,
+           "bonus_pct": body.bonus_pct or 0, "credits_total": base + bonus,
+           "active": bool(body.active if body.active is not None else True),
+           "sort": body.sort or 99, "badge": body.badge, "highlight": bool(body.highlight),
+           "created_at": now_iso(), "updated_at": now_iso()}
+    await db.credit_packages.insert_one(doc)
+    await record_audit(admin, "credit_package_create", meta={"id": doc["id"], "price": doc["price"]})
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.put("/platform/credit-packages/{pid}")
+async def update_credit_package(pid: str, body: CreditPackageIn, admin: dict = Depends(require_superadmin)):
+    pkg = await db.credit_packages.find_one({"id": pid}, {"_id": 0})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Taglio non trovato")
+    changes = {}
+    for f in ["price", "credits_base", "credits_bonus", "bonus_pct", "active", "sort", "badge", "highlight"]:
+        v = getattr(body, f)
+        if v is not None and v != pkg.get(f):
+            changes[f] = v
+    if not changes:
+        return pkg
+    for f, newv in changes.items():
+        await db.credit_package_history.insert_one({
+            "id": new_id(), "package_id": pid, "field": f, "old_value": pkg.get(f),
+            "new_value": newv, "changed_by": admin.get("user_id"), "created_at": now_iso()})
+    merged = {**pkg, **changes}
+    changes["credits_total"] = (merged.get("credits_base") or 0) + (merged.get("credits_bonus") or 0)
+    changes["updated_at"] = now_iso()
+    await db.credit_packages.update_one({"id": pid}, {"$set": changes})
+    await record_audit(admin, "credit_package_update", meta={"id": pid, "changes": changes})
+    return await db.credit_packages.find_one({"id": pid}, {"_id": 0})
+
+
+@api.get("/platform/credit-packages/history")
+async def credit_packages_history(admin: dict = Depends(require_superadmin)):
+    rows = await db.credit_package_history.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return rows
+
+
+# ---------------- Impostazioni crediti org (soglia) ----------------
+class CreditSettingsIn(BaseModel):
+    low_balance_threshold: Optional[int] = None
+
+
+@api.put("/credits/settings")
+async def credits_settings(body: CreditSettingsIn, user: dict = Depends(require_admin)):
+    await _ensure_org_credits(user["org_id"])
+    if body.low_balance_threshold is not None:
+        await db.organizations.update_one(
+            {"id": user["org_id"]},
+            {"$set": {"credits.low_balance_threshold": max(0, int(body.low_balance_threshold)),
+                      "credits.updated_at": now_iso()}})
+    c = await _ensure_org_credits(user["org_id"])
+    return {"low_balance_threshold": c.get("low_balance_threshold")}
+
+
+# ---------------- MOTORE CONSUMO: estimate -> reserve -> settle -> release ----------------
+# (predisposto, NON collegato ad alcuna funzione CRMEvent esistente in Fase B)
+async def _credit_service_cost(service_key, quantity):
+    svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
+    if not svc:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    if svc.get("unit_cost") is None or svc.get("pricing_mode") is None:
+        return {"service": svc, "cost": None, "configured": False, "quantity": int(quantity or 1)}
+    q = max(int(quantity or 1), int(svc.get("min_units", 1) or 1))
+    cost = svc["unit_cost"] if svc["pricing_mode"] == "flat" else svc["unit_cost"] * q
+    return {"service": svc, "cost": int(round(cost)), "configured": True, "quantity": q}
+
+
+async def _credits_reserve(org_id, service_key, quantity=1, user_id=None, event_id=None, idempotency_key=None):
+    from pymongo.errors import DuplicateKeyError
+    info = await _credit_service_cost(service_key, quantity)
+    if not info["configured"]:
+        raise HTTPException(status_code=400, detail="Servizio non configurato per il consumo")
+    if not info["service"].get("active"):
+        raise HTTPException(status_code=400, detail="Servizio non attivo")
+    cost = info["cost"]
+    q = info["quantity"]
+    await _ensure_org_credits(org_id)
+    if idempotency_key:
+        existing = await db.credit_ledger.find_one({"org_id": org_id, "idempotency_key": idempotency_key}, {"_id": 0})
+        if existing:
+            return existing
+    doc = {"id": new_id(), "org_id": org_id, "type": "debit", "status": "pending", "amount": -cost,
+           "balance_after": None, "reason_code": service_key, "service_key": service_key, "quantity": q,
+           "unit_cost": info["service"]["unit_cost"], "event_id": event_id, "user_id": user_id,
+           "idempotency_key": idempotency_key, "note": None, "created_at": now_iso(), "settled_at": None}
+    try:
+        await db.credit_ledger.insert_one(doc)
+    except DuplicateKeyError:
+        return await db.credit_ledger.find_one({"org_id": org_id, "idempotency_key": idempotency_key}, {"_id": 0})
+    res = await db.organizations.update_one(
+        {"id": org_id, "credits.balance": {"$gte": cost}},
+        {"$inc": {"credits.balance": -cost, "credits.reserved": cost}, "$set": {"credits.updated_at": now_iso()}})
+    if res.modified_count == 0:
+        await db.credit_ledger.update_one({"id": doc["id"]}, {"$set": {"status": "released", "settled_at": now_iso()}})
+        org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+        bal = (org.get("credits") or {}).get("balance", 0)
+        raise HTTPException(status_code=402, detail=f"Crediti insufficienti (saldo {bal}, richiesti {cost})")
+    return await db.credit_ledger.find_one({"id": doc["id"]}, {"_id": 0})
+
+
+async def _credits_settle(reservation_id, actual_cost=None):
+    r = await db.credit_ledger.find_one({"id": reservation_id}, {"_id": 0})
+    if not r:
+        raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+    if r["status"] == "committed":
+        return r
+    if r["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Prenotazione non in stato pending")
+    reserved = -r["amount"]
+    final = reserved if actual_cost is None else max(0, min(int(actual_cost), reserved))
+    refund = reserved - final
+    inc = {"credits.reserved": -reserved, "credits.lifetime_spent": final}
+    if refund > 0:
+        inc["credits.balance"] = refund
+    await db.organizations.update_one({"id": r["org_id"]}, {"$inc": inc, "$set": {"credits.updated_at": now_iso()}})
+    org = await db.organizations.find_one({"id": r["org_id"]}, {"_id": 0, "credits": 1})
+    bal = (org.get("credits") or {}).get("balance", 0)
+    await db.credit_ledger.update_one({"id": reservation_id}, {"$set": {"status": "committed", "amount": -final, "balance_after": bal, "settled_at": now_iso()}})
+    return await db.credit_ledger.find_one({"id": reservation_id}, {"_id": 0})
+
+
+async def _credits_release(reservation_id):
+    r = await db.credit_ledger.find_one({"id": reservation_id}, {"_id": 0})
+    if not r:
+        raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+    if r["status"] == "released":
+        return r
+    if r["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Prenotazione non in stato pending")
+    reserved = -r["amount"]
+    await db.organizations.update_one(
+        {"id": r["org_id"]},
+        {"$inc": {"credits.balance": reserved, "credits.reserved": -reserved}, "$set": {"credits.updated_at": now_iso()}})
+    await db.credit_ledger.update_one({"id": reservation_id}, {"$set": {"status": "released", "settled_at": now_iso()}})
+    return await db.credit_ledger.find_one({"id": reservation_id}, {"_id": 0})
+
+
+class EstimateIn(BaseModel):
+    service_key: str
+    quantity: int = 1
+
+
+@api.post("/credits/estimate")
+async def credits_estimate(body: EstimateIn, user: dict = Depends(require_admin)):
+    info = await _credit_service_cost(body.service_key, body.quantity)
+    c = await _ensure_org_credits(user["org_id"])
+    cost = info["cost"]
+    return {"service_key": body.service_key, "quantity": info.get("quantity", body.quantity),
+            "cost": cost, "configured": info["configured"], "active": bool(info["service"].get("active")),
+            "balance": c.get("balance", 0),
+            "sufficient": (cost is not None and c.get("balance", 0) >= cost)}
+
+
 class PriceUpdateIn(BaseModel):
     net: float
 

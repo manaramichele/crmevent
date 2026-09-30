@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import api, { formatApiError } from "@/lib/api";
 import EventPlanManager from "@/components/EventPlanManager";
+import CreditsSection from "@/components/CreditsSection";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,9 @@ export default function Account() {
               {s.access !== "full" && <div className="mt-3 flex items-start gap-2 text-red-700 text-sm" data-testid="account-expired-note"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />La prova gratuita è terminata. I tuoi dati sono conservati. Attiva un piano per ciascun evento per continuare a operarlo.</div>}
             </>}
       </div>
+
+      {/* Crediti CRMEvent */}
+      <CreditsSection />
 
       {/* Billing details */}
       <div className="bg-white border border-slate-200 rounded-xl p-6 mb-4" data-testid="billing-form">
