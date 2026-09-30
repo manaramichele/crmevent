@@ -2,14 +2,10 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Footer from "@/components/Footer";
 import { trackEvent } from "@/lib/analytics";
-import { Check, Sparkles, Zap, Users, CalendarCheck, Megaphone, Menu, X, ChevronDown, Minus } from "lucide-react";
+import { Check, Sparkles, Zap, Users, CalendarCheck, Megaphone, Menu, X, Minus } from "lucide-react";
 
-// Prezzi legati al numero di eventi/anno (solo visualizzazione — nessuna logica Stripe qui).
-// NB: in FASE 2 questi valori arriveranno dal listino gestito dal Super Admin (DB), non hardcoded.
-const PRICING = {
-  small: { starter: 49, professional: 79, premium: 99 },   // Fino a 3 eventi/anno
-  large: { starter: 99, professional: 149, premium: 199 },  // Più di 3 eventi/anno
-};
+// Prezzo per singolo evento (standard). Fonte dati: pricing_plans (fascia "small") — nessun hardcoding in produzione.
+const PRICING = { starter: 49, professional: 99, premium: 199 };
 
 const PLANS = {
   starter: {
@@ -235,19 +231,18 @@ function ComparisonTable({ prices }) {
 }
 
 export default function Pricing() {
-  const [tier, setTier] = useState("small"); // small = fino a 3 eventi/anno | large = più di 3
   const [open, setOpen] = useState(false);
   const [pricing, setPricing] = useState(PRICING);
-  const prices = pricing[tier];
+  const prices = pricing;
   useEffect(() => {
     trackEvent("pricing_view");
     fetch(`${process.env.REACT_APP_BACKEND_URL}/api/pricing`)
       .then((r) => r.json())
       .then((d) => {
         if (!d || !Array.isArray(d.plans)) return;
-        const next = { small: {}, large: {} };
-        d.plans.forEach((p) => { if (next[p.fascia]) next[p.fascia][p.plan] = p.net; });
-        if (Object.keys(next.small).length === 3 && Object.keys(next.large).length === 3) setPricing(next);
+        const next = {};
+        d.plans.forEach((p) => { if (p.fascia === "small") next[p.plan] = p.net; });
+        if (next.starter && next.professional && next.premium) setPricing(next);
       })
       .catch(() => {});
   }, []);
@@ -288,24 +283,11 @@ export default function Pricing() {
         <p className="text-base md:text-lg text-slate-500 mt-4 max-w-xl mx-auto">Dalla gestione dello staff all'organizzazione completa e alla promozione: paghi in base a quanti eventi organizzi ogni anno.</p>
       </section>
 
-      {/* Selettore numero eventi */}
-      <section className="max-w-3xl mx-auto px-6 pb-2">
-        <div className="flex flex-col items-center gap-3" data-testid="pricing-selector">
-          <label htmlFor="events-select" className="text-sm font-semibold text-slate-800">Quanti eventi organizzi all'anno?</label>
-          <div className="relative w-full sm:w-72">
-            <select
-              id="events-select"
-              data-testid="pricing-events-selector"
-              value={tier}
-              onChange={(e) => { setTier(e.target.value); trackEvent("pricing_tier_change", { tier: e.target.value }); }}
-              className="w-full h-12 appearance-none rounded-xl border-2 border-tiffany bg-white px-4 pr-11 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-tiffany/40 cursor-pointer"
-            >
-              <option value="small">Fino a 3 eventi</option>
-              <option value="large">Più di 3 eventi</option>
-            </select>
-            <ChevronDown className="w-5 h-5 text-tiffany-active absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-        </div>
+      {/* Sottotitolo modello per-evento */}
+      <section className="max-w-3xl mx-auto px-6 pb-2 text-center" data-testid="pricing-selector">
+        <p className="inline-flex items-center gap-2 rounded-full bg-slate-100 text-slate-600 px-4 py-2 text-sm font-medium">
+          <Sparkles className="w-4 h-4 text-tiffany-active" />Nessun abbonamento mensile · paghi per singolo evento
+        </p>
       </section>
 
       {/* 3 piani */}
@@ -316,11 +298,36 @@ export default function Pricing() {
           <PlanCard plan={PLANS.premium} amount={prices.premium} highlighted={false} />
         </div>
         <p className="text-xs text-slate-400 mt-8 text-center max-w-2xl mx-auto">
-          Prezzi IVA esclusa, per evento. La fascia è determinata dal numero di eventi organizzati nello stesso anno solare. Il trattamento IVA sarà applicato secondo la normativa vigente.
+          Prezzi IVA esclusa, per singolo evento. Nessun abbonamento mensile: paghi per il tuo evento e gli aggiornamenti sono inclusi. Il trattamento IVA sarà applicato secondo la normativa vigente.
         </p>
       </section>
 
-      {/* Tabella di confronto completa (FASE 1) */}
+      {/* Pacchetti (predisposizione commerciale) */}
+      <section className="max-w-4xl mx-auto px-6 pt-4 pb-2" data-testid="pricing-packages">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-7">
+          <div className="text-center max-w-xl mx-auto">
+            <h3 className="font-display text-xl font-bold text-slate-900">Organizzi più di un evento?</h3>
+            <p className="text-sm text-slate-500 mt-2">Nessun abbonamento. Paghi per evento e gli aggiornamenti sono sempre inclusi. Per chi organizza più eventi stiamo preparando pacchetti dedicati.</p>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
+            {[
+              { n: "1 evento", d: "Prezzo standard", tag: "Disponibile", active: true },
+              { n: "3 eventi", d: "Prezzo agevolato", tag: "In arrivo", active: false },
+              { n: "5 eventi", d: "Prezzo agevolato", tag: "In arrivo", active: false },
+              { n: "Più di 5", d: "Soluzione su misura", tag: "Contattaci", active: false },
+            ].map((p) => (
+              <div key={p.n} data-testid={`package-${p.n}`} className={`rounded-xl border p-4 text-center ${p.active ? "border-tiffany bg-white shadow-sm" : "border-slate-200 bg-white/60"}`}>
+                <div className="font-display text-base font-bold text-slate-900">{p.n}</div>
+                <div className="text-xs text-slate-500 mt-1">{p.d}</div>
+                <span className={`inline-block mt-3 text-[11px] font-semibold rounded-full px-2.5 py-1 ${p.active ? "bg-tiffany-light text-tiffany-fg" : "bg-slate-100 text-slate-500"}`}>{p.tag}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-center text-xs text-slate-400 mt-5">Organizzi più di 5 eventi all'anno? <Link to="/#demo" className="underline hover:text-slate-600">Contattaci</Link> per una soluzione dedicata.</p>
+        </div>
+      </section>
+
+      {/* Tabella di confronto completa */}
       <ComparisonTable prices={prices} />
 
       {/* Final CTA */}

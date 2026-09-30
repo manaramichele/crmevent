@@ -98,7 +98,7 @@ export default function EventPlanManager({ handleReturn = false, compact = false
         <DialogContent className="max-w-lg" data-testid="plan-dialog">
           <DialogHeader>
             <DialogTitle>{dlg?.purchased ? "Upgrade piano" : "Scegli il piano"} · {dlg?.nome}</DialogTitle>
-            <DialogDescription>{dlg?.purchased ? "Paghi solo la differenza rispetto a quanto già pagato per questo evento." : "Prezzi per evento in base alla fascia annuale della tua organizzazione. IVA 22% esclusa."}</DialogDescription>
+            <DialogDescription>{dlg?.purchased ? "Paghi solo la differenza rispetto a quanto già pagato per questo evento." : "Prezzo per singolo evento. IVA 22% esclusa. Nessun abbonamento."}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             {(dlg?.options || []).map((opt) => (

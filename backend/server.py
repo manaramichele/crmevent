@@ -7807,7 +7807,7 @@ PRICING_PLANS_LIST = ["starter", "professional", "premium"]
 PRICING_TIERS = ["small", "large"]
 PRICING_VAT_RATE = 22.0
 PRICING_SEED = {
-    ("starter", "small"): 49.0, ("professional", "small"): 79.0, ("premium", "small"): 99.0,
+    ("starter", "small"): 49.0, ("professional", "small"): 99.0, ("premium", "small"): 199.0,
     ("starter", "large"): 99.0, ("professional", "large"): 149.0, ("premium", "large"): 199.0,
 }
 PLAN_RANK = {"free": 0, "starter": 1, "professional": 2, "premium": 3}

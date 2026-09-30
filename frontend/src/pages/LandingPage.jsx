@@ -173,7 +173,19 @@ const H2 = ({ children }) => <h2 className="font-display text-3xl md:text-4xl fo
 
 export default function LandingPage() {
   const [open, setOpen] = useState(false);
+  const [prices, setPrices] = useState({ starter: 49, professional: 99, premium: 199 });
   useEffect(() => { document.title = "CRMEvent | Il CRM per organizzare eventi"; }, []);
+  useEffect(() => {
+    fetch(`${process.env.REACT_APP_BACKEND_URL}/api/pricing`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d || !Array.isArray(d.plans)) return;
+        const next = {};
+        d.plans.forEach((p) => { if (p.fascia === "small") next[p.plan] = p.net; });
+        if (next.starter && next.professional && next.premium) setPrices(next);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="bg-white text-slate-900">
@@ -355,33 +367,37 @@ export default function LandingPage() {
 
       {/* Prezzi teaser */}
       <Section id="prezzi-teaser" className="py-20 bg-slate-900 text-white">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <div>
-            <div className="text-tiffany font-semibold text-sm uppercase tracking-wide mb-3">Prezzi trasparenti</div>
-            <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Un solo piano. Tutto CRMEvent.</h2>
-            <p className="text-slate-300 mt-4 max-w-lg">Tutto ciò che ti serve per organizzare e gestire i tuoi eventi in un'unica piattaforma. 14 giorni di prova gratuita, nessuna carta richiesta.</p>
-            <div className="mt-6 space-y-2">
-              {["Tutte le funzionalità incluse", "Aggiornamenti inclusi", "Nessun costo di attivazione · Cancella quando vuoi"].map((t) => (
-                <div key={t} className="flex items-center gap-2 text-sm text-slate-200"><Check className="w-4 h-4 text-tiffany" />{t}</div>))}
+        <div className="max-w-3xl mx-auto text-center">
+          <div className="text-tiffany font-semibold text-sm uppercase tracking-wide mb-3">Prezzi trasparenti</div>
+          <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Prova tutto. Poi scegli cosa ti serve.</h2>
+          <p className="text-slate-300 mt-4">14 giorni di CRMEvent Premium gratis. Nessuna carta richiesta.</p>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-5 mt-12 max-w-4xl mx-auto">
+          {[
+            { id: "starter", name: "Starter", desc: "Gestisci staff, volontari, team e turni.", featured: false },
+            { id: "professional", name: "Professional", desc: "Organizza in modo completo il tuo evento.", featured: true },
+            { id: "premium", name: "Premium", desc: "Organizza e promuovi con tutti gli strumenti.", featured: false },
+          ].map((p) => (
+            <div key={p.id} data-testid={`home-plan-${p.id}`} className={`relative rounded-2xl p-6 flex flex-col ${p.featured ? "bg-white text-slate-900 shadow-xl ring-2 ring-tiffany sm:-translate-y-2" : "bg-white/5 border border-white/10 backdrop-blur"}`}>
+              {p.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-tiffany text-slate-900 px-3 py-1 text-xs font-bold shadow">Più scelto</span>}
+              <div className={`text-xs font-bold uppercase tracking-wide ${p.featured ? "text-tiffany-fg" : "text-tiffany"}`}>{p.name}</div>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="font-display text-4xl font-bold">{prices[p.id]} €</span>
+                <span className={`text-sm mb-0.5 ${p.featured ? "text-slate-500" : "text-slate-300"}`}>+ IVA</span>
+              </div>
+              <div className="text-xs text-slate-400">/ evento</div>
+              <p className={`text-sm mt-3 leading-relaxed ${p.featured ? "text-slate-600" : "text-slate-300"}`}>{p.desc}</p>
             </div>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/prezzi" data-testid="home-pricing-cta" className="h-12 px-7 rounded-xl bg-tiffany hover:bg-tiffany-hover text-slate-900 text-base font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Scopri i prezzi<ArrowRight className="w-5 h-5" /></Link>
-              <Link to="/registrati" data-testid="home-pricing-try" className="h-12 px-7 rounded-xl border border-white/25 hover:bg-white/10 text-white text-base font-semibold transition-all inline-flex items-center">Prova CRMEvent gratis</Link>
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-8 backdrop-blur">
-            <div className="text-sm uppercase tracking-widest text-tiffany font-semibold">Piano CRMEvent</div>
-            <div className="mt-4 flex items-end gap-2">
-              <span className="text-5xl font-bold font-display">19,90 €</span><span className="text-slate-300 mb-1.5">/ mese + IVA</span>
-            </div>
-            <div className="mt-2 text-slate-300">oppure <span className="font-semibold text-white">199 € / anno</span> <span className="inline-flex items-center rounded-full bg-tiffany/20 text-tiffany px-2 py-0.5 text-xs font-semibold ml-1">2 mesi inclusi</span></div>
-            <div className="mt-6 h-px bg-white/10" />
-            <div className="mt-6 space-y-2 text-sm text-slate-200">
-              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />14 giorni di prova gratuita</div>
-              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Nessuna carta richiesta per iniziare</div>
-              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Aggiornamenti inclusi</div>
-            </div>
-          </div>
+          ))}
+        </div>
+        <p className="text-center text-xs text-slate-400 mt-6 max-w-xl mx-auto">Prezzi per evento. Nessun abbonamento mensile. Aggiornamenti inclusi. Il prezzo varia in base al numero di eventi che organizzi.</p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link to="/registrati" data-testid="home-pricing-try" className="h-12 px-7 rounded-xl bg-tiffany hover:bg-tiffany-hover text-slate-900 text-base font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Prova gratis 14 giorni</Link>
+          <Link to="/prezzi" data-testid="home-pricing-cta" className="h-12 px-7 rounded-xl border border-white/25 hover:bg-white/10 text-white text-base font-semibold transition-all inline-flex items-center gap-2">Confronta i piani<ArrowRight className="w-5 h-5" /></Link>
+        </div>
+        <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-slate-200">
+          <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />14 giorni di prova gratuita</div>
+          <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Nessuna carta richiesta</div>
         </div>
       </Section>
 

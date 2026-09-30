@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import EventPlanManager from "@/components/EventPlanManager";
 import { toast } from "sonner";
@@ -7,8 +6,7 @@ import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CreditCard, CalendarClock, CheckCircle2, AlertTriangle, Building2, Save, Settings2, ReceiptText } from "lucide-react";
-import { trackBeginCheckout, trackPurchaseOnce } from "@/lib/analytics";
+import { CalendarClock, CheckCircle2, AlertTriangle, Building2, Save, ReceiptText } from "lucide-react";
 
 const STATUS_LABEL = { trial: "Prova gratuita", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pagamento non riuscito", suspended: "Sospeso" };
 const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange" };
@@ -24,13 +22,10 @@ const BFIELDS = [
 export default function Account() {
   const [data, setData] = useState(null);
   const [billing, setBilling] = useState(null);
-  const [cycle, setCycle] = useState("yearly");
   const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [invoices, setInvoices] = useState([]);
   const [simBusy, setSimBusy] = useState(null);
   const [sim, setSim] = useState(null);
-  const [params, setParams] = useSearchParams();
 
   const load = useCallback(async () => {
     const [a, b, inv] = await Promise.all([api.get("/account/subscription"), api.get("/account/billing"), api.get("/account/invoices")]);
@@ -50,25 +45,6 @@ export default function Account() {
     load().catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
   }, [load]);
 
-  useEffect(() => {
-    const c = params.get("checkout");
-    if (c === "success") {
-      const sessionId = params.get("session_id");
-      toast.success("Pagamento ricevuto! Sincronizzo l'abbonamento...");
-      api.post("/account/sync-subscription").then(() => load()).catch(() => {});
-      // GA4 `purchase` only after Stripe confirms the payment (deduplicated by transaction_id).
-      if (sessionId) {
-        api.get(`/account/checkout-confirmation?session_id=${encodeURIComponent(sessionId)}`)
-          .then(({ data }) => { if (data?.paid) trackPurchaseOnce(data); })
-          .catch(() => {});
-      }
-      params.delete("checkout"); params.delete("session_id"); setParams(params, { replace: true });
-    } else if (c === "cancel") {
-      toast.info("Checkout annullato.");
-      params.delete("checkout"); setParams(params, { replace: true });
-    }
-  }, [params, setParams, load]);
-
   if (!data || !billing) return <div className="text-slate-400">Caricamento...</div>;
   const s = data.subscription;
   const isItaly = (billing.paese || "IT") === "IT";
@@ -83,28 +59,10 @@ export default function Account() {
     finally { setSaving(false); }
   };
 
-  const checkout = async () => {
-    setBusy(true);
-    try {
-      trackBeginCheckout(cycle);
-      const { data } = await api.post("/account/checkout", { billing_cycle: cycle, origin_url: window.location.origin });
-      window.location.href = data.checkout_url;
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setBusy(false); }
-  };
-
-  const manage = async () => {
-    setBusy(true);
-    try { const { data } = await api.post("/account/portal", { origin_url: window.location.origin }); window.location.href = data.url; }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setBusy(false); }
-  };
-
-  const canPay = !!(billing.paese && billing.indirizzo && billing.citta && (isAzienda ? billing.ragione_sociale : (billing.nome && billing.cognome)));
-  const hasSub = s.status === "active" || s.status === "past_due" || !!data.subscription.stripe_subscription_id;
-
   return (
     <div className="max-w-3xl animate-fade-up" data-testid="account-page">
-      <h1 className="font-display text-3xl font-bold text-slate-900">Account e abbonamento</h1>
-      <p className="text-slate-500 mt-1 mb-6">Gestisci il piano e i dati di fatturazione della tua organizzazione.</p>
+      <h1 className="font-display text-3xl font-bold text-slate-900">Account e licenze</h1>
+      <p className="text-slate-500 mt-1 mb-6">Ogni evento ha la sua licenza. Gestisci prova, piani per evento e dati di fatturazione.</p>
 
       <div className="bg-white border border-slate-200 rounded-xl p-6 mb-4">
         <div className="flex items-center gap-2 text-slate-500 text-sm"><Building2 className="w-4 h-4" />Organizzazione</div>
@@ -113,17 +71,19 @@ export default function Account() {
 
       {/* Subscription status */}
       <div className={`rounded-xl p-6 border mb-4 ${s.access !== "full" ? "border-red-200 bg-red-50" : s.status === "trial" ? "border-tiffany-border bg-tiffany-light/40" : "border-emerald-200 bg-emerald-50"}`} data-testid="account-subscription">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2"><span className="text-sm text-slate-500">Stato</span>
-              <StatusBadge color={STATUS_COLOR[s.status] || "gray"} data-testid="account-status">{STATUS_LABEL[s.status] || s.status}</StatusBadge></div>
-            <div className="text-2xl font-bold text-slate-900 mt-2 font-display">Piano CRMEvent {s.billing_cycle === "yearly" ? "· Annuale" : s.billing_cycle === "monthly" ? "· Mensile" : ""}</div>
-          </div>
-          <div className="text-right"><div className="text-3xl font-bold text-slate-900">{s.billing_cycle === "yearly" ? "199 €" : "19,90 €"}</div><div className="text-xs text-slate-500">{s.billing_cycle === "yearly" ? "/ anno" : "/ mese"} + IVA</div></div>
-        </div>
-        {s.status === "trial" && <div className="mt-4 flex items-center gap-2 text-tiffany-fg font-semibold" data-testid="account-trial-remaining"><CalendarClock className="w-5 h-5" />Prova gratuita – {s.days_left} giorni rimanenti</div>}
-        {s.status === "active" && s.current_period_end && <div className="text-sm text-slate-600 mt-3 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" />Prossimo rinnovo: {new Date(s.current_period_end).toLocaleDateString("it-IT")}</div>}
-        {s.access !== "full" && s.status !== "active" && <div className="mt-4 flex items-start gap-2 text-red-700 text-sm" data-testid="account-expired-note"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />Il periodo di prova è terminato. I tuoi dati sono conservati. Attiva l'abbonamento per continuare senza limitazioni.</div>}
+        <div className="flex items-center gap-2"><span className="text-sm text-slate-500">Stato organizzazione</span>
+          <StatusBadge color={STATUS_COLOR[s.status] || "gray"} data-testid="account-status">{STATUS_LABEL[s.status] || s.status}</StatusBadge></div>
+        {s.status === "trial"
+          ? <>
+              <div className="text-2xl font-bold text-slate-900 mt-2 font-display">Prova gratuita CRMEvent Premium</div>
+              <div className="mt-3 flex items-center gap-2 text-tiffany-fg font-semibold" data-testid="account-trial-remaining"><CalendarClock className="w-5 h-5" />{s.days_left} giorni rimanenti · tutte le funzionalità Premium</div>
+              <p className="text-sm text-slate-600 mt-2">Alla fine della prova i tuoi dati restano al sicuro. Per continuare a operare un evento, attiva un piano dedicato qui sotto.</p>
+            </>
+          : <>
+              <div className="text-2xl font-bold text-slate-900 mt-2 font-display">Licenze per evento</div>
+              <div className="mt-2 flex items-start gap-2 text-slate-700 text-sm"><CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-500 shrink-0" />Nessun abbonamento. Ogni evento si attiva con Starter, Professional o Premium.</div>
+              {s.access !== "full" && <div className="mt-3 flex items-start gap-2 text-red-700 text-sm" data-testid="account-expired-note"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />La prova gratuita è terminata. I tuoi dati sono conservati. Attiva un piano per ciascun evento per continuare a operarlo.</div>}
+            </>}
       </div>
 
       {/* Billing details */}
@@ -150,28 +110,6 @@ export default function Account() {
         </div>
         {isItaly && isAzienda && <p className="text-xs text-slate-400 mt-3">Per le aziende italiane indica Codice Destinatario SDI oppure PEC per la fatturazione elettronica.</p>}
         <Button onClick={saveBilling} disabled={saving} data-testid="billing-save" className="mt-4 bg-slate-900 hover:bg-slate-800 text-white"><Save className="w-4 h-4 mr-2" />{saving ? "Salvataggio..." : "Salva dati"}</Button>
-      </div>
-
-      {/* Activate / manage */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6" data-testid="activate-card">
-        {hasSub ? (
-          <>
-            <h2 className="font-semibold text-slate-800 mb-2">Gestisci abbonamento</h2>
-            <p className="text-sm text-slate-500 mb-4">Modifica il metodo di pagamento, cambia piano o annulla tramite il portale Stripe.</p>
-            <Button onClick={manage} disabled={busy} data-testid="manage-subscription-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Settings2 className="w-4 h-4 mr-2" />Gestisci abbonamento</Button>
-          </>
-        ) : (
-          <>
-            <h2 className="font-semibold text-slate-800 mb-3">Attiva CRMEvent</h2>
-            <div className="inline-flex bg-slate-100 rounded-full p-1 mb-4" data-testid="account-cycle-toggle">
-              <button onClick={() => setCycle("monthly")} data-testid="account-cycle-monthly" className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${cycle === "monthly" ? "bg-white shadow text-slate-900" : "text-slate-500"}`}>Mensile · 19,90 €</button>
-              <button onClick={() => setCycle("yearly")} data-testid="account-cycle-yearly" className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${cycle === "yearly" ? "bg-white shadow text-slate-900" : "text-slate-500"}`}>Annuale · 199 €</button>
-            </div>
-            {!canPay && <p className="text-xs text-amber-600 mb-3">Completa e salva i dati di fatturazione prima di procedere al pagamento.</p>}
-            <div><Button onClick={checkout} disabled={busy || !canPay} data-testid="account-activate-btn" className="h-11 px-6 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><CreditCard className="w-4 h-4 mr-2" />{busy ? "Reindirizzamento..." : "Attiva CRMEvent"}</Button></div>
-            <p className="text-xs text-slate-400 mt-2">Pagamenti sicuri gestiti tramite Stripe · Rinnovo automatico · Cancella quando vuoi.</p>
-          </>
-        )}
       </div>
 
       {/* Piani e acquisti (per evento) */}

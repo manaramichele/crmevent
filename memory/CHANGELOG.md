@@ -1,5 +1,13 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Home + /prezzi + Account allineati al modello per-evento ✅
+- **Home (`LandingPage.jsx`)**: rimossa la vecchia sezione "Un solo piano. Tutto CRMEvent." con 19,90 €/mese · 199 €/anno · "2 mesi inclusi" · "Cancella quando vuoi". Nuovo teaser "Prova tutto. Poi scegli cosa ti serve." con 3 mini-card (Starter/Professional ⭐Più scelto/Premium), prezzi letti da `/api/pricing` (fascia small, nessun hardcoding), CTA "Prova gratis 14 giorni" → /registrati + "Confronta i piani" → /prezzi. Mantenuti "14 giorni di prova" e "Nessuna carta richiesta".
+- **Prezzi listino**: aggiornati i prezzi del singolo evento in `pricing_plans` (DB) → Starter 49 · Professional 99 · Premium 199 (+IVA). Aggiornato anche `PRICING_SEED` in server.py. Stripe price_id NON toccati (migrazione differita su autorizzazione utente).
+- **/prezzi (`Pricing.jsx`)**: rimosso il selettore "Fino a 3 / Più di 3"; modello per singolo evento. Aggiunto blocco pacchetti predisposti (1 evento Disponibile · 3/5 eventi "In arrivo" · >5 "Contattaci") senza inventare prezzi. Prezzi sempre da DB.
+- **Account (`Account.jsx`)**: rimosso il vecchio blocco abbonamento mensile/annuale (toggle 19,90/199, "Gestisci abbonamento", "Rinnovo automatico · Cancella quando vuoi"). Riformulato su licenze per-evento: stato prova Premium (14 gg org) e gestione piani per evento via `EventPlanManager`. Titolo → "Account e licenze".
+- Nessuna modifica a Stripe LIVE, Checkout, webhook o Fatture in Cloud.
+
+
 ## 2026-06 — Fix pubblicazione Instagram "Media ID is not available" ✅
 - **RCA**: l'endpoint chiamava `media_publish` subito dopo la creazione del container, senza attendere `status_code=FINISHED` → race condition (container ancora `IN_PROGRESS`, Meta risponde 4xx "Media ID is not available"). Fase del fallimento: *container processing*. Token/scope/IG account/immagine HTTPS erano corretti.
 - **Fix**: nuovo `instagram_utils.create_and_publish` con polling di `container_status` (GET /{creation_id}?fields=status_code) finché `FINISHED` (max_polls, timeout→504, ERROR/EXPIRED→422, creation_id/media_id assenti→502) prima di pubblicare; log `container_created` con creation_id. Salva separatamente il vero Instagram Media ID.
