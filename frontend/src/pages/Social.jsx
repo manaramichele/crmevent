@@ -518,8 +518,8 @@ export default function Social() {
             <Button variant="outline" onClick={savePost} data-testid="edit-save"><Pencil className="w-4 h-4 mr-1" />Salva</Button>
             <Button variant="outline" onClick={() => approve(editing)} disabled={!editing?.creative_media_id || igAccounts.length === 0 || (igAccounts.length > 1 && !editing?.account_id)} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
             <Button variant="outline" onClick={() => schedule(editing)} data-testid="edit-schedule"><Clock className="w-4 h-4 mr-1" />Programma</Button>
-            {editing && (editing.status === "approved" || editing.status === "scheduled") && (
-              <Button onClick={() => publishNow(editing)} disabled={!editing?.creative_media_id || igAccounts.length === 0 || (igAccounts.length > 1 && !editing?.account_id)} data-testid="edit-publish" className="bg-pink-600 hover:bg-pink-700 text-white"><Instagram className="w-4 h-4 mr-1" />Pubblica ora</Button>
+            {editing && (editing.status === "approved" || editing.status === "scheduled" || editing.status === "error") && (
+              <Button onClick={() => publishNow(editing)} disabled={!editing?.creative_media_id || igAccounts.length === 0 || (igAccounts.length > 1 && !editing?.account_id)} data-testid="edit-publish" className="bg-pink-600 hover:bg-pink-700 text-white"><Instagram className="w-4 h-4 mr-1" />{editing.status === "error" ? "Riprova pubblicazione" : "Pubblica ora"}</Button>
             )}
             <Button variant="outline" className="text-red-600" onClick={() => del(editing)} data-testid="edit-delete"><Trash2 className="w-4 h-4 mr-1" />Elimina</Button>
           </DialogFooter>

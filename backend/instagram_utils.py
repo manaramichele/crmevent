@@ -124,3 +124,42 @@ async def publish_media(ig_user_id: str, creation_id: str, token: str) -> dict:
         r = await c.post(f"{GRAPH}/{ig_user_id}/media_publish",
                          data={"creation_id": creation_id, "access_token": token})
     return _check(r)
+
+
+async def container_status(container_id: str, token: str) -> dict:
+    """Return the container processing state: {status_code: IN_PROGRESS|FINISHED|ERROR|EXPIRED, ...}."""
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get(f"{GRAPH}/{container_id}",
+                        params={"fields": "status_code,status", "access_token": token})
+    return _check(r)
+
+
+async def create_and_publish(ig_user_id, image_url, caption, token, *, sleep=None, max_polls=10, log=None):
+    """Full single-image flow with container status polling — fixes 'Media ID is not available'.
+    1) create container -> creation_id; 2) poll status_code until FINISHED (never publish while
+    IN_PROGRESS); 3) publish -> media_id. Raises GraphAPIError on ERROR/EXPIRED/timeout/missing ids.
+    Returns {creation_id, media_id}."""
+    import asyncio as _a
+    _sleep = sleep or _a.sleep
+    cont = await create_media(ig_user_id, image_url, caption, token)
+    creation_id = (cont or {}).get("id")
+    if not creation_id:
+        raise GraphAPIError("Container non creato: creation_id assente nella risposta Meta", status_code=502)
+    if log:
+        await log("container_created", f"creation_id={creation_id}")
+    status_code = None
+    for _ in range(max_polls):
+        st = await container_status(creation_id, token)
+        status_code = (st or {}).get("status_code")
+        if status_code == "FINISHED":
+            break
+        if status_code in ("ERROR", "EXPIRED"):
+            raise GraphAPIError(f"Container {status_code}: {(st or {}).get('status') or 'errore Meta'}", status_code=422)
+        await _sleep(3)
+    if status_code != "FINISHED":
+        raise GraphAPIError("Timeout elaborazione media Instagram (container non FINISHED): riprova tra poco", status_code=504)
+    pub = await publish_media(ig_user_id, creation_id, token)
+    media_id = (pub or {}).get("id")
+    if not media_id:
+        raise GraphAPIError("Media ID non restituito da Meta dopo media_publish", status_code=502)
+    return {"creation_id": creation_id, "media_id": media_id}

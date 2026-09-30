@@ -5162,7 +5162,7 @@ async def social_post_publish(post_id: str, body: SocialPublishIn, user: dict = 
                 problems.append("token valido (scaduto: aggiorna il token)")
         except Exception:
             pass
-    if post.get("status") not in ("approved", "scheduled"):
+    if post.get("status") not in ("approved", "scheduled", "error"):
         problems.append("post approvato")
     if not post.get("creative_media_id"):
         problems.append("creatività presente")
@@ -5177,7 +5177,7 @@ async def social_post_publish(post_id: str, body: SocialPublishIn, user: dict = 
     # Atomic lock to prevent accidental double publish.
     prev_status = post.get("status")
     lock = await db.social_posts.update_one(
-        {"id": post_id, "org_id": user["org_id"], "status": {"$in": ["approved", "scheduled"]},
+        {"id": post_id, "org_id": user["org_id"], "status": {"$in": ["approved", "scheduled", "error"]},
          "published_media_id": {"$in": [None, ""]}},
         {"$set": {"status": "publishing", "updated_at": now_iso()}})
     if lock.matched_count == 0:
@@ -5196,10 +5196,12 @@ async def social_post_publish(post_id: str, body: SocialPublishIn, user: dict = 
         caption = caption + "\n\n" + " ".join(hashtags)
     await _social_log(user, "publish_requested", post_id=post_id, platform="instagram",
                       detail=f"acct=@{acct.get('username')} img={image_url}")
+    async def _iglog(kind, detail):
+        await _social_log(user, kind, post_id=post_id, platform="instagram", detail=detail)
     try:
-        cont = await instagram_utils.create_media(acct["ig_user_id"], image_url, caption, acct["access_token"])
-        pub = await instagram_utils.publish_media(acct["ig_user_id"], cont.get("id"), acct["access_token"])
-        media_id = pub.get("id")
+        res = await instagram_utils.create_and_publish(
+            acct["ig_user_id"], image_url, caption, acct["access_token"], log=_iglog)
+        media_id = res["media_id"]
     except Exception as e:
         await db.social_posts.update_one({"id": post_id, "org_id": user["org_id"]},
                                          {"$set": {"status": "error", "last_publish_error": str(e)[:300],
