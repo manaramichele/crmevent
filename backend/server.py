@@ -4497,7 +4497,10 @@ async def stripe_webhook(request: Request):
     elif t in ("customer.subscription.created", "customer.subscription.updated"):
         await _sync_subscription(obj)
     elif t == "checkout.session.completed":
-        if obj.get("subscription"):
+        md = obj.get("metadata") or {}
+        if md.get("kind") in ("event_purchase", "event_upgrade"):
+            await _activate_event_from_session(obj)
+        elif obj.get("subscription"):
             sub = stripe_sdk.Subscription.retrieve(obj["subscription"])
             await _sync_subscription(sub, (obj.get("metadata") or {}).get("org_id"))
     elif t in ("invoice.paid", "invoice.payment_succeeded"):
@@ -7903,18 +7906,33 @@ async def update_pricing(plan: str, fascia: str, body: PriceUpdateIn, admin: dic
     if not doc:
         raise HTTPException(status_code=404, detail="Prezzo non trovato")
     old_net = doc.get("net")
-    # FASE 2 STEP 3: aggiornamento SOLO su DB. La sync con Stripe (nuovo Price) arriverà allo step Stripe.
+    # FASE 2 STEP 4: sync Stripe. Ordine sicuro: nuovo Price → verifica → update DB → history → poi archivia vecchio.
+    old_price_id = doc.get("stripe_price_id")
+    try:
+        pid = doc.get("stripe_product_id") or _ensure_stripe_product(plan)
+        new_price_id = _create_stripe_price(plan, fascia, new_net, pid)
+        if not new_price_id:
+            raise RuntimeError("price_id vuoto")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Sincronizzazione Stripe fallita: nessuna modifica applicata al listino ({e})")
     await db.pricing_plans.update_one({"plan": plan, "fascia": fascia}, {"$set": {
         "net": new_net, "gross": _gross(new_net), "version": doc.get("version", 1) + 1,
+        "stripe_product_id": pid, "stripe_price_id": new_price_id,
         "updated_at": now_iso(), "updated_by": admin.get("user_id")}})
     await _create("pricing_history", {
         "plan": plan, "fascia": fascia, "old_net": old_net, "new_net": new_net,
         "old_gross": doc.get("gross"), "new_gross": _gross(new_net),
-        "old_stripe_price_id": doc.get("stripe_price_id"), "new_stripe_price_id": None,
+        "old_stripe_price_id": old_price_id, "new_stripe_price_id": new_price_id,
         "changed_by": admin.get("user_id"), "changed_by_email": admin.get("email"),
-        "note": "Aggiornamento listino (solo DB — sync Stripe non ancora attiva)"})
+        "note": "Aggiornamento listino con sync Stripe (nuovo Price attivo, vecchio archiviato)"})
+    # Solo DOPO il completamento del DB: archivia il vecchio Price Stripe.
+    if old_price_id:
+        try:
+            stripe_sdk.Price.modify(old_price_id, active=False)
+        except Exception:
+            pass
     try:
-        await record_audit(admin, "pricing_updated", meta={"plan": plan, "fascia": fascia, "old_net": old_net, "new_net": new_net})
+        await record_audit(admin, "pricing_updated", meta={"plan": plan, "fascia": fascia, "old_net": old_net, "new_net": new_net, "new_price_id": new_price_id})
     except Exception:
         pass
     return await db.pricing_plans.find_one({"plan": plan, "fascia": fascia}, {"_id": 0})
@@ -7970,6 +7988,181 @@ async def account_plan_overview(user: dict = Depends(require_admin)):
             "status": sub.get("status"), "days_left": sub.get("days_left"),
             "year": year, "events_in_year": count, "fascia": tier,
             "fascia_label": TIER_LABEL.get(tier)}
+
+
+# ---- FASE 2 STEP 4: Stripe per-evento (TEST) — Price/Product dinamici, checkout mode=payment, upgrade ----
+_TAX_RATE_CACHE = {}
+
+
+def _get_tax_rate_id():
+    if _TAX_RATE_CACHE.get("id"):
+        return _TAX_RATE_CACHE["id"]
+    for r in stripe_sdk.TaxRate.list(active=True, limit=100).auto_paging_iter():
+        if float(r.percentage) == PRICING_VAT_RATE and not r.inclusive:
+            _TAX_RATE_CACHE["id"] = r.id
+            return r.id
+    r = stripe_sdk.TaxRate.create(display_name="IVA", percentage=PRICING_VAT_RATE, inclusive=False, country="IT")
+    _TAX_RATE_CACHE["id"] = r.id
+    return r.id
+
+
+def _ensure_stripe_product(plan):
+    for p in stripe_sdk.Product.list(active=True, limit=100).auto_paging_iter():
+        if p.to_dict().get("metadata", {}).get("emergent_plan") == plan:
+            return p.id
+    p = stripe_sdk.Product.create(name=f"CRMEvent {PLAN_LABEL.get(plan, plan)}", tax_code="txcd_10103001",
+                                  metadata={"managed_by": "emergent", "emergent_plan": plan})
+    return p.id
+
+
+def _create_stripe_price(plan, fascia, net, product_id):
+    pr = stripe_sdk.Price.create(product=product_id, unit_amount=int(round(float(net) * 100)), currency="eur",
+                                 tax_behavior="exclusive", metadata={"emergent_plan": plan, "emergent_fascia": fascia})
+    return pr.id
+
+
+async def _ensure_pricing_stripe(row):
+    if row.get("stripe_price_id"):
+        return row["stripe_price_id"]
+    pid = row.get("stripe_product_id") or _ensure_stripe_product(row["plan"])
+    price_id = _create_stripe_price(row["plan"], row["fascia"], row["net"], pid)
+    await db.pricing_plans.update_one({"plan": row["plan"], "fascia": row["fascia"]},
+                                      {"$set": {"stripe_product_id": pid, "stripe_price_id": price_id, "updated_at": now_iso()}})
+    return price_id
+
+
+async def _pricing_row(plan, tier):
+    return await db.pricing_plans.find_one({"plan": plan, "fascia": tier, "status": "active"}, {"_id": 0})
+
+
+@api.post("/platform/pricing/stripe-sync-all")
+async def pricing_stripe_sync_all(admin: dict = Depends(require_superadmin)):
+    await _ensure_pricing_seeded()
+    rows = await db.pricing_plans.find({}, {"_id": 0}).to_list(50)
+    rows.sort(key=_pricing_sort_key)
+    out = []
+    for r in rows:
+        pid = await _ensure_pricing_stripe(r)
+        out.append({"plan": r["plan"], "fascia": r["fascia"], "stripe_price_id": pid})
+    return {"ok": True, "prices": out}
+
+
+class EventCheckoutIn(BaseModel):
+    plan: str
+    origin_url: str
+
+
+@api.post("/events/{event_id}/checkout")
+async def event_checkout(event_id: str, body: EventCheckoutIn, user: dict = Depends(require_admin)):
+    if body.plan not in PRICING_PLANS_LIST:
+        raise HTTPException(status_code=400, detail="Piano non valido")
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    if not (org.get("billing") or {}).get("paese"):
+        raise HTTPException(status_code=400, detail="Completa prima i dati di fatturazione")
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    di = ev.get("data_inizio") or ""
+    if not di[:4].isdigit():
+        raise HTTPException(status_code=400, detail="Imposta prima la data dell'evento")
+    year = int(di[:4])
+    tier = compute_tier(await _events_in_year(user["org_id"], year))
+    row = await _pricing_row(body.plan, tier)
+    if not row:
+        raise HTTPException(status_code=500, detail="Listino non configurato")
+    price_id = await _ensure_pricing_stripe(row)
+    cust_id = await _ensure_stripe_customer(org, user)
+    session = stripe_sdk.checkout.Session.create(
+        mode="payment", customer=cust_id,
+        line_items=[{"price": price_id, "quantity": 1, "tax_rates": [_get_tax_rate_id()]}],
+        success_url=f"{body.origin_url}/eventi?purchase=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/eventi?purchase=cancel",
+        metadata={"kind": "event_purchase", "org_id": org["id"], "event_id": event_id,
+                  "plan": body.plan, "tier": tier, "year": str(year),
+                  "net": str(row["net"]), "price_id": price_id, "version": str(row.get("version", 1))},
+        payment_intent_data={"metadata": {"kind": "event_purchase", "event_id": event_id, "plan": body.plan}},
+    )
+    return {"checkout_url": session.url, "session_id": session.id, "plan": body.plan, "tier": tier, "net": row["net"]}
+
+
+class EventUpgradeIn(BaseModel):
+    plan: str
+    origin_url: str
+
+
+@api.post("/events/{event_id}/upgrade")
+async def event_upgrade(event_id: str, body: EventUpgradeIn, user: dict = Depends(require_admin)):
+    if body.plan not in PRICING_PLANS_LIST:
+        raise HTTPException(status_code=400, detail="Piano non valido")
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    ent = ev.get("entitlement") or {}
+    cur_plan = ent.get("plan") or "free"
+    if ent.get("source") != "purchased":
+        raise HTTPException(status_code=400, detail="L'evento non ha un piano acquistato da aggiornare")
+    if PLAN_RANK.get(body.plan, 0) <= PLAN_RANK.get(cur_plan, 0):
+        raise HTTPException(status_code=400, detail="Downgrade non consentito")
+    tier = ent.get("price_tier") or compute_tier(await _events_in_year(user["org_id"], ent.get("year") or datetime.now(timezone.utc).year))
+    row = await _pricing_row(body.plan, tier)
+    if not row:
+        raise HTTPException(status_code=500, detail="Listino non configurato")
+    already = float(ent.get("amount_net") or 0)
+    diff = round(float(row["net"]) - already, 2)
+    if diff <= 0:
+        raise HTTPException(status_code=409, detail=f"Nessun importo dovuto per l'upgrade (destinazione {row['net']}€ ≤ già pagato {already}€). Caso gestito in sicurezza: nessun addebito né rimborso.")
+    await _ensure_pricing_stripe(row)
+    cust_id = await _ensure_stripe_customer(org, user)
+    session = stripe_sdk.checkout.Session.create(
+        mode="payment", customer=cust_id,
+        line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(diff * 100)), "tax_behavior": "exclusive",
+                     "product_data": {"name": f"Upgrade a {PLAN_LABEL.get(body.plan)} – {ev.get('nome', 'Evento')}"}},
+                     "quantity": 1, "tax_rates": [_get_tax_rate_id()]}],
+        success_url=f"{body.origin_url}/eventi?upgrade=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/eventi?upgrade=cancel",
+        metadata={"kind": "event_upgrade", "org_id": org["id"], "event_id": event_id,
+                  "plan": body.plan, "tier": tier, "year": str(ent.get("year") or ""),
+                  "net": str(row["net"]), "diff": str(diff), "from_plan": cur_plan,
+                  "price_id": row.get("stripe_price_id"), "version": str(row.get("version", 1))},
+        payment_intent_data={"metadata": {"kind": "event_upgrade", "event_id": event_id, "plan": body.plan}},
+    )
+    return {"checkout_url": session.url, "session_id": session.id, "plan": body.plan, "diff": diff}
+
+
+async def _activate_event_from_session(sess: dict):
+    """Attivazione SERVER-SIDE da sessione PAGATA. Idempotente per session id."""
+    md = sess.get("metadata") or {}
+    if md.get("kind") not in ("event_purchase", "event_upgrade") or sess.get("payment_status") != "paid":
+        return
+    sid = sess.get("id")
+    if await db.event_purchases.find_one({"stripe_session_id": sid}):
+        return
+    ev = await db.events.find_one({"id": md.get("event_id")}, {"_id": 0})
+    if not ev:
+        return
+    kind = md["kind"]
+    plan, tier = md.get("plan"), md.get("tier")
+    year = int(md["year"]) if md.get("year", "").isdigit() else (ev.get("entitlement") or {}).get("year")
+    net = float(md.get("net") or 0)
+    pi = sess.get("payment_intent")
+    amount_total = round((sess.get("amount_total") or 0) / 100.0, 2)
+    upgrade_paid = float(md["diff"]) if kind == "event_upgrade" and md.get("diff") else None
+    vat = round(net * PRICING_VAT_RATE / 100.0, 2)
+    gross = round(net + vat, 2)
+    version = int(md["version"]) if md.get("version", "").isdigit() else None
+    await _create("event_purchases", {
+        "event_id": md.get("event_id"), "organization_id": md.get("org_id"), "plan": plan, "price_tier": tier,
+        "year": year, "net": net, "vat": vat, "gross": gross, "currency": (sess.get("currency") or "eur"),
+        "kind": kind, "from_plan": md.get("from_plan"), "upgrade_amount_paid": upgrade_paid,
+        "amount_total_paid": amount_total, "stripe_price_id": md.get("price_id"), "stripe_payment_intent": pi,
+        "stripe_session_id": sid, "pricing_plan_version": version, "quantita": 1, "payment_status": "paid"})
+    ent = {"plan": plan, "source": "purchased", "price_tier": tier, "year": year,
+           "amount_net": net, "amount_vat": vat, "amount_gross": gross, "currency": (sess.get("currency") or "eur"),
+           "stripe_price_id": md.get("price_id"), "stripe_payment_ref": pi, "stripe_session_id": sid,
+           "invoice_id": None, "purchased_at": now_iso(), "upgrade_amount_paid": upgrade_paid,
+           "pricing_plan_version": version}
+    await db.events.update_one({"id": md.get("event_id")}, {"$set": {"entitlement": ent, "updated_at": now_iso()}})
 
 
 app.include_router(api)

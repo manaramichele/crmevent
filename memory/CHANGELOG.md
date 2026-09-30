@@ -546,3 +546,14 @@ Task 2 — Creatività manuale:
 - FRONTEND: nuova pagina /piattaforma/prezzi (PricingAdmin.jsx) in Amministrazione piattaforma → "Piani e prezzi": tabella 6 prezzi editabili (netto/IVA22%/totale/stato/data/Stripe Price), conferma "applicato solo ai nuovi acquisti", storico variazioni, pulsante migrazione. Avviso "sync Stripe non attiva".
 - PRODUZIONE (verifica deployer, sola lettura): 0 abbonamenti Stripe ricorrenti reali (3 org interne/test, nessuna subscription/rinnovo). Migrazione legacy = no-op. Nessuna subscription toccata.
 - Test: seed/migrazione/update 79->89 con storico/validazione 400/plan-overview fascia small — tutti OK. NESSUNA modifica a Stripe/Checkout/webhook/Fatture in Cloud.
+
+## 2026-06-30 (FASE 2 STEP 4 — Stripe TEST + Checkout per evento + Upgrade) — STOP prima di FIC/LIVE
+- Stripe TEST: creati 6 Product/Price one-shot (starter/professional/premium × small/large), tax_behavior=exclusive + Tax Rate IVA 22%. Endpoint POST /api/platform/pricing/stripe-sync-all.
+- Checkout per evento: POST /api/events/{id}/checkout {plan} — mode=payment. Il backend determina org/evento/anno/conteggio/fascia/piano/stripe_price_id dal DB (pricing_plans); prezzo e fascia NON accettati dal frontend.
+- Sync listino→Stripe: PUT /api/platform/pricing crea NUOVO Price → verifica → update DB → history → poi archivia vecchio. Errore Stripe = DB invariato (502). Checkout usa solo stripe_price_id attivo del DB.
+- Attivazione SERVER-SIDE via webhook checkout.session.completed (kind event_purchase/upgrade), idempotente per session id. Snapshot immutabile in collection event_purchases + events.entitlement aggiornato. Mai attivare dal ritorno browser.
+- Upgrade Starter→Professional/Premium e Professional→Premium: paga differenza (destinazione net − già pagato). diff<=0 → 409 gestito senza addebiti/rimborsi. Nessun downgrade.
+- Trial: acquisto termina il trial per quell'evento sostituendolo col piano acquistato.
+- /prezzi ora legge i prezzi da GET /api/pricing (niente hardcoding; fallback locale se API non risponde).
+- TEST superati: fascia 1-3/4°, purchase starter/professional/premium, webhook idempotente, upgrade math (49→79 diff 30; 79→99 diff 20), price-change→nuovo Stripe Price, snapshot storico immutabile.
+- NON modificati: Fatture in Cloud, Stripe LIVE (chiave sk_test_).

@@ -237,8 +237,20 @@ function ComparisonTable({ prices }) {
 export default function Pricing() {
   const [tier, setTier] = useState("small"); // small = fino a 3 eventi/anno | large = più di 3
   const [open, setOpen] = useState(false);
-  const prices = PRICING[tier];
-  useEffect(() => { trackEvent("pricing_view"); }, []);
+  const [pricing, setPricing] = useState(PRICING);
+  const prices = pricing[tier];
+  useEffect(() => {
+    trackEvent("pricing_view");
+    fetch(`${process.env.REACT_APP_BACKEND_URL}/api/pricing`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d || !Array.isArray(d.plans)) return;
+        const next = { small: {}, large: {} };
+        d.plans.forEach((p) => { if (next[p.fascia]) next[p.fascia][p.plan] = p.net; });
+        if (Object.keys(next.small).length === 3 && Object.keys(next.large).length === 3) setPricing(next);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="bg-white text-slate-900" data-testid="pricing-page">
