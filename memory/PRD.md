@@ -232,6 +232,38 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - ✅ Gating rivisto: STARTER=gestione staff · PROFESSIONAL=+gestione evento · PREMIUM=+organizzazione avanzata+marketing/social. Org-level sul miglior piano attivo (Professional/Premium) con evento attivo nell'anno.
 - 🆕 FASE 2 — "Piani e prezzi" (Super Admin): listino prezzi gestibile da DB (NO hardcoding), 6 prezzi (3 piani × 2 fasce), sync Stripe con NUOVO Price ad ogni variazione (vecchi Price archiviati per riconciliazione), storico variazioni prezzo, snapshot immutabile del prezzo su ogni acquisto evento. Solo ruolo Super Admin. Gestione sicura errori di sync (DB e Stripe mai divergenti).
 
+### FASE 2 — GESTIONE DINAMICA PREZZI (APPROVATA 2026-06-30)
+Struttura a 3 livelli (APPROVATA):
+1. `pricing_plans` → LISTINO ATTUALE = fonte di verità (6 doc: 3 piani × 2 fasce). Campi: plan, fascia, net, vat_rate(22), gross, currency, stripe_product_id, stripe_price_id(attivo), status, version, updated_at, updated_by.
+2. `pricing_history` → storico append-only: plan, fascia, old_net, new_net, old_stripe_price_id, new_stripe_price_id, changed_at, changed_by.
+3. Snapshot IMMUTABILE dell'acquisto su `events.entitlement` (mai toccato da variazioni listino).
+
+/prezzi e Checkout LEGGONO il listino dal DB via API (GET /api/pricing). NESSUN prezzo hardcoded.
+
+FLUSSO AGGIORNAMENTO PREZZO (ordine APPROVATO — archiviazione vecchio Price DOPO il DB):
+1. crea NUOVO Price su Stripe;
+2. verifica price_id restituito correttamente;
+3. aggiorna `pricing_plans` (nuovo prezzo + nuovo stripe_price_id + version++);
+4. registra variazione in `pricing_history`;
+5. SOLO DOPO i passaggi 1-4 → archivia il vecchio Price Stripe (active:false).
+- Se la creazione del nuovo Price fallisce → DB INVARIATO.
+- Se errore dopo la creazione ma prima del completamento DB → il nuovo Price NON deve diventare utilizzabile dal Checkout (Checkout usa solo pricing_plans.stripe_price_id attivo); il Price resta ORFANO/non attivo da riconciliare.
+- Checkout usa ESCLUSIVAMENTE lo stripe_price_id del record pricing_plans attivo; MAI cercare un Price autonomamente su Stripe.
+
+SNAPSHOT ACQUISTO (immutabile) — campi APPROVATI:
+plan, price_tier(fascia), net, vat, gross, currency, year, purchased_at,
+event_id, organization_id, pricing_plan_version, quantita (default 1, per uso futuro),
+payment_status, upgrade_amount_paid (importo upgrade già pagato),
+stripe_price_id, stripe_payment/checkout_ref, invoice_id (FIC).
+→ Ricostruibile sempre: cosa ha acquistato il cliente, per quale evento, a quale prezzo e con quale versione di listino.
+
+REGOLA FONDAMENTALE: una modifica del listino interessa SOLO i nuovi acquisti.
+Es.: acquisto Professional a 79€+IVA → cambio listino a 89€+IVA → l'anagrafica cliente/evento continua a mostrare 79€+IVA; i nuovi acquisti usano 89€+IVA.
+
+SICUREZZA: solo Super Admin (require_superadmin) modifica il listino; tutte le modifiche tracciate (audit).
+
+PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 14 giorni senza carta.
+
 ### FASE 2 — Logica TRIAL 14 giorni (da implementare, NON ancora fatta)
 - Alla registrazione: 14 giorni di prova gratuita con accesso alle funzionalità PREMIUM (prova intera piattaforma).
 - Nessuna carta richiesta per iniziare.

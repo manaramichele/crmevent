@@ -526,3 +526,10 @@ Task 2 — Creatività manuale:
 - Tabella comparativa aggiornata: colonne STARTER/PROFESSIONAL/PREMIUM. Redistribuzione: STARTER=gestione staff, PROFESSIONAL=+gestione evento, PREMIUM=+organizzazione avanzata+marketing/social.
 - La prova gratuita 14gg (accesso Premium) sostituisce completamente il piano FREE. Alla scadenza: nessuna cancellazione dati, eventi in SOLA LETTURA finché non si acquista un piano.
 - Solo frontend + documentazione. NESSUNA modifica a backend, DB, Stripe, Checkout, webhook, Fatture in Cloud.
+
+## 2026-06-30 (Design FASE 2 APPROVATO — gestione dinamica prezzi)
+- Approvata struttura 3 livelli: pricing_plans (listino/verità) · pricing_history (append-only) · snapshot immutabile su evento.
+- Flusso cambio prezzo corretto: nuovo Price Stripe → verifica → update pricing_plans → pricing_history → SOLO DOPO archivia vecchio Price (active:false). Errore pre-DB → Price orfano non usabile; Checkout usa solo pricing_plans.stripe_price_id.
+- Snapshot acquisto esteso: +event_id, organization_id, pricing_plan_version, quantita, payment_status, upgrade_amount_paid.
+- Regola: variazione listino → solo nuovi acquisti (gli storici restano congelati). Solo Super Admin, con audit.
+- Nessuna implementazione: documentazione soltanto. Backend/DB/Stripe/Checkout/webhook/FIC invariati.
