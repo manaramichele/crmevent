@@ -4,7 +4,7 @@ import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Building2, Users, CalendarRange, Search, ShieldCheck, ExternalLink, GitMerge, Send, Instagram, Linkedin, Mail, Globe, Plus, Upload, Sparkles } from "lucide-react";
+import { Building2, Users, CalendarRange, Search, ShieldCheck, ExternalLink, GitMerge, Send, Instagram, Linkedin, Mail, Globe, Plus, Upload, Sparkles, Pencil, Trash2 } from "lucide-react";
 
 const FIELD = "w-full h-10 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
 const TABS = [
@@ -63,6 +63,37 @@ export default function LeadFinder() {
   const [brevoTest, setBrevoTest] = useState(null);
   const [brevoBusy, setBrevoBusy] = useState(false);
   const [syncConfirm, setSyncConfirm] = useState(null);
+  const [editOrg, setEditOrg] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [delOrg, setDelOrg] = useState(null);
+  const [delRel, setDelRel] = useState(null);
+  const [bulkDel, setBulkDel] = useState(false);
+
+  const openEdit = (o) => {
+    setEditForm({ name: o.name || "", email: (o.emails || [])[0] || o.email || "", website: o.website || "",
+      instagram_url: o.instagram_url || "", linkedin_url: o.linkedin_url || "", region: o.region || "",
+      sport: (o.sports || [])[0] || "", status: o.status || "da_verificare" });
+    setEditOrg(o);
+  };
+  const submitEdit = async () => {
+    try {
+      const payload = { ...editForm, _manual: true, _verified: editForm.status === "verificato" };
+      await api.put(`/leadfinder/organizers/${editOrg.id}`, payload);
+      toast.success("Organizzatore aggiornato"); setEditOrg(null); load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+  const askDelete = async (o) => {
+    setDelOrg(o); setDelRel(null);
+    try { const { data } = await api.get(`/leadfinder/organizers/${o.id}/relations`); setDelRel(data); } catch { /* ignore */ }
+  };
+  const doDelete = async () => {
+    try { await api.delete(`/leadfinder/organizers/${delOrg.id}`); toast.success("Organizzatore eliminato"); setMergeSel((s) => s.filter((x) => x !== delOrg.id)); setDelOrg(null); load(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+  const doBulkDelete = async () => {
+    try { const { data } = await api.post("/leadfinder/organizers/delete-bulk", { ids: mergeSel }); toast.success(`Eliminati ${data.deleted} organizzatori`); setBulkDel(false); setMergeSel([]); load(); }
+    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
 
   const load = async () => {
     try {
@@ -249,6 +280,7 @@ export default function LeadFinder() {
               {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={enrichSelected} data-testid="lf-enrich-btn"><Sparkles className="w-4 h-4 mr-1" />Arricchisci selezionati</Button>}
               {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={approveBrevo} data-testid="lf-approve-brevo-btn"><ShieldCheck className="w-4 h-4 mr-1" />Approva per Brevo</Button>}
               {mergeSel.length >= 1 && <Button size="sm" onClick={askSync} data-testid="lf-sync-brevo-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Send className="w-4 h-4 mr-1" />Sincronizza con Brevo</Button>}
+              {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={() => setBulkDel(true)} data-testid="lf-bulk-delete-btn" className="text-red-600 border-red-200 hover:bg-red-50"><Trash2 className="w-4 h-4 mr-1" />Elimina {mergeSel.length}</Button>}
               <div className="flex-1" />
               <Button size="sm" onClick={() => setShowAdd(true)} data-testid="lf-add-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Plus className="w-4 h-4 mr-1" />Aggiungi organizzatore</Button>
               <Button size="sm" variant="outline" onClick={() => { setShowImport(true); setImportPrev(null); setImportFile(null); }} data-testid="lf-import-btn"><Upload className="w-4 h-4 mr-1" />Importa email</Button>
@@ -258,7 +290,7 @@ export default function LeadFinder() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr>
                 {tab === "organizers" && <th className="p-2"></th>}
-                <th className="p-2 text-left">Organizzazione</th><th className="p-2">Eventi</th><th className="p-2">Email</th><th className="p-2">Instagram</th><th className="p-2">LinkedIn</th><th className="p-2">Regione</th><th className="p-2">Fonte</th><th className="p-2">Stato</th><th className="p-2">Brevo</th><th className="p-2">Ultima verifica</th>
+                <th className="p-2 text-left">Organizzazione</th><th className="p-2">Eventi</th><th className="p-2">Email</th><th className="p-2">Instagram</th><th className="p-2">LinkedIn</th><th className="p-2">Regione</th><th className="p-2">Fonte</th><th className="p-2">Stato</th><th className="p-2">Brevo</th><th className="p-2">Ultima verifica</th>{tab === "organizers" && <th className="p-2">Azioni</th>}
               </tr></thead>
               <tbody>
                 {(tab === "organizers" ? filtered : toReview).map((o) => (
@@ -274,6 +306,14 @@ export default function LeadFinder() {
                     <td className="p-2 text-center" onClick={() => setDetail(o)}><span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">{STATE_LABEL[o.status] || o.status}</span></td>
                     <td className="p-2 text-center" onClick={() => setDetail(o)}><span className={`text-xs px-2 py-0.5 rounded-full ${BREVO_BADGE[o.brevo_status || "non_approvato"]}`}>{BREVO_LABEL[o.brevo_status || "non_approvato"]}</span></td>
                     <td className="p-2 text-center text-xs text-slate-400" onClick={() => setDetail(o)}>{o.last_verified_at ? o.last_verified_at.slice(0, 10) : "—"}</td>
+                    {tab === "organizers" && (
+                      <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => openEdit(o)} data-testid={`lf-edit-${o.id}`} title="Modifica" className="p-1 text-slate-400 hover:text-tiffany-fg"><Pencil className="w-4 h-4" /></button>
+                          <button onClick={() => askDelete(o)} data-testid={`lf-delete-${o.id}`} title="Elimina" className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -516,8 +556,7 @@ export default function LeadFinder() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showImport} onOpenChange={setShowImport}>
-        <DialogContent className="max-w-lg" data-testid="lf-import-modal">
+      <Dialog open={showImport} onOpenChange={setShowImport}>        <DialogContent className="max-w-lg" data-testid="lf-import-modal">
           <DialogHeader><DialogTitle>Importa email</DialogTitle></DialogHeader>
           <div className="space-y-3 text-sm">
             <p className="text-xs text-slate-500">Carica un file <strong>.xlsx</strong>, <strong>.xls</strong> o <strong>.csv</strong> con una colonna <code>email</code>. Non servono altre colonne.</p>
@@ -542,6 +581,56 @@ export default function LeadFinder() {
                 <div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => { setImportPrev(null); setImportFile(null); }}>Cambia file</Button><Button size="sm" onClick={doImport} disabled={importBusy || !importPrev.new_count} data-testid="lf-import-confirm-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900">{importBusy ? "Importazione…" : `Importa ${importPrev.new_count} nuove email`}</Button></div>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editOrg} onOpenChange={(o) => !o && setEditOrg(null)}>
+        <DialogContent className="max-w-md" data-testid="lf-edit-modal">
+          <DialogHeader><DialogTitle>Modifica organizzatore</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div><label className="text-xs text-slate-500">Nome organizzazione</label><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className={FIELD} data-testid="lf-edit-name" placeholder="Nome ufficiale (non usare l'email)" /></div>
+            <div><label className="text-xs text-slate-500">Email</label><input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} className={FIELD} data-testid="lf-edit-email" /></div>
+            <div><label className="text-xs text-slate-500">Sito web</label><input value={editForm.website} onChange={(e) => setEditForm((f) => ({ ...f, website: e.target.value }))} className={FIELD} data-testid="lf-edit-website" placeholder="https://…" /></div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="text-xs text-slate-500">Instagram</label><input value={editForm.instagram_url} onChange={(e) => setEditForm((f) => ({ ...f, instagram_url: e.target.value }))} className={FIELD} data-testid="lf-edit-instagram" /></div>
+              <div><label className="text-xs text-slate-500">LinkedIn</label><input value={editForm.linkedin_url} onChange={(e) => setEditForm((f) => ({ ...f, linkedin_url: e.target.value }))} className={FIELD} data-testid="lf-edit-linkedin" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="text-xs text-slate-500">Regione</label><input value={editForm.region} onChange={(e) => setEditForm((f) => ({ ...f, region: e.target.value }))} className={FIELD} data-testid="lf-edit-region" /></div>
+              <div><label className="text-xs text-slate-500">Sport</label><input value={editForm.sport} onChange={(e) => setEditForm((f) => ({ ...f, sport: e.target.value }))} className={FIELD} data-testid="lf-edit-sport" /></div>
+            </div>
+            <div><label className="text-xs text-slate-500">Stato / verifica</label><select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))} className={FIELD} data-testid="lf-edit-status">{Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+            <p className="text-xs text-slate-400">La fonte e la tracciabilità dei dati vengono mantenute. Se il nome non è disponibile lascia il campo vuoto: il record resta “Da completare”.</p>
+            <div className="flex justify-end gap-2 pt-1"><Button variant="outline" size="sm" onClick={() => setEditOrg(null)}>Annulla</Button><Button size="sm" onClick={submitEdit} data-testid="lf-edit-submit" className="bg-tiffany hover:bg-tiffany/90 text-slate-900">Salva modifiche</Button></div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!delOrg} onOpenChange={(o) => !o && setDelOrg(null)}>
+        <DialogContent className="max-w-md" data-testid="lf-delete-modal">
+          <DialogHeader><DialogTitle>Elimina organizzatore</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>Vuoi eliminare l'organizzatore <strong>{delOrg?.name || delOrg?.email}</strong>? Questa operazione non può essere annullata.</p>
+            {delRel && (delRel.events_count > 0 || delRel.brevo_synced) && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1" data-testid="lf-delete-warning">
+                <div className="font-semibold">Attenzione: relazioni collegate</div>
+                {delRel.events_count > 0 && <div>• {delRel.events_count} evento/i trovato/i collegato/i (verranno scollegati, non eliminati).</div>}
+                {delRel.brevo_synced && <div>• Contatto sincronizzato con Brevo: <strong>NON verrà eliminato da Brevo</strong> (sono due operazioni distinte).</div>}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1"><Button variant="outline" size="sm" onClick={() => setDelOrg(null)} data-testid="lf-delete-cancel">Annulla</Button><Button size="sm" onClick={doDelete} data-testid="lf-delete-confirm" className="bg-red-500 hover:bg-red-600 text-white">Elimina</Button></div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDel} onOpenChange={setBulkDel}>
+        <DialogContent className="max-w-md" data-testid="lf-bulk-delete-modal">
+          <DialogHeader><DialogTitle>Elimina selezionati</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>Stai per eliminare <strong>{mergeSel.length}</strong> anagrafic{mergeSel.length === 1 ? "a" : "he"} organizzatore. Questa operazione non può essere annullata.</p>
+            <p className="text-xs text-slate-500">Gli eventi collegati verranno scollegati (non eliminati). I contatti su Brevo NON vengono eliminati.</p>
+            <div className="flex justify-end gap-2 pt-1"><Button variant="outline" size="sm" onClick={() => setBulkDel(false)}>Annulla</Button><Button size="sm" onClick={doBulkDelete} data-testid="lf-bulk-delete-confirm" className="bg-red-500 hover:bg-red-600 text-white">Elimina {mergeSel.length}</Button></div>
           </div>
         </DialogContent>
       </Dialog>

@@ -5464,6 +5464,45 @@ async def lf_update_organizer(oid: str, body: dict, user: dict = Depends(require
     return await _lf_enrich(user, await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0}))
 
 
+@api.get("/leadfinder/organizers/{oid}/relations")
+async def lf_organizer_relations(oid: str, user: dict = Depends(require_org_admin)):
+    o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})
+    if not o:
+        raise HTTPException(status_code=404, detail="Organizzatore non trovato")
+    events_count = await db.lf_events.count_documents(oq(user, organizer_id=oid))
+    brevo_synced = bool(o.get("brevo_contact_id")) or o.get("brevo_status") in ("sincronizzato", "gia_presente")
+    return {"events_count": events_count, "brevo_status": o.get("brevo_status") or "non_approvato",
+            "brevo_synced": brevo_synced, "name": o.get("name") or o.get("email")}
+
+
+async def _lf_delete_one(user: dict, oid: str) -> bool:
+    o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})
+    if not o:
+        return False
+    # Non-destructive on events: unlink instead of deleting them. Brevo contact is NEVER touched.
+    await db.lf_events.update_many(oq(user, organizer_id=oid), {"$set": {"organizer_id": None}})
+    await db.lf_organizers.delete_one(oq(user, id=oid))
+    return True
+
+
+@api.delete("/leadfinder/organizers/{oid}")
+async def lf_delete_organizer(oid: str, user: dict = Depends(require_org_admin)):
+    if not await _lf_delete_one(user, oid):
+        raise HTTPException(status_code=404, detail="Organizzatore non trovato")
+    return {"deleted": True, "id": oid}
+
+
+@api.post("/leadfinder/organizers/delete-bulk")
+async def lf_delete_organizers_bulk(body: dict, user: dict = Depends(require_org_admin)):
+    ids = [x for x in (body.get("ids") or []) if x]
+    deleted = 0
+    for oid in ids:
+        if await _lf_delete_one(user, oid):
+            deleted += 1
+    return {"deleted": deleted, "requested": len(ids)}
+
+
+
 @api.post("/leadfinder/organizers/merge")
 async def lf_merge_organizers(body: dict, user: dict = Depends(require_org_admin)):
     primary_id = body.get("primary_id")
