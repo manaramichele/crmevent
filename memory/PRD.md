@@ -324,3 +324,14 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Attivazione consumi reali reserve→settle su servizi IA/briefing/automazioni/email/Calendar/WhatsApp (credit_services off). (P0)
 - Stripe LIVE + Fatture in Cloud reale + auto-ricarica. (P1)
 - Rimozione definitiva vecchio sistema commerciale per-evento (verifica separata). (P2)
+
+## FASE E — Prima attivazione consumi crediti — 2026-06-30 ✅ backend COMPLETATO e VERIFICATO (24/24)
+- Catalogo consumi configurato (Super Admin, non hardcoded): Assistente IA=1, Contenuti=2, Briefing IA=3, Analisi evento=5, Checklist/piano IA=5, Immagini=5 (attivi). Google Calendar gratis (consumo off). Newsletter/WhatsApp/SMS/Automazioni NON attivi.
+- Motore reserve→settle/release agganciato via `_charge_begin`. Endpoint REALI a consumo: /api/social/generate, /social/posts/{id}/regenerate, /social/plan/generate (ai_content=2). Saldo insufficiente→402 (no esecuzione), idempotenza, isolamento, ledger completo. Storico invariato alle modifiche costo.
+- PENDING: (a) transparency UI (costo prima + "Ricarica crediti" su 402) sulle azioni AI; (b) collegamento consumi alle funzioni AI non ancora esistenti come endpoint (briefing IA, analisi evento, checklist/piano IA, generazione immagini, assistente IA) — costi già configurati, si agganceranno alla creazione delle feature.
+
+### Backlog aperto (attende autorizzazione)
+- Transparency UI consumi + gestione 402 con apertura ricarica. (P1)
+- Collegare consumi alle future funzioni AI (briefing/analisi/checklist/immagini/assistente). (P1)
+- Definire costi/contabilizzazione per Newsletter/WhatsApp/SMS/Automazioni prima di attivarli. (P1)
+- Migrazione org esistenti (+100), Stripe LIVE + FIC reale. (P0/P1)

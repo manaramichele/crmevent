@@ -6267,9 +6267,15 @@ async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_a
     event_ctx = None
     if body.event_id:
         event_ctx = await _event_public_context(body.event_id, user["org_id"])
-    gen = await social_ai.generate_post(settings, event_ctx, topic=body.topic,
-                                        category=body.category, platform=body.platform or "instagram",
-                                        extra=body.extra_instructions)
+    reservation = await _charge_begin(user["org_id"], "ai_content", user_id=user.get("user_id"), event_id=body.event_id)
+    try:
+        gen = await social_ai.generate_post(settings, event_ctx, topic=body.topic,
+                                            category=body.category, platform=body.platform or "instagram",
+                                            extra=body.extra_instructions)
+    except Exception:
+        if reservation:
+            await _credits_release(reservation["id"])
+        raise
     gid = await _record_generation(user, "post", body.model_dump(), gen)
     acct_id = await _default_account_id(user)
     data = {"org_id": user["org_id"], "status": "draft", "source": "ai", "account_id": acct_id,
@@ -6280,6 +6286,9 @@ async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_a
             "format": gen.get("format"), "ai_generation_id": gid,
             "created_by": user.get("user_id"), "created_by_name": user.get("name")}
     doc = await _create("social_posts", data)
+    if reservation:
+        await _credits_settle(reservation["id"])
+        await db.credit_ledger.update_one({"id": reservation["id"]}, {"$set": {"note": "Generazione contenuti"}})
     await _social_log(user, "generated", post_id=doc["id"], platform=doc.get("platform"))
     return doc
 
@@ -6292,17 +6301,26 @@ async def social_regenerate(post_id: str, body: SocialGenerateIn, user: dict = D
     settings = await _get_social_settings(user["org_id"])
     ev_id = body.event_id or post.get("event_id")
     event_ctx = await _event_public_context(ev_id, user["org_id"]) if ev_id else None
-    gen = await social_ai.generate_post(settings, event_ctx,
-                                        topic=body.topic or post.get("topic"),
-                                        category=body.category or post.get("category"),
-                                        platform=post.get("platform") or "instagram",
-                                        extra=body.extra_instructions)
+    reservation = await _charge_begin(user["org_id"], "ai_content", user_id=user.get("user_id"), event_id=ev_id)
+    try:
+        gen = await social_ai.generate_post(settings, event_ctx,
+                                            topic=body.topic or post.get("topic"),
+                                            category=body.category or post.get("category"),
+                                            platform=post.get("platform") or "instagram",
+                                            extra=body.extra_instructions)
+    except Exception:
+        if reservation:
+            await _credits_release(reservation["id"])
+        raise
     gid = await _record_generation(user, "post", {"regenerate": post_id, **body.model_dump()}, gen)
     upd = {"topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
            "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
            "image_suggestion": gen.get("image_suggestion"), "image_brief": gen.get("image_brief"), "category": gen.get("category"),
            "format": gen.get("format"), "ai_generation_id": gid, "status": "draft", "updated_at": now_iso()}
     await db.social_posts.update_one(oq(user, id=post_id), {"$set": upd})
+    if reservation:
+        await _credits_settle(reservation["id"])
+        await db.credit_ledger.update_one({"id": reservation["id"]}, {"$set": {"note": "Generazione contenuti"}})
     await _social_log(user, "regenerated", post_id=post_id)
     return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
 
@@ -6312,8 +6330,17 @@ async def social_plan_generate(body: SocialPlanIn, user: dict = Depends(require_
     settings = await _get_social_settings(user["org_id"])
     event_ctx = await _event_public_context(body.event_id, user["org_id"]) if body.event_id else None
     dates = _plan_dates(body.date_from, body.date_to, body.posts_per_week, settings.get("preferred_times"))
-    posts = await social_ai.generate_plan(settings, event_ctx, goal=body.goal,
-                                          count=len(dates), platform=body.platform or "instagram")
+    reservation = await _charge_begin(user["org_id"], "ai_content", user_id=user.get("user_id"), event_id=body.event_id)
+    try:
+        posts = await social_ai.generate_plan(settings, event_ctx, goal=body.goal,
+                                              count=len(dates), platform=body.platform or "instagram")
+    except Exception:
+        if reservation:
+            await _credits_release(reservation["id"])
+        raise
+    if reservation:
+        await _credits_settle(reservation["id"])
+        await db.credit_ledger.update_one({"id": reservation["id"]}, {"$set": {"note": "Generazione piano contenuti"}})
     plan_id = new_id()
     await db.social_calendar.insert_one({
         "id": plan_id, "org_id": user["org_id"], "date_from": body.date_from, "date_to": body.date_to,
@@ -7970,9 +7997,11 @@ DEFAULT_LOW_BALANCE_THRESHOLD = 20
 
 # key, name, category, pricing_mode (flat|per_unit|None), unit_label
 CREDIT_SERVICES_SEED = [
-    ("ai_analysis", "Assistente IA / analisi evento", "ai", "flat", "richiesta"),
+    ("ai_assistant", "Assistente IA", "ai", "flat", "richiesta"),
     ("ai_content", "Generazione contenuti", "ai", "flat", "richiesta"),
     ("ai_briefing", "Generazione briefing", "ai", "flat", "richiesta"),
+    ("ai_analysis", "Analisi completa evento", "ai", "flat", "richiesta"),
+    ("ai_checklist", "Generazione checklist / piano operativo", "ai", "flat", "operazione"),
     ("image_generation", "Generazione immagini", "image", "per_unit", "immagine"),
     ("automation_run", "Automazioni", "automation", "flat", "esecuzione"),
     ("newsletter_email", "Newsletter / email", "communication", "per_unit", "destinatario"),
@@ -7980,6 +8009,17 @@ CREDIT_SERVICES_SEED = [
     ("whatsapp_send", "WhatsApp", "communication", "per_unit", "messaggio"),
     ("sms_send", "SMS (futuro)", "communication", "per_unit", "messaggio"),
 ]
+# FASE E: valori iniziali di consumo (applicati UNA SOLA VOLTA quando il servizio non è ancora
+# configurato, così le modifiche del Super Admin non vengono mai sovrascritte). NON hardcoded a runtime:
+# _credit_service_cost legge sempre dal catalogo DB.
+FASE_E_INITIAL = {
+    "ai_assistant": {"name": "Assistente IA", "pricing_mode": "flat", "unit_label": "richiesta", "unit_cost": 1},
+    "ai_content": {"name": "Generazione contenuti", "pricing_mode": "flat", "unit_label": "richiesta", "unit_cost": 2},
+    "ai_briefing": {"name": "Generazione briefing", "pricing_mode": "flat", "unit_label": "richiesta", "unit_cost": 3},
+    "ai_analysis": {"name": "Analisi completa evento", "pricing_mode": "flat", "unit_label": "richiesta", "unit_cost": 5},
+    "ai_checklist": {"name": "Generazione checklist / piano operativo", "pricing_mode": "flat", "unit_label": "operazione", "unit_cost": 5},
+    "image_generation": {"name": "Generazione immagini", "pricing_mode": "per_unit", "unit_label": "immagine", "unit_cost": 5},
+}
 _credits_indexes_done = False
 
 
@@ -8003,6 +8043,13 @@ async def _ensure_credits_setup():
                 "pricing_mode": mode, "unit_label": unit, "unit_cost": None, "min_units": 1,
                 "active": False, "visible": True, "version": 1,
                 "created_at": now_iso(), "updated_at": now_iso()})
+    # FASE E: applica i costi iniziali SOLO ai servizi non ancora configurati (unit_cost is None).
+    for key, cfg in FASE_E_INITIAL.items():
+        svc = await db.credit_services.find_one({"key": key})
+        if svc and svc.get("unit_cost") is None:
+            await db.credit_services.update_one({"key": key}, {"$set": {
+                "name": cfg["name"], "pricing_mode": cfg["pricing_mode"], "unit_label": cfg["unit_label"],
+                "unit_cost": cfg["unit_cost"], "active": True, "updated_at": now_iso()}})
 
 
 async def _ensure_org_credits(org_id: str) -> dict:
@@ -8669,6 +8716,16 @@ async def _credits_release(reservation_id):
 class EstimateIn(BaseModel):
     service_key: str
     quantity: int = 1
+
+
+async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, idempotency_key=None):
+    """Prenota i crediti SOLO se il servizio è configurato E attivo; altrimenti ritorna None (uso gratuito).
+    Se il saldo è insufficiente solleva HTTP 402 e il servizio NON deve essere eseguito.
+    Pattern: reservation = await _charge_begin(...); try: <esegui>; _credits_settle(); except: _credits_release()."""
+    svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
+    if not svc or not svc.get("active") or svc.get("unit_cost") is None or svc.get("pricing_mode") is None:
+        return None
+    return await _credits_reserve(org_id, service_key, 1, user_id=user_id, event_id=event_id, idempotency_key=idempotency_key)
 
 
 @api.post("/credits/estimate")
