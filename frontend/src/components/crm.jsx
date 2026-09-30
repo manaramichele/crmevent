@@ -357,14 +357,14 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate }) {
   const { items, loading, create, update, remove } = useCollection(endpoint);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
   const [filterVals, setFilterVals] = useState({});
 
-  const openNew = () => { setEditing(null); setDialogOpen(true); };
+  const openNew = async () => { if (guardCreate) { const ok = await guardCreate(); if (!ok) return; } setEditing(null); setDialogOpen(true); };
   const openEdit = (row) => { setEditing(row); setDialogOpen(true); };
 
   const onSubmit = async (form) => {

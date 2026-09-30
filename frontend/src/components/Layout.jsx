@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
+import { RechargeDialog } from "@/components/CreditsSection";
 
 const ORG_NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
@@ -28,7 +29,6 @@ const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account");
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
-  { to: "/piattaforma/prezzi", label: "Piani e prezzi", icon: BadgeEuro, id: "prezzi" },
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
@@ -64,6 +64,26 @@ function OrgSwitcher({ orgs, actingOrgId, onChange }) {
 function TrialBanner() {
   // Modello a crediti: la piattaforma base è gratuita. Nessun banner di prova/abbonamento.
   return null;
+}
+
+function CreditGuardBanner() {
+  const { user } = useAuth();
+  const [bal, setBal] = useState(null);
+  const [recharge, setRecharge] = useState(false);
+  useEffect(() => {
+    if (user?.role === "superadmin") return;
+    api.get("/credits/balance").then(({ data }) => setBal(data)).catch(() => {});
+  }, [user]);
+  if (user?.role === "superadmin" || !bal || bal.balance > 0) return null;
+  return (
+    <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-red-50 text-red-800 border-b border-red-200" data-testid="credits-guard-banner">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span className="font-semibold">Crediti esauriti.</span>
+      <span className="hidden sm:inline">Modalità sola consultazione — i tuoi dati restano disponibili.</span>
+      <button onClick={() => setRecharge(true)} className="ml-auto rounded-md bg-red-600 text-white px-3 py-1 text-xs font-semibold hover:bg-red-700" data-testid="credits-guard-recharge">Ricarica crediti</button>
+      <RechargeDialog open={recharge} onClose={() => setRecharge(false)} />
+    </div>
+  );
 }
 
 function Logo({ collapsed }) {
@@ -285,7 +305,7 @@ export default function Layout({ children }) {
         </div>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="h-16 sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 px-4 lg:px-6">
+        <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 px-4 lg:px-6">
           <button className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} />}
           <div className="flex-1"><GlobalSearch /></div>
@@ -312,6 +332,7 @@ export default function Layout({ children }) {
           </div>
         </header>
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/account")} />}
+        {user?.role !== "superadmin" && <CreditGuardBanner />}
         {isSuper && actingOrgId && !isPlatformRoute && (
           <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-amber-100 text-amber-900 border-b border-amber-300" data-testid="super-acting-banner">
             <ShieldCheck className="w-4 h-4 shrink-0" />

@@ -922,9 +922,12 @@ def crud_routes(path, coll, model, org_scoped=True):
         data = body.model_dump()
         data["org_id"] = user["org_id"]
         if coll == "events":
+            await _assert_can_create_event(user["org_id"])
             data.setdefault("credit_state", "preparazione")
-        elif data.get("evento_id"):
-            await _assert_event_operational(user["org_id"], data["evento_id"])
+        else:
+            await _assert_org_operational(user["org_id"])
+            if data.get("evento_id"):
+                await _assert_event_operational(user["org_id"], data["evento_id"])
         return await _create(coll, data)
 
     @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
@@ -938,19 +941,33 @@ def crud_routes(path, coll, model, org_scoped=True):
     async def _u(item_id: str, body: upd_model, user: dict = Depends(require_admin)):
         clean = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
         clean["updated_at"] = now_iso()
-        if coll != "events" and clean.get("evento_id"):
-            await _assert_event_operational(user["org_id"], clean["evento_id"])
-        elif coll != "events":
-            existing = await db[coll].find_one(oq(user, id=item_id), {"_id": 0, "evento_id": 1})
-            if existing and existing.get("evento_id"):
-                await _assert_event_operational(user["org_id"], existing["evento_id"])
+        await _assert_org_operational(user["org_id"])
+        if coll != "events":
+            if clean.get("evento_id"):
+                await _assert_event_operational(user["org_id"], clean["evento_id"])
+            else:
+                existing = await db[coll].find_one(oq(user, id=item_id), {"_id": 0, "evento_id": 1})
+                if existing and existing.get("evento_id"):
+                    await _assert_event_operational(user["org_id"], existing["evento_id"])
+        old_ev = None
+        if coll == "events":
+            old_ev = await db[coll].find_one(oq(user, id=item_id), {"_id": 0, "data_inizio": 1, "data_fine": 1})
         res = await db[coll].update_one(oq(user, id=item_id), {"$set": clean})
         if res.matched_count == 0:
             raise HTTPException(status_code=404, detail="Elemento non trovato")
+        if coll == "events" and old_ev and ("data_inizio" in clean or "data_fine" in clean):
+            new_di = clean.get("data_inizio", old_ev.get("data_inizio"))
+            new_df = clean.get("data_fine", old_ev.get("data_fine"))
+            if old_ev.get("data_inizio") != new_di or old_ev.get("data_fine") != new_df:
+                await record_audit(user, "event_date_change", org_id=user["org_id"],
+                                   meta={"event_id": item_id,
+                                         "from": {"data_inizio": old_ev.get("data_inizio"), "data_fine": old_ev.get("data_fine")},
+                                         "to": {"data_inizio": new_di, "data_fine": new_df}})
         return await db[coll].find_one(oq(user, id=item_id), {"_id": 0})
 
     @api.delete(f"/{path}/{{item_id}}", name=f"delete_{path}")
     async def _d(item_id: str, user: dict = Depends(require_admin)):
+        await _assert_org_operational(user["org_id"])
         await db[coll].delete_one(oq(user, id=item_id))
         return {"ok": True}
 
@@ -7991,7 +8008,7 @@ CREDIT_SERVICES_SEED = [
     ("google_calendar", "Google Calendar", "integration", None, None),
     ("whatsapp_send", "WhatsApp", "communication", "per_unit", "messaggio"),
     ("sms_send", "SMS (futuro)", "communication", "per_unit", "messaggio"),
-    ("event_active_period", "Evento attivo — 30 giorni", "event", "flat", "periodo"),
+    ("event_active_period", "Attivazione evento", "event", "flat", "attivazione"),
 ]
 # FASE E: valori iniziali di consumo (applicati UNA SOLA VOLTA quando il servizio non è ancora
 # configurato, così le modifiche del Super Admin non vengono mai sovrascritte). NON hardcoded a runtime:
@@ -8003,7 +8020,7 @@ FASE_E_INITIAL = {
     "ai_analysis": {"name": "Analisi completa evento", "pricing_mode": "flat", "unit_label": "richiesta", "unit_cost": 5},
     "ai_checklist": {"name": "Generazione checklist / piano operativo", "pricing_mode": "flat", "unit_label": "operazione", "unit_cost": 5},
     "image_generation": {"name": "Generazione immagini", "pricing_mode": "per_unit", "unit_label": "immagine", "unit_cost": 5},
-    "event_active_period": {"name": "Evento attivo — 30 giorni", "pricing_mode": "flat", "unit_label": "periodo", "unit_cost": 20, "period_days": 30},
+    "event_active_period": {"name": "Attivazione evento", "pricing_mode": "flat", "unit_label": "attivazione", "unit_cost": 20, "period_days": None},
 }
 _credits_indexes_done = False
 
@@ -8036,6 +8053,13 @@ async def _ensure_credits_setup():
                 "name": cfg["name"], "pricing_mode": cfg["pricing_mode"], "unit_label": cfg["unit_label"],
                 "unit_cost": cfg["unit_cost"], "period_days": cfg.get("period_days"),
                 "active": True, "consumo_active": True, "updated_at": now_iso()}})
+    # FASE E.2: rinomina il vecchio servizio "Evento attivo — 30 giorni" in "Attivazione evento"
+    # (una tantum, nessun periodo). Solo se non ancora personalizzato dal Super Admin.
+    old_ev = await db.credit_services.find_one({"key": "event_active_period"})
+    if old_ev and old_ev.get("name") == "Evento attivo — 30 giorni":
+        await db.credit_services.update_one({"key": "event_active_period"}, {"$set": {
+            "name": "Attivazione evento", "unit_label": "attivazione", "period_days": None,
+            "updated_at": now_iso()}})
     # Backfill del campo consumo_active (distinto da active=disponibilità). Retrocompat: se assente,
     # un servizio configurato+attivo consumava già -> consumo_active=True. Google Calendar: disponibile
     # ma consumo OFF (gratuito).
@@ -8658,6 +8682,7 @@ async def _credit_service_cost(service_key, quantity):
 
 async def _credits_reserve(org_id, service_key, quantity=1, user_id=None, event_id=None, idempotency_key=None):
     from pymongo.errors import DuplicateKeyError
+    await _assert_org_operational(org_id)
     info = await _credit_service_cost(service_key, quantity)
     if not info["configured"]:
         raise HTTPException(status_code=400, detail="Servizio non configurato per il consumo")
@@ -8757,74 +8782,135 @@ async def credits_estimate(body: EstimateIn, user: dict = Depends(require_admin)
             "sufficient": (not will_charge) or (cost is not None and balance >= cost)}
 
 
-# ==================== FASE E.2 · EVENTO ATTIVO A CREDITI ====================
-# Evento attivo = 20 crediti / 30 giorni (dal catalogo, non hardcoded). Cicli indipendenti per evento.
-# Stati: preparazione | attivo | sospeso | concluso. Eventi legacy (credit_state assente) NON bloccati.
+# ==================== FASE E.2 · ATTIVAZIONE EVENTO A CREDITI ====================
+# Attivazione evento = 20 crediti UNA TANTUM (dal catalogo). Copre l'evento fino alla sua data.
+# Nessun rinnovo periodico. Il PRIMO evento di ogni org è gratuito (bonus benvenuto).
+# Stati: preparazione | attivo | concluso (per data). Eventi legacy (credit_state assente) NON bloccati.
 from datetime import date as _date, timedelta as _timedelta
 
 
-async def _event_period_cfg() -> dict:
+async def _event_activation_cfg() -> dict:
     svc = await db.credit_services.find_one({"key": "event_active_period"}, {"_id": 0})
     cost = int(svc["unit_cost"]) if svc and svc.get("unit_cost") is not None else None
-    period = int(svc.get("period_days") or 30) if svc else 30
-    return {"cost": cost, "period_days": period, "active": bool(svc and svc.get("active")), "svc": svc}
+    return {"cost": cost, "active": bool(svc and svc.get("active")), "svc": svc}
 
 
 def _event_end_date(ev: dict) -> Optional[str]:
     return ev.get("data_fine") or ev.get("data_inizio")
 
 
+def _event_is_past(ev: dict) -> bool:
+    end = _event_end_date(ev)
+    try:
+        return bool(end and _date.fromisoformat(end[:10]) < datetime.now(timezone.utc).date())
+    except ValueError:
+        return False
+
+
+def _event_display_state(ev: dict) -> str:
+    """Stato mostrato: concluso (data trascorsa) | attivo | preparazione.
+    Eventi legacy (credit_state assente) sono operativi: mostrati 'attivo'."""
+    if _event_is_past(ev):
+        return "concluso"
+    st = ev.get("credit_state")
+    if st in (None, "attivo"):
+        return "attivo"
+    if st == "concluso":
+        return "concluso"
+    return "preparazione"
+
+
+async def _is_credit_model_org(org_id: str) -> bool:
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+    return bool(((org or {}).get("credits") or {}).get("signup_bonus_granted"))
+
+
+async def _assert_org_operational(org_id: str):
+    """Guardia GLOBALE saldo minimo: le org sul modello a crediti devono avere saldo > 0 per
+    eseguire scritture operative. Saldo 0 = sola consultazione. Le org legacy sono esentate."""
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+    c = (org or {}).get("credits") or {}
+    if not c.get("signup_bonus_granted"):
+        return  # org legacy: non bloccata durante la transizione
+    if c.get("balance", 0) <= 0:
+        raise HTTPException(status_code=402, detail="Crediti esauriti: ricarica per continuare a usare CRMEvent. I tuoi dati restano consultabili.")
+
+
+async def _assert_can_create_event(org_id: str):
+    """Creare un evento richiede saldo >= 1 (nessun consumo). Org legacy esentate."""
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+    c = (org or {}).get("credits") or {}
+    if not c.get("signup_bonus_granted"):
+        return
+    if c.get("balance", 0) < 1:
+        raise HTTPException(status_code=402, detail="Crediti insufficienti: per creare un nuovo evento devi avere almeno 1 credito disponibile. Il tuo saldo è 0 crediti.")
+
+
 async def _assert_event_operational(org_id: str, event_id: str):
-    """Guardia CENTRALIZZATA: consente le scritture operative solo se l'evento è attivo (o concluso,
-    consultabile+modificabile post-evento) o legacy (credit_state assente). Blocca preparazione/sospeso."""
+    """Guardia per-evento: le scritture operative legate a un evento sono consentite solo se
+    l'evento è attivato (attivo/concluso) o legacy. Blocca gli eventi 'in preparazione'."""
     ev = await db.events.find_one({"id": event_id, "org_id": org_id}, {"_id": 0, "credit_state": 1, "nome": 1})
     if not ev:
-        return  # evento inesistente/altro tenant: lascia gestire al normale 404
-    st = ev.get("credit_state")
-    if st in (None, "attivo", "concluso"):
         return
-    if st == "preparazione":
-        raise HTTPException(status_code=403, detail="Attiva l'evento per gestire le funzioni operative (20 crediti · 30 giorni).")
-    if st == "sospeso":
-        raise HTTPException(status_code=403, detail="Evento sospeso per crediti insufficienti. Ricarica e riattiva l'evento per modificarlo.")
+    if ev.get("credit_state") == "preparazione":
+        raise HTTPException(status_code=403, detail="Attiva l'evento per gestire le sue funzioni operative.")
 
 
-async def _charge_event_period(ev: dict, user_id: Optional[str], mode: str) -> dict:
-    """Addebita un periodo evento (idempotente per evento+periodo). Solleva 402 se saldo insufficiente."""
+async def _charge_event_activation(ev: dict, user_id: Optional[str]) -> dict:
+    """Addebita l'attivazione una-tantum (idempotente per evento). 402 se saldo insufficiente.
+    L'evento resta attivo fino alla sua data: nessun rinnovo periodico."""
     org_id = ev["org_id"]; eid = ev["id"]
-    cfg = await _event_period_cfg()
+    cfg = await _event_activation_cfg()
     if not cfg["active"] or cfg["cost"] is None:
-        raise HTTPException(status_code=400, detail="Servizio 'Evento attivo' non configurato")
-    cost = cfg["cost"]; period = cfg["period_days"]
-    count = int(ev.get("renewal_count") or 0) + 1
-    label = {"activate": "Attivazione", "renew": "Rinnovo", "reactivate": "Riattivazione"}[mode]
+        raise HTTPException(status_code=400, detail="Servizio 'Attivazione evento' non configurato")
+    cost = cfg["cost"]
     mv = await _apply_credit_movement(
-        org_id, -cost, reason_code="event_active_period", type_="debit", service_key="event_active_period",
-        event_id=eid, user_id=user_id, idempotency_key=f"event_active:{eid}:{count}",
-        note=f"{label} evento — {ev.get('nome')}")
+        org_id, -cost, reason_code="event_activation", type_="debit", service_key="event_active_period",
+        event_id=eid, user_id=user_id, idempotency_key=f"event_activation:{eid}",
+        note=f"Attivazione evento — {ev.get('nome')}")
     now = now_iso()
-    nxt = (datetime.now(timezone.utc) + _timedelta(days=period)).isoformat()
-    upd = {"credit_state": "attivo", "period_days": period, "cost_snapshot": cost,
-           "renewal_count": count, "last_renewal_at": now, "next_renewal_at": nxt, "updated_at": now}
-    if mode in ("activate", "reactivate"):
-        upd["activated_at"] = now
-    await db.events.update_one({"id": eid, "org_id": org_id}, {"$set": upd})
+    await db.events.update_one({"id": eid, "org_id": org_id}, {"$set": {
+        "credit_state": "attivo", "activated_at": now, "activation_cost": cost,
+        "activation_free": False, "updated_at": now}})
     return mv
 
 
+async def _free_activate_event(ev: dict, user_id: Optional[str]):
+    """Attivazione gratuita del primo evento (bonus benvenuto): ledger 0 crediti, saldo invariato.
+    Il flag org è già stato reclamato atomicamente dal chiamante."""
+    org_id = ev["org_id"]; eid = ev["id"]; now = now_iso()
+    c = await _ensure_org_credits(org_id)
+    try:
+        await db.credit_ledger.insert_one({
+            "id": new_id(), "org_id": org_id, "type": "grant", "status": "committed",
+            "amount": 0, "balance_after": c.get("balance", 0), "reason_code": "welcome_event_activation",
+            "service_key": "event_active_period", "quantity": 1, "unit_cost": 0,
+            "event_id": eid, "user_id": user_id, "idempotency_key": f"welcome_activation:{org_id}",
+            "note": "Attivazione primo evento di benvenuto · 0 crediti",
+            "created_at": now, "settled_at": now})
+    except Exception:
+        pass
+    await db.events.update_one({"id": eid, "org_id": org_id}, {"$set": {
+        "credit_state": "attivo", "activated_at": now, "activation_cost": 0,
+        "activation_free": True, "updated_at": now}})
+
+
 async def _event_credit_status(ev: dict) -> dict:
-    cfg = await _event_period_cfg()
-    c = await _ensure_org_credits(ev["org_id"])
+    cfg = await _event_activation_cfg()
+    org = await db.organizations.find_one({"id": ev["org_id"]}, {"_id": 0, "credits": 1})
+    c = (org or {}).get("credits") or {}
     bal = c.get("balance", 0)
     cost = cfg["cost"]
-    st = ev.get("credit_state")
-    low = (st == "attivo" and cost is not None and bal < cost)
-    return {"event_id": ev["id"], "nome": ev.get("nome"), "credit_state": st or "preparazione",
-            "cost": cost, "period_days": cfg["period_days"], "balance": bal,
-            "activated_at": ev.get("activated_at"), "next_renewal_at": ev.get("next_renewal_at"),
-            "last_renewal_at": ev.get("last_renewal_at"), "renewal_count": ev.get("renewal_count", 0),
-            "event_date": _event_end_date(ev), "sufficient": (cost is not None and bal >= cost),
-            "low_balance": low, "can_reactivate": (st == "sospeso" and cost is not None and bal >= cost)}
+    is_model = bool(c.get("signup_bonus_granted"))
+    welcome_free = bool(is_model and not c.get("welcome_event_activation_used"))
+    return {"event_id": ev["id"], "nome": ev.get("nome"),
+            "credit_state": ev.get("credit_state") or "preparazione",
+            "display_state": _event_display_state(ev),
+            "cost": cost, "balance": bal, "event_date": _event_end_date(ev),
+            "activated_at": ev.get("activated_at"), "activation_free": bool(ev.get("activation_free")),
+            "is_credit_model": is_model, "welcome_free_available": welcome_free,
+            "sufficient": (cost is not None and bal >= cost),
+            "low_balance": (bal <= c.get("low_balance_threshold", DEFAULT_LOW_BALANCE_THRESHOLD))}
 
 
 @api.get("/events/{event_id}/credit-status")
@@ -8837,59 +8923,66 @@ async def event_credit_status(event_id: str, user: dict = Depends(require_admin)
 
 @api.post("/events/{event_id}/activate")
 async def event_activate(event_id: str, user: dict = Depends(require_admin)):
-    """Attiva (preparazione) o riattiva (sospeso) l'evento: −20 crediti, nuovo periodo di 30 giorni."""
+    """Attiva l'evento: gratis per il PRIMO evento dell'org (bonus benvenuto, una volta per org),
+    altrimenti −20 crediti una tantum. Resta attivo fino alla sua data. Nessun rinnovo periodico."""
     ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento non trovato")
-    st = ev.get("credit_state")
-    if st == "attivo":
+    if ev.get("credit_state") == "attivo":
         return await _event_credit_status(ev)
-    end = _event_end_date(ev)
-    if end and _date.fromisoformat(end) < datetime.now(timezone.utc).date():
+    if _event_is_past(ev):
         raise HTTPException(status_code=400, detail="La data dell'evento è già trascorsa: nessuna attivazione necessaria")
-    mode = "reactivate" if st == "sospeso" else "activate"
-    await _charge_event_period(ev, user.get("user_id"), mode)
-    await record_audit(user, "event_activate", org_id=user["org_id"], meta={"event_id": event_id, "mode": mode})
+    org_id = user["org_id"]
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+    c = (org or {}).get("credits") or {}
+    mode = "paid"
+    if c.get("signup_bonus_granted") and not c.get("welcome_event_activation_used"):
+        res = await db.organizations.update_one(
+            {"id": org_id, "credits.signup_bonus_granted": True,
+             "$or": [{"credits.welcome_event_activation_used": {"$exists": False}},
+                     {"credits.welcome_event_activation_used": False}]},
+            {"$set": {"credits.welcome_event_activation_used": True}})
+        if res.modified_count == 1:
+            await _free_activate_event(ev, user.get("user_id"))
+            mode = "welcome_free"
+    if mode == "paid":
+        await _charge_event_activation(ev, user.get("user_id"))
+    await record_audit(user, "event_activate", org_id=org_id, meta={"event_id": event_id, "mode": mode})
     ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     return await _event_credit_status(ev)
 
 
 async def run_event_renewals(now_dt: Optional[datetime] = None) -> dict:
-    """Motore rinnovi: atomico/idempotente/multi-tenant. Rinnova gli eventi attivi con next_renewal
-    scaduto; sospende se saldo insufficiente; conclude se la data evento è trascorsa."""
+    """FASE E.2 (una tantum): NESSUN rinnovo periodico. Questo motore si limita a concludere gli
+    eventi attivi la cui data è trascorsa (nessun addebito). Idempotente e multi-tenant.
+    NON è collegato ad alcuno scheduler: invocabile solo manualmente dal Super Admin."""
     now_dt = now_dt or datetime.now(timezone.utc)
     today = now_dt.date(); nowiso = now_dt.isoformat()
-    out = {"renewed": [], "suspended": [], "concluded": []}
-    rows = await db.events.find({"credit_state": "attivo", "next_renewal_at": {"$lte": nowiso}}, {"_id": 0}).to_list(5000)
+    concluded = []
+    rows = await db.events.find({"credit_state": "attivo"}, {"_id": 0, "id": 1, "org_id": 1, "data_inizio": 1, "data_fine": 1}).to_list(5000)
     for ev in rows:
         end = _event_end_date(ev)
-        if end and _date.fromisoformat(end) < today:
-            await db.events.update_one({"id": ev["id"], "org_id": ev["org_id"]},
-                                       {"$set": {"credit_state": "concluso", "next_renewal_at": None, "updated_at": nowiso}})
-            out["concluded"].append(ev["id"]); continue
         try:
-            await _charge_event_period(ev, None, "renew")
-            out["renewed"].append(ev["id"])
-        except HTTPException as he:
-            if he.status_code == 402:
-                await db.events.update_one({"id": ev["id"], "org_id": ev["org_id"]},
-                                           {"$set": {"credit_state": "sospeso", "updated_at": nowiso}})
-                out["suspended"].append(ev["id"])
-            else:
-                raise
-    return out
+            past = bool(end and _date.fromisoformat(end[:10]) < today)
+        except ValueError:
+            past = False
+        if past:
+            await db.events.update_one({"id": ev["id"], "org_id": ev["org_id"]},
+                                       {"$set": {"credit_state": "concluso", "updated_at": nowiso}})
+            concluded.append(ev["id"])
+    return {"renewed": [], "suspended": [], "concluded": concluded}
 
 
 @api.post("/platform/events/run-renewals")
 async def platform_run_event_renewals(admin: dict = Depends(require_superadmin)):
-    """Esecuzione manuale/schedulata del motore rinnovi (sicura, idempotente)."""
+    """Esecuzione manuale (Super Admin). Conclude gli eventi con data trascorsa. Nessun cron attivo."""
     return await run_event_renewals()
 
 
 @api.get("/platform/events/migration-dryrun")
 async def events_migration_dryrun(admin: dict = Depends(require_superadmin)):
     """DRY-RUN (sola lettura): stato degli eventi esistenti col nuovo modello. Nessuna scrittura."""
-    cfg = await _event_period_cfg()
+    cfg = await _event_activation_cfg()
     evs = await db.events.find({}, {"_id": 0, "id": 1, "nome": 1, "org_id": 1, "data_inizio": 1,
                                     "data_fine": 1, "credit_state": 1}).to_list(5000)
     orgs = {o["id"]: o for o in await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "credits": 1}).to_list(5000)}
@@ -8904,8 +8997,8 @@ async def events_migration_dryrun(admin: dict = Depends(require_superadmin)):
                      "evento": ev.get("nome"), "data_evento": end, "past": past,
                      "credit_state_attuale": ev.get("credit_state"), "org_balance": bal,
                      "cosa_succederebbe": ("Nessuna azione (già concluso per data)" if past else
-                                           "Resterebbe 'in preparazione' finché l'organizzatore non lo attiva manualmente (−%s crediti). Nessun addebito automatico." % cfg["cost"])})
-    return {"period_cost": cfg["cost"], "period_days": cfg["period_days"], "total_events": len(rows),
+                                           "Resterebbe 'in preparazione' finché l'organizzatore non lo attiva manualmente (−%s crediti, una tantum). Nessun addebito automatico." % cfg["cost"])})
+    return {"activation_cost": cfg["cost"], "total_events": len(rows),
             "note": "Nessuna attivazione/addebito automatico. Gli eventi esistenti NON vengono migrati.", "events": rows}
 
 

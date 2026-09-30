@@ -178,8 +178,8 @@ export default function LandingPage() {
   return (
     <div className="bg-white text-slate-900">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 pt-[env(safe-area-inset-top)]">
+        <div className="max-w-6xl mx-auto px-6 min-h-[4.75rem] py-2.5 flex items-center justify-between">
           <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-14 sm:h-16 w-auto" /></Link>
           <nav className="hidden lg:flex items-center gap-7">
             {NAV.map(([l, id]) => <button key={id} onClick={() => scrollTo(id)} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{l}</button>)}

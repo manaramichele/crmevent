@@ -13,6 +13,8 @@ const REASON = {
   ai_briefing: "Generazione briefing", image_generation: "Generazione immagini",
   automation_run: "Automazione", newsletter_email: "Newsletter / email",
   google_calendar: "Google Calendar", whatsapp_send: "WhatsApp", sms_send: "SMS", purchase: "Ricarica crediti",
+  event_activation: "Attivazione evento", event_active_period: "Attivazione evento",
+  welcome_event_activation: "Attivazione primo evento (gratuita)",
 };
 const PURCHASE_STATUS = {
   pending: ["In attesa", "text-amber-700 bg-amber-50 border-amber-200"],
@@ -166,6 +168,7 @@ export default function CreditsSection() {
 
   if (!bal) return null;
   const low = bal.low_balance;
+  const empty = bal.balance <= 0;
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-6 mb-4" data-testid="credits-section">
@@ -190,9 +193,17 @@ export default function CreditsSection() {
         <Button onClick={() => setOpen(true)} data-testid="recharge-open-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Coins className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
       </div>
 
-      {low && (
+      {empty ? (
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800" data-testid="credits-empty-banner">
+          <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+          <div>
+            <div className="font-semibold">Crediti esauriti</div>
+            <div>Il tuo saldo è di 0 crediti. Ricarica i crediti per continuare a utilizzare CRMEvent. I tuoi dati restano disponibili e consultabili.</div>
+          </div>
+        </div>
+      ) : low && (
         <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" data-testid="low-balance-banner">
-          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />Saldo crediti basso. Ricarica per continuare a usare i servizi avanzati quando saranno attivi.
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />Saldo crediti basso. Ricarica per continuare a usare i servizi avanzati.
         </div>
       )}
 

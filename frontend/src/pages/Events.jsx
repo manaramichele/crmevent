@@ -17,7 +17,7 @@ import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, Refr
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import AvailabilityDialog from "@/components/AvailabilityDialog";
-import EventPlanManager from "@/components/EventPlanManager";
+import { RechargeDialog } from "@/components/CreditsSection";
 
 const STATO = { attivo: "green", pianificato: "tiffany", concluso: "gray", annullato: "red" };
 const STATO_LABEL = { attivo: "Attivo", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
@@ -237,12 +237,39 @@ function MapsDialog({ eventId, open, onOpenChange }) {
   );
 }
 
+const EV_STATE = {
+  preparazione: ["In preparazione", "bg-slate-100 text-slate-600"],
+  attivo: ["Attivo", "bg-emerald-50 text-emerald-700"],
+  concluso: ["Concluso", "bg-slate-100 text-slate-500"],
+};
+const dmyEv = (d) => (d ? d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4) : "");
+function eventDisplayState(r) {
+  const end = r.data_fine || r.data_inizio;
+  if (end && new Date(end + "T23:59:59") < new Date()) return "concluso";
+  if (r.credit_state === "attivo") return "attivo";
+  if (r.credit_state === "concluso") return "concluso";
+  if (!r.credit_state) return "attivo"; // legacy: operativo, nessun prompt
+  return "preparazione";
+}
+
 export default function Events() {
   const settings = useSettings();
   const navigate = useNavigate();
   const [mapsFor, setMapsFor] = useState(null);
   const [availFor, setAvailFor] = useState(null);
   const [creditFor, setCreditFor] = useState(null);
+  const [recharge, setRecharge] = useState(false);
+  const [noCredits, setNoCredits] = useState(false);
+  const balRef = useRef({ balance: null });
+  const refreshBalance = async () => {
+    try { const { data } = await api.get("/credits/balance"); balRef.current = data; return data; } catch { return null; }
+  };
+  useEffect(() => { refreshBalance(); }, []);
+  const guardCreate = async () => {
+    const b = await refreshBalance();
+    if (b && b.balance < 1) { setNoCredits(true); return false; }
+    return true;
+  };
   if (!settings) return <div className="text-slate-400">Caricamento...</div>;
 
   const fields = [
@@ -290,6 +317,17 @@ export default function Events() {
       );
     } },
     { key: "stato", label: "Stato", render: (r) => <StatusBadge color={STATO[r.stato] || "gray"}>{STATO_LABEL[r.stato] || r.stato}</StatusBadge> },
+    { key: "credit_state", label: "Attivazione", render: (r) => {
+      const s = eventDisplayState(r);
+      const [lbl, cls] = EV_STATE[s] || EV_STATE.preparazione;
+      const end = r.data_fine || r.data_inizio;
+      return (
+        <button onClick={() => setCreditFor(r.id)} data-testid={`event-credit-badge-${r.id}`} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${cls} hover:opacity-80 transition`}>
+          <Coins className="w-3.5 h-3.5" />
+          {s === "attivo" && end ? `Attivo · fino al ${dmyEv(end)}` : s === "preparazione" ? "Attiva evento · 20" : lbl}
+        </button>
+      );
+    } },
   ];
 
   const syncCal = async (row) => {
@@ -309,16 +347,22 @@ export default function Events() {
 
   return (
     <>
-      <div className="mb-5 bg-slate-50 border border-slate-200 rounded-xl p-4" data-testid="events-plan-section">
-        <div className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-3">Stato commerciale eventi</div>
-        <EventPlanManager handleReturn />
-      </div>
       <EntityManager title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event"
-        searchKeys={["nome", "citta", "tipologia"]} rowActions={rowActions} />
+        searchKeys={["nome", "citta", "tipologia"]} rowActions={rowActions} guardCreate={guardCreate} />
       {mapsFor && <MapsDialog eventId={mapsFor} open={!!mapsFor} onOpenChange={(o) => !o && setMapsFor(null)} />}
       {availFor && <AvailabilityDialog eventId={availFor} open={!!availFor} onOpenChange={(o) => !o && setAvailFor(null)} />}
-      {creditFor && <EventCreditDialog eventId={creditFor} open={!!creditFor} onOpenChange={(o) => !o && setCreditFor(null)} />}
+      {creditFor && <EventCreditDialog eventId={creditFor} open={!!creditFor} onOpenChange={(o) => { if (!o) { setCreditFor(null); refreshBalance(); } }} />}
+      <Dialog open={noCredits} onOpenChange={setNoCredits}>
+        <DialogContent className="max-w-md" data-testid="event-no-credits-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Coins className="w-5 h-5 text-tiffany-active" />Crediti insufficienti</DialogTitle>
+            <DialogDescription>Per creare un nuovo evento devi avere almeno 1 credito disponibile. Il tuo saldo è {balRef.current?.balance ?? 0} crediti.</DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => { setNoCredits(false); setRecharge(true); }} className="w-full bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="event-no-credits-recharge"><Coins className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
+        </DialogContent>
+      </Dialog>
+      <RechargeDialog open={recharge} onClose={() => { setRecharge(false); refreshBalance(); }} />
     </>
   );
 }
