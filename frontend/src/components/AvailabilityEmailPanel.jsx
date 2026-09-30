@@ -26,6 +26,7 @@ export function AvailabilityEmailPanel() {
   const [eventId, setEventId] = useState("");
   const [to, setTo] = useState("");
   const [sendingKind, setSendingKind] = useState(null);
+  const [testLang, setTestLang] = useState("it");
   const [result, setResult] = useState(null);
 
   const load = async () => {
@@ -84,7 +85,7 @@ export function AvailabilityEmailPanel() {
     if (!to.trim()) { toast.error("Inserisci l'indirizzo destinatario"); return; }
     setSendingKind(kind); setResult(null);
     try {
-      const { data: r } = await api.post("/brevo/availability-test-email", { event_id: eventId, kind, to_email: to.trim() });
+      const { data: r } = await api.post("/brevo/availability-test-email", { event_id: eventId, kind, to_email: to.trim(), lang: testLang });
       setResult({ kind, ...r });
       if (r.ok) toast.success(r.message);
       else toast.warning(r.message);
@@ -139,10 +140,10 @@ export function AvailabilityEmailPanel() {
           </thead>
           <tbody>
             {templates.map((t) => (
-              <tr key={t.kind} className="border-b border-slate-100" data-testid={`availability-template-row-${t.kind}`}>
+              <tr key={t.name} className="border-b border-slate-100" data-testid={`availability-template-row-${t.kind}-${t.lang || "it"}`}>
                 <td className="py-2.5 px-3 text-slate-800 font-medium">
                   {t.name}
-                  <div className="text-[11px] font-normal text-slate-400" data-testid={`availability-trigger-${t.kind}`}>{TRIGGER[t.kind]}</div>
+                  <div className="text-[11px] font-normal text-slate-400" data-testid={`availability-trigger-${t.kind}-${t.lang || "it"}`}>{TRIGGER[t.kind]}</div>
                 </td>
                 <td className="py-2.5 px-3 text-slate-600">{t.type_label}</td>
                 <td className="py-2.5 px-3 text-slate-600 font-mono">{t.template_id ?? "—"}</td>
@@ -154,7 +155,7 @@ export function AvailabilityEmailPanel() {
                       : (
                         <span className="inline-flex items-center gap-2">
                           <span className="text-amber-600 font-medium">Bozza</span>
-                          <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => activate(t.kind)} disabled={activatingKind === t.kind || !configured} data-testid={`availability-activate-${t.kind}`}>
+                          <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => activate(t.kind)} disabled={activatingKind === t.kind || !configured} data-testid={`availability-activate-${t.kind}-${t.lang || "it"}`}>
                             {activatingKind === t.kind ? "Attivo…" : "Attiva in Brevo"}
                           </Button>
                         </span>
@@ -237,6 +238,13 @@ export function AvailabilityEmailPanel() {
           <div className="flex-1">
             <label className="text-xs text-slate-500">Destinatario</label>
             <Input type="email" placeholder="destinatario@esempio.it" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1" data-testid="availability-test-to-input" />
+          </div>
+          <div className="sm:w-40">
+            <label className="text-xs text-slate-500">Lingua email</label>
+            <select className="w-full mt-1 border border-slate-200 rounded-md px-2 py-2 text-sm bg-white" value={testLang} onChange={(e) => setTestLang(e.target.value)} data-testid="availability-test-lang">
+              <option value="it">Italiano</option>
+              <option value="en">English</option>
+            </select>
           </div>
         </div>
         <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1">

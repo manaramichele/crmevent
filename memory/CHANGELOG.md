@@ -636,3 +636,10 @@ Task 2 — Creatività manuale:
 - Home: titolo Hero → "Organizza il tuo evento. Tutto in un'unica piattaforma." (solo titolo).
 - /partecipa/{token} bilingue IT/EN: selettore lingua (Italiano | English), parametro ?lang=it|en (default IT per retrocompatibilità link esistenti), stesso token/flusso/raccolta dati, cambio lingua senza reload né perdita dati compilati, date localizzate client-side, logo CRMEvent per fondo bianco (/logo-crmevent.png). Backend: POST /api/public/availability/{code} accetta body.lang e salva compilation_lang (it/en) come metadato.
 - Maschera evento (AvailabilityDialog): due link distinti stesso token — "Link partecipazione — Italiano [Copia link IT]" (?lang=it) e "Link partecipazione — English [Copy EN link]" (?lang=en).
+
+## 2026-06-30 (Email conferma disponibilità bilingue IT/EN) ✅ (logica verificata; invio reale gated BREVO_AVAILABILITY_ENABLED=off)
+- Le email Brevo generate dopo /partecipa usano la lingua di compilazione (compilation_lang): it→IT, en→EN, assente→fallback IT.
+- Backend: subject+HTML bilingui (_avail_email_html(kind, lang), AVAIL_TPL_SUBJECT[lang][kind]); nuove varianti template EN "CRMEvent · Availability received (EN)" e "CRMEvent · Participation confirmed (EN)"; mappa AVAIL_TPL_LANG + _avail_lang(av); _brevo_avail seleziona il template localizzato con fallback al template IT se l'EN non è attivo. Nome evento e contenuti organizzatore NON tradotti. Mittente/config Brevo/logica invio invariati.
+- Endpoint Super Admin aggiornati: create-availability-templates crea 4 template (IT+EN, idempotente), activate e lista gestiscono IT+EN. Email di test con selettore lingua (IT/English). Preview con parametro lang.
+- Le future email legate alla partecipazione (conferma/attr_update) riusano automaticamente compilation_lang dal record disponibilità.
+- Verificato: risoluzione lingua+fallback (unit test), lista 4 template via API, test-email senza crash (nested subject). Invio reale disponibile in produzione con Brevo configurato e flag attivo.

@@ -7150,11 +7150,29 @@ async def avail_list_received(event_id: str, user: dict = Depends(require_admin)
 AVAIL_LIST_NAME = "CRMEvent · Disponibilità eventi"
 AVAIL_TPL_CONFERMA_DISP = "CRMEvent · Disponibilità ricevuta"
 AVAIL_TPL_CONFERMA_PART = "CRMEvent · Partecipazione confermata"
+AVAIL_TPL_CONFERMA_DISP_EN = "CRMEvent · Availability received (EN)"
+AVAIL_TPL_CONFERMA_PART_EN = "CRMEvent · Participation confirmed (EN)"
 AVAIL_TPL_KIND_LABEL = {"disponibilita": "Disponibilità", "conferma": "Conferma"}
 AVAIL_TPL_SUBJECT = {
-    "disponibilita": "Grazie {{params.NOME}}, abbiamo ricevuto la tua disponibilità",
-    "conferma": "{{params.NOME_EVENTO}}: la tua disponibilità è confermata",
+    "it": {
+        "disponibilita": "Grazie {{params.NOME}}, abbiamo ricevuto la tua disponibilità",
+        "conferma": "{{params.NOME_EVENTO}}: la tua disponibilità è confermata",
+    },
+    "en": {
+        "disponibilita": "Thank you {{params.NOME}}, we have received your availability",
+        "conferma": "{{params.NOME_EVENTO}}: your availability is confirmed",
+    },
 }
+# Mappa nome-template-base (IT) -> nome localizzato per lingua. Fallback IT se EN assente.
+AVAIL_TPL_LANG = {
+    AVAIL_TPL_CONFERMA_DISP: {"it": AVAIL_TPL_CONFERMA_DISP, "en": AVAIL_TPL_CONFERMA_DISP_EN},
+    AVAIL_TPL_CONFERMA_PART: {"it": AVAIL_TPL_CONFERMA_PART, "en": AVAIL_TPL_CONFERMA_PART_EN},
+}
+
+
+def _avail_lang(av: dict) -> str:
+    """Lingua della comunicazione = lingua di compilazione del modulo (fallback it)."""
+    return "en" if (av.get("compilation_lang") or "").lower().startswith("en") else "it"
 
 
 def _brevo_avail_enabled():
@@ -7211,25 +7229,45 @@ async def _ensure_avail_list(c):
     return list_id
 
 
-def _avail_email_html(kind: str) -> str:
-    """Master template HTML (unico per piattaforma). I dati sono dinamici via {{params.*}}:
+def _avail_email_html(kind: str, lang: str = "it") -> str:
+    """Master template HTML (uno per lingua/tipo). Dati dinamici via {{params.*}}:
     NOME, NOME_EVENTO, DATA_EVENTO, LOCALITA_EVENTO, LOGO_EVENTO_URL. Il logo NON è salvato nel
-    template: viene passato ad ogni invio (logo dell'Evento o fallback CRMEvent)."""
+    template: viene passato ad ogni invio (logo dell'Evento o fallback CRMEvent).
+    Nome evento e contenuti dell'organizzatore NON vengono tradotti."""
+    en = str(lang).lower().startswith("en")
     if kind == "conferma":
-        intro = ("<p>Ciao {{params.NOME}},</p>"
-                 "<p>ci fa piacere confermarti la partecipazione a <strong>{{params.NOME_EVENTO}}</strong>. "
-                 "Grazie per aver scelto di far parte della squadra che contribuirà alla realizzazione dell'evento.</p>")
-        outro = ("<p>Nei prossimi giorni riceverai le informazioni operative relative alla tua attività, agli orari, "
-                 "al punto di ritrovo e al briefing. Non devi fare altro per il momento.</p>"
-                 "<p>A presto!<br/>Lo staff di {{params.NOME_EVENTO}}</p>")
+        if en:
+            intro = ("<p>Hi {{params.NOME}},</p>"
+                     "<p>we're glad to confirm your participation in <strong>{{params.NOME_EVENTO}}</strong>. "
+                     "Thank you for choosing to be part of the team that will help make this event happen.</p>")
+            outro = ("<p>Over the next few days you'll receive the operational details about your activity, schedule, "
+                     "meeting point and briefing. There's nothing else you need to do for now.</p>"
+                     "<p>See you soon!<br/>The {{params.NOME_EVENTO}} team</p>")
+        else:
+            intro = ("<p>Ciao {{params.NOME}},</p>"
+                     "<p>ci fa piacere confermarti la partecipazione a <strong>{{params.NOME_EVENTO}}</strong>. "
+                     "Grazie per aver scelto di far parte della squadra che contribuirà alla realizzazione dell'evento.</p>")
+            outro = ("<p>Nei prossimi giorni riceverai le informazioni operative relative alla tua attività, agli orari, "
+                     "al punto di ritrovo e al briefing. Non devi fare altro per il momento.</p>"
+                     "<p>A presto!<br/>Lo staff di {{params.NOME_EVENTO}}</p>")
     else:
-        intro = ("<p>Ciao {{params.NOME}},</p>"
-                 "<p>grazie per aver dato la tua disponibilità per <strong>{{params.NOME_EVENTO}}</strong>. "
-                 "Abbiamo ricevuto correttamente i tuoi dati e le giornate in cui hai indicato di essere disponibile.</p>"
-                 "<p>L'organizzazione sta raccogliendo tutte le disponibilità e ti contatterà successivamente per "
-                 "comunicarti l'eventuale conferma e le informazioni operative.</p>")
-        outro = ("<p>Grazie per la disponibilità e per il tempo che hai deciso di dedicarci.<br/>"
-                 "Lo staff di {{params.NOME_EVENTO}}</p>")
+        if en:
+            intro = ("<p>Hi {{params.NOME}},</p>"
+                     "<p>thank you for sharing your availability for <strong>{{params.NOME_EVENTO}}</strong>. "
+                     "We've correctly received your details and the days you indicated you're available.</p>"
+                     "<p>The organizer is collecting all availabilities and will contact you later to confirm and "
+                     "share the operational information.</p>")
+            outro = ("<p>Thank you for your availability and for the time you've decided to dedicate to us.<br/>"
+                     "The {{params.NOME_EVENTO}} team</p>")
+        else:
+            intro = ("<p>Ciao {{params.NOME}},</p>"
+                     "<p>grazie per aver dato la tua disponibilità per <strong>{{params.NOME_EVENTO}}</strong>. "
+                     "Abbiamo ricevuto correttamente i tuoi dati e le giornate in cui hai indicato di essere disponibile.</p>"
+                     "<p>L'organizzazione sta raccogliendo tutte le disponibilità e ti contatterà successivamente per "
+                     "comunicarti l'eventuale conferma e le informazioni operative.</p>")
+            outro = ("<p>Grazie per la disponibilità e per il tempo che hai deciso di dedicarci.<br/>"
+                     "Lo staff di {{params.NOME_EVENTO}}</p>")
+    footer = "Communication managed via CRMEvent" if en else "Comunicazione gestita tramite CRMEvent"
     return (
         '<div style="background:#f1f5f9;padding:24px 0;font-family:Arial,Helvetica,sans-serif;">'
         '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">'
@@ -7243,7 +7281,7 @@ def _avail_email_html(kind: str) -> str:
         f'{intro}{outro}'
         '</div>'
         '<div style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:12px;">'
-        'Comunicazione gestita tramite CRMEvent'
+        f'{footer}'
         '</div></div></div>'
     )
 
@@ -7318,8 +7356,14 @@ async def _brevo_avail(action: str, av: dict, event: dict, org_nome: str = None,
                 else:
                     raise
             if send_template:
+                lang = _avail_lang(av)
+                want_name = AVAIL_TPL_LANG.get(send_template, {}).get(lang, send_template)
                 tpls = await c.get_templates()
-                tpl = next((t for t in tpls if (t.get("name") or "").strip().lower() == send_template.lower() and t.get("isActive")), None)
+
+                def _find_active(n):
+                    return next((t for t in tpls if (t.get("name") or "").strip().lower() == n.lower() and t.get("isActive")), None)
+
+                tpl = _find_active(want_name) or _find_active(send_template)  # fallback lingua IT
                 if tpl:
                     params = _avail_email_params(av, event, {"nome": org_nome}, _event_logo_url(event))
                     await c._req("POST", "/smtp/email", json={"to": [{"email": email, "name": av.get("nome") or ""}],
@@ -7459,8 +7503,10 @@ async def brevo_avail_templates_activate(body: AvailTplActivate, user: dict = De
     Attivazione REALE su Brevo, nessuna forzatura dello stato nel DB CRMEvent. Idempotente."""
     if not brevo_client.is_configured():
         raise HTTPException(status_code=400, detail="Brevo non configurato in questo ambiente (disponibile in produzione).")
-    want = {"disponibilita": [AVAIL_TPL_CONFERMA_DISP],
-            "conferma": [AVAIL_TPL_CONFERMA_PART]}.get(body.kind, [AVAIL_TPL_CONFERMA_DISP, AVAIL_TPL_CONFERMA_PART])
+    want = {"disponibilita": [AVAIL_TPL_CONFERMA_DISP, AVAIL_TPL_CONFERMA_DISP_EN],
+            "conferma": [AVAIL_TPL_CONFERMA_PART, AVAIL_TPL_CONFERMA_PART_EN]}.get(
+                body.kind, [AVAIL_TPL_CONFERMA_DISP, AVAIL_TPL_CONFERMA_PART,
+                            AVAIL_TPL_CONFERMA_DISP_EN, AVAIL_TPL_CONFERMA_PART_EN])
     out = []
     async with brevo_client.BrevoClient() as c:
         tpls = await c.get_templates()
@@ -7493,15 +7539,17 @@ async def brevo_create_avail_templates(user: dict = Depends(require_superadmin))
             sender = {"name": "CRMEvent", "email": pref["email"]}
             tpls = await c.get_templates()
             out = []
-            for name, subject, kind in [
-                (AVAIL_TPL_CONFERMA_DISP, "Grazie {{params.NOME}}, abbiamo ricevuto la tua disponibilità", "disponibilita"),
-                (AVAIL_TPL_CONFERMA_PART, "{{params.NOME_EVENTO}}: la tua disponibilità è confermata", "conferma"),
+            for name, subject, kind, lang in [
+                (AVAIL_TPL_CONFERMA_DISP, AVAIL_TPL_SUBJECT["it"]["disponibilita"], "disponibilita", "it"),
+                (AVAIL_TPL_CONFERMA_PART, AVAIL_TPL_SUBJECT["it"]["conferma"], "conferma", "it"),
+                (AVAIL_TPL_CONFERMA_DISP_EN, AVAIL_TPL_SUBJECT["en"]["disponibilita"], "disponibilita", "en"),
+                (AVAIL_TPL_CONFERMA_PART_EN, AVAIL_TPL_SUBJECT["en"]["conferma"], "conferma", "en"),
             ]:
                 ex = next((t for t in tpls if (t.get("name") or "").strip().lower() == name.lower()), None)
                 if ex:
                     out.append({"name": name, "template_id": ex.get("id"), "created": False})
                     continue
-                res = await c.create_email_template(name, subject, _avail_email_html(kind), sender)
+                res = await c.create_email_template(name, subject, _avail_email_html(kind, lang), sender)
                 out.append({"name": name, "template_id": res.get("id"), "created": True})
             list_id = await _ensure_avail_list(c)
             return {"sender": sender, "templates": out, "is_active": False,
@@ -7514,8 +7562,10 @@ async def brevo_create_avail_templates(user: dict = Depends(require_superadmin))
 async def brevo_avail_templates_list(user: dict = Depends(require_superadmin)):
     """Elenca i due template master (nome + Template ID + stato attivo + tipo + ultimo aggiornamento).
     Riservato al Super Admin. Nessuna copia per evento."""
-    base = [{"name": AVAIL_TPL_CONFERMA_DISP, "kind": "disponibilita", "type_label": AVAIL_TPL_KIND_LABEL["disponibilita"]},
-            {"name": AVAIL_TPL_CONFERMA_PART, "kind": "conferma", "type_label": AVAIL_TPL_KIND_LABEL["conferma"]}]
+    base = [{"name": AVAIL_TPL_CONFERMA_DISP, "kind": "disponibilita", "lang": "it", "type_label": "Disponibilità · IT"},
+            {"name": AVAIL_TPL_CONFERMA_PART, "kind": "conferma", "lang": "it", "type_label": "Conferma · IT"},
+            {"name": AVAIL_TPL_CONFERMA_DISP_EN, "kind": "disponibilita", "lang": "en", "type_label": "Availability · EN"},
+            {"name": AVAIL_TPL_CONFERMA_PART_EN, "kind": "conferma", "lang": "en", "type_label": "Confirmation · EN"}]
     cfg = await db.brevo_config.find_one({"key": "availability"}, {"_id": 0}) or {}
     lst = {"id": cfg.get("list_id"), "name": cfg.get("list_name") or AVAIL_LIST_NAME, "contacts": None}
     succ = await db.brevo_sync_log.find_one({"availability_id": {"$ne": None}, "status": {"$in": ["sent", "synced"]}},
@@ -7570,6 +7620,7 @@ class AvailTestEmail(BaseModel):
     event_id: str
     kind: str = "disponibilita"
     to_email: EmailStr
+    lang: Optional[str] = "it"
 
 
 @api.post("/brevo/availability-test-email")
@@ -7589,8 +7640,9 @@ async def brevo_avail_test_email(body: AvailTestEmail, user: dict = Depends(requ
     if org.get("type") != "test":
         raise HTTPException(status_code=400, detail="L'invio di prova è consentito solo su Eventi di Organizzazioni di tipo Test.")
     params = _avail_email_params({"nome": "Mario", "cognome": "Rossi"}, event, org, _event_logo_url(event))
-    html = _avail_email_html(kind)
-    subject = AVAIL_TPL_SUBJECT[kind]
+    lang = "en" if (body.lang or "").lower().startswith("en") else "it"
+    html = _avail_email_html(kind, lang)
+    subject = AVAIL_TPL_SUBJECT[lang][kind]
     for k, v in params.items():
         token = "{{params." + k + "}}"
         html = html.replace(token, str(v or ""))
@@ -7609,13 +7661,13 @@ async def brevo_avail_test_email(body: AvailTestEmail, user: dict = Depends(requ
         mid = res.get("messageId") if isinstance(res, dict) else None
         return {"ok": True, "configured": True, "message": f"Email di test inviata a {body.to_email}",
                 "messageId": mid, "sender": sender["email"], "event": event.get("nome"),
-                "kind": kind, "logo": bool(event.get("logo_url"))}
+                "kind": kind, "lang": lang, "logo": bool(event.get("logo_url"))}
     except brevo_client.BrevoError as e:
         raise HTTPException(status_code=502, detail=f"Brevo: invio non riuscito (HTTP {e.status})")
 
 
 @api.get("/brevo/availability-template-preview")
-async def brevo_avail_template_preview(event_id: str, kind: str = "disponibilita", request: Request = None, user: dict = Depends(require_admin)):
+async def brevo_avail_template_preview(event_id: str, kind: str = "disponibilita", lang: str = "it", request: Request = None, user: dict = Depends(require_admin)):
     """Anteprima HTML reale del template master con i dati dinamici dell'Evento indicato."""
     event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not event:
@@ -7623,7 +7675,8 @@ async def brevo_avail_template_preview(event_id: str, kind: str = "disponibilita
     org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0}) or {}
     base = str(request.base_url).rstrip("/") if request else PUBLIC_SITE_URL
     params = _avail_email_params({"nome": "Mario", "cognome": "Rossi"}, event, org, _event_logo_url(event, base))
-    html = _avail_email_html("conferma" if kind == "conferma" else "disponibilita")
+    lang_code = "en" if (lang or "").lower().startswith("en") else "it"
+    html = _avail_email_html("conferma" if kind == "conferma" else "disponibilita", lang_code)
     for k, v in params.items():
         html = html.replace("{{params." + k + "}}", str(v or ""))
     return Response(content=html, media_type="text/html; charset=utf-8")
