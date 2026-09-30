@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
-import { PageHeader, StatusBadge, useCollection, useSettings } from "@/components/crm";
+import { PageHeader, StatusBadge, useCollection, useSettings, formatDateRange } from "@/components/crm";
 import SettingSelect from "@/components/SettingSelect";
 import StructureSelect from "@/components/StructureSelect";
 import MapsLink from "@/components/MapsLink";
@@ -72,12 +72,36 @@ function EsigenzeEditor({ value, onChange, testid }) {
   );
 }
 
+// Auto-compilazione dai dati master della Struttura (anagrafica riutilizzabile).
+// NON crea/duplica strutture: legge i campi e riempie il form; se un dato manca resta vuoto.
+function fillFromStructure(set, id, s, { isMeal } = {}) {
+  set("struttura_id", id);
+  if (!s) return;
+  set("struttura_nome", s.nome || "");
+  set("indirizzo", s.indirizzo || "");
+  set("referente", s.referente || "");
+  set("telefono", s.telefono_referente || s.telefono || "");
+  set("struttura_maps_url", s.google_maps_url || "");
+  if (isMeal) set("luogo", s.nome || "");
+}
+function StructureMissingNote({ form }) {
+  if (!form.struttura_id) return null;
+  const LBL = { indirizzo: "Indirizzo", referente: "Referente", telefono: "Telefono", struttura_maps_url: "Link Google Maps" };
+  const missing = Object.keys(LBL).filter((k) => !form[k]);
+  if (missing.length === 0) return null;
+  return (
+    <div className="sm:col-span-2 text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5" data-testid="struct-missing-note">
+      Dato non presente nell'anagrafica struttura: {missing.map((k) => LBL[k]).join(", ")}. Puoi completarlo qui o aggiornare l'anagrafica in <strong>Strutture</strong>.
+    </div>
+  );
+}
+
 // ---- Lodging & Meal forms ----
 function LodgingForm({ form, set, canCosts }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <Field label="Struttura (da anagrafica)" full>
-        <StructureSelect value={form.struttura_id} onChange={(id, s) => { set("struttura_id", id); if (s) set("struttura_nome", s.nome); }} testid="lodging" />
+        <StructureSelect value={form.struttura_id} onChange={(id, s) => fillFromStructure(set, id, s)} testid="lodging" />
       </Field>
       <SelectField label="Tipologia struttura" value={form.tipo_struttura} onChange={(v) => set("tipo_struttura", v)} options={TIPO_STRUTTURA} testid="lodging-tipo" />
       <Field label="Indirizzo" full><Input value={form.indirizzo || ""} onChange={(e) => set("indirizzo", e.target.value)} /></Field>
@@ -94,18 +118,21 @@ function LodgingForm({ form, set, canCosts }) {
         <SelectField label="Stato pagamento" value={form.stato_pagamento} onChange={(v) => set("stato_pagamento", v)} options={PAY_STATE} testid="lodging-pay" />
         <Field label="Note amministrative" full><Input value={form.note_amministrative || ""} onChange={(e) => set("note_amministrative", e.target.value)} /></Field>
       </>}
+      <StructureMissingNote form={form} />
       <Field label="Note" full><Input value={form.note || ""} onChange={(e) => set("note", e.target.value)} /></Field>
     </div>
   );
 }
 function MealForm({ form, set, canCosts, lockType }) {
+  const dataInizio = form.data_inizio || form.data || "";
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <Field label="Data"><Input type="date" value={form.data || ""} onChange={(e) => set("data", e.target.value)} data-testid="meal-data" /></Field>
+      <Field label="Data inizio"><Input type="date" value={dataInizio} onChange={(e) => set("data_inizio", e.target.value)} data-testid="meal-data-inizio" /></Field>
+      <Field label="Data fine"><Input type="date" value={form.data_fine || dataInizio} min={dataInizio} onChange={(e) => set("data_fine", e.target.value)} data-testid="meal-data-fine" /></Field>
       <SelectField label="Tipo pasto" value={form.tipo_pasto} onChange={(v) => set("tipo_pasto", v)} options={MEAL_TYPE} testid="meal-tipo" />
       <SelectField label="Tipologia servizio" value={form.tipologia_servizio} onChange={(v) => set("tipologia_servizio", v)} options={MEAL_SERVICE} testid="meal-servizio" />
       <Field label="Struttura / Fornitore (da anagrafica)" full>
-        <StructureSelect value={form.struttura_id} onChange={(id, s) => { set("struttura_id", id); if (s) set("struttura_nome", s.nome); }} testid="meal" />
+        <StructureSelect value={form.struttura_id} onChange={(id, s) => fillFromStructure(set, id, s, { isMeal: true })} testid="meal" />
       </Field>
       <Field label="Luogo"><Input value={form.luogo || ""} onChange={(e) => set("luogo", e.target.value)} /></Field>
       <Field label="Indirizzo"><Input value={form.indirizzo || ""} onChange={(e) => set("indirizzo", e.target.value)} /></Field>
@@ -114,6 +141,7 @@ function MealForm({ form, set, canCosts, lockType }) {
       <Field label="Referente"><Input value={form.referente || ""} onChange={(e) => set("referente", e.target.value)} /></Field>
       <Field label="Telefono"><Input value={form.telefono || ""} onChange={(e) => set("telefono", e.target.value)} /></Field>
       {canCosts && <Field label="Costo (€)"><Input type="number" value={form.costo ?? ""} onChange={(e) => set("costo", e.target.value === "" ? null : Number(e.target.value))} /></Field>}
+      <StructureMissingNote form={form} />
       <Field label="Note operative" full><Input value={form.note || ""} onChange={(e) => set("note", e.target.value)} /></Field>
     </div>
   );
@@ -143,8 +171,11 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
   };
   const saveMeal = async () => {
     if (!editM.tipo_pasto) return toast.error("Seleziona il tipo di pasto");
+    const di = editM.data_inizio || editM.data;
+    const df = editM.data_fine || di;
+    if (di && df && df < di) return toast.error("La data di fine non può precedere la data di inizio");
     try {
-      const body = { ...editM, evento_id: eventId, persona_id: person.persona_id };
+      const body = { ...editM, data_inizio: di || null, data_fine: df || null, evento_id: eventId, persona_id: person.persona_id };
       if (editM.id) await api.put(`/meals/${editM.id}`, body); else await api.post("/meals", body);
       toast.success("Pasto salvato"); setEditM(null); onChanged();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -212,7 +243,7 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
             {meals.map((m) => { const I = MEAL_ICON[m.tipo_pasto] || UtensilsCrossed; return (
               <div key={m.id} className="border border-slate-200 rounded-lg px-3 py-2.5 flex items-start justify-between" data-testid={`meal-row-${m.id}`}>
                 <div className="text-sm">
-                  <div className="font-medium text-slate-800 flex items-center gap-1.5"><I className="w-4 h-4 text-tiffany-active" />{MEAL_TYPE[m.tipo_pasto] || "Pasto"}{m.data ? ` · ${m.data}` : ""}{m.orario ? ` · ${m.orario}` : ""}</div>
+                  <div className="font-medium text-slate-800 flex items-center gap-1.5"><I className="w-4 h-4 text-tiffany-active" />{MEAL_TYPE[m.tipo_pasto] || "Pasto"}{(m.data_inizio || m.data) ? ` · ${formatDateRange(m.data_inizio || m.data, m.data_fine)}` : ""}{m.orario ? ` · ${m.orario}` : ""}</div>
                   <div className="text-xs text-slate-500">{[m.tipologia_servizio && MEAL_SERVICE[m.tipologia_servizio], m.struttura_nome, m.luogo].filter(Boolean).join(" · ") || "—"}</div>
                   {m.struttura?.google_maps_url && <div className="text-xs mt-0.5"><MapsLink url={m.struttura.google_maps_url} testid={`meal-maps-${m.id}`} /></div>}
                   <div className="text-xs mt-0.5"><StatusBadge color={m.a_carico_di === "da_definire" || !m.a_carico_di ? "orange" : "tiffany"}>{CARICO[m.a_carico_di] || "A carico: da definire"}</StatusBadge></div>
@@ -255,6 +286,10 @@ function BulkAssignDialog({ eventId, persons, teams, canCosts, open, onOpenChang
   const submit = async () => {
     if (sel.size === 0) return toast.error("Seleziona almeno una persona");
     if (type === "meal" && !form.tipo_pasto) return toast.error("Seleziona il tipo di pasto");
+    if (type === "meal") {
+      const di = form.data_inizio || form.data; const df = form.data_fine || di;
+      if (di && df && df < di) return toast.error("La data di fine non può precedere la data di inizio");
+    }
     try {
       const ep = type === "meal" ? "/meals/bulk" : "/lodgings/bulk";
       const { data } = await api.post(ep, { evento_id: eventId, persona_ids: Array.from(sel), data: form });
@@ -422,7 +457,7 @@ export default function Hospitality() {
   const days = useMemo(() => {
     const e = events.find((x) => x.id === eventId);
     const set = new Set(e ? eachDay(e.data_inizio, e.data_fine) : []);
-    (data?.meals || []).forEach((m) => m.data && set.add(m.data));
+    (data?.meals || []).forEach((m) => eachDay(m.data_inizio || m.data, m.data_fine || m.data_inizio || m.data).forEach((dd) => set.add(dd)));
     (data?.lodgings || []).forEach((l) => { l.check_in && set.add(l.check_in); });
     return Array.from(set).sort();
   }, [events, eventId, data]);
@@ -457,7 +492,7 @@ export default function Hospitality() {
     return Object.values(map).sort((a, b) => a.key.localeCompare(b.key));
   }, [data, persons]);
 
-  const dayMeals = (data?.meals || []).filter((m) => m.data === day);
+  const dayMeals = (data?.meals || []).filter((m) => { const s = m.data_inizio || m.data; const e = m.data_fine || s; return s && s <= day && day <= e; });
   const dayLodgings = (data?.lodgings || []).filter((l) => (l.check_in && l.check_in <= day) && (!l.check_out || l.check_out > day));
 
   return (

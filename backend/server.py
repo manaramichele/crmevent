@@ -820,7 +820,9 @@ class Meal(BaseModel):  # collection: meals — colazione/pranzo/cena (persona <
     evento_id: str
     persona_id: str
     struttura_id: Optional[str] = None
-    data: Optional[str] = None
+    data: Optional[str] = None  # legacy: data singola (retrocompatibile → data_inizio)
+    data_inizio: Optional[str] = None
+    data_fine: Optional[str] = None
     tipo_pasto: Optional[str] = None  # colazione/pranzo/cena
     tipologia_servizio: Optional[str] = None
     struttura_nome: Optional[str] = None
@@ -834,6 +836,31 @@ class Meal(BaseModel):  # collection: meals — colazione/pranzo/cena (persona <
     note: Optional[str] = None
     note_amministrative: Optional[str] = None
     gruppo_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _meal_dates(self):
+        # Retrocompatibilità: vecchia 'data' singola → data_inizio = data_fine
+        if self.data and not self.data_inizio:
+            self.data_inizio = self.data
+        if self.data_inizio and not self.data_fine:
+            self.data_fine = self.data_inizio
+        if self.data_inizio and self.data_fine and self.data_fine < self.data_inizio:
+            raise ValueError("La data di fine non può precedere la data di inizio")
+        # Mantieni 'data' allineata all'inizio per i consumatori legacy
+        if self.data_inizio and not self.data:
+            self.data = self.data_inizio
+        return self
+
+
+def _normalize_meals(meals: list) -> None:
+    """Assicura che ogni pasto esponga data_inizio/data_fine (retrocompat con 'data' singola).
+    Calcolato in lettura: NON altera i record vecchi nel DB."""
+    for m in meals:
+        di = m.get("data_inizio") or m.get("data")
+        m["data_inizio"] = di
+        m["data_fine"] = m.get("data_fine") or di
+        if not m.get("data"):
+            m["data"] = di
 
 
 def _opt(model):
@@ -1029,6 +1056,7 @@ async def event_hospitality(event_id: str, admin: dict = Depends(require_admin))
     links = await db.staff.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(5000)
     lodgings = await db.lodgings.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(5000)
     meals = await db.meals.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(20000)
+    _normalize_meals(meals)
     if not can_costs:
         for x in lodgings + meals:
             for f in COST_FIELDS:
@@ -2397,6 +2425,7 @@ async def my_event_detail(event_id: str, user: dict = Depends(get_current_user))
     # non vengono mai esposti allo staff (scoping lato API, non solo nel frontend).
     my_lodgings = await db.lodgings.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(100)
     my_meals = await db.meals.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(500)
+    _normalize_meals(my_meals)
     _STAFF_HIDE = ("costo", "stato_pagamento", "note_amministrative", "a_carico_di", "codice_prenotazione")
     for x in my_lodgings + my_meals:
         for f in _STAFF_HIDE:
@@ -3885,6 +3914,7 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
     maps = await db.event_maps.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(1000)
     lodgings = await db.lodgings.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(5000)
     meals = await db.meals.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(20000)
+    _normalize_meals(meals)
     await _attach_structures(lodgings + meals, org_id)
     deals = await db.deals.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(2000)
     companies = {c["id"]: c for c in await db.companies.find({"org_id": org_id}, {"_id": 0}).to_list(10000)}

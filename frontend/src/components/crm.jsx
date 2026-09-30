@@ -23,6 +23,22 @@ export const BACKEND = process.env.REACT_APP_BACKEND_URL;
 export const fileUrl = (u) => (u ? (u.startsWith("http") ? u : `${BACKEND}${u}`) : "");
 export const toOptions = (arr) => (arr || []).map((v) => ({ value: v, label: v }));
 
+const MESI_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+// "16 dicembre 2026" (singolo) o "16–20 dicembre 2026" (stesso mese) o "16 dic 2026 – 3 gen 2027".
+export function formatDateRange(start, end) {
+  if (!start) return "";
+  const s = new Date(start);
+  if (isNaN(s)) return start;
+  const e = end && end !== start ? new Date(end) : null;
+  const one = (dt) => `${dt.getDate()} ${MESI_IT[dt.getMonth()]} ${dt.getFullYear()}`;
+  if (!e || isNaN(e)) return one(s);
+  if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth())
+    return `${s.getDate()}–${e.getDate()} ${MESI_IT[s.getMonth()]} ${s.getFullYear()}`;
+  if (s.getFullYear() === e.getFullYear())
+    return `${s.getDate()} ${MESI_IT[s.getMonth()]} – ${e.getDate()} ${MESI_IT[e.getMonth()]} ${s.getFullYear()}`;
+  return `${one(s)} – ${one(e)}`;
+}
+
 const _WD_IT = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
 const _MO_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 export const eventDayList = (start, end) => {
@@ -263,7 +279,8 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
       addLabel={field.addLabel || "Aggiungi nuovo"} testid={`field-${field.name}`} />;
   }
   if (field.type === "select") {
-    const opts = sortOptions(field.options || options?.[field.source] || [], field.keepOrder);
+    const baseOpts = field.dynamicOptions ? field.dynamicOptions(form) : (field.options || options?.[field.source] || []);
+    const opts = sortOptions(baseOpts, field.keepOrder);
     const ADD_ENTITY = "__add_entity__";
     return (
       <Select value={value || ""} onValueChange={(v) => { if (v === ADD_ENTITY) { onAddEntity && onAddEntity(field); } else { onChange(field.name, v); } }}>

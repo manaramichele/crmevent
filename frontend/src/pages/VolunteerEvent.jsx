@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
-import { StatusBadge, fileUrl } from "@/components/crm";
+import { StatusBadge, fileUrl, formatDateRange } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import RouteMapDialog from "@/components/RouteMapDialog";
@@ -217,7 +217,7 @@ export default function VolunteerEvent() {
               return (
                 <div key={m.id || i} className="border border-slate-200 rounded-xl p-3" data-testid={`vol-meal-${m.id || i}`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="font-semibold text-slate-800 text-sm capitalize">{[m.data, m.tipo_pasto].filter(Boolean).join(" · ")}</div>
+                    <div className="font-semibold text-slate-800 text-sm capitalize">{[formatDateRange(m.data_inizio || m.data, m.data_fine), m.tipo_pasto].filter(Boolean).join(" · ")}</div>
                     {m.orario && <span className="text-xs text-slate-500">{m.orario}</span>}
                   </div>
                   <div className="mt-1 space-y-1">

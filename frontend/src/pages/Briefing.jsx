@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
-import { fileUrl, StatusBadge, formatEUR } from "@/components/crm";
+import { fileUrl, StatusBadge, formatEUR, formatDateRange } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -235,7 +235,8 @@ function BriefingBody({ data }) {
                 ))}
                 {h.meals.map((m, j) => (
                   <div key={`m${j}`} className="text-xs text-slate-600 mt-1">
-                    🍽️ {m.tipo_pasto || "Pasto"} {m.data ? `· ${m.data}` : ""} {m.orario ? `· ${m.orario}` : ""} · {m.struttura?.nome || m.struttura_nome || "Struttura"}
+                    🍽️ {m.tipo_pasto || "Pasto"} {(m.data_inizio || m.data) ? `· ${formatDateRange(m.data_inizio || m.data, m.data_fine)}` : ""} {m.orario ? `· ${m.orario}` : ""} · {m.struttura?.nome || m.struttura_nome || "Struttura"}
+                    {(m.struttura?.indirizzo || m.indirizzo) && <span className="text-slate-400"> · {[m.struttura?.indirizzo || m.indirizzo, m.struttura?.citta].filter(Boolean).join(", ")}</span>}
                     {m.struttura?.google_maps_url && <span className="ml-2"><MapsLink url={m.struttura.google_maps_url} testid={`bhosp-meal-${i}-${j}`} /></span>}
                   </div>
                 ))}
