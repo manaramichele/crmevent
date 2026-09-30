@@ -652,6 +652,15 @@ export default function LeadFinder() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={!!convDup} onOpenChange={(o) => !o && setConvDup(null)}>
+        <DialogContent className="max-w-md" data-testid="lf-convert-dup-modal">
+          <DialogHeader><DialogTitle>Contatto già presente</DialogTitle><DialogDescription>Questo contatto è già presente nei Lead: collegalo invece di crearne un duplicato.</DialogDescription></DialogHeader>
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>Esiste già un Lead con questa email{convDup?.lead_name ? <>: <strong>{convDup.lead_name}</strong></> : ""}. Vuoi collegare l'organizzatore al Lead esistente invece di crearne uno nuovo?</p>
+            <div className="flex justify-end gap-2 pt-1"><Button variant="outline" size="sm" onClick={() => setConvDup(null)}>Annulla</Button><Button size="sm" onClick={() => convertToLead(convDup.org, true)} data-testid="lf-convert-link-btn" className="bg-slate-900 hover:bg-slate-800 text-white">Collega al Lead esistente</Button></div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
