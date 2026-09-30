@@ -533,3 +533,8 @@ Task 2 — Creatività manuale:
 - Snapshot acquisto esteso: +event_id, organization_id, pricing_plan_version, quantita, payment_status, upgrade_amount_paid.
 - Regola: variazione listino → solo nuovi acquisti (gli storici restano congelati). Solo Super Admin, con audit.
 - Nessuna implementazione: documentazione soltanto. Backend/DB/Stripe/Checkout/webhook/FIC invariati.
+
+## 2026-06-30 (Mappa gating DEFINITIVA + /prezzi allineata)
+- Spostate Scadenze + Responsabili + Stato attività da PREMIUM a PROFESSIONAL (attività normali non limitate).
+- PREMIUM organizzazione avanzata: Checklist completa, Pipeline organizzativa pre-evento, Controllo avanzamento, Modelli per tipologia evento (+ marketing/social).
+- Tabella comparativa e feature list card allineate. Prezzi/selettore/CTA invariati. Solo frontend + doc.

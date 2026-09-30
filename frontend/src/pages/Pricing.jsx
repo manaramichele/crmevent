@@ -31,7 +31,7 @@ const PLANS = {
     subtitle: "Per organizzare il tuo evento",
     description: null,
     intro: "Tutto ciò che trovi in Starter, più:",
-    features: ["Aziende e contatti", "Sponsor e partner", "Attività e follow-up", "Ospitalità e pernottamenti", "Pasti", "Briefing", "Documenti", "Mappe e percorsi"],
+    features: ["Aziende e contatti", "Sponsor e partner", "Attività, follow-up e scadenze", "Responsabili e stato attività", "Ospitalità e pernottamenti", "Pasti", "Briefing", "Documenti", "Mappe e percorsi"],
     ctaTestid: "plan-professional-cta",
   },
   premium: {
@@ -42,7 +42,7 @@ const PLANS = {
     subtitle: "Per organizzare e promuovere il tuo evento",
     description: null,
     intro: "Tutto ciò che trovi in Professional, più:",
-    features: ["Checklist completa dell'evento", "Pipeline organizzativa pre-evento", "Scadenze e controllo avanzamento", "Responsabili delle attività", "Marketing dell'evento", "Piano editoriale", "Calendario social", "Libreria media", "Creazione contenuti", "Gestione e pubblicazione social"],
+    features: ["Checklist completa dell'evento", "Pipeline organizzativa pre-evento", "Controllo avanzamento", "Modelli per tipologia di evento", "Marketing dell'evento", "Piano editoriale e calendario social", "Libreria media", "Creazione contenuti", "Gestione e pubblicazione social"],
     ctaTestid: "plan-premium-cta",
   },
 };
@@ -132,6 +132,9 @@ const COMPARISON = [
     ["Aziende e contatti", false, true, true],
     ["Sponsor e partner", false, true, true],
     ["Attività e follow-up", false, true, true],
+    ["Scadenze", false, true, true],
+    ["Responsabili delle attività", false, true, true],
+    ["Stato delle attività", false, true, true],
     ["Ospitalità", false, true, true],
     ["Pernottamenti", false, true, true],
     ["Pasti", false, true, true],
@@ -140,11 +143,10 @@ const COMPARISON = [
     ["Mappe e percorsi", false, true, true],
   ]},
   { area: "Organizzazione avanzata", rows: [
-    ["Checklist dell'evento", false, false, true],
-    ["Pipeline organizzativa", false, false, true],
-    ["Scadenze", false, false, true],
-    ["Responsabili delle attività", false, false, true],
+    ["Checklist completa dell'evento", false, false, true],
+    ["Pipeline organizzativa pre-evento", false, false, true],
     ["Controllo avanzamento", false, false, true],
+    ["Modelli per tipologia di evento", false, false, true],
   ]},
   { area: "Marketing e social", rows: [
     ["Piano editoriale", false, false, true],

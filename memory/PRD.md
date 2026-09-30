@@ -232,6 +232,19 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - ✅ Gating rivisto: STARTER=gestione staff · PROFESSIONAL=+gestione evento · PREMIUM=+organizzazione avanzata+marketing/social. Org-level sul miglior piano attivo (Professional/Premium) con evento attivo nell'anno.
 - 🆕 FASE 2 — "Piani e prezzi" (Super Admin): listino prezzi gestibile da DB (NO hardcoding), 6 prezzi (3 piani × 2 fasce), sync Stripe con NUOVO Price ad ogni variazione (vecchi Price archiviati per riconciliazione), storico variazioni prezzo, snapshot immutabile del prezzo su ogni acquisto evento. Solo ruolo Super Admin. Gestione sicura errori di sync (DB e Stripe mai divergenti).
 
+### MAPPA DI GATING DEFINITIVA (APPROVATA 2026-06-30) — FASE 2
+STARTER — Gestisci il tuo team (49€ / 99€ +IVA per evento):
+  Persone/anagrafiche (staff), Staff e volontari, Team, Turni, Disponibilità e conferme, Informazioni allo staff.
+PROFESSIONAL — Gestisci tutto il tuo evento (79€ / 149€) [EVIDENZIATO]:
+  Tutto Starter + Aziende, Contatti aziendali, Sponsor e partner, Attività, Follow-up, SCADENZE, Assegnazione RESPONSABILI, STATO attività, Ospitalità, Pernottamenti, Pasti, Briefing, Documenti, Mappe e percorsi.
+PREMIUM — Organizza e promuovi (99€ / 199€):
+  Tutto Professional + Checklist completa evento, Pipeline organizzativa pre-evento, Controllo avanzamento complessivo, Modelli/checklist per tipologia evento, automazioni future, Marketing, Piano editoriale, Calendario social, Libreria media, Creazione contenuti, Gestione+Pubblicazione social.
+NOTE:
+- Anagrafiche/Persone: gating PER SEZIONE (staff=Starter; aziende/contatti/sponsor=Professional). Mai bloccare l'intera pagina.
+- Org-level: Aziende+Strutture da Professional; Libreria media+Impostazioni Social+strumenti marketing da Premium. Gating sul MIGLIOR piano con evento ATTIVO nell'anno, senza modificare il piano dei singoli eventi.
+- Attività "normali" (incl. scadenze/responsabili/stato) in PROFESSIONAL; solo l'evoluto (checklist/pipeline/controllo avanzamento/modelli) in PREMIUM.
+- Trial 14gg = tutte le funzionalità PREMIUM. Nessun FREE.
+
 ### FASE 2 — GESTIONE DINAMICA PREZZI (APPROVATA 2026-06-30)
 Struttura a 3 livelli (APPROVATA):
 1. `pricing_plans` → LISTINO ATTUALE = fonte di verità (6 doc: 3 piani × 2 fasce). Campi: plan, fascia, net, vat_rate(22), gross, currency, stripe_product_id, stripe_price_id(attivo), status, version, updated_at, updated_by.
