@@ -97,7 +97,7 @@ function Cell({ on, plus }) {
   );
 }
 
-function ComparisonTable() {
+function ComparisonTable({ prices }) {
   const GRID = "grid grid-cols-[1fr_repeat(3,minmax(56px,1fr))] sm:grid-cols-[1.6fr_repeat(3,1fr)]";
   return (
     <section id="confronto" className="max-w-4xl mx-auto px-6 pt-14 pb-4" data-testid="comparison-section">
@@ -133,6 +133,43 @@ function ComparisonTable() {
             ))}
           </div>
         ))}
+
+        {/* Riga finale di scelta — prezzi dinamici coerenti con il selettore */}
+        <div className="grid grid-cols-1 sm:grid-cols-[1.6fr_repeat(3,1fr)] border-t-2 border-slate-200 bg-white" data-testid="comparison-choice-row">
+          <div className="hidden sm:flex items-center px-4 text-sm font-semibold text-slate-700">Scegli il tuo piano</div>
+
+          {/* FREE */}
+          <div className="flex flex-col items-center gap-2 text-center p-4 border-t border-slate-100 sm:border-t-0">
+            <span className="sm:hidden text-xs font-bold uppercase tracking-wide text-slate-500">Free</span>
+            <div className="font-display text-2xl font-bold text-slate-900">0 €</div>
+            <Link to="/registrati" data-testid="choice-free-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "free", where: "table" })}
+              className="w-full max-w-[180px] inline-flex items-center justify-center h-10 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-all active:scale-[0.98]">Crea account</Link>
+          </div>
+
+          {/* PLUS (evidenziato) */}
+          <div className="flex flex-col items-center gap-2 text-center p-4 border-t border-slate-100 sm:border-t-0 bg-tiffany-light/40 sm:border-x sm:border-tiffany/30">
+            <span className="sm:hidden inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-tiffany-fg"><Zap className="w-3 h-3" fill="currentColor" />Plus</span>
+            <div>
+              <span className="font-display text-2xl font-bold text-slate-900">{prices.plus} €</span>
+              <span className="text-slate-500 text-xs font-medium ml-1">+ IVA</span>
+              <div className="text-xs text-slate-400">/ evento</div>
+            </div>
+            <Link to="/registrati" data-testid="choice-plus-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "plus", where: "table" })}
+              className="w-full max-w-[180px] inline-flex items-center justify-center h-10 px-4 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98]">Scegli Plus</Link>
+          </div>
+
+          {/* PREMIUM */}
+          <div className="flex flex-col items-center gap-2 text-center p-4 border-t border-slate-100 sm:border-t-0">
+            <span className="sm:hidden text-xs font-bold uppercase tracking-wide text-slate-500">Premium</span>
+            <div>
+              <span className="font-display text-2xl font-bold text-slate-900">{prices.premium} €</span>
+              <span className="text-slate-500 text-xs font-medium ml-1">+ IVA</span>
+              <div className="text-xs text-slate-400">/ evento</div>
+            </div>
+            <Link to="/registrati" data-testid="choice-premium-cta" onClick={() => trackEvent("pricing_cta_click", { plan: "premium", where: "table" })}
+              className="w-full max-w-[180px] inline-flex items-center justify-center h-10 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-all active:scale-[0.98]">Scegli Premium</Link>
+          </div>
+        </div>
       </div>
       <p className="text-xs text-slate-400 mt-4 text-center">FREE = gestione staff · PLUS = gestione completa dell'evento · PREMIUM = tutto Plus + organizzazione avanzata + marketing/social.</p>
     </section>
@@ -291,7 +328,7 @@ export default function Pricing() {
       </section>
 
       {/* Tabella di confronto completa (FASE 1) */}
-      <ComparisonTable />
+      <ComparisonTable prices={prices} />
 
       {/* Final CTA */}
       <section className="max-w-3xl mx-auto px-6 py-16 mt-6 text-center">
