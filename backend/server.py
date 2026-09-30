@@ -218,7 +218,8 @@ def _sub_summary(org: dict) -> dict:
         # Internal/Test organizations: no trial, no Stripe, no CRMEvent billing.
         return {"status": otype, "plan": sub.get("plan", "crmevent"), "billing_cycle": None,
                 "trial_end": None, "current_period_end": None, "days_left": None,
-                "access": "full", "price_monthly": PRICE_MONTHLY, "price_yearly": PRICE_YEARLY,
+                "access": "full", "account_plan": "internal", "effective_plan": "premium",
+                "price_monthly": PRICE_MONTHLY, "price_yearly": PRICE_YEARLY,
                 "org_type": otype}
     status = sub.get("status", "trial")
     trial_end = sub.get("trial_end")
@@ -228,10 +229,20 @@ def _sub_summary(org: dict) -> dict:
     if status == "trial" and days_left <= 0:
         status = "expired"
     active = status == "active" or (status == "trial" and days_left > 0)
+    # FASE 2: account_plan (stato account) + effective_plan (piano attivo effettivo).
+    # Durante il trial l'utente prova tutte le funzionalità PREMIUM; alla scadenza → sola lettura.
+    account_plan = "trial" if status == "trial" else ("customer" if status == "active" else "free")
+    if status == "trial" and active:
+        effective_plan = "premium"
+    elif status == "active":
+        effective_plan = "premium"  # legacy ricorrente in grace finché non migrato (FASE 2 Stripe)
+    else:
+        effective_plan = "free"
     return {"status": status, "plan": sub.get("plan", "crmevent"),
             "billing_cycle": sub.get("billing_cycle"), "trial_end": trial_end,
             "current_period_end": period_end, "days_left": days_left,
             "access": "full" if active else "limited",
+            "account_plan": account_plan, "effective_plan": effective_plan,
             "price_monthly": PRICE_MONTHLY, "price_yearly": PRICE_YEARLY, "org_type": "cliente"}
 
 
@@ -7785,6 +7796,180 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     except Exception as e:
         logger.error(f"brevo avail submit sync failed: {e}")
     return {"ok": True, "event_nome": event.get("nome")}
+
+
+# ==================== FASE 2 — Modello commerciale per-evento + Listino dinamico ====================
+# STEP 1-3 (modello dati, listino DB, Super Admin "Piani e prezzi"). NESSUNA sync Stripe qui.
+PRICING_PLANS_LIST = ["starter", "professional", "premium"]
+PRICING_TIERS = ["small", "large"]
+PRICING_VAT_RATE = 22.0
+PRICING_SEED = {
+    ("starter", "small"): 49.0, ("professional", "small"): 79.0, ("premium", "small"): 99.0,
+    ("starter", "large"): 99.0, ("professional", "large"): 149.0, ("premium", "large"): 199.0,
+}
+PLAN_RANK = {"free": 0, "starter": 1, "professional": 2, "premium": 3}
+PLAN_LABEL = {"starter": "Starter", "professional": "Professional", "premium": "Premium"}
+TIER_LABEL = {"small": "Fino a 3 eventi/anno", "large": "Più di 3 eventi/anno"}
+
+
+def _gross(net: float) -> float:
+    return round(float(net) * (1 + PRICING_VAT_RATE / 100.0), 2)
+
+
+def compute_tier(event_count: int) -> str:
+    """Fascia in base al n° eventi nello stesso anno solare: 1-3 → small, dal 4° → large."""
+    return "large" if event_count >= 4 else "small"
+
+
+async def _events_in_year(org_id: str, year: int) -> int:
+    return await db.events.count_documents({"org_id": org_id, "data_inizio": {"$regex": f"^{year}-"}})
+
+
+def _event_effective_plan(event: dict, sub_summary: dict) -> str:
+    """Piano effettivo di un evento: durante il trial tutto PREMIUM; altrimenti l'entitlement dell'evento."""
+    if sub_summary.get("status") == "trial" and sub_summary.get("access") == "full":
+        return "premium"
+    ent = (event or {}).get("entitlement") or {}
+    return ent.get("plan") or "free"
+
+
+async def _org_best_plan(org_id: str, sub_summary: dict, year: int) -> str:
+    """Gating org-level: miglior piano tra gli eventi ATTIVI dell'anno corrente (trial → premium)."""
+    if sub_summary.get("effective_plan") == "premium" and sub_summary.get("status") in ("trial", "active"):
+        return "premium"
+    best = "free"
+    cur = db.events.find({"org_id": org_id, "data_inizio": {"$regex": f"^{year}-"}}, {"_id": 0, "entitlement": 1})
+    async for e in cur:
+        p = (e.get("entitlement") or {}).get("plan") or "free"
+        if PLAN_RANK.get(p, 0) > PLAN_RANK.get(best, 0):
+            best = p
+    return best
+
+
+async def _ensure_pricing_seeded():
+    """Popola i 6 prezzi iniziali del listino se mancanti (idempotente)."""
+    for (plan, fascia), net in PRICING_SEED.items():
+        if not await db.pricing_plans.find_one({"plan": plan, "fascia": fascia}):
+            await _create("pricing_plans", {
+                "plan": plan, "fascia": fascia, "net": net, "vat_rate": PRICING_VAT_RATE,
+                "gross": _gross(net), "currency": "EUR", "status": "active", "version": 1,
+                "stripe_product_id": None, "stripe_price_id": None, "updated_by": None,
+            })
+
+
+def _pricing_sort_key(p: dict):
+    return (PRICING_PLANS_LIST.index(p["plan"]) if p["plan"] in PRICING_PLANS_LIST else 9,
+            PRICING_TIERS.index(p["fascia"]) if p["fascia"] in PRICING_TIERS else 9)
+
+
+@api.get("/pricing")
+async def public_pricing():
+    """Listino pubblico attivo (per /prezzi e Checkout — fonte di verità DB, nessun hardcoding)."""
+    await _ensure_pricing_seeded()
+    rows = await db.pricing_plans.find({"status": "active"}, {"_id": 0}).to_list(50)
+    rows.sort(key=_pricing_sort_key)
+    return {"currency": "EUR", "vat_rate": PRICING_VAT_RATE, "plans": rows}
+
+
+@api.get("/platform/pricing")
+async def platform_pricing(admin: dict = Depends(require_superadmin)):
+    await _ensure_pricing_seeded()
+    rows = await db.pricing_plans.find({}, {"_id": 0}).to_list(50)
+    rows.sort(key=_pricing_sort_key)
+    for r in rows:
+        r["plan_label"] = PLAN_LABEL.get(r["plan"], r["plan"])
+        r["tier_label"] = TIER_LABEL.get(r["fascia"], r["fascia"])
+    return {"currency": "EUR", "vat_rate": PRICING_VAT_RATE, "plans": rows}
+
+
+@api.get("/platform/pricing/history")
+async def platform_pricing_history(admin: dict = Depends(require_superadmin)):
+    rows = await db.pricing_history.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return rows
+
+
+class PriceUpdateIn(BaseModel):
+    net: float
+
+
+@api.put("/platform/pricing/{plan}/{fascia}")
+async def update_pricing(plan: str, fascia: str, body: PriceUpdateIn, admin: dict = Depends(require_superadmin)):
+    if plan not in PRICING_PLANS_LIST or fascia not in PRICING_TIERS:
+        raise HTTPException(status_code=400, detail="Piano o fascia non validi")
+    new_net = round(float(body.net), 2)
+    if new_net <= 0:
+        raise HTTPException(status_code=400, detail="Il prezzo netto deve essere maggiore di zero")
+    doc = await db.pricing_plans.find_one({"plan": plan, "fascia": fascia}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Prezzo non trovato")
+    old_net = doc.get("net")
+    # FASE 2 STEP 3: aggiornamento SOLO su DB. La sync con Stripe (nuovo Price) arriverà allo step Stripe.
+    await db.pricing_plans.update_one({"plan": plan, "fascia": fascia}, {"$set": {
+        "net": new_net, "gross": _gross(new_net), "version": doc.get("version", 1) + 1,
+        "updated_at": now_iso(), "updated_by": admin.get("user_id")}})
+    await _create("pricing_history", {
+        "plan": plan, "fascia": fascia, "old_net": old_net, "new_net": new_net,
+        "old_gross": doc.get("gross"), "new_gross": _gross(new_net),
+        "old_stripe_price_id": doc.get("stripe_price_id"), "new_stripe_price_id": None,
+        "changed_by": admin.get("user_id"), "changed_by_email": admin.get("email"),
+        "note": "Aggiornamento listino (solo DB — sync Stripe non ancora attiva)"})
+    try:
+        await record_audit(admin, "pricing_updated", meta={"plan": plan, "fascia": fascia, "old_net": old_net, "new_net": new_net})
+    except Exception:
+        pass
+    return await db.pricing_plans.find_one({"plan": plan, "fascia": fascia}, {"_id": 0})
+
+
+@api.post("/platform/phase2/migrate")
+async def phase2_migrate(admin: dict = Depends(require_superadmin)):
+    """Migrazione non distruttiva: seed listino + account_plan org + back-fill entitlement eventi. Idempotente."""
+    await _ensure_pricing_seeded()
+    orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "type": 1, "subscription": 1}).to_list(5000)
+    org_updates = 0
+    org_ap = {}
+    for o in orgs:
+        sub = o.get("subscription", {}) or {}
+        if o.get("type") != "cliente":
+            ap = "internal"
+        else:
+            st = sub.get("status", "trial")
+            ap = "trial" if st == "trial" else ("customer" if st == "active" else "free")
+        org_ap[o["id"]] = ap
+        if sub.get("account_plan") != ap:
+            await db.organizations.update_one({"id": o["id"]}, {"$set": {"subscription.account_plan": ap, "updated_at": now_iso()}})
+            org_updates += 1
+    events = await db.events.find({}, {"_id": 0, "id": 1, "org_id": 1, "data_inizio": 1, "entitlement": 1}).to_list(50000)
+    ev_updates = 0
+    for e in events:
+        if e.get("entitlement"):
+            continue
+        di = e.get("data_inizio") or ""
+        year = int(di[:4]) if di[:4].isdigit() else None
+        ap = org_ap.get(e["org_id"])
+        plan = "premium" if ap in ("trial", "internal", "customer") else "free"
+        ent = {"plan": plan, "source": "trial" if ap == "trial" else "migration", "price_tier": None,
+               "year": year, "amount_net": None, "amount_vat": None, "amount_gross": None, "currency": "EUR",
+               "stripe_price_id": None, "stripe_payment_ref": None, "invoice_id": None, "purchased_at": None}
+        await db.events.update_one({"id": e["id"]}, {"$set": {"entitlement": ent, "updated_at": now_iso()}})
+        ev_updates += 1
+    return {"ok": True, "pricing_plans": await db.pricing_plans.count_documents({}),
+            "org_account_plan_updated": org_updates, "org_total": len(orgs),
+            "events_backfilled": ev_updates, "events_total": len(events)}
+
+
+@api.get("/account/plan-overview")
+async def account_plan_overview(user: dict = Depends(require_admin)):
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    sub = _sub_summary(org)
+    year = datetime.now(timezone.utc).year
+    count = await _events_in_year(user["org_id"], year)
+    tier = compute_tier(count)
+    return {"account_plan": sub.get("account_plan"), "effective_plan": sub.get("effective_plan"),
+            "status": sub.get("status"), "days_left": sub.get("days_left"),
+            "year": year, "events_in_year": count, "fascia": tier,
+            "fascia_label": TIER_LABEL.get(tier)}
 
 
 app.include_router(api)

@@ -19,6 +19,7 @@ import Profile from "@/pages/Profile";
 import Account from "@/pages/Account";
 import Platform from "@/pages/Platform";
 import OrgDetail from "@/pages/OrgDetail";
+import PricingAdmin from "@/pages/PricingAdmin";
 import Invite from "@/pages/Invite";
 import { trackPageView } from "@/lib/analytics";
 import AuditLog from "@/pages/AuditLog";
@@ -107,6 +108,7 @@ function Shell() {
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
         <Route path="/account" element={<Protected><AdminOnly><Account /></AdminOnly></Protected>} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/org/:id" element={<Protected><SuperAdminOnly><OrgDetail /></SuperAdminOnly></Protected>} />
         <Route path="/audit" element={<Protected><SuperAdminOnly><AuditLog /></SuperAdminOnly></Protected>} />
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />

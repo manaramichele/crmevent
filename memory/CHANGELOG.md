@@ -538,3 +538,11 @@ Task 2 — Creatività manuale:
 - Spostate Scadenze + Responsabili + Stato attività da PREMIUM a PROFESSIONAL (attività normali non limitate).
 - PREMIUM organizzazione avanzata: Checklist completa, Pipeline organizzativa pre-evento, Controllo avanzamento, Modelli per tipologia evento (+ marketing/social).
 - Tabella comparativa e feature list card allineate. Prezzi/selettore/CTA invariati. Solo frontend + doc.
+
+## 2026-06-30 (FASE 2 STEP 1-3 — modello dati + listino DB + Super Admin "Piani e prezzi") — STOP prima di Stripe
+- BACKEND (server.py): nuove collection `pricing_plans` (6 prezzi, fonte di verità), `pricing_history` (append-only), campo `events.entitlement` (plan/source/price_tier/year/amount/stripe/invoice) e `organizations.subscription.account_plan`. Helper: compute_tier, _events_in_year, _event_effective_plan, _org_best_plan, _ensure_pricing_seeded. _sub_summary esteso con account_plan + effective_plan.
+- API: GET /api/pricing (pubblico, per /prezzi e Checkout futuri), GET/PUT /api/platform/pricing (+/{plan}/{fascia}), GET /api/platform/pricing/history, POST /api/platform/phase2/migrate, GET /api/account/plan-overview. Modifica prezzo = SOLO DB (no Stripe) + record in pricing_history + audit. Solo Super Admin.
+- MIGRAZIONE (idempotente, non distruttiva): seed 6 prezzi, account_plan su 9 org, entitlement back-fill su 8 eventi. Nessun dato perso.
+- FRONTEND: nuova pagina /piattaforma/prezzi (PricingAdmin.jsx) in Amministrazione piattaforma → "Piani e prezzi": tabella 6 prezzi editabili (netto/IVA22%/totale/stato/data/Stripe Price), conferma "applicato solo ai nuovi acquisti", storico variazioni, pulsante migrazione. Avviso "sync Stripe non attiva".
+- PRODUZIONE (verifica deployer, sola lettura): 0 abbonamenti Stripe ricorrenti reali (3 org interne/test, nessuna subscription/rinnovo). Migrazione legacy = no-op. Nessuna subscription toccata.
+- Test: seed/migrazione/update 79->89 con storico/validazione 400/plan-overview fascia small — tutti OK. NESSUNA modifica a Stripe/Checkout/webhook/Fatture in Cloud.
