@@ -218,6 +218,10 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - Brevo GATED da env BREVO_AVAILABILITY_ENABLED (default off): in preview e finché non approvato, nessun invio reale; le intenzioni sono loggate in brevo_sync_log (pending) per retry. Template creati come BOZZA via POST /api/brevo/create-availability-templates. Consenso marketing separato e facoltativo (non blocca).
 - Endpoint nuovi: POST /api/events/{id}/availabilities/confirm-bulk, POST /api/brevo/create-availability-templates. availability doc: confirmed_at/by, confirmation_email_sent_at/status/error, brevo_status, marketing_consent(+ts/source).
 
+### 2026-06-30 (Nuova pagina /prezzi — FASE 1 frontend COMPLETATA)
+- 3 piani FREE/PLUS/PREMIUM con selettore eventi (Fino a 3 / Più di 3) e prezzi dinamici. Solo frontend, Stripe intatto.
+- FASE 2 da fare per rendere Plus/Premium acquistabili: vedi ROADMAP.
+
 ### Backlog aggiornato (P1)
 - Attivazione invii Brevo disponibilità (dopo approvazione utente): BREVO_AVAILABILITY_ENABLED=on in produzione + attivazione template + test invio singolo.
 - Consultazione disponibilità in creazione Team/Turni; alimentazione Briefing da assegnazione reale.

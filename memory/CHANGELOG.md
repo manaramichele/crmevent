@@ -499,3 +499,10 @@ Task 2 — Creatività manuale:
 - [x] **Viste aggiornate**: Ospitalità "Per giorno" espande il pasto su OGNI giorno del range; "Per struttura", Briefing e Area Staff ("La mia partecipazione") mostrano il range leggibile "16–20 ottobre 2026" (helper `formatDateRange` in `crm.jsx`, usato in `Hospitality.jsx`, `Briefing.jsx`, `VolunteerEvent.jsx`).
 - File: `server.py` (Meal, _normalize_meals, 3 endpoint hospitality/me-events/briefing), `crm.jsx`, `Persons.jsx`, `Hospitality.jsx`, `Briefing.jsx`, `VolunteerEvent.jsx`.
 - Test credentials aggiornate: org admin `tabtest_1790713653@crmevent.it` / `TestOrg2026!` (org con eventi/staff/team/meals/strutture).
+
+## 2026-06-30 (Nuova pagina /prezzi — FASE 1 solo frontend, verificato con screenshot desktop+mobile)
+- Riprogettata `frontend/src/pages/Pricing.jsx`: da singolo piano mensile/annuale a **3 piani FREE / PLUS / PREMIUM** con prezzo per evento.
+- Selettore "Quanti eventi organizzi?" (`pricing-events-selector`): Fino a 3 eventi (PLUS 49€, PREMIUM 99€) · Più di 3 eventi (PLUS 79€, PREMIUM 149€), FREE sempre 0€. Aggiornamento prezzi istantaneo via stato React, nessun reload.
+- PLUS evidenziato (bordo Tiffany + badge "Miglior rapporto qualità-prezzo"); kicker gerarchia commerciale (Gestisci le persone / Gestisci l'evento / Organizza e promuovi l'evento). Responsive grid 1→3 colonne, nessuno scroll orizzontale.
+- Predisposta area FASE 2 per la tabella di confronto (commento in pagina, `id="confronto"`).
+- ⚠️ NESSUNA modifica a Stripe, Checkout, webhook, Fatture in Cloud, prodotti/prezzi Stripe. La pagina è puramente marketing: i CTA puntano a `/registrati`.
