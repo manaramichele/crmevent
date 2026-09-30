@@ -1,0 +1,29 @@
+{
+  "summary": "E2E tested bilingual /partecipa flow, home hero title change, org-admin availability dialog with dual IT/EN links, and trial-banner removal. All 9 test scenarios passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "home_hero_title": "PASS - 'Organizza il tuo evento. Tutto in un'unica piattaforma.' shown, old title absent",
+    "partecipa_default_it": "PASS - lang-switch visible, IT strings present, CRMEvent logo shown on white",
+    "partecipa_lang_en_param": "PASS - EN strings ('Share your availability', 'When are you available?', 'First name', 'Submit availability') rendered",
+    "lang_switch_data_persistence": "PASS - Nome='MarioTest' and Email='test@example.com' preserved across IT->EN->IT toggles; URL updates ?lang=en / ?lang=it without reload",
+    "en_form_submission": "PASS - Thank-you shown in EN ('Thank you, your availability has been recorded.'); backend availability doc created with compilation_lang='en' (verified in Mongo)",
+    "bilingual_validation": "PASS - Empty submit in EN triggers 'Required field: First name' toast",
+    "org_admin_dual_links": "PASS - Login qa.eventi@crmeventqa.it OK; availability dialog exposes avail-link-url (?lang=it), avail-link-url-en (?lang=en), avail-copy-it, avail-copy-en; both share same token ocFg2KeXH7zEloiOV9-fP-j2G_MAgjiA",
+    "trial_banner_removed": "PASS - [data-testid=trial-banner] absent; strings 'Prova gratuita' and 'Attiva CRMEvent' not present in internal layout",
+    "responsive_mobile_390": "PASS - lang switch + logo visible, no horizontal overflow at 390x844"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Partecipa.jsx date-of-birth uses native <input type=date> (browser default picker) rather than a shadcn calendar; acceptable but per guidelines noted only.",
+    "AvailabilityDialog.jsx toast strings 'Link IT copiato' / 'Impossibile copiare' are IT-only for a bilingual feature; minor, admin-only UI."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! (org admin) - working",
+  "seed_data_creation": "Created one availability record via public form: TESTEnrico<ts> / test_en_<ts>@example.com against token GTsKCYLQZQb8U8AeOh_wO6Jp-BngpWW9 (Nova Run Festival, other org). compilation_lang='en' confirmed in Mongo.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bilingual /partecipa + dual link IT/EN in AvailabilityDialog verified end-to-end. Backend field storing language is 'compilation_lang' on availabilities collection."
+}

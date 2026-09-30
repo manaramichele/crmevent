@@ -622,3 +622,17 @@ Task 2 — Creatività manuale:
 - Test: script /app/backend/test_credits_faseC.py 15/15 PASS (accredito, idempotenza webhook duplicato, snapshot, multi-tenant, unpaid=no-credit, FIC sim). e2e Playwright: pagamento Stripe TEST reale €20 (carta 4242) → banner +100, saldo 120→220, ledger, storico acquisti, fattura, IVA 22% (subtotal 2000, tax 440, total 2440 cents). €50/100/200/500/1000 breakdown verificati. Regressione EventPlanManager/Fatture OK.
 - NON toccati: Stripe LIVE, consumo crediti (credit_services restano disattivati), migrazione org esistenti, vecchio sistema commerciale per-evento.
 - Nota Stripe: l'account TEST liquida in USD → il Checkout mostra anche l'equivalente USD, ma imponibile/IVA/totale/crediti sono corretti in EUR/crediti (nessun impatto funzionale; eventuale € puro è una config dell'account Stripe).
+
+## 2026-06-30 (FASE D — passaggio pubblico al modello a crediti) ✅ VERIFICATO e2e (100%)
+- /prezzi riscritta come pagina Crediti pubblica (endpoint pubblico GET /api/credits/packages-public): hero "Usa CRMEvent gratuitamente", 100 crediti inclusi, sezione "Quando utilizzo i crediti?" (2 colonne gratis vs a crediti), 6 tagli dinamici con IVA 22%. Nessun riferimento a Starter/Professional/Premium/trial/per-evento.
+- Registrazione: welcome dialog "Benvenuto in CRMEvent · Hai ricevuto 100 crediti" (bonus una tantum già assegnato da _grant_signup_bonus, idempotente); rimosso copy trial 14 giorni.
+- Area Account ripulita: rimosso EventPlanManager e blocco trial/licenze; mostra Crediti + fatturazione + fatture. Titolo "Account e crediti".
+- /demo copy aggiornato ("Vuoi usare CRMEvent con il tuo evento?" + CTA "Inizia gratuitamente").
+- Layout: TrialBanner disattivato (return null) — rimossa la regressione "Prova gratuita 14 giorni".
+- Super Admin /piattaforma/crediti: nuovo tab "Migrazione" con DRY-RUN (GET /api/platform/credits/migration-dryrun, sola lettura) + POST /api/platform/credits/migrate (idempotente, NON eseguito). Dry-run attuale: 11 org → 4 idonee (+400 crediti), 7 escluse (test/demo/interne), 0 già col bonus.
+- NON toccati: consumi (credit_services off), Stripe LIVE, vecchio sistema commerciale (coesiste), migrazione org (non eseguita).
+
+## 2026-06-30 (Home hero title + /partecipa bilingue IT/EN) ✅ VERIFICATO e2e (100%)
+- Home: titolo Hero → "Organizza il tuo evento. Tutto in un'unica piattaforma." (solo titolo).
+- /partecipa/{token} bilingue IT/EN: selettore lingua (Italiano | English), parametro ?lang=it|en (default IT per retrocompatibilità link esistenti), stesso token/flusso/raccolta dati, cambio lingua senza reload né perdita dati compilati, date localizzate client-side, logo CRMEvent per fondo bianco (/logo-crmevent.png). Backend: POST /api/public/availability/{code} accetta body.lang e salva compilation_lang (it/en) come metadato.
+- Maschera evento (AvailabilityDialog): due link distinti stesso token — "Link partecipazione — Italiano [Copia link IT]" (?lang=it) e "Link partecipazione — English [Copy EN link]" (?lang=en).

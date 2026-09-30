@@ -314,3 +314,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - FASE E — Pagamenti LIVE: Stripe LIVE per i pacchetti crediti + Fatture in Cloud reale per ricariche + auto-ricarica. (P1)
 - Attivazione consumi reali (era FASE C nel piano originale, ora rinviata): agganciare reserve→settle ai servizi IA/briefing/automazioni/email/Calendar/WhatsApp. credit_services restano DISATTIVATI finché l'utente non autorizza. (P0)
 - Config Stripe account per checkout in EUR puro (opzionale).
+
+## FASE D + Bilingue Partecipa — 2026-06-30 ✅ COMPLETATO e VERIFICATO (100%)
+- Modello a crediti reso pubblico: /prezzi=pagina crediti, registrazione con 100 crediti + welcome, Account ripulito, /demo aggiornata, banner trial rimosso. Super Admin: tab Migrazione con dry-run (11 org, 4 idonee +400, 7 escluse) — migrazione NON eseguita (attende autorizzazione).
+- Home hero title aggiornato. Pagina pubblica /partecipa bilingue IT/EN (?lang, selettore, logo fondo bianco, metadato compilation_lang, doppio link IT/EN nella maschera evento).
+
+### Backlog aperto (attende autorizzazione utente)
+- Eseguire migrazione org esistenti (+100 crediti alle 4 idonee) dopo approvazione del dry-run. (P0)
+- Attivazione consumi reali reserve→settle su servizi IA/briefing/automazioni/email/Calendar/WhatsApp (credit_services off). (P0)
+- Stripe LIVE + Fatture in Cloud reale + auto-ricarica. (P1)
+- Rimozione definitiva vecchio sistema commerciale per-evento (verifica separata). (P2)
