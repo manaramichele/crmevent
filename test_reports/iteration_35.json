@@ -1,0 +1,33 @@
+{
+  "summary": "Fase E.2 (ciclo di vita evento a crediti) testata end-to-end su org Demo. Backend HTTP suite dedicata: 9/9 pytest PASS. UI: creazione evento -> stato 'In preparazione' senza consumo (saldo 100), dialog crediti mostra costo 20 + saldo, attivazione consuma 20 crediti (saldo 80), stato diventa 'Attivo' con box 'Prossimo rinnovo: 30 ottobre 2026 · 20 crediti', toast di conferma 'Evento attivo · 20 crediti utilizzati · nuovo saldo 80'. Aggiornamento saldo IMMEDIATO nel dialog dopo attivazione. Responsive mobile 390x844 OK: dialog fit perfetto. Guard _assert_event_operational verificata: POST /api/activities con evento_id in 'preparazione' -> 403 (come da spec). Idempotenza activate su evento gia' attivo -> saldo invariato. 402 su activate con saldo insufficiente. run-renewals accessibile solo a superadmin (403 org admin). Sospensione forzata via HTTP non riproducibile senza modifica DB (nessun endpoint pubblico per forzare next_renewal_at nel passato); i rami UI 'sospeso'/'concluso'/'recharge-low' hanno data-testid corretti in EventCreditDialog.jsx e la logica backend e' coperta dallo script interno test_credits_faseE2.py (13/13 gia' verde).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_faseE2_events.py",
+    "/app/test_reports/pytest/pytest_faseE2.xml",
+    "/app/backend/test_credits_faseE2.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "EventCreditDialog: activate() aggiorna setSt(data) dalla risposta di POST /events/{id}/activate ma il response body include gia' 'balance' e 'credit_state' -> aggiornamento immediato del saldo funziona (verificato: 100 -> 80 senza reload).",
+    "Guard _assert_event_operational e' applicata SOLO nelle route CRUD generate da crud_routes quando esiste evento_id in payload/documento (server.py:927, 942, 946). Altri endpoint scritture operative NON generici (es. mappe, disponibilita', turni personalizzati) andrebbero verificati caso per caso perche' potrebbero bypassare la guardia se hanno path custom - suggerito audit dedicato.",
+    "Sospensione automatica: run_event_renewals cerca solo eventi con credit_state='attivo' AND next_renewal_at<=now. Non esiste endpoint pubblico per forzare next_renewal_at, quindi la sospensione e' testabile solo via cron scheduled o via DB. E2E test UI per lo stato 'sospeso' non e' possibile senza intervento diretto sul DB — considerare un endpoint superadmin 'force-suspend' per QA/staging."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_faseE2_events.py (nuovo, 9 test HTTP end-to-end)"
+  ],
+  "success_rate": {"backend": "100% (9/9 pytest HTTP + 13/13 script interno)", "frontend": "100% sui rami testabili (preparazione, attivo, mobile). Rami sospeso/concluso non riproducibili via UI senza DB manipulation ma data-testid presenti."},
+  "test_credentials": "demo.crmevent@gmail.com / DemoCrm#2026pv (org_id 4cdfbd7aed3d43b882032892885feef3); manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Creato transitoriamente 1 evento 'TEST_UI_FaseE2' su org Demo, poi ELIMINATO. Saldo Demo riportato a 100 crediti. Eventi test HTTP ('TEST_FaseE2_A/B') creati e rimossi via cleanup fixture.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fase E.2 backend e UI (rami raggiungibili senza DB access) sono FUNZIONANTI. Per test futuri del ramo 'sospeso' via UI e' necessario o (a) aggiungere endpoint superadmin QA per forzare next_renewal_at, oppure (b) manipolare direttamente db.events. Test HTTP end-to-end riusabile in /app/backend/tests/test_faseE2_events.py, script logica interna in /app/backend/test_credits_faseE2.py. Al termine del test l'org Demo e' stata lasciata coerente: saldo=100, nessun evento residuo TEST_.",
+  "rca of the issue": "Nessun bug rilevato in Fase E.2."
+}

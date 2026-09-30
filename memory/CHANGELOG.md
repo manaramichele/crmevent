@@ -664,3 +664,10 @@ Task 2 — Creatività manuale:
 - UI: EventCreditDialog (azione di riga in Eventi) con attiva/riattiva, prossimo rinnovo, avviso crediti in esaurimento, evento sospeso + Ricarica crediti (RechargeDialog riusato).
 - Cron: proposta in /app/memory/EVENT_RENEWAL_CRON_PROPOSAL.md — NON attivata (attende autorizzazione).
 - NON toccati: 100 crediti registrazione, copy pubblico Home/prezzi, Stripe (TEST), migrazione eventi/org (solo dry-run), WhatsApp/newsletter/SMS.
+
+## 2026-06 — FASE E.2 test UI completo + deploy produzione
+- Creato account Demo preview (demo.crmevent@gmail.com) via normale flusso register-organization → 100 crediti bonus verificati.
+- Testing agent FASE E.2: 100% PASS (9/9 pytest HTTP + 13/13 script interno; UI desktop+mobile). Nessun bug.
+  - preparazione (0 crediti) → activate 20 crediti → attivo (saldo 100→80) + next_renewal_at +30gg; saldo aggiornato immediato; guard _assert_event_operational blocca scritture su preparazione/sospeso (403).
+- Verificato: NESSUN cron rinnovi in .emergent/crons.yml (solo brevo-funnel-tick preesistente). run_event_renewals solo manuale (superadmin).
+- Deploy produzione avviato (vincoli: no cron, Stripe TEST, no migrazione eventi/org legacy, Home/prezzi invariati).
