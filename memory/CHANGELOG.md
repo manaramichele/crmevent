@@ -1,5 +1,14 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Home: ripristinato il design precedente, adattato al modello a crediti ✅
+- Ripristinata da git (commit ab56483) la struttura/grafica/sezioni della Home precedente (hero con DashboardMock, Problema, Funzionalità, Staff & Volontari, Sponsor, Multi-evento, Come funziona, Per chi è, Differenziazione, Screenshots, Demo form). La versione "tutta crediti" è stata sostituita.
+- Contenuti commerciali vecchi rimossi: niente Starter/Professional/Premium, prezzi per-evento, prova 14 giorni, abbonamenti, link pubblico a /prezzi (header desktop + mobile).
+- Hero aggiornato: "Organizza il tuo evento. Tutto in un unico posto." + "Gestisci persone, staff, sponsor, attività, turni…" + CTA "Inizia gratuitamente" (/registrati) e "Guarda la demo" (/demo) + nota "100 crediti CRMEvent inclusi · Nessuna carta richiesta".
+- Sezione finale prezzi/piani sostituita da un'unica sezione **Crediti** (stesso stile dark della Home): "Inizia gratuitamente con 100 crediti", gestione ordinaria senza consumo vs servizi avanzati a crediti (IA, contenuti/briefing, automazioni, newsletter, WhatsApp "prossimamente"). CTA "Inizia gratuitamente".
+- I crediti restano NON protagonisti: il focus è il prodotto e le funzionalità.
+- Nessuna modifica a /prezzi, Area Account, Stripe, Fatture in Cloud o backend commerciale.
+
+
 ## 2026-06 — Home pubblica ridisegnata sul modello a CREDITI ✅ (verificata testing_agent 100%)
 - **LandingPage.jsx riscritta da zero** (11 sezioni): Hero "Tu organizzi l'evento. CRMEvent ti aiuta a farlo." + badge "100 crediti inclusi · Nessuna carta richiesta"; Problema; Checklist evento (indicatori 🔴🟠🟡🔵); griglia 8 moduli (Eventi, Persone, Team e turni, Sponsor e partner, Attività e checklist, Ospitalità e pasti, Briefing, Comunicazioni); Dashboard priorità; "CRMEvent può fare di più" (IA, a crediti); Comunicazioni (WhatsApp "prossimamente"); Come funzionano i crediti (2 colonne: gratis vs a consumo); Nessun blocco; Per chi è (Running/Triathlon/Trail/Nuoto); banda CTA finale Tiffany.
 - **Mockup UI nativi** (no screenshot raster): HeroDashboardMock, ChecklistMock, PriorityMock, CommsMock, AICopilotMock — resi con il vero design system, responsive.
