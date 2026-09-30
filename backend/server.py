@@ -4499,7 +4499,9 @@ async def stripe_webhook(request: Request):
         await _sync_subscription(obj)
     elif t == "checkout.session.completed":
         md = obj.get("metadata") or {}
-        if md.get("kind") in ("event_purchase", "event_upgrade"):
+        if md.get("kind") == "credit_purchase":
+            await _activate_credit_purchase_from_session(obj)
+        elif md.get("kind") in ("event_purchase", "event_upgrade"):
             await _activate_event_from_session(obj)
         elif obj.get("subscription"):
             sub = stripe_sdk.Subscription.retrieve(obj["subscription"])
@@ -4677,6 +4679,15 @@ def _fic_entity(org: dict) -> dict:
     return ent
 
 
+def _invoice_line_name(inv: dict, org: dict) -> str:
+    """Descrizione riga fattura: ricariche crediti vs abbonamento (coerente FIC reale/simulazione)."""
+    if inv.get("descrizione"):
+        return inv["descrizione"]
+    if inv.get("kind") == "credit_recharge":
+        return f"Ricarica {inv.get('credits_total')} crediti CRMEvent"
+    return f"Abbonamento CRMEvent ({org.get('nome')})"
+
+
 async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
     """Create an issued invoice in FIC from a CRMEvent invoice record (TEST: no real SDI transmission)."""
     org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
@@ -4689,7 +4700,7 @@ async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
     vat_id = await _fic_vat_id(cid, token)
     a = _derive_amounts(inv)
     net = a["imponibile"] if a["imponibile"] is not None else 0
-    line = {"name": f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1, "net_price": net}
+    line = {"name": _invoice_line_name(inv, org), "qty": 1, "net_price": net}
     if vat_id is not None:
         line["vat"] = {"id": vat_id}
     else:
@@ -4773,11 +4784,11 @@ def _derive_amounts(inv: dict) -> dict:
 
 
 # ---- FIC SIMULATION (TEST): builds the payload internally, makes NO FIC call, NO SDI. ----
-def _fic_build_payload(org: dict, amounts: dict) -> dict:
+def _fic_build_payload(org: dict, amounts: dict, line_name: Optional[str] = None) -> dict:
     """Build the exact FIC issued_document payload that WOULD be sent — without sending it.
     Uses the reconciled net price and REAL VAT rate; contains only the org's own billing data."""
     net = amounts["imponibile"] if amounts["imponibile"] is not None else 0
-    line = {"name": f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1,
+    line = {"name": line_name or f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1,
             "net_price": net, "vat": {"value": amounts["aliquota_iva"]}}
     return {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
                      "items_list": [line], "currency": {"id": (amounts.get("valuta") or "eur").upper()},
@@ -4789,7 +4800,7 @@ async def _fic_simulate(inv: dict) -> dict:
     if not org:
         raise HTTPException(status_code=404, detail="Organizzazione non trovata")
     a = _derive_amounts(inv)
-    payload = _fic_build_payload(org, a)
+    payload = _fic_build_payload(org, a, _invoice_line_name(inv, org))
     numero = f"SIM/{datetime.now(timezone.utc).year}/{str(inv.get('id', ''))[:6].upper()}"
     data_doc = datetime.now(timezone.utc).date().isoformat()
     # Persist the reconciled fiscal fields so the stored test invoice is repaired in place.
@@ -8253,6 +8264,180 @@ async def update_credit_package(pid: str, body: CreditPackageIn, admin: dict = D
 async def credit_packages_history(admin: dict = Depends(require_superadmin)):
     rows = await db.credit_package_history.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return rows
+
+
+# ==================== FASE C · ACQUISTO CREDITI (Stripe TEST) ====================
+# Acquisto reale dei crediti: checkout Stripe TEST, accredito SOLO via conferma
+# server-side (webhook autorevole), idempotente, snapshot pacchetto, ledger, fattura FIC.
+# IVA 22% ESCLUSA applicata via TaxRate manuale (nessun automatic_tax). Nessun consumo attivo.
+_credit_purchases_index_done = False
+
+
+async def _ensure_credit_purchases_setup():
+    global _credit_purchases_index_done
+    if _credit_purchases_index_done:
+        return
+    try:
+        await db.credit_purchases.create_index([("stripe_session_id", 1)], unique=True)
+        await db.credit_purchases.create_index([("org_id", 1), ("created_at", -1)])
+    except Exception:
+        pass
+    _credit_purchases_index_done = True
+
+
+def _credit_billing_snapshot(org: dict) -> dict:
+    b = org.get("billing") or {}
+    return {
+        "ragione_sociale": b.get("ragione_sociale") or (f"{b.get('nome','')} {b.get('cognome','')}".strip() or org.get("nome")),
+        "partita_iva": b.get("partita_iva"), "codice_fiscale": b.get("codice_fiscale"),
+        "codice_sdi": b.get("codice_sdi"), "pec": b.get("pec"), "paese": (b.get("paese") or "IT").upper(),
+    }
+
+
+class CreditCheckoutIn(BaseModel):
+    package_id: str
+    origin_url: str
+
+
+@api.post("/credits/checkout")
+async def credits_checkout(body: CreditCheckoutIn, user: dict = Depends(require_admin)):
+    """Crea una sessione Stripe Checkout (TEST) per l'acquisto di un pacchetto crediti.
+    Prezzo e crediti provengono SEMPRE dal catalogo server-side (mai dal frontend).
+    IVA 22% esclusa via TaxRate manuale. I crediti NON vengono accreditati qui:
+    l'accredito avviene solo dopo conferma del pagamento (webhook Stripe)."""
+    await _ensure_credit_packages_seeded()
+    await _ensure_credit_purchases_setup()
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    if not (org.get("billing") or {}).get("paese"):
+        raise HTTPException(status_code=400, detail="Completa prima i dati di fatturazione")
+    pkg = await db.credit_packages.find_one({"id": body.package_id, "active": True}, {"_id": 0})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Taglio di ricarica non trovato o non attivo")
+    net = round(float(pkg.get("price") or 0), 2)
+    if net <= 0:
+        raise HTTPException(status_code=400, detail="Prezzo del taglio non configurato")
+    base = int(pkg.get("credits_base") or 0)
+    bonus = int(pkg.get("credits_bonus") or 0)
+    total = base + bonus
+    vat = round(net * PRICING_VAT_RATE / 100.0, 2)
+    gross = round(net + vat, 2)
+    snapshot = {"price": net, "credits_base": base, "credits_bonus": bonus,
+                "credits_total": total, "bonus_pct": pkg.get("bonus_pct"), "badge": pkg.get("badge")}
+    cust_id = await _ensure_stripe_customer(org, user)
+    tax_rate_id = _get_tax_rate_id()
+    purchase_id = new_id()
+    # Il bonus NON ha valore economico: l'imponibile e l'IVA si basano solo sul prezzo del taglio.
+    session = stripe_sdk.checkout.Session.create(
+        mode="payment", customer=cust_id,
+        managed_payments={"enabled": False},
+        line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(net * 100)),
+                     "tax_behavior": "exclusive",
+                     "product_data": {"name": f"Ricarica {total} crediti CRMEvent",
+                                      "tax_code": "txcd_10103001",
+                                      "description": (f"{base} crediti + {bonus} crediti bonus" if bonus else f"{base} crediti")}},
+                     "quantity": 1, "tax_rates": [tax_rate_id]}],
+        success_url=f"{body.origin_url}/account?credits_checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/account?credits_checkout=cancel",
+        metadata={"kind": "credit_purchase", "org_id": org["id"], "purchase_id": purchase_id,
+                  "package_id": pkg["id"], "credits_base": str(base), "credits_bonus": str(bonus),
+                  "credits_total": str(total), "net": str(net), "vat": str(vat), "gross": str(gross)},
+        payment_intent_data={"metadata": {"kind": "credit_purchase", "purchase_id": purchase_id, "org_id": org["id"]}},
+    )
+    doc = {"id": purchase_id, "org_id": org["id"], "user_id": user.get("user_id"),
+           "package_id": pkg["id"], "package_snapshot": snapshot,
+           "credits_base": base, "credits_bonus": bonus, "credits_total": total,
+           "amount_net": net, "amount_vat": vat, "amount_gross": gross,
+           "aliquota_iva": PRICING_VAT_RATE, "currency": "eur",
+           "stripe_session_id": session.id, "stripe_payment_intent": None,
+           "status": "pending", "invoice_id": None, "ledger_id": None,
+           "billing_snapshot": _credit_billing_snapshot(org),
+           "created_at": now_iso(), "paid_at": None, "updated_at": now_iso()}
+    await db.credit_purchases.insert_one(doc)
+    return {"checkout_url": session.url, "session_id": session.id,
+            "amount_net": net, "amount_vat": vat, "amount_gross": gross,
+            "credits_total": total, "credits_base": base, "credits_bonus": bonus}
+
+
+async def _record_credit_invoice(purchase: dict, sess: dict) -> Optional[str]:
+    """Crea (idempotente) un record fattura per la ricarica, compatibile col flusso FIC/simulazione."""
+    sid = purchase["stripe_session_id"]
+    existing = await db.invoices.find_one({"stripe_session_id": sid, "kind": "credit_recharge"}, {"_id": 0})
+    if existing:
+        return existing["id"]
+    total = purchase["credits_total"]
+    doc = {"id": new_id(), "org_id": purchase["org_id"], "kind": "credit_recharge",
+           "descrizione": f"Ricarica {total} crediti CRMEvent",
+           "credits_base": purchase["credits_base"], "credits_bonus": purchase["credits_bonus"],
+           "credits_total": total,
+           "stripe_session_id": sid, "stripe_payment_intent": sess.get("payment_intent"),
+           "stripe_invoice_id": None, "numero_stripe": None, "data": now_iso(),
+           "imponibile": purchase["amount_net"], "aliquota_iva": purchase["aliquota_iva"],
+           "importo_iva": purchase["amount_vat"], "iva": purchase["amount_vat"],
+           "totale": purchase["amount_gross"], "valuta": purchase.get("currency") or "eur",
+           "dati_fiscali_cliente": purchase.get("billing_snapshot") or {},
+           "riferimento_stripe": {"stripe_session_id": sid, "payment_intent": sess.get("payment_intent")},
+           "payment_status": "paid", "created_at": now_iso(), "updated_at": now_iso(),
+           "fic_document_id": None, "fic_numero": None, "fic_data": None,
+           "fic_stato_documento": "da_emettere", "fic_stato_sdi": "non_inviato", "fic_pdf_url": None}
+    try:
+        await db.invoices.insert_one(doc)
+    except Exception:
+        return (await db.invoices.find_one({"stripe_session_id": sid, "kind": "credit_recharge"}, {"_id": 0}) or {}).get("id")
+    return doc["id"]
+
+
+async def _activate_credit_purchase_from_session(sess: dict):
+    """Accredito crediti SERVER-SIDE da sessione PAGATA. Idempotente per session id.
+    Doppia protezione anti-doppione: stato 'paid' del purchase + idempotency_key sul ledger."""
+    md = sess.get("metadata") or {}
+    if md.get("kind") != "credit_purchase" or sess.get("payment_status") != "paid":
+        return
+    sid = sess.get("id")
+    purchase = await db.credit_purchases.find_one({"stripe_session_id": sid}, {"_id": 0})
+    if not purchase or purchase.get("status") == "paid":
+        return
+    org_id = purchase["org_id"]
+    base, bonus, total = purchase["credits_base"], purchase["credits_bonus"], purchase["credits_total"]
+    pi = sess.get("payment_intent")
+    note = (f"Ricarica {total} crediti ({base} + {bonus} bonus)" if bonus else f"Ricarica {total} crediti")
+    mv = await _apply_credit_movement(
+        org_id, total, reason_code="purchase", type_="purchase",
+        user_id=purchase.get("user_id"), idempotency_key=f"credit_purchase:{sid}", note=note)
+    inv_id = await _record_credit_invoice(purchase, sess)
+    await db.credit_purchases.update_one(
+        {"stripe_session_id": sid},
+        {"$set": {"status": "paid", "stripe_payment_intent": pi, "paid_at": now_iso(),
+                  "ledger_id": (mv or {}).get("id"), "invoice_id": inv_id, "updated_at": now_iso()}})
+
+
+@api.get("/credits/checkout-confirmation")
+async def credits_checkout_confirmation(session_id: str, user: dict = Depends(require_admin)):
+    """Verifica SERVER-SIDE (retrieve su Stripe) l'esito e, se pagato, accredita in modo
+    idempotente (fallback al webhook, mai fidandosi della sola pagina di ritorno)."""
+    try:
+        sess = stripe_sdk.checkout.Session.retrieve(session_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Sessione di checkout non trovata")
+    purchase = await db.credit_purchases.find_one({"stripe_session_id": session_id}, {"_id": 0})
+    if not purchase or purchase.get("org_id") != user["org_id"]:
+        raise HTTPException(status_code=403, detail="Sessione non associata all'organizzazione")
+    paid = sess.get("payment_status") == "paid"
+    if paid:
+        await _activate_credit_purchase_from_session(sess)
+    c = await _ensure_org_credits(user["org_id"])
+    p = await db.credit_purchases.find_one({"stripe_session_id": session_id}, {"_id": 0})
+    return {"paid": paid, "status": p.get("status"),
+            "credits_total": p.get("credits_total"), "credits_base": p.get("credits_base"),
+            "credits_bonus": p.get("credits_bonus"), "amount_net": p.get("amount_net"),
+            "amount_vat": p.get("amount_vat"), "amount_gross": p.get("amount_gross"),
+            "balance": c.get("balance")}
+
+
+@api.get("/credits/purchases")
+async def credits_purchases(user: dict = Depends(require_admin)):
+    await _ensure_credit_purchases_setup()
+    rows = await db.credit_purchases.find({"org_id": user["org_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"purchases": rows}
 
 
 # ---------------- Impostazioni crediti org (soglia) ----------------

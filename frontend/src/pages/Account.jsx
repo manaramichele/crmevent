@@ -134,7 +134,7 @@ export default function Account() {
               <div key={iv.id} className="flex items-center justify-between border border-slate-100 rounded-lg px-3 py-2" data-testid={`invoice-row-${iv.id}`}>
                 <div className="min-w-0 text-sm">
                   <div className="font-medium text-slate-800">{iv.numero_stripe || iv.fic_numero || iv.id.slice(0, 8)} · {(iv.totale ?? 0).toFixed(2)} {(iv.valuta || "eur").toUpperCase()}</div>
-                  <div className="text-xs text-slate-500">{(iv.data || "").slice(0, 10)} · {iv.payment_status || "—"} · FIC: {iv.fic_stato_documento || "da_emettere"}</div>
+                  <div className="text-xs text-slate-500">{iv.descrizione ? `${iv.descrizione} · ` : ""}{(iv.data || "").slice(0, 10)} · {iv.payment_status || "—"} · FIC: {iv.fic_stato_documento || "da_emettere"}</div>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => simulateInvoice(iv.id)} disabled={simBusy === iv.id} data-testid={`invoice-simulate-${iv.id}`}>{simBusy === iv.id ? "Simulo…" : "Simula fattura (TEST)"}</Button>
               </div>
