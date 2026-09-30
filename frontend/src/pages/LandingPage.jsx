@@ -203,7 +203,7 @@ export default function LandingPage() {
       <Section className="pt-16 pb-20 lg:pt-24">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="animate-fade-up">
-            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">Organizza il tuo evento. <span className="text-tiffany-active">Tutto in un unico posto.</span></h1>
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">Organizza il tuo evento. <span className="text-tiffany-active">Tutto in un'unica piattaforma.</span></h1>
             <p className="text-lg text-slate-500 mt-6 max-w-xl">Gestisci persone, staff, sponsor, attività, turni e tutte le informazioni operative del tuo evento con <strong className="font-semibold text-slate-700">CRMEvent</strong>.</p>
             <div className="flex flex-wrap gap-3 mt-8">
               <Link to="/registrati" data-testid="hero-cta-start-free" className="h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Inizia gratuitamente <ArrowRight className="w-4 h-4" /></Link>

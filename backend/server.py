@@ -7699,6 +7699,7 @@ class PubAvailIn(BaseModel):
     preferenza_altro: Optional[str] = None
     privacy: bool = False
     marketing_consent: bool = False
+    lang: Optional[str] = None
 
 
 @api.post("/public/availability/{code}")
@@ -7769,6 +7770,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
         pid = pdoc["id"]
     now = now_iso()
+    lang = "en" if (body.lang or "").lower().startswith("en") else "it"
     mk = bool(body.marketing_consent)
     mk_fields = {"marketing_consent": mk,
                  "marketing_consent_ts": now if mk else None,
@@ -7779,7 +7781,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                "preferenza_altro": (body.preferenza_altro or "").strip() or None,
                "submitted": submitted, "privacy_accepted": True, "privacy_ts": now,
                "ip": _client_ip(request), "user_agent": (request.headers.get("user-agent") or "")[:300],
-               "updated_at": now, **mk_fields}
+               "compilation_lang": lang, "updated_at": now, **mk_fields}
         if mismatch:
             upd["mismatch"] = {**(existing.get("mismatch") or {}), **mismatch}
             upd["has_mismatch"] = True
@@ -7798,6 +7800,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "mismatch": mismatch or None, "has_mismatch": bool(mismatch),
             "privacy_accepted": True, "privacy_ts": now, "ip": _client_ip(request),
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
+            "compilation_lang": lang,
             "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
     # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
     try:

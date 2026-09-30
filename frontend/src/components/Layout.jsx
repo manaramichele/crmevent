@@ -61,16 +61,9 @@ function OrgSwitcher({ orgs, actingOrgId, onChange }) {
   );
 }
 
-function TrialBanner({ sub, onCta }) {
-  if (!sub || sub.status === "active") return null;
-  const limited = sub.access !== "full";
-  return (
-    <div className={`px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm ${limited ? "bg-red-50 text-red-700 border-b border-red-200" : "bg-tiffany-light text-tiffany-fg border-b border-tiffany-border"}`} data-testid="trial-banner">
-      {limited ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <Sparkles className="w-4 h-4 shrink-0" />}
-      <span className="font-medium">{limited ? "Periodo di prova terminato — i tuoi dati sono al sicuro." : `Prova gratuita – ${sub.days_left} ${sub.days_left === 1 ? "giorno" : "giorni"} rimanenti`}</span>
-      <button onClick={onCta} data-testid="trial-banner-cta" className="ml-auto font-semibold underline hover:no-underline">Attiva CRMEvent</button>
-    </div>
-  );
+function TrialBanner() {
+  // Modello a crediti: la piattaforma base è gratuita. Nessun banner di prova/abbonamento.
+  return null;
 }
 
 function Logo({ collapsed }) {

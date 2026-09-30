@@ -1,0 +1,32 @@
+{
+  "summary": "Fase D testing (credits public rollout). Completed end-to-end coverage of public /prezzi, /demo, registration + welcome dialog + signup bonus (100 crediti), Account page (credits section, IVA breakdown), Super Admin migration dry-run tab, and mobile responsive. Backend endpoints /api/credits/packages-public (6 packs) and /api/platform/credits/migration-dryrun both operational. Signup bonus ledger entry (reason_code=signup_bonus, amount=100, idempotency_key=signup_bonus:<org_id>) correctly persisted. Recharge dialog renders correct 22% VAT breakdown (100 crediti: net €20 / VAT €4,40 / gross €24,40) with 6 packs. Stripe redirect from Account not tested end-to-end because backend requires billing data to be filled first (returns 'Completa prima i dati di fatturazione'), but the API endpoint /api/credits/checkout is reachable and validates input correctly; per iteration context, real Stripe redirect was already validated in Fase C. Super Admin /piattaforma/crediti Migrazione tab shows dry-run counters (Totali 12, Idonee 4 -> +400 crediti, Escluse 7, GiA col bonus 1) and contains ZERO execution buttons (only 'Ricalcola dry-run'). Mobile viewport 390x844 for /prezzi: no horizontal overflow, 6 packs visible.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AppLayout (top banner on /app, /account, /eventi, ...)", "issue": "Il banner 'Prova gratuita – 14 giorni rimanenti' con CTA 'Attiva CRMEvent' è ancora visibile in cima a tutte le pagine interne (dashboard e /account inclusi) subito dopo la registrazione. La Fase D richiede la rimozione dei riferimenti al trial nel modello a crediti. Non blocca l'uso ma è una regressione visiva/di copy.", "selector": "header banner sopra il main content", "priority": "HIGH"},
+      {"component": "Sidebar item Account", "issue": "La voce nel menu laterale è ancora 'Account e abbonamento'. In Fase D andrebbe rinominata (es. 'Account e crediti', coerente con l'intestazione della pagina che è già 'Account e crediti').", "selector": "nav item /account", "priority": "MEDIUM"},
+      {"component": "Login page /login", "issue": "Il link sotto 'Non hai un account?' recita 'Prova CRMEvent gratis' – copy legacy (trial). Non è nella checklist di test ma è la stessa stringa di copy che Fase D vuole rimuovere altrove.", "selector": "a href=/registrati testo 'Prova CRMEvent gratis'", "priority": "LOW"},
+      {"component": "WelcomeDialog (Register.jsx)", "issue": "DialogContent senza DialogTitle: console emette warning Radix 'DialogContent requires a DialogTitle for accessibility'. Aggiungere DialogTitle (eventualmente VisuallyHidden) al welcome-dialog.", "selector": "[data-testid=welcome-dialog]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_credits_faseC.py"],
+  "action_items": [
+    "Rimuovere il banner 'Prova gratuita – 14 giorni rimanenti / Attiva CRMEvent' che compare in testa alle pagine interne per gli account creati dopo Fase D (o per tutti se si abbandona il modello trial).",
+    "Rinominare la voce di menu 'Account e abbonamento' in coerenza con la nuova pagina 'Account e crediti'.",
+    "Aggiornare copy del link nella pagina di login ('Prova CRMEvent gratis' -> 'Inizia gratuitamente' / 'Registrati').",
+    "Aggiungere DialogTitle (anche VisuallyHidden) al welcome-dialog per accessibilità."
+  ],
+  "critical_code_review_comments": [
+    "CreditsSection.jsx: 'if (!bal) return null' nasconde la sezione durante il primo caricamento e in caso di errore silenzioso; considerare uno skeleton/loader (già segnalato in iter 31).",
+    "Il gating dello Stripe checkout con 'Completa prima i dati di fatturazione' non è comunicato nell'UI prima del click: idealmente il bottone 'Procedi al pagamento' dovrebbe già essere disabilitato con hint se i dati fiscali mancano, invece che affidarsi al toast di errore."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "90% (bug regressione banner trial)"},
+  "test_credentials": "Nuovo utente creato: fased+1790800346@crmeventqa.it / Password123! (org OrgFaseD 1790800346, org_id=4b48bf3ed9ea43c38e696a0f92699e61). Super Admin: manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Creata 1 nuova organizzazione tramite registrazione pubblica: 'OrgFaseD 1790800346' con signup bonus 100 crediti. Compare in Migrazione dryrun sotto 'Già col bonus' (mig-already=1). Nessuna modifica dati esistenti.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tutte le funzionalità Fase D richieste (pagine pubbliche allineate ai crediti, registrazione + welcome + 100 crediti, Account ripulito con CreditsSection, migration dry-run) funzionano. Unica anomalia trovata: il banner 'Prova gratuita – 14 giorni rimanenti' con CTA 'Attiva CRMEvent' è ancora presente in cima al layout interno – regressione di copy da rimuovere. Backend Fase C non ritestato (già validato in iter 32 originale). Stripe redirect da /account bloccato lato server perché billing data mancanti (comportamento esistente, non un regressione di Fase D)."
+}

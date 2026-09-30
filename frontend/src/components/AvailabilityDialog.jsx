@@ -72,10 +72,6 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
     try { await api.post(`/events/${eventId}/availability/link/deactivate`); await loadLink(); toast.success("Link disattivato"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(link.url); toast.success("Link copiato"); }
-    catch { toast.error("Impossibile copiare"); }
-  };
 
   const updateRow = async (aid, patch) => {
     try { const { data } = await api.put(`/availabilities/${aid}`, patch); setRows((p) => p.map((r) => (r.id === aid ? { ...r, ...data } : r))); toast.success(patch.apply_person ? "Anagrafica aggiornata" : "Disponibilità aggiornata"); }
@@ -119,15 +115,39 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
 
             <TabsContent value="link" className="pt-3">
               {link?.active ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <StatusBadge color="green">Link attivo</StatusBadge>
-                    <span className="text-xs text-slate-400">Condividi questo link con i potenziali collaboratori.</span>
+                    <span className="text-xs text-slate-400">Condividi il link nella lingua corretta con i collaboratori.</span>
                   </div>
-                  <Input readOnly value={link.url} className="font-mono text-sm" data-testid="avail-link-url" onFocus={(e) => e.target.select()} />
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={copy} data-testid="avail-copy"><Copy className="w-4 h-4 mr-1.5" />Copia link</Button>
-                    <Button variant="outline" size="sm" onClick={() => window.open(link.url, "_blank")} data-testid="avail-open"><ExternalLink className="w-4 h-4 mr-1.5" />Apri pagina</Button>
+                  {(() => {
+                    const base = link.url;
+                    const withLang = (l) => base + (base.includes("?") ? "&" : "?") + "lang=" + l;
+                    const itUrl = withLang("it");
+                    const enUrl = withLang("en");
+                    const copyUrl = async (u, msg) => { try { await navigator.clipboard.writeText(u); toast.success(msg); } catch { toast.error("Impossibile copiare"); } };
+                    return (
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1.5">🇮🇹 Link partecipazione — Italiano</div>
+                          <Input readOnly value={itUrl} className="font-mono text-sm" data-testid="avail-link-url" onFocus={(e) => e.target.select()} />
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <Button variant="outline" size="sm" onClick={() => copyUrl(itUrl, "Link IT copiato")} data-testid="avail-copy-it"><Copy className="w-4 h-4 mr-1.5" />Copia link IT</Button>
+                            <Button variant="outline" size="sm" onClick={() => window.open(itUrl, "_blank")} data-testid="avail-open-it"><ExternalLink className="w-4 h-4 mr-1.5" />Apri IT</Button>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1.5">🇬🇧 Link partecipazione — English</div>
+                          <Input readOnly value={enUrl} className="font-mono text-sm" data-testid="avail-link-url-en" onFocus={(e) => e.target.select()} />
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <Button variant="outline" size="sm" onClick={() => copyUrl(enUrl, "EN link copied")} data-testid="avail-copy-en"><Copy className="w-4 h-4 mr-1.5" />Copy EN link</Button>
+                            <Button variant="outline" size="sm" onClick={() => window.open(enUrl, "_blank")} data-testid="avail-open-en"><ExternalLink className="w-4 h-4 mr-1.5" />Open EN</Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-100">
                     <AlertDialog>
                       <AlertDialogTrigger asChild><Button variant="outline" size="sm" data-testid="avail-regen"><RefreshCw className="w-4 h-4 mr-1.5" />Rigenera link</Button></AlertDialogTrigger>
                       <AlertDialogContent>
