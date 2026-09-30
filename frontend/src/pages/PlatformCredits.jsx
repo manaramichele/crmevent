@@ -22,7 +22,7 @@ function ServicesTab() {
   return (
     <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="svc-table">
       <thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100">
-        <th className="py-2 pr-3">Servizio</th><th className="py-2 pr-3">Modalità</th><th className="py-2 pr-3">Costo</th><th className="py-2 pr-3">Unità</th><th className="py-2 pr-3">Attivo</th><th className="py-2 pr-3">Ver.</th><th className="py-2"></th></tr></thead>
+        <th className="py-2 pr-3">Servizio</th><th className="py-2 pr-3">Modalità</th><th className="py-2 pr-3">Costo</th><th className="py-2 pr-3">Unità</th><th className="py-2 pr-3">Disponibile</th><th className="py-2 pr-3">Consumo crediti</th><th className="py-2 pr-3">Ver.</th><th className="py-2"></th></tr></thead>
       <tbody>
         {rows.map((s) => {
           const e = edits[s.key] || {};
@@ -38,6 +38,7 @@ function ServicesTab() {
               <td className="py-2 pr-3"><Input type="number" className="h-9 w-24" value={v("unit_cost") ?? ""} onChange={(ev) => set(s.key, "unit_cost", ev.target.value === "" ? null : Number(ev.target.value))} data-testid={`svc-cost-${s.key}`} /></td>
               <td className="py-2 pr-3"><Input className="h-9 w-28" value={v("unit_label") ?? ""} onChange={(ev) => set(s.key, "unit_label", ev.target.value)} data-testid={`svc-unit-${s.key}`} /></td>
               <td className="py-2 pr-3"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={!!v("active")} onChange={(ev) => set(s.key, "active", ev.target.checked)} data-testid={`svc-active-${s.key}`} /></td>
+              <td className="py-2 pr-3"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={v("consumo_active") !== undefined ? !!v("consumo_active") : !!(s.active && s.unit_cost != null && s.pricing_mode)} onChange={(ev) => set(s.key, "consumo_active", ev.target.checked)} data-testid={`svc-consumo-${s.key}`} /></td>
               <td className="py-2 pr-3 text-slate-400">{s.version}</td>
               <td className="py-2"><Button size="sm" disabled={!edits[s.key]} onClick={() => save(s)} data-testid={`svc-save-${s.key}`} className="bg-slate-900 text-white"><Save className="w-4 h-4" /></Button></td>
             </tr>
@@ -45,7 +46,7 @@ function ServicesTab() {
         })}
       </tbody>
     </table>
-    <p className="text-xs text-slate-400 mt-3">I consumi reali NON sono ancora collegati alle funzioni CRMEvent (Fase B). L'attivazione abilita solo il servizio nel catalogo.</p>
+    <p className="text-xs text-slate-400 mt-3"><b>Disponibile</b> = la funzione è utilizzabile. <b>Consumo crediti</b> = quando utilizzata, scala crediti. Disponibile + consumo OFF = servizio gratuito (es. Google Calendar). Le modifiche valgono per le operazioni successive; lo storico resta invariato.</p>
     </div>
   );
 }

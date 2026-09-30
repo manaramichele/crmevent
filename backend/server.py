@@ -8049,7 +8049,18 @@ async def _ensure_credits_setup():
         if svc and svc.get("unit_cost") is None:
             await db.credit_services.update_one({"key": key}, {"$set": {
                 "name": cfg["name"], "pricing_mode": cfg["pricing_mode"], "unit_label": cfg["unit_label"],
-                "unit_cost": cfg["unit_cost"], "active": True, "updated_at": now_iso()}})
+                "unit_cost": cfg["unit_cost"], "active": True, "consumo_active": True, "updated_at": now_iso()}})
+    # Backfill del campo consumo_active (distinto da active=disponibilità). Retrocompat: se assente,
+    # un servizio configurato+attivo consumava già -> consumo_active=True. Google Calendar: disponibile
+    # ma consumo OFF (gratuito).
+    for svc in await db.credit_services.find({"consumo_active": {"$exists": False}}, {"_id": 0}).to_list(200):
+        if svc["key"] == "google_calendar":
+            upd = {"active": True, "consumo_active": False}
+        else:
+            derived = bool(svc.get("active") and svc.get("unit_cost") is not None and svc.get("pricing_mode") is not None)
+            upd = {"consumo_active": derived}
+        upd["updated_at"] = now_iso()
+        await db.credit_services.update_one({"key": svc["key"]}, {"$set": upd})
 
 
 async def _ensure_org_credits(org_id: str) -> dict:
@@ -8251,6 +8262,7 @@ async def platform_credit_services(admin: dict = Depends(require_superadmin)):
 class CreditServiceUpdateIn(BaseModel):
     name: Optional[str] = None
     active: Optional[bool] = None
+    consumo_active: Optional[bool] = None
     visible: Optional[bool] = None
     pricing_mode: Optional[str] = None
     unit_label: Optional[str] = None
@@ -8265,7 +8277,7 @@ async def update_credit_service(key: str, body: CreditServiceUpdateIn, admin: di
     if not svc:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     changes = {}
-    for f in ["name", "active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units"]:
+    for f in ["name", "active", "consumo_active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units"]:
         v = getattr(body, f)
         if v is not None and v != svc.get(f):
             changes[f] = v
@@ -8632,15 +8644,30 @@ async def credits_settings(body: CreditSettingsIn, user: dict = Depends(require_
 
 # ---------------- MOTORE CONSUMO: estimate -> reserve -> settle -> release ----------------
 # (predisposto, NON collegato ad alcuna funzione CRMEvent esistente in Fase B)
+def _service_consumo_on(svc: dict) -> bool:
+    """True se il servizio, oltre a essere disponibile (active), consuma crediti (consumo_active)
+    ed è configurato (costo+modalità). Retrocompat: se consumo_active assente, deriva dallo stato.
+    Distinzione: active = disponibilità della funzione; consumo_active = se consuma crediti."""
+    if not svc or not svc.get("active"):
+        return False
+    if svc.get("unit_cost") is None or svc.get("pricing_mode") is None:
+        return False
+    ca = svc.get("consumo_active")
+    if ca is None:
+        ca = True  # retrocompat: configurato+attivo consumava già
+    return bool(ca)
+
+
 async def _credit_service_cost(service_key, quantity):
     svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
     if not svc:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
+    consumo_on = _service_consumo_on(svc)
     if svc.get("unit_cost") is None or svc.get("pricing_mode") is None:
-        return {"service": svc, "cost": None, "configured": False, "quantity": int(quantity or 1)}
+        return {"service": svc, "cost": None, "configured": False, "consumo_on": consumo_on, "quantity": int(quantity or 1)}
     q = max(int(quantity or 1), int(svc.get("min_units", 1) or 1))
     cost = svc["unit_cost"] if svc["pricing_mode"] == "flat" else svc["unit_cost"] * q
-    return {"service": svc, "cost": int(round(cost)), "configured": True, "quantity": q}
+    return {"service": svc, "cost": int(round(cost)), "configured": True, "consumo_on": consumo_on, "quantity": q}
 
 
 async def _credits_reserve(org_id, service_key, quantity=1, user_id=None, event_id=None, idempotency_key=None):
@@ -8723,7 +8750,7 @@ async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, ide
     Se il saldo è insufficiente solleva HTTP 402 e il servizio NON deve essere eseguito.
     Pattern: reservation = await _charge_begin(...); try: <esegui>; _credits_settle(); except: _credits_release()."""
     svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
-    if not svc or not svc.get("active") or svc.get("unit_cost") is None or svc.get("pricing_mode") is None:
+    if not _service_consumo_on(svc):
         return None
     return await _credits_reserve(org_id, service_key, 1, user_id=user_id, event_id=event_id, idempotency_key=idempotency_key)
 
@@ -8732,11 +8759,16 @@ async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, ide
 async def credits_estimate(body: EstimateIn, user: dict = Depends(require_admin)):
     info = await _credit_service_cost(body.service_key, body.quantity)
     c = await _ensure_org_credits(user["org_id"])
+    svc = info["service"]
+    will_charge = info["consumo_on"]
     cost = info["cost"]
+    effective = cost if (will_charge and cost is not None) else 0
+    balance = c.get("balance", 0)
     return {"service_key": body.service_key, "quantity": info.get("quantity", body.quantity),
-            "cost": cost, "configured": info["configured"], "active": bool(info["service"].get("active")),
-            "balance": c.get("balance", 0),
-            "sufficient": (cost is not None and c.get("balance", 0) >= cost)}
+            "cost": cost, "effective_cost": effective, "will_charge": will_charge,
+            "configured": info["configured"], "available": bool(svc.get("active")),
+            "consumo_active": will_charge, "balance": balance,
+            "sufficient": (not will_charge) or (cost is not None and balance >= cost)}
 
 
 class PriceUpdateIn(BaseModel):

@@ -9,8 +9,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   Sparkles, CalendarPlus, Bot, Loader2, Pencil, CheckCircle2, Clock, Trash2,
-  RefreshCw, ImagePlus, FileText, Images, Upload, Instagram, Star,
+  RefreshCw, ImagePlus, FileText, Images, Upload, Instagram, Star, Coins, Wallet,
 } from "lucide-react";
+import { RechargeDialog } from "@/components/CreditsSection";
 
 const FIELD = "w-full h-10 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
 const AREA = "w-full px-3 py-2 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
@@ -52,6 +53,31 @@ export default function Social() {
   const [planOpen, setPlanOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [genBusy, setGenBusy] = useState(false);
+
+  // FASE E.1 — trasparenza consumi crediti (servizio ai_content, costo dal backend)
+  const [svcCost, setSvcCost] = useState(null); // {cost, will_charge, balance}
+  const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [insuff, setInsuff] = useState(null); // {cost, balance}
+  const loadCost = useCallback(async () => {
+    try {
+      const { data } = await api.post("/credits/estimate", { service_key: "ai_content", quantity: 1 });
+      setSvcCost(data);
+    } catch { /* non bloccare la UI se l'estimate fallisce */ }
+  }, []);
+  useEffect(() => { loadCost(); }, [loadCost]);
+  const afterGen = (label) => {
+    const used = svcCost?.will_charge ? ` · ${svcCost.cost} ${svcCost.cost === 1 ? "credito utilizzato" : "crediti utilizzati"}` : "";
+    toast.success(`${label}${used}`);
+    loadCost();
+  };
+  const handleCreditError = (e) => {
+    if (e?.response?.status === 402) {
+      setInsuff({ cost: svcCost?.cost ?? null, balance: svcCost?.balance ?? null });
+      loadCost();
+      return true;
+    }
+    return false;
+  };
 
   const [media, setMedia] = useState([]);
   const [creative, setCreative] = useState(null);
@@ -156,8 +182,8 @@ export default function Social() {
       });
       toast.success("Contenuto generato");
       setAiOpen(false); setAiForm({ topic: "", category: "", event_id: "", extra_instructions: "" });
-      setEditing(data); load();
-    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+      setEditing(data); load(); afterGen("Contenuto generato");
+    } catch (e) { if (!handleCreditError(e)) toast.error(formatApiError(e?.response?.data?.detail)); }
     setGenBusy(false);
   };
 
@@ -173,8 +199,8 @@ export default function Social() {
         goal: planForm.goal || undefined, event_id: planForm.event_id || undefined,
       });
       toast.success(`Piano editoriale generato · ${data.count} contenuti`);
-      setPlanOpen(false); load();
-    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+      setPlanOpen(false); load(); afterGen("Piano editoriale generato");
+    } catch (e) { if (!handleCreditError(e)) toast.error(formatApiError(e?.response?.data?.detail)); }
     setGenBusy(false);
   };
 
@@ -195,8 +221,8 @@ export default function Social() {
     setGenBusy(true);
     try {
       const { data } = await api.post(`/social/posts/${editing.id}/regenerate`, {});
-      toast.success("Contenuto rigenerato"); setEditing(data); load();
-    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+      setEditing(data); load(); afterGen("Contenuto rigenerato");
+    } catch (e) { if (!handleCreditError(e)) toast.error(formatApiError(e?.response?.data?.detail)); }
     setGenBusy(false);
   };
   const approve = async (p) => {
@@ -391,7 +417,8 @@ export default function Social() {
             </div>
             <div><label className="text-sm text-slate-600">Istruzioni aggiuntive (opzionale)</label><textarea rows={2} className={AREA} value={aiForm.extra_instructions} onChange={(e) => setAiForm({ ...aiForm, extra_instructions: e.target.value })} data-testid="ai-extra" /></div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="items-center sm:justify-between gap-2">
+            <CostHint svcCost={svcCost} onRecharge={() => { setAiOpen(false); setRechargeOpen(true); }} />
             <Button onClick={generate} disabled={genBusy} data-testid="ai-generate-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">
               {genBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}Genera
             </Button>
@@ -417,7 +444,8 @@ export default function Social() {
               </select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="items-center sm:justify-between gap-2">
+            <CostHint svcCost={svcCost} onRecharge={() => { setPlanOpen(false); setRechargeOpen(true); }} />
             <Button onClick={genPlan} disabled={genBusy} data-testid="plan-generate-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">
               {genBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarPlus className="w-4 h-4 mr-2" />}Genera piano
             </Button>
@@ -514,7 +542,7 @@ export default function Social() {
                 : <div data-testid="approve-ready" className="w-full text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5">✓ Pronto per l'approvazione</div>;
             })()}
             <Button variant="outline" onClick={() => setIgOpen(true)} data-testid="edit-igpreview"><Instagram className="w-4 h-4 mr-1" />Anteprima Instagram</Button>
-            <Button variant="outline" onClick={regenerate} disabled={genBusy} data-testid="edit-regenerate"><RefreshCw className={`w-4 h-4 mr-1 ${genBusy ? "animate-spin" : ""}`} />Rigenera</Button>
+            <Button variant="outline" onClick={regenerate} disabled={genBusy} data-testid="edit-regenerate"><RefreshCw className={`w-4 h-4 mr-1 ${genBusy ? "animate-spin" : ""}`} />Rigenera{svcCost?.will_charge ? ` · ${svcCost.cost} cr` : ""}</Button>
             <Button variant="outline" onClick={savePost} data-testid="edit-save"><Pencil className="w-4 h-4 mr-1" />Salva</Button>
             <Button variant="outline" onClick={() => approve(editing)} disabled={!editing?.creative_media_id || igAccounts.length === 0 || (igAccounts.length > 1 && !editing?.account_id)} data-testid="edit-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva</Button>
             <Button variant="outline" onClick={() => schedule(editing)} data-testid="edit-schedule"><Clock className="w-4 h-4 mr-1" />Programma</Button>
@@ -548,6 +576,33 @@ export default function Social() {
           )}
         </DialogContent>
       </Dialog>
+
+      <RechargeDialog open={rechargeOpen} onClose={() => { setRechargeOpen(false); loadCost(); }} />
+      <Dialog open={!!insuff} onOpenChange={(v) => !v && setInsuff(null)}>
+        <DialogContent className="max-w-sm" data-testid="insufficient-credits-dialog">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Coins className="w-5 h-5 text-amber-500" />Crediti insufficienti</DialogTitle></DialogHeader>
+          <div className="text-sm text-slate-600 space-y-1">
+            <p>Servono <b data-testid="insuff-cost">{insuff?.cost ?? svcCost?.cost}</b> crediti per questa operazione.</p>
+            <p>Saldo disponibile: <b data-testid="insuff-balance">{insuff?.balance ?? svcCost?.balance ?? 0}</b> {(insuff?.balance ?? svcCost?.balance) === 1 ? "credito" : "crediti"}.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInsuff(null)}>Annulla</Button>
+            <Button data-testid="insuff-recharge-btn" onClick={() => { setInsuff(null); setRechargeOpen(true); }} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CostHint({ svcCost, onRecharge }) {
+  if (!svcCost || !svcCost.will_charge) return null;
+  const insufficient = svcCost.cost != null && svcCost.balance < svcCost.cost;
+  return (
+    <div className="flex items-center gap-2 text-xs text-slate-500 mr-auto" data-testid="cost-hint">
+      <span className="inline-flex items-center gap-1"><Coins className="w-3.5 h-3.5 text-tiffany-active" />Costo: <b className="text-slate-700">{svcCost.cost} {svcCost.cost === 1 ? "credito" : "crediti"}</b></span>
+      <span className={insufficient ? "text-amber-600 font-semibold" : "text-slate-400"} data-testid="cost-hint-balance">· Saldo: {svcCost.balance}</span>
+      {insufficient && onRecharge && <button type="button" onClick={onRecharge} className="text-tiffany-active underline font-semibold" data-testid="cost-hint-recharge">Ricarica</button>}
     </div>
   );
 }

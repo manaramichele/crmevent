@@ -24,7 +24,7 @@ const fmtDate = (s) => (s ? new Date(s).toLocaleString("it-IT", { day: "2-digit"
 const eur = (n) => `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const num = (n) => Number(n || 0).toLocaleString("it-IT");
 
-function RechargeDialog({ open, onClose }) {
+export function RechargeDialog({ open, onClose }) {
   const [packs, setPacks] = useState([]);
   const [busy, setBusy] = useState(null);
   useEffect(() => {
