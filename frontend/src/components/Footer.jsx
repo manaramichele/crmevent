@@ -12,15 +12,18 @@ export default function Footer() {
           <div className="text-white font-semibold mb-3 text-sm">Prodotto</div>
           <ul className="space-y-2 text-sm">
             <li><a href="/#funzionalita" className="hover:text-white">Funzionalità</a></li>
-            <li><Link to="/prezzi" data-testid="footer-pricing-link" className="hover:text-white">Prezzi</Link></li>
-            <li><a href="/#staff" className="hover:text-white">Staff & Volontari</a></li>
-            <li><a href="/#sponsor" className="hover:text-white">Sponsor</a></li>
+            <li><a href="/#come-funziona" className="hover:text-white">Come funziona</a></li>
+            <li><a href="/#crediti" data-testid="footer-credits-link" className="hover:text-white">Crediti</a></li>
+            <li><a href="/#demo" className="hover:text-white">Demo</a></li>
             <li><Link to="/login" className="hover:text-white">Accedi</Link></li>
           </ul>
         </div>
         <div>
-          <div className="text-white font-semibold mb-3 text-sm">Azienda</div>
-          <ul className="space-y-2 text-sm"><li><a href="/#demo" className="hover:text-white">Contatti</a></li></ul>
+          <div className="text-white font-semibold mb-3 text-sm">CRMEvent</div>
+          <ul className="space-y-2 text-sm">
+            <li><a href="/#crediti" className="hover:text-white">100 crediti inclusi</a></li>
+            <li><a href="/#demo" className="hover:text-white">Contatti</a></li>
+          </ul>
         </div>
         <div>
           <div className="text-white font-semibold mb-3 text-sm">Legale</div>

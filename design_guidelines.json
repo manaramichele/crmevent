@@ -1,123 +1,322 @@
 {
-  "brand": {
+  "project_name": "CRMEvent - Public Home Redesign",
+  "language": "it",
+  "theme": "light",
+  "brand_identity": {
     "name": "CRMEvent",
-    "domain": "crmevent.it",
-    "tagline": "Il CRM e Gestionale per Organizzatori di Eventi",
-    "language": "it"
-  },
-  "typography": {
-    "fonts": {
-      "heading": "Plus Jakarta Sans, sans-serif",
-      "body": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
-      "mono": "JetBrains Mono, monospace"
-    },
-    "hierarchy": {
-      "h1": "text-3xl md:text-4xl font-bold tracking-tight text-slate-900",
-      "h2": "text-2xl md:text-3xl font-semibold tracking-tight text-slate-900",
-      "h3": "text-lg md:text-xl font-semibold text-slate-800",
-      "h4": "text-base font-medium text-slate-800",
-      "subtitle": "text-sm md:text-base text-slate-500 font-normal",
-      "body": "text-sm text-slate-700 leading-relaxed",
-      "caption": "text-xs text-slate-500 font-medium tracking-wide uppercase"
-    }
-  },
-  "colors": {
-    "primary": {
-      "ral_6027_tiffany": "#81D8D0",
+    "primary_color": "Tiffany (RAL 6027)",
+    "color_tokens": {
+      "tiffany": "#81D8D0",
       "tiffany_hover": "#6ECDC4",
       "tiffany_active": "#59C1B7",
       "tiffany_light": "#E8F8F6",
       "tiffany_border": "#B2E7E1",
-      "tiffany_foreground": "#0F4C45"
+      "tiffany_fg": "#0F4C45"
     },
-    "neutral": {
+    "neutrals": {
       "bg_main": "#FFFFFF",
-      "bg_secondary": "#F8FAFC",
-      "bg_hover": "#F1F5F9",
-      "border": "#E2E8F0",
-      "border_subtle": "#EDF2F7",
-      "text_primary_anthracite": "#0F172A",
-      "text_secondary_gray": "#64748B",
-      "text_muted": "#94A3B8"
+      "bg_alt": "#F8FAFC",
+      "bg_dark": "#0F172A",
+      "text_primary": "#0F172A",
+      "text_muted": "#64748B",
+      "border": "#E2E8F0"
     },
-    "status": {
-      "success": "#10B981",
-      "success_bg": "#ECFDF5",
-      "warning": "#F59E0B",
-      "warning_bg": "#FFFBEB",
-      "critical_due": "#EF4444",
-      "critical_bg": "#FEF2F2",
-      "info": "#0EA5E9",
-      "info_bg": "#F0F9FF"
-    },
-    "rules": "IMPORTANT: Do NOT apply RAL 6027 Tiffany to large background surfaces or full containers. Use only for primary action buttons, active tabs, selected states, badges, graphs, key KPI accents, active navigation indicators, and links."
-  },
-  "layout_and_navigation": {
-    "sidebar": {
-      "type": "Collapsible vertical sidebar",
-      "width_expanded": "w-64",
-      "width_collapsed": "w-20",
-      "bg": "bg-white border-r border-slate-200",
-      "sections": [
-        "Dashboard",
-        "Eventi",
-        "Aziende",
-        "Persone",
-        "Sponsor & Partner",
-        "Staff & Volontari",
-        "Attività",
-        "Follow-up",
-        "Impostazioni"
-      ]
-    },
-    "topbar": {
-      "bg": "bg-white/90 backdrop-blur-md border-b border-slate-200 z-40 sticky top-0",
-      "elements": [
-        "Logo CRMEvent with Tiffany badge",
-        "Global Search Bar (Ricerca globale con shortcut Cmd+K)",
-        "Notification Bell with unread count badge",
-        "User Profile Dropdown with avatar, name & multi-role toggle"
-      ]
-    },
-    "grid_system": {
-      "kpi_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5",
-      "content_split": "grid grid-cols-1 lg:grid-cols-12 gap-6",
-      "kanban_pipeline": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4"
+    "status_colors": {
+      "red_critical": {
+        "bg": "#FEF2F2",
+        "border": "#FCA5A5",
+        "text": "#991B1B",
+        "badge": "bg-red-50 text-red-700 border-red-200",
+        "dot": "bg-red-500"
+      },
+      "orange_warning": {
+        "bg": "#FFEDD5",
+        "border": "#FDBA74",
+        "text": "#9A3412",
+        "badge": "bg-orange-50 text-orange-800 border-orange-200",
+        "dot": "bg-orange-500"
+      },
+      "yellow_attention": {
+        "bg": "#FEF9C3",
+        "border": "#FDE047",
+        "text": "#854D0E",
+        "badge": "bg-yellow-50 text-yellow-800 border-yellow-200",
+        "dot": "bg-yellow-500"
+      },
+      "blue_info": {
+        "bg": "#EFF6FF",
+        "border": "#93C5FD",
+        "text": "#1E40AF",
+        "badge": "bg-blue-50 text-blue-700 border-blue-200",
+        "dot": "bg-blue-500"
+      }
     }
   },
-  "components_strategy": {
-    "cards": "White background, slate-200 border, subtle shadow-sm (hover:shadow-md transition-shadow), p-5 or p-6 rounded-xl",
-    "buttons": {
-      "primary": "bg-[#81D8D0] hover:bg-[#6ECDC4] text-slate-900 font-semibold px-4 py-2 rounded-lg shadow-sm transition-all focus:ring-2 focus:ring-[#81D8D0]/50 active:scale-[0.98]",
-      "secondary": "bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium px-4 py-2 rounded-lg transition-all",
-      "outline": "border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium px-4 py-2 rounded-lg transition-all",
-      "danger": "bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg shadow-sm"
-    },
-    "tables": "Clean row dividers, border-slate-200, hover:bg-slate-50/80 transition-colors, clear column sorting, rounded-lg overflow-hidden",
-    "charts": "Recharts / Shadcn charts with Tiffany accent (#81D8D0) as primary series, Slate (#64748B) secondary, Green/Orange for conversion stages",
-    "badges": "rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset",
-    "modals_and_drawers": "Shadcn Dialog and Sheet with backdrop-blur-sm bg-slate-900/40"
-  },
-  "media_assets": {
-    "event_hero_1": "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?crop=entropy&cs=srgb&fm=jpg&q=85",
-    "event_hero_2": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?crop=entropy&cs=srgb&fm=jpg&q=85",
-    "event_speaker": "https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?crop=entropy&cs=srgb&fm=jpg&q=85",
-    "event_staff": "https://images.pexels.com/photos/8761304/pexels-photo-8761304.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-    "logos": {
-      "crm_logo": "CRMEvent (Stylized icon in Tiffany #81D8D0 + Slate-900 text)"
+  "typography": {
+    "font_display": "'Plus Jakarta Sans', sans-serif",
+    "font_sans": "'Inter', sans-serif",
+    "scale": {
+      "hero_title": "text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.15]",
+      "section_title": "text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900",
+      "section_subtitle": "text-lg sm:text-xl text-slate-600 font-normal max-w-3xl leading-relaxed",
+      "card_title": "text-xl font-bold text-slate-900",
+      "body": "text-base text-slate-600 leading-relaxed",
+      "body_small": "text-sm text-slate-500",
+      "label": "text-xs font-semibold tracking-wider uppercase text-slate-500"
     }
   },
-  "general_ui_ux_guidelines": {
-    "language_setting": "All UI strings, labels, buttons, toasts, and status indicators MUST be in Italian (e.g. 'Dashboard', 'Eventi Attivi', 'Aziende', 'Contatti', 'Pipeline Commerciale', 'Staff & Volontari', 'Follow-up Oggi', 'Scadenze', 'Aggiungi Evento', 'Modifica', 'Salva Modifiche', 'Elimina').",
-    "test_attributes": "All interactive elements (buttons, inputs, select items, menu links, tabs, search inputs, modal triggers, pagination) MUST include explicit data-testid attributes in kebab-case (e.g. data-testid='sidebar-link-eventi', data-testid='add-event-button', data-testid='global-search-input').",
-    "accessibility": "Ensure text contrast against white and slate backgrounds. For Tiffany buttons, use dark slate text (#0F172A) for strong WCAG compliance.",
-    "responsiveness": "Full desktop optimization with sidebar collapse on tablet/mobile screens. Touch-friendly touch targets on buttons (min 40px height)."
+  "layout_and_spacing": {
+    "container_max_width": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "section_padding": "py-16 md:py-24",
+    "section_gap": "gap-12 lg:gap-16",
+    "bg_alternation": "Alternate between pure white (#FFFFFF) and soft light slate (#F8FAFC) sections with crisp tiffany accents and borders.",
+    "card_radius": "rounded-2xl",
+    "shadow_style": "shadow-sm hover:shadow-md transition-shadow duration-200 border border-slate-200/80"
   },
-  "instructions_to_main_agent": [
-    "Ensure all components are built in JS/JSX files in /app/frontend/src/.",
-    "Implement the Italian multi-event CRM interface with realistic seed/mock data for events, companies, contacts, sponsors, pipeline stages, staff shifts, and follow-ups.",
-    "Maintain strict adherence to the clean, modern B2B SaaS aesthetic: white backgrounds, slate typography, subtle borders, and precise Tiffany (#81D8D0) accenting.",
-    "Ensure Sonner toasts are used for user feedback (salvataggio, aggiunta, eliminazione, cambio stato).",
-    "Include data-testid on every interactive button, input, tab, card link, dropdown option, and modal button."
-  ]
+  "core_positioning_and_messaging": {
+    "value_proposition": "Gestione completamente gratuita dell'evento + Servizi avanzati e IA ad consumo tramite crediti.",
+    "strict_exclusions": [
+      "NO starter / professional / premium plans",
+      "NO pricing per event",
+      "NO 14-day free trial references",
+      "NO generic illustrations or stock photos of random runners blocking the product view"
+    ],
+    "hero_tagline": "Tu organizzi l'evento. CRMEvent ti aiuta a farlo.",
+    "hero_subtitle": "Staff, volontari, sponsor, attività, turni, ospitalità, briefing e comunicazioni. Tutto in un unico posto.",
+    "included_credits_badge": "100 crediti CRMEvent inclusi alla registrazione · Nessuna carta richiesta"
+  },
+  "product_ui_mockups_guidelines": {
+    "approach": "First-class interactive/pixel-crisp React in-browser UI components representing real CRMEvent software dashboards, checklist tools, communication matrices, and credits ledger.",
+    "visual_treatment": {
+      "window_chrome": "Mac-style glass header with 3 dots (red, yellow, green) and title bar 'CRMEvent App — Dashboard Evento'",
+      "border": "border border-slate-200/90 shadow-2xl rounded-2xl bg-white overflow-hidden",
+      "tiffany_accents": "Active tabs, primary action buttons, status pills, progress bars, and high priority badges"
+    }
+  },
+  "sections_breakdown": [
+    {
+      "id": "header",
+      "name": "Navigation Bar",
+      "type": "fixed_top_header",
+      "elements": {
+        "logo": "CRMEvent Logo with Tiffany icon badge",
+        "nav_links": [
+          { "label": "Funzionalità", "target": "#funzionalita" },
+          { "label": "Come funziona", "target": "#come-funziona" },
+          { "label": "Crediti", "target": "#crediti" },
+          { "label": "Demo", "target": "#demo" }
+        ],
+        "ctas": [
+          { "label": "Accedi", "variant": "ghost/outline" },
+          { "label": "Inizia gratuitamente", "variant": "tiffany_primary" }
+        ]
+      }
+    },
+    {
+      "id": "hero",
+      "name": "Hero Section",
+      "content": {
+        "title": "Tu organizzi l'evento. CRMEvent ti aiuta a farlo.",
+        "subtitle": "Staff, volontari, sponsor, attività, turni, ospitalità, briefing e comunicazioni. Tutto in un unico posto.",
+        "cta_primary": "Inizia gratuitamente",
+        "cta_secondary": "Guarda la demo",
+        "guarantee_note": "100 crediti CRMEvent inclusi alla registrazione · Nessuna carta richiesta",
+        "ui_mockup": "Full Dashboard Mockup with live status counters (30 giorni all'evento, 142 volontari, 12 sponsor, 88% turni coperti) and active event selector."
+      }
+    },
+    {
+      "id": "problema",
+      "name": "Il Problema & La Soluzione",
+      "content": {
+        "title": "Organizzare un evento significa tenere insieme centinaia di cose.",
+        "text": "Permessi, sponsor, volontari, turni, fornitori, hotel, pasti, materiali, briefing e scadenze sparsi tra Excel, email e chat Whatsapp.",
+        "highlight_box": "CRMEvent mette tutto in ordine.",
+        "visual": "Interactive comparison card: 'Prima' (chaos with red alert tags) vs 'Con CRMEvent' (organized single dashboard in Tiffany glow)."
+      }
+    },
+    {
+      "id": "checklist",
+      "name": "Checklist Operativa con Scadenze",
+      "content": {
+        "title": "Sai sempre cosa devi fare. E cosa manca.",
+        "subtitle": "Checklist operativa con responsabili e scadenze collegate alla data dell'evento.",
+        "interactive_widget": {
+          "header": "Mancano 30 giorni all'evento — Milano Trail Run 2026",
+          "items": [
+            { "type": "critical", "icon": "🔴", "label": "3 attività in ritardo", "detail": "Permesso AIPO, Ordine pettorali, Piano di sicurezza" },
+            { "type": "warning", "icon": "🟠", "label": "2 turni scoperti", "detail": "Ristoro km 15 (2 volontari), Incrocio SP12 (1 volontario)" },
+            { "type": "attention", "icon": "🟡", "label": "14 volontari da confermare", "detail": "Inviato sollecito via SMS/Mail" },
+            { "type": "info", "icon": "🔵", "label": "4 sponsor da ricontattare", "detail": "Invio bozza banner promozionale" }
+          ]
+        },
+        "cta": "Gestisci il tuo prossimo evento"
+      }
+    },
+    {
+      "id": "tutto_in_un_posto",
+      "name": "Tutto l'Evento in un Posto (Feature Grid)",
+      "content": {
+        "title": "Una piattaforma. Tutto quello che serve per organizzare.",
+        "subtitle": "Moduli nativi integrati per non perdere mai il controllo.",
+        "grid_items": [
+          { "icon": "Calendar", "title": "Eventi", "description": "Gestione multi-evento con date, location, percorsi e dettagli generali." },
+          { "icon": "Users", "title": "Persone", "description": "Database unico per staff, volontari, referenti e contatti esterni." },
+          { "icon": "UserCheck", "title": "Team e turni", "description": "Assegnazione ruoli, orari e mansioni con copertura in tempo reale." },
+          { "icon": "Award", "title": "Sponsor e partner", "description": "Tracciamento benefit, materiali consegnati e scadenze accordi." },
+          { "icon": "CheckSquare", "title": "Attività e checklist", "description": "To-do list collaborative con scadenze collegate al giorno dell'evento." },
+          { "icon": "Utensils", "title": "Ospitalità e pasti", "description": "Prenotazioni hotel, voucher pasto e diete speciali per staff e guest." },
+          { "icon": "FileText", "title": "Briefing", "description": "Schede operative automatiche generate per ciascun settore o capozona." },
+          { "icon": "MessageSquare", "title": "Comunicazioni", "description": "Invio email, newsletter e notifiche mirate a gruppi specifici." }
+        ]
+      }
+    },
+    {
+      "id": "dashboard_priorita",
+      "name": "Dashboard Priorità",
+      "content": {
+        "title": "Apri CRMEvent e sai da dove iniziare.",
+        "subtitle": "Pannello intelligente che evidenzia istantaneamente le urgenze del giorno.",
+        "ui_dashboard_sample": {
+          "greeting": "Buongiorno, Marco. Mancano 18 giorni all'evento.",
+          "metrics": [
+            { "label": "Attività da completare", "value": "6" },
+            { "label": "Attività in ritardo", "value": "2", "alert": true },
+            { "label": "Turni senza responsabile", "value": "3", "alert": true },
+            { "label": "Volontari senza turno", "value": "17" },
+            { "label": "Sponsor da ricontattare", "value": "4" }
+          ]
+        },
+        "cta": "Vedi le priorità"
+      }
+    },
+    {
+      "id": "crmevent_ia",
+      "name": "CRMEvent Può Fare di Più (AI & Advanced Services)",
+      "content": {
+        "title": "Non solo organizza i dati. Può lavorare insieme a te.",
+        "subtitle": "Attiva gli assistenti intelligenti quando hai bisogno di velocità e automazione.",
+        "capabilities": [
+          "Analizzare cosa manca e suggerire azioni correttive",
+          "Individuare attività urgenti a rischio ritardo",
+          "Preparare briefing operativi per capizona e volontari",
+          "Creare testi, post e comunicazioni ufficiali",
+          "Generare contenuti promozionali per gli sponsor",
+          "Automatizzare invii e promemoria di scadenza",
+          "Inviare comunicazioni multicanale massive"
+        ],
+        "credit_notice": "Questi servizi avanzati utilizzano i crediti CRMEvent.",
+        "ui_card": "AI Copilot Widget preview showing prompt generation: 'Genera briefing per Responsabili Ristoro km 21'."
+      }
+    },
+    {
+      "id": "comunicazioni",
+      "name": "Modulo Comunicazioni Mirate",
+      "content": {
+        "title": "Comunica con le persone giuste, direttamente dall'evento.",
+        "subtitle": "Filtra i destinatari in un click e invia messaggi specifici al momento opportuno.",
+        "recipient_selector_mock": {
+          "checkboxes": [
+            { "label": "Staff", "checked": true },
+            { "label": "Volontari", "checked": true },
+            { "label": "Sponsor", "checked": false },
+            { "label": "Aziende", "checked": false }
+          ],
+          "selected_group": "Team ristoro km 30 — 18 persone",
+          "channels": [
+            { "name": "Email & Newsletter", "status": "Disponibile ora", "active": true },
+            { "name": "WhatsApp", "status": "Prossimamente", "badge": "prossimamente", "active": false }
+          ]
+        }
+      }
+    },
+    {
+      "id": "come_funzionano_crediti",
+      "name": "Come Funzionano i Crediti",
+      "content": {
+        "title": "Parti con 100 crediti CRMEvent.",
+        "subtitle": "Gestisci il tuo evento gratis per sempre. Usa i crediti solo quando vuoi far lavorare la piattaforma per te.",
+        "two_column_comparison": {
+          "col_1": {
+            "title": "Gestione dell'Evento (0 Crediti)",
+            "badge": "Sempre Gratuito",
+            "features": [
+              "Gestione Eventi e date",
+              "Database Persone e volontari",
+              "Gestione Sponsor e contatti",
+              "Creazione Turni e mansioni",
+              "Attività e Checklist operative",
+              "Ospitalità e voucher pasti"
+            ]
+          },
+          "col_2": {
+            "title": "CRMEvent Lavora per Te (A Consumo)",
+            "badge": "Servizi Avanzati",
+            "features": [
+              "Assistente IA e analisi evento",
+              "Generazione automatica briefing",
+              "Creazione contenuti e testi",
+              "Automazioni scadenze",
+              "Invio Newsletter ed Email massive",
+              "Integrazione WhatsApp (in arrivo)"
+            ]
+          }
+        },
+        "highlight_banner": "Se non utilizzi servizi a consumo, i tuoi crediti restano disponibili per sempre."
+      }
+    },
+    {
+      "id": "nessun_blocco",
+      "name": "Nessun Blocco Accessi",
+      "content": {
+        "title": "I tuoi eventi restano sempre accessibili.",
+        "text": "Se esaurisci i crediti, non perdi mai l'accesso ai tuoi dati, agli eventi o alle funzionalità gestionali. Puoi continuare a organizzare gratuitamente o ricaricare i crediti in qualsiasi momento dall'Area Account con la massima flessibilità."
+      }
+    },
+    {
+      "id": "per_chi_e",
+      "name": "Per Chi È CRMEvent",
+      "content": {
+        "title": "Pensato per chi organizza eventi sportivi.",
+        "categories": [
+          { "title": "Running", "desc": "Maratone, mezza maratona, 10k, podistiche cittadine" },
+          { "title": "Triathlon", "desc": "Sprint, Olimpico, Medio, Ironman e duathlon" },
+          { "title": "Trail Running", "desc": "Ultratrail, vertikal e gare in montagna" },
+          { "title": "Nuoto", "desc": "Gare in acque libere, traversate e gran fondo" },
+          { "title": "E altri eventi sportivi", "desc": "Ciclismo, OCR, padel, tornei e manifestazioni multidisciplinari" }
+        ]
+      }
+    },
+    {
+      "id": "cta_finale",
+      "name": "CTA Finale (Tiffany Band)",
+      "content": {
+        "background": "bg-tiffany text-tiffany-fg p-12 md:p-16 rounded-3xl shadow-xl",
+        "title": "Il prossimo evento parte da qui.",
+        "subtitle": "Metti in ordine persone, attività, sponsor e scadenze. Quando vuoi fare di più, CRMEvent è pronto ad aiutarti. 100 crediti inclusi.",
+        "cta_primary": "Inizia gratuitamente",
+        "guarantee": "Nessuna carta richiesta",
+        "cta_secondary": "Guarda la demo"
+      }
+    },
+    {
+      "id": "footer",
+      "name": "Footer Ufficiale",
+      "content": {
+        "legal_info": "CRMEvent S.r.l. · P.IVA / C.F. 01234567890 · Tutti i diritti riservati.",
+        "quick_links": [
+          { "label": "Funzionalità", "href": "#funzionalita" },
+          { "label": "Come funziona", "href": "#come-funziona" },
+          { "label": "Crediti", "href": "#crediti" },
+          { "label": "Demo", "href": "#demo" },
+          { "label": "Privacy Policy", "href": "/privacy" },
+          { "label": "Cookie Policy", "href": "/cookie" },
+          { "label": "Termini e Condizioni", "href": "/termini" },
+          { "label": "Accedi", "href": "/login" }
+        ]
+      }
+    }
+  ],
+  "testing_guidelines": {
+    "data_testid_convention": "All interactive elements, buttons, menu links, checkboxes, modal triggers, and status widgets must feature kebab-case data-testid attributes (e.g. data-testid='hero-cta-start-free', data-testid='checklist-item-critical', data-testid='nav-link-crediti', data-testid='comms-checkbox-staff')."
+  }
 }
