@@ -222,6 +222,13 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 - Attivazione invii Brevo disponibilità (dopo approvazione utente): BREVO_AVAILABILITY_ENABLED=on in produzione + attivazione template + test invio singolo.
 - Consultazione disponibilità in creazione Team/Turni; alimentazione Briefing da assegnazione reale.
 
+### 2026-06-30 (Messaggio 304 — COMPLETATO E VERIFICATO)
+- [x] Team Leader dropdown filtrato a Staff & Volontari dell'evento selezionato (esclusi referenti-only), alfabetico, event-aware.
+- [x] Pasti con Data inizio | Data fine (retrocompat con `data` singola, no duplicazione, validazione fine≥inizio) — un record copre l'intero periodo.
+- [x] Auto-compilazione Luogo/Indirizzo/Referente/Telefono/Google Maps da anagrafica Struttura nei form Pasto e Pernottamento, con nota "Dato non presente".
+- [x] Viste aggiornate: Ospitalità Per-giorno (espansione), Per-struttura/Briefing/Area Staff (range leggibile "16–20 ottobre 2026").
+- Prossimi P1: passaggio Stripe + Fatture in Cloud in modalità LIVE.
+
 ## Super Admin · Scheda "Email disponibilità eventi" (Marketing/Brevo) — 2026-06 (verificato frontend 100%)
 - Sezione in /piattaforma (`AvailabilityEmailPanel.jsx`) SOLO Super Admin (org-admin/utenti esclusi; multi-tenant ready per CRMEvent Pro futuro, nessun riferimento Pro in UI pubblica). Mostra i 2 template master (nome, tipo Disponibilità/Conferma, Template ID, stato Attivo/Bozza/Non creato, ultimo aggiornamento) + badge "Invii automatici ATTIVI/DISATTIVATI" (da BREVO_AVAILABILITY_ENABLED, resta off).
 - Pulsanti: Aggiorna stato · Crea template in Brevo (anti-duplicato, riusa Template ID esistenti) · Invia email di test per template (Evento di org type=test + email destinatario, dati reali evento+logo via HTML inline; invio manuale indipendente dal flag).
