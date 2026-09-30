@@ -1,5 +1,13 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Lead Finder FASE 3: menu, dashboard KPI, filtri ✅
+- Rimossa la voce di menu "Lead" da `PLATFORM_NAV` (`Layout.jsx`); route `/lead` → redirect a `/marketing/organizzatori?tab=leads` (`App.js`). Nessuna route/collection/componente backend eliminata (il componente Leads è riusato embedded).
+- LeadFinder legge il tab iniziale da `?tab=` (deep-link). Dashboard Organizzatori con 8 KPI cliccabili (`lf-kpis`): Lead totali/Demo/Manuali/Lead Finder → tab Lead con filtro Origine; Organizzatori/Eventi/Da verificare/Sincronizzati Brevo → tab+filtro corretti. Backend `lf_dashboard` esteso con leads_total/leads_demo/leads_manual/leads_lead_finder/brevo_synced.
+- Tab Lead: filtri Origine, Stato e ricerca libera (`Leads.jsx`, prop `initialOrigine` per deep-link dai KPI). Nuovo filtro Brevo negli Organizzatori.
+- Brevo/Funnel Demo NON toccati. Verificato: testing agent iter27 frontend 100% (22/22).
+- Record di test (SOLO preview, da rimuovere prima del deploy): leads `demo.origine@test.it`, `manuale.origine@test.it` (flag `_seed_fase3`) + eventuali org "Retest Dup Org"/"Conv Test Org" dei test. Rimossi i sintetici `@test.it`/`@lf.it` residui.
+
+
 ## 2026-06 — Lead Finder FASE 2: unificazione Lead + a11y fix ✅
 - Nuovo tab **"Lead"** dentro Lead Finder (`LeadFinder.jsx`) che riusa il componente `Leads` in modalità `embedded` (zero duplicazione di logica) — mantiene tutte le funzioni esistenti (stato, collega account, assegna org, invito, vista Funnel).
 - Colonna **Origine** nei Lead (`Leads.jsx`): Demo sito / Inserimento manuale / Lead Finder. Derivazione NON distruttiva a lettura (`_lead_origine` nel backend): demo → "Demo sito" (via funnel_ts_demo_requested/source), convertiti → "Lead Finder", altrimenti "Inserimento manuale".

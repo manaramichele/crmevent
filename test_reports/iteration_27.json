@@ -1,0 +1,20 @@
+{
+  "summary": "FASE 3 frontend E2E: ALL 22 acceptance criteria PASS. (1) 'Lead' voice removed from Amministrazione piattaforma sidebar. (2) /lead redirects client-side to /marketing/organizzatori?tab=leads with lf-tab-leads active and leads-page visible. (3) All 8 KPI cards (lf-kpi-leads-total, lf-kpi-leads-demo, lf-kpi-leads-manual, lf-kpi-leads-lf, lf-kpi-organizers, lf-kpi-events, lf-kpi-review, lf-kpi-brevo) inside lf-kpis grid are visible and clickable. (4) Each Lead KPI opens Lead tab with correct origine filter: demo→demo_sito (table shows only 'Demo sito' rows), manual→manuale, lf→lead_finder, total→'' (no filter). (5) organizers KPI opens Organizzatori tab; events KPI opens lf-events; review KPI opens Organizzatori with lf-filter-status=da_verificare; brevo KPI opens Organizzatori with lf-filter-brevo=sincronizzato. (6) Lead tab filters work: leads-search (filter by 'manuale.origine' → 1 row), leads-filter-origine (demo_sito shows only Demo sito lead), leads-filter-stato (nuovo returns filtered subset). Seed leads demo.origine@test.it (Demo sito) and manuale.origine@test.it (Inserimento manuale) both present. (7) Converti in Lead flow: POST /api/leadfinder/organizers/manual?scope=platform created ConvTest org, opened detail, clicked lf-convert-lead-btn → new lead appears when filtering Lead tab by origine=Lead Finder; seed leads still have exactly count=1 each (no duplication). Test data cleaned up (org + lead deleted, HTTP 200).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LeadFinder.jsx is now ~677 lines — still under the 700-line threshold but growing. Consider extracting the KPI grid, Detail modal and Convert-to-Lead subcomponents into separate files when adding new features.",
+    "Leads.jsx uses inline emails filter parsing on client — fine at current volume; if lead count grows past a few hundred, move filtering to backend query params.",
+    "PLATFORM_PATHS constant at Layout.jsx L35 no longer includes /lead (correct after removal) — good cleanup."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped as requested)", "frontend": "100% — 22/22 FASE 3 criteria pass"},
+  "test_credentials": "manara.michele.pro@gmail.com / CrmEvent2026! (verified)",
+  "seed_data_creation": "Test-only 'ConvTest Org 1790761773' organizer + its converted lead created via API and CLEANED UP at end. Seed leads demo.origine@test.it and manuale.origine@test.it preserved (verified counts=1 each).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FASE 3 complete and verified. All KPI clickable behaviors (leads/organizers/events/review/brevo), /lead redirect, sidebar cleanup, Lead tab filters and Converti in Lead flow work end-to-end. Backend /api/leadfinder/dashboard returns leads_total/leads_demo/leads_manual/leads_lead_finder/brevo_synced correctly (rendered on frontend). No further action required.",
+  "rca of the issue": "N/A — no issues found."
+}
