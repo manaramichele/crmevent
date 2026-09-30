@@ -1,5 +1,15 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Home pubblica ridisegnata sul modello a CREDITI ✅ (verificata testing_agent 100%)
+- **LandingPage.jsx riscritta da zero** (11 sezioni): Hero "Tu organizzi l'evento. CRMEvent ti aiuta a farlo." + badge "100 crediti inclusi · Nessuna carta richiesta"; Problema; Checklist evento (indicatori 🔴🟠🟡🔵); griglia 8 moduli (Eventi, Persone, Team e turni, Sponsor e partner, Attività e checklist, Ospitalità e pasti, Briefing, Comunicazioni); Dashboard priorità; "CRMEvent può fare di più" (IA, a crediti); Comunicazioni (WhatsApp "prossimamente"); Come funzionano i crediti (2 colonne: gratis vs a consumo); Nessun blocco; Per chi è (Running/Triathlon/Trail/Nuoto); banda CTA finale Tiffany.
+- **Mockup UI nativi** (no screenshot raster): HeroDashboardMock, ChecklistMock, PriorityMock, CommsMock, AICopilotMock — resi con il vero design system, responsive.
+- **Header** nuovo: Funzionalità · Come funziona · Crediti · Demo + Accedi + "Inizia gratuitamente". Rimosso ogni link a /prezzi e ai vecchi piani.
+- **Footer.jsx** aggiornato: link Funzionalità/Come funziona/Crediti/Demo/Accedi + Privacy/Cookie/Termini. Rimosso link /prezzi.
+- ZERO riferimenti a Starter/Professional/Premium, prezzi, "14 giorni", trial, abbonamento, mensile/annuale. Nessun percorso dalla Home al vecchio /prezzi.
+- CTA → /registrati (Inizia gratuitamente) e /demo (Guarda la demo). Mobile: nessuno scroll orizzontale, hamburger ok.
+- NON toccati: /prezzi, Area Account, Stripe, Fatture in Cloud, backend commerciale (per-evento) — verranno allineati al modello a crediti in una fase successiva su autorizzazione.
+
+
 ## 2026-06 — Home + /prezzi + Account allineati al modello per-evento ✅
 - **Home (`LandingPage.jsx`)**: rimossa la vecchia sezione "Un solo piano. Tutto CRMEvent." con 19,90 €/mese · 199 €/anno · "2 mesi inclusi" · "Cancella quando vuoi". Nuovo teaser "Prova tutto. Poi scegli cosa ti serve." con 3 mini-card (Starter/Professional ⭐Più scelto/Premium), prezzi letti da `/api/pricing` (fascia small, nessun hardcoding), CTA "Prova gratis 14 giorni" → /registrati + "Confronta i piani" → /prezzi. Mantenuti "14 giorni di prova" e "Nessuna carta richiesta".
 - **Prezzi listino**: aggiornati i prezzi del singolo evento in `pricing_plans` (DB) → Starter 49 · Professional 99 · Premium 199 (+IVA). Aggiornato anche `PRICING_SEED` in server.py. Stripe price_id NON toccati (migrazione differita su autorizzazione utente).

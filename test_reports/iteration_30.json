@@ -1,0 +1,23 @@
+{
+  "summary": "Frontend-only verification of new credit-model public Home (/) and Footer for CRMEvent. All requested checks PASSED: hero title/CTAs/credits badge correct, nav menu (Funzionalità, Come funziona, Crediti, Demo) scrolls to sections, all sections present (Problema, Checklist w/ colored items, 8 features, Priorità, AI, Comunicazioni w/ WhatsApp 'Prossimamente', Crediti 2-col, Nessun blocco, Per chi, Final CTA Tiffany), demo form submits successfully (POST /api/leads -> 200 and navigates to /demo). Zero references to Starter/Professional/Premium/prices/14 giorni/abbonamento/mese/anno/prova gratuita on Home or Footer. Zero /prezzi links. Mobile 390x844: hamburger opens menu with all 4 items + Accedi + Inizia gratuitamente, no horizontal scroll (scrollWidth == clientWidth == 390). Cookie banner accepted correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LandingPage.jsx is ~460 lines and mixes many mock subcomponents; could be split into /components/landing/* for maintainability, though not blocking.",
+    "Hero credits note renders as '100 crediti inclusialla registrazione' (missing space between spans in innerText). Cosmetic only — visually the badge is separated. Consider adding a leading space to the second span text."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped as requested)", "frontend": "100%"},
+  "test_credentials": "N/A - public pages",
+  "seed_data_creation": "One TEST lead created via demo form (test.mario@example.com) - POST /api/leads returned 200",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "New credit-model Home fully verified. /prezzi route intentionally still exists but is not linked from Home/Footer (per request). Demo form submit redirects user to /demo page which is out of scope but still uses old copy ('Prova CRMEvent gratis' CTA present there) — flagged separately if needed later.",
+  "rca of the issue": "No issues found."
+}

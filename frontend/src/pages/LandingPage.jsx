@@ -285,7 +285,7 @@ export default function LandingPage() {
             </div>
             <div className="mt-5 flex items-center gap-2 text-sm text-slate-500" data-testid="hero-credits-note">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1.5 font-semibold"><Coins className="w-4 h-4" />100 crediti inclusi</span>
-              <span>alla registrazione · Nessuna carta richiesta</span>
+              <span>{" "}alla registrazione · Nessuna carta richiesta</span>
             </div>
           </div>
           <div className="animate-fade-up"><AppFrame><HeroDashboardMock /></AppFrame></div>
