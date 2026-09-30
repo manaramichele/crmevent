@@ -12,8 +12,9 @@ const FUNNEL_ST = { active: { label: "attivo", cls: "text-emerald-700 bg-emerald
 const STEP_ST = { scheduled: "Programmata", sent: "Inviata", failed: "Fallita", canceled: "Annullata", skipped: "Saltata" };
 const STOP_LABEL = { trial_started: "prova gratuita avviata", cliente: "diventato cliente", unsubscribed: "disiscritto", hard_bounce: "hard bounce", spam: "spam", lead_deleted: "lead eliminato" };
 const inputCls = "h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-tiffany focus:ring-2 focus:ring-tiffany/30";
+const ORIGINE = { demo_sito: { label: "Demo sito", color: "tiffany" }, manuale: { label: "Inserimento manuale", color: "gray" }, lead_finder: { label: "Lead Finder", color: "blue" }, area_personale: { label: "Area personale", color: "gray" } };
 
-export default function Leads() {
+export default function Leads({ embedded = false }) {
   const [leads, setLeads] = useState([]);
   const [orgs, setOrgs] = useState([]);
   const [sel, setSel] = useState(null); // lead detail {lead, account, linked}
@@ -35,21 +36,24 @@ export default function Leads() {
 
   return (
     <div className="animate-fade-up" data-testid="leads-page">
-      <h1 className="font-display text-3xl font-bold text-slate-900">Lead</h1>
-      <p className="text-slate-500 mt-1 mb-6">Richieste demo e pipeline commerciale. Un Lead è un contatto commerciale, distinto da Utente e Organizzazione.</p>
+      {!embedded && <>
+        <h1 className="font-display text-3xl font-bold text-slate-900">Lead</h1>
+        <p className="text-slate-500 mt-1 mb-6">Richieste demo e pipeline commerciale. Un Lead è un contatto commerciale, distinto da Utente e Organizzazione.</p>
+      </>}
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-            <th className="text-left px-4 py-2.5">Nome</th><th className="text-left px-4 py-2.5">Organizzazione</th><th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Data</th><th className="text-left px-4 py-2.5">Stato</th>
+            <th className="text-left px-4 py-2.5">Nome</th><th className="text-left px-4 py-2.5">Organizzazione</th><th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Origine</th><th className="text-left px-4 py-2.5">Data</th><th className="text-left px-4 py-2.5">Stato</th>
           </tr></thead>
           <tbody>
-            {leads.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Nessun lead.</td></tr> :
+            {leads.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nessun lead.</td></tr> :
               leads.map((l) => (
                 <tr key={l.id} onClick={() => openLead(l.id)} className="border-t border-slate-100 cursor-pointer hover:bg-slate-50" data-testid={`lead-row-${l.id}`}>
                   <td className="px-4 py-2.5 font-medium text-slate-800">{l.nome} {l.cognome || ""}</td>
                   <td className="px-4 py-2.5 text-slate-600">{l.organizzazione || "—"}</td>
                   <td className="px-4 py-2.5 text-slate-600">{l.email}</td>
+                  <td className="px-4 py-2.5"><StatusBadge color={(ORIGINE[l.origine] || ORIGINE.manuale).color}>{(ORIGINE[l.origine] || ORIGINE.manuale).label}</StatusBadge></td>
                   <td className="px-4 py-2.5 text-slate-500">{(l.created_at || "").slice(0, 10)}</td>
                   <td className="px-4 py-2.5"><StatusBadge color={STATO[l.stato] || "gray"}>{STATO_LABEL[l.stato] || l.stato}</StatusBadge></td>
                 </tr>
@@ -65,6 +69,7 @@ export default function Leads() {
             <div className="text-sm text-slate-600 space-y-1">
               <div><span className="text-slate-400">Email:</span> {sel.lead.email}</div>
               {sel.lead.organizzazione && <div><span className="text-slate-400">Organizzazione (lead):</span> {sel.lead.organizzazione}</div>}
+              <div><span className="text-slate-400">Origine:</span> {(ORIGINE[sel.lead.origine] || ORIGINE.manuale).label}</div>
               {sel.lead.telefono && <div><span className="text-slate-400">Telefono:</span> {sel.lead.telefono}</div>}
             </div>
             <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Stato commerciale</label>

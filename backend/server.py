@@ -2544,9 +2544,26 @@ async def lead_funnel(lead_id: str, body: FunnelIn):
     return {"ok": True}
 
 
+def _lead_origine(lead: dict) -> str:
+    """Derive the Lead origin (non-destructive, computed at read time).
+    Explicit `origine` wins; converted Lead Finder records are tagged; demo-site leads are
+    detected via demo funnel timestamp/source; everything else defaults to manual."""
+    if lead.get("origine"):
+        return lead["origine"]
+    if lead.get("lead_finder_organizer_id"):
+        return "lead_finder"
+    src = (lead.get("source") or "").lower()
+    if lead.get("funnel_ts_demo_requested") or "demo" in src or "richiedi" in src:
+        return "demo_sito"
+    return "manuale"
+
+
 @api.get("/leads")
 async def list_leads(admin: dict = Depends(require_superadmin)):
-    return await _list("leads")
+    rows = await _list("leads")
+    for l in rows:
+        l["origine"] = _lead_origine(l)
+    return rows
 
 
 @api.put("/leads/{lead_id}")
@@ -3780,6 +3797,7 @@ async def get_lead(lead_id: str, admin: dict = Depends(require_superadmin)):
         account = await _account_for_email(lead.get("email"))
     enrollment = await db.funnel_enrollments.find_one(
         {"funnel_key": brevo_funnel.FUNNEL_KEY, "lead_id": lead_id}, {"_id": 0})
+    lead["origine"] = _lead_origine(lead)
     return {"lead": lead, "account": account, "linked": bool(lead.get("user_id")),
             "funnel": enrollment}
 
@@ -5500,6 +5518,43 @@ async def lf_delete_organizers_bulk(body: dict, user: dict = Depends(require_org
         if await _lf_delete_one(user, oid):
             deleted += 1
     return {"deleted": deleted, "requested": len(ids)}
+
+
+class ConvertLeadIn(BaseModel):
+    force: Optional[bool] = False
+
+
+@api.post("/leadfinder/organizers/{oid}/convert-to-lead")
+async def lf_convert_to_lead(oid: str, body: ConvertLeadIn = ConvertLeadIn(),
+                             user: dict = Depends(require_org_admin)):
+    """Convert a Lead Finder prospect into a commercial Lead.
+    Keeps a bidirectional link to the original organizer. Detects duplicates by email and,
+    when found, offers to LINK instead of creating a copy. Does NOT enroll the Demo funnel
+    nor mutate Brevo — the LF→Brevo sync and the Demo automation are left untouched."""
+    o = await db.lf_organizers.find_one(oq(user, id=oid), {"_id": 0})
+    if not o:
+        raise HTTPException(status_code=404, detail="Organizzatore non trovato")
+    email = ((o.get("emails") or [o.get("email")]) or [None])[0]
+    email = (email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email mancante: completa l'anagrafica prima di convertire")
+    name = o.get("name") or o.get("legal_name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Completa il Nome organizzazione prima di convertire in Lead")
+    existing = await db.leads.find_one({"email": email}, {"_id": 0})
+    if existing and not body.force:
+        return {"duplicate": True, "lead_id": existing["id"],
+                "lead_name": f"{existing.get('nome', '')} {existing.get('cognome', '') or ''}".strip(),
+                "message": "Questo contatto è già presente nei Lead"}
+    if existing:
+        await db.leads.update_one({"id": existing["id"]}, {"$set": {"lead_finder_organizer_id": oid, "updated_at": now_iso()}})
+        await db.lf_organizers.update_one(oq(user, id=oid), {"$set": {"lead_id": existing["id"], "updated_at": now_iso()}})
+        return {"linked": True, "lead_id": existing["id"]}
+    doc = await _create("leads", {"nome": name, "cognome": None, "organizzazione": name, "email": email,
+                                  "telefono": o.get("phone"), "source": "lead_finder", "origine": "lead_finder",
+                                  "stato": "nuovo", "note": "", "lead_finder_organizer_id": oid})
+    await db.lf_organizers.update_one(oq(user, id=oid), {"$set": {"lead_id": doc["id"], "updated_at": now_iso()}})
+    return {"created": True, "lead_id": doc["id"]}
 
 
 

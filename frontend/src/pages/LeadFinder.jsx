@@ -3,12 +3,14 @@ import api from "@/lib/platformApi";
 import { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Building2, Users, CalendarRange, Search, ShieldCheck, ExternalLink, GitMerge, Send, Instagram, Linkedin, Mail, Globe, Plus, Upload, Sparkles, Pencil, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import Leads from "@/pages/Leads";
+import { Building2, Users, CalendarRange, Search, ShieldCheck, ExternalLink, GitMerge, Send, Instagram, Linkedin, Mail, Globe, Plus, Upload, Sparkles, Pencil, Trash2, UserCheck } from "lucide-react";
 
 const FIELD = "w-full h-10 px-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm";
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: ShieldCheck },
+  { id: "leads", label: "Lead", icon: Mail },
   { id: "organizers", label: "Organizzatori", icon: Building2 },
   { id: "events", label: "Eventi trovati", icon: CalendarRange },
   { id: "finder", label: "Lead Finder", icon: Search },
@@ -93,6 +95,15 @@ export default function LeadFinder() {
   const doBulkDelete = async () => {
     try { const { data } = await api.post("/leadfinder/organizers/delete-bulk", { ids: mergeSel }); toast.success(`Eliminati ${data.deleted} organizzatori`); setBulkDel(false); setMergeSel([]); load(); }
     catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+  };
+  const [convDup, setConvDup] = useState(null);
+  const convertToLead = async (o, force = false) => {
+    try {
+      const { data } = await api.post(`/leadfinder/organizers/${o.id}/convert-to-lead`, { force });
+      if (data.duplicate) { setConvDup({ oid: o.id, org: o, ...data }); return; }
+      toast.success(data.created ? "Convertito in Lead" : "Collegato al Lead esistente");
+      setConvDup(null); load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
 
   const load = async () => {
@@ -323,6 +334,8 @@ export default function LeadFinder() {
         </div>
       )}
 
+      {tab === "leads" && <Leads embedded />}
+
       {tab === "events" && (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="lf-events">
           <table className="w-full text-sm"><thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr><th className="p-2 text-left">Evento</th><th className="p-2">Sport</th><th className="p-2">Data</th><th className="p-2">Città</th><th className="p-2">Regione</th><th className="p-2">Organizzatore</th><th className="p-2">Fonte ENDU</th></tr></thead>
@@ -525,6 +538,11 @@ export default function LeadFinder() {
                 <select value={detail.status} onChange={(e) => setStatus(detail, e.target.value)} className={FIELD} data-testid="lf-detail-status">{Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
                 {detail.status === "non_contattare" && <div className="text-xs text-red-600 mt-1">"Non contattare" ha priorità e non viene sovrascritto dalle ricerche automatiche.</div>}
               </section>
+              <section>
+                <div className="text-xs font-semibold uppercase text-slate-400 mb-1">Commerciale</div>
+                <Button size="sm" onClick={() => convertToLead(detail)} data-testid="lf-convert-lead-btn" className="bg-slate-900 hover:bg-slate-800 text-white h-8 text-xs"><UserCheck className="w-3.5 h-3.5 mr-1" />Converti in Lead</Button>
+                {detail.lead_id && <span className="text-xs text-emerald-600 ml-2">✓ Collegato a un Lead</span>}
+              </section>
               <section><div className="text-xs font-semibold uppercase text-slate-400 mb-1">Brevo</div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${BREVO_BADGE[detail.brevo_status || "non_approvato"]}`} data-testid="lf-detail-brevo-status">{BREVO_LABEL[detail.brevo_status || "non_approvato"]}</span>
@@ -587,7 +605,7 @@ export default function LeadFinder() {
 
       <Dialog open={!!editOrg} onOpenChange={(o) => !o && setEditOrg(null)}>
         <DialogContent className="max-w-md" data-testid="lf-edit-modal">
-          <DialogHeader><DialogTitle>Modifica organizzatore</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Modifica organizzatore</DialogTitle><DialogDescription>Aggiorna i dati dell'anagrafica organizzatore. Fonte e tracciabilità vengono mantenute.</DialogDescription></DialogHeader>
           <div className="space-y-3 text-sm">
             <div><label className="text-xs text-slate-500">Nome organizzazione</label><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className={FIELD} data-testid="lf-edit-name" placeholder="Nome ufficiale (non usare l'email)" /></div>
             <div><label className="text-xs text-slate-500">Email</label><input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} className={FIELD} data-testid="lf-edit-email" /></div>
@@ -609,7 +627,7 @@ export default function LeadFinder() {
 
       <Dialog open={!!delOrg} onOpenChange={(o) => !o && setDelOrg(null)}>
         <DialogContent className="max-w-md" data-testid="lf-delete-modal">
-          <DialogHeader><DialogTitle>Elimina organizzatore</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Elimina organizzatore</DialogTitle><DialogDescription>Conferma l'eliminazione dell'anagrafica. L'operazione non può essere annullata.</DialogDescription></DialogHeader>
           <div className="space-y-3 text-sm text-slate-700">
             <p>Vuoi eliminare l'organizzatore <strong>{delOrg?.name || delOrg?.email}</strong>? Questa operazione non può essere annullata.</p>
             {delRel && (delRel.events_count > 0 || delRel.brevo_synced) && (
@@ -626,7 +644,7 @@ export default function LeadFinder() {
 
       <Dialog open={bulkDel} onOpenChange={setBulkDel}>
         <DialogContent className="max-w-md" data-testid="lf-bulk-delete-modal">
-          <DialogHeader><DialogTitle>Elimina selezionati</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Elimina selezionati</DialogTitle><DialogDescription>Conferma l'eliminazione multipla delle anagrafiche selezionate.</DialogDescription></DialogHeader>
           <div className="space-y-3 text-sm text-slate-700">
             <p>Stai per eliminare <strong>{mergeSel.length}</strong> anagrafic{mergeSel.length === 1 ? "a" : "he"} organizzatore. Questa operazione non può essere annullata.</p>
             <p className="text-xs text-slate-500">Gli eventi collegati verranno scollegati (non eliminati). I contatti su Brevo NON vengono eliminati.</p>
