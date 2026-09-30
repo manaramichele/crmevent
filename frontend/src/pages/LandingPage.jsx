@@ -381,7 +381,7 @@ export default function LandingPage() {
               <div className="text-tiffany font-semibold text-sm">Servizi avanzati</div>
               <div className="text-xs text-slate-400 mt-0.5 mb-3">Utilizzano i crediti</div>
               <ul className="space-y-1.5 text-sm text-slate-200">
-                {["Assistente IA e analisi evento", "Generazione contenuti e briefing", "Automazioni", "Newsletter ed email", "WhatsApp (prossimamente)"].map((t) => (
+                {["Assistente IA e analisi evento", "Generazione contenuti e briefing", "Automazioni", "Newsletter ed email", "Google Calendar", "WhatsApp (prossimamente)"].map((t) => (
                   <li key={t} className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-tiffany shrink-0" />{t}</li>))}
               </ul>
             </div>
