@@ -335,3 +335,15 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Collegare consumi alle future funzioni AI (briefing/analisi/checklist/immagini/assistente). (P1)
 - Definire costi/contabilizzazione per Newsletter/WhatsApp/SMS/Automazioni prima di attivarli. (P1)
 - Migrazione org esistenti (+100), Stripe LIVE + FIC reale. (P0/P1)
+
+## FASE E.1 fix + E.2 Evento attivo a crediti — 2026-06-30 ✅ backend COMPLETATO e VERIFICATO
+- E.1: consumo ai_content scollegato dal Social (marketing piattaforma). Catalogo distingue active (disponibilità) vs consumo_active (consumo). Bugfix idempotenza su saldo insufficiente (claim cancellato).
+- E.2: evento attivo = 20 crediti/30gg (catalogo event_active_period, configurabile). Stati preparazione/attivo/sospeso/concluso. Attivazione/riattivazione, motore rinnovo idempotente, guardia centralizzata scritture, dry-run, UI EventCreditDialog. Eventi legacy non bloccati/migrati.
+- Test: test_credits_faseE2.py 18/18, test_credits_faseE.py 24/24.
+
+### Backlog aperto (attende autorizzazione)
+- Attivare cron rinnovi (proposta in EVENT_RENEWAL_CRON_PROPOSAL.md). (P0)
+- Migrazione eventi/org esistenti (solo dopo revisione dry-run). (P0)
+- Aggiornare copy pubblico Home/prezzi al modello "attivi l'evento con i crediti". (P1)
+- Futura funzione "contenuti evento" lato org che usi ai_content. UI trasparenza consumi lato org quando esisterà. (P1)
+- Stripe LIVE + FIC reale. (P1)

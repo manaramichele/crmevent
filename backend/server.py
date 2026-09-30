@@ -921,6 +921,10 @@ def crud_routes(path, coll, model, org_scoped=True):
     async def _c(body: model, user: dict = Depends(require_admin)):
         data = body.model_dump()
         data["org_id"] = user["org_id"]
+        if coll == "events":
+            data.setdefault("credit_state", "preparazione")
+        elif data.get("evento_id"):
+            await _assert_event_operational(user["org_id"], data["evento_id"])
         return await _create(coll, data)
 
     @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
@@ -934,6 +938,12 @@ def crud_routes(path, coll, model, org_scoped=True):
     async def _u(item_id: str, body: upd_model, user: dict = Depends(require_admin)):
         clean = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
         clean["updated_at"] = now_iso()
+        if coll != "events" and clean.get("evento_id"):
+            await _assert_event_operational(user["org_id"], clean["evento_id"])
+        elif coll != "events":
+            existing = await db[coll].find_one(oq(user, id=item_id), {"_id": 0, "evento_id": 1})
+            if existing and existing.get("evento_id"):
+                await _assert_event_operational(user["org_id"], existing["evento_id"])
         res = await db[coll].update_one(oq(user, id=item_id), {"$set": clean})
         if res.matched_count == 0:
             raise HTTPException(status_code=404, detail="Elemento non trovato")
@@ -6267,15 +6277,9 @@ async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_a
     event_ctx = None
     if body.event_id:
         event_ctx = await _event_public_context(body.event_id, user["org_id"])
-    reservation = await _charge_begin(user["org_id"], "ai_content", user_id=user.get("user_id"), event_id=body.event_id)
-    try:
-        gen = await social_ai.generate_post(settings, event_ctx, topic=body.topic,
-                                            category=body.category, platform=body.platform or "instagram",
-                                            extra=body.extra_instructions)
-    except Exception:
-        if reservation:
-            await _credits_release(reservation["id"])
-        raise
+    gen = await social_ai.generate_post(settings, event_ctx, topic=body.topic,
+                                        category=body.category, platform=body.platform or "instagram",
+                                        extra=body.extra_instructions)
     gid = await _record_generation(user, "post", body.model_dump(), gen)
     acct_id = await _default_account_id(user)
     data = {"org_id": user["org_id"], "status": "draft", "source": "ai", "account_id": acct_id,
@@ -6286,9 +6290,6 @@ async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_a
             "format": gen.get("format"), "ai_generation_id": gid,
             "created_by": user.get("user_id"), "created_by_name": user.get("name")}
     doc = await _create("social_posts", data)
-    if reservation:
-        await _credits_settle(reservation["id"])
-        await db.credit_ledger.update_one({"id": reservation["id"]}, {"$set": {"note": "Generazione contenuti"}})
     await _social_log(user, "generated", post_id=doc["id"], platform=doc.get("platform"))
     return doc
 
@@ -6301,26 +6302,17 @@ async def social_regenerate(post_id: str, body: SocialGenerateIn, user: dict = D
     settings = await _get_social_settings(user["org_id"])
     ev_id = body.event_id or post.get("event_id")
     event_ctx = await _event_public_context(ev_id, user["org_id"]) if ev_id else None
-    reservation = await _charge_begin(user["org_id"], "ai_content", user_id=user.get("user_id"), event_id=ev_id)
-    try:
-        gen = await social_ai.generate_post(settings, event_ctx,
-                                            topic=body.topic or post.get("topic"),
-                                            category=body.category or post.get("category"),
-                                            platform=post.get("platform") or "instagram",
-                                            extra=body.extra_instructions)
-    except Exception:
-        if reservation:
-            await _credits_release(reservation["id"])
-        raise
+    gen = await social_ai.generate_post(settings, event_ctx,
+                                        topic=body.topic or post.get("topic"),
+                                        category=body.category or post.get("category"),
+                                        platform=post.get("platform") or "instagram",
+                                        extra=body.extra_instructions)
     gid = await _record_generation(user, "post", {"regenerate": post_id, **body.model_dump()}, gen)
     upd = {"topic": gen.get("topic"), "title": gen.get("title"), "body": gen.get("body"),
            "caption": gen.get("caption"), "cta": gen.get("cta"), "hashtags": gen.get("hashtags"),
            "image_suggestion": gen.get("image_suggestion"), "image_brief": gen.get("image_brief"), "category": gen.get("category"),
            "format": gen.get("format"), "ai_generation_id": gid, "status": "draft", "updated_at": now_iso()}
     await db.social_posts.update_one(oq(user, id=post_id), {"$set": upd})
-    if reservation:
-        await _credits_settle(reservation["id"])
-        await db.credit_ledger.update_one({"id": reservation["id"]}, {"$set": {"note": "Generazione contenuti"}})
     await _social_log(user, "regenerated", post_id=post_id)
     return await db.social_posts.find_one(oq(user, id=post_id), {"_id": 0})
 
@@ -6330,17 +6322,8 @@ async def social_plan_generate(body: SocialPlanIn, user: dict = Depends(require_
     settings = await _get_social_settings(user["org_id"])
     event_ctx = await _event_public_context(body.event_id, user["org_id"]) if body.event_id else None
     dates = _plan_dates(body.date_from, body.date_to, body.posts_per_week, settings.get("preferred_times"))
-    reservation = await _charge_begin(user["org_id"], "ai_content", user_id=user.get("user_id"), event_id=body.event_id)
-    try:
-        posts = await social_ai.generate_plan(settings, event_ctx, goal=body.goal,
-                                              count=len(dates), platform=body.platform or "instagram")
-    except Exception:
-        if reservation:
-            await _credits_release(reservation["id"])
-        raise
-    if reservation:
-        await _credits_settle(reservation["id"])
-        await db.credit_ledger.update_one({"id": reservation["id"]}, {"$set": {"note": "Generazione piano contenuti"}})
+    posts = await social_ai.generate_plan(settings, event_ctx, goal=body.goal,
+                                          count=len(dates), platform=body.platform or "instagram")
     plan_id = new_id()
     await db.social_calendar.insert_one({
         "id": plan_id, "org_id": user["org_id"], "date_from": body.date_from, "date_to": body.date_to,
@@ -8008,6 +7991,7 @@ CREDIT_SERVICES_SEED = [
     ("google_calendar", "Google Calendar", "integration", None, None),
     ("whatsapp_send", "WhatsApp", "communication", "per_unit", "messaggio"),
     ("sms_send", "SMS (futuro)", "communication", "per_unit", "messaggio"),
+    ("event_active_period", "Evento attivo — 30 giorni", "event", "flat", "periodo"),
 ]
 # FASE E: valori iniziali di consumo (applicati UNA SOLA VOLTA quando il servizio non è ancora
 # configurato, così le modifiche del Super Admin non vengono mai sovrascritte). NON hardcoded a runtime:
@@ -8019,6 +8003,7 @@ FASE_E_INITIAL = {
     "ai_analysis": {"name": "Analisi completa evento", "pricing_mode": "flat", "unit_label": "richiesta", "unit_cost": 5},
     "ai_checklist": {"name": "Generazione checklist / piano operativo", "pricing_mode": "flat", "unit_label": "operazione", "unit_cost": 5},
     "image_generation": {"name": "Generazione immagini", "pricing_mode": "per_unit", "unit_label": "immagine", "unit_cost": 5},
+    "event_active_period": {"name": "Evento attivo — 30 giorni", "pricing_mode": "flat", "unit_label": "periodo", "unit_cost": 20, "period_days": 30},
 }
 _credits_indexes_done = False
 
@@ -8041,7 +8026,7 @@ async def _ensure_credits_setup():
             await db.credit_services.insert_one({
                 "id": new_id(), "key": key, "name": name, "category": cat,
                 "pricing_mode": mode, "unit_label": unit, "unit_cost": None, "min_units": 1,
-                "active": False, "visible": True, "version": 1,
+                "period_days": None, "active": False, "visible": True, "version": 1,
                 "created_at": now_iso(), "updated_at": now_iso()})
     # FASE E: applica i costi iniziali SOLO ai servizi non ancora configurati (unit_cost is None).
     for key, cfg in FASE_E_INITIAL.items():
@@ -8049,7 +8034,8 @@ async def _ensure_credits_setup():
         if svc and svc.get("unit_cost") is None:
             await db.credit_services.update_one({"key": key}, {"$set": {
                 "name": cfg["name"], "pricing_mode": cfg["pricing_mode"], "unit_label": cfg["unit_label"],
-                "unit_cost": cfg["unit_cost"], "active": True, "consumo_active": True, "updated_at": now_iso()}})
+                "unit_cost": cfg["unit_cost"], "period_days": cfg.get("period_days"),
+                "active": True, "consumo_active": True, "updated_at": now_iso()}})
     # Backfill del campo consumo_active (distinto da active=disponibilità). Retrocompat: se assente,
     # un servizio configurato+attivo consumava già -> consumo_active=True. Google Calendar: disponibile
     # ma consumo OFF (gratuito).
@@ -8113,8 +8099,7 @@ async def _apply_credit_movement(org_id, amount, reason_code, type_, *, service_
              "$set": {"credits.updated_at": now_iso()}})
         if res.modified_count == 0:
             if ledger_id:
-                await db.credit_ledger.update_one(
-                    {"id": ledger_id}, {"$set": {"status": "released", "settled_at": now_iso()}})
+                await db.credit_ledger.delete_one({"id": ledger_id})
             org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
             bal = (org.get("credits") or {}).get("balance", 0)
             raise HTTPException(status_code=402,
@@ -8268,6 +8253,7 @@ class CreditServiceUpdateIn(BaseModel):
     unit_label: Optional[str] = None
     unit_cost: Optional[float] = None
     min_units: Optional[int] = None
+    period_days: Optional[int] = None
 
 
 @api.put("/platform/credit-services/{key}")
@@ -8277,7 +8263,7 @@ async def update_credit_service(key: str, body: CreditServiceUpdateIn, admin: di
     if not svc:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     changes = {}
-    for f in ["name", "active", "consumo_active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units"]:
+    for f in ["name", "active", "consumo_active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units", "period_days"]:
         v = getattr(body, f)
         if v is not None and v != svc.get(f):
             changes[f] = v
@@ -8696,7 +8682,7 @@ async def _credits_reserve(org_id, service_key, quantity=1, user_id=None, event_
         {"id": org_id, "credits.balance": {"$gte": cost}},
         {"$inc": {"credits.balance": -cost, "credits.reserved": cost}, "$set": {"credits.updated_at": now_iso()}})
     if res.modified_count == 0:
-        await db.credit_ledger.update_one({"id": doc["id"]}, {"$set": {"status": "released", "settled_at": now_iso()}})
+        await db.credit_ledger.delete_one({"id": doc["id"]})
         org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
         bal = (org.get("credits") or {}).get("balance", 0)
         raise HTTPException(status_code=402, detail=f"Crediti insufficienti (saldo {bal}, richiesti {cost})")
@@ -8769,6 +8755,158 @@ async def credits_estimate(body: EstimateIn, user: dict = Depends(require_admin)
             "configured": info["configured"], "available": bool(svc.get("active")),
             "consumo_active": will_charge, "balance": balance,
             "sufficient": (not will_charge) or (cost is not None and balance >= cost)}
+
+
+# ==================== FASE E.2 · EVENTO ATTIVO A CREDITI ====================
+# Evento attivo = 20 crediti / 30 giorni (dal catalogo, non hardcoded). Cicli indipendenti per evento.
+# Stati: preparazione | attivo | sospeso | concluso. Eventi legacy (credit_state assente) NON bloccati.
+from datetime import date as _date, timedelta as _timedelta
+
+
+async def _event_period_cfg() -> dict:
+    svc = await db.credit_services.find_one({"key": "event_active_period"}, {"_id": 0})
+    cost = int(svc["unit_cost"]) if svc and svc.get("unit_cost") is not None else None
+    period = int(svc.get("period_days") or 30) if svc else 30
+    return {"cost": cost, "period_days": period, "active": bool(svc and svc.get("active")), "svc": svc}
+
+
+def _event_end_date(ev: dict) -> Optional[str]:
+    return ev.get("data_fine") or ev.get("data_inizio")
+
+
+async def _assert_event_operational(org_id: str, event_id: str):
+    """Guardia CENTRALIZZATA: consente le scritture operative solo se l'evento è attivo (o concluso,
+    consultabile+modificabile post-evento) o legacy (credit_state assente). Blocca preparazione/sospeso."""
+    ev = await db.events.find_one({"id": event_id, "org_id": org_id}, {"_id": 0, "credit_state": 1, "nome": 1})
+    if not ev:
+        return  # evento inesistente/altro tenant: lascia gestire al normale 404
+    st = ev.get("credit_state")
+    if st in (None, "attivo", "concluso"):
+        return
+    if st == "preparazione":
+        raise HTTPException(status_code=403, detail="Attiva l'evento per gestire le funzioni operative (20 crediti · 30 giorni).")
+    if st == "sospeso":
+        raise HTTPException(status_code=403, detail="Evento sospeso per crediti insufficienti. Ricarica e riattiva l'evento per modificarlo.")
+
+
+async def _charge_event_period(ev: dict, user_id: Optional[str], mode: str) -> dict:
+    """Addebita un periodo evento (idempotente per evento+periodo). Solleva 402 se saldo insufficiente."""
+    org_id = ev["org_id"]; eid = ev["id"]
+    cfg = await _event_period_cfg()
+    if not cfg["active"] or cfg["cost"] is None:
+        raise HTTPException(status_code=400, detail="Servizio 'Evento attivo' non configurato")
+    cost = cfg["cost"]; period = cfg["period_days"]
+    count = int(ev.get("renewal_count") or 0) + 1
+    label = {"activate": "Attivazione", "renew": "Rinnovo", "reactivate": "Riattivazione"}[mode]
+    mv = await _apply_credit_movement(
+        org_id, -cost, reason_code="event_active_period", type_="debit", service_key="event_active_period",
+        event_id=eid, user_id=user_id, idempotency_key=f"event_active:{eid}:{count}",
+        note=f"{label} evento — {ev.get('nome')}")
+    now = now_iso()
+    nxt = (datetime.now(timezone.utc) + _timedelta(days=period)).isoformat()
+    upd = {"credit_state": "attivo", "period_days": period, "cost_snapshot": cost,
+           "renewal_count": count, "last_renewal_at": now, "next_renewal_at": nxt, "updated_at": now}
+    if mode in ("activate", "reactivate"):
+        upd["activated_at"] = now
+    await db.events.update_one({"id": eid, "org_id": org_id}, {"$set": upd})
+    return mv
+
+
+async def _event_credit_status(ev: dict) -> dict:
+    cfg = await _event_period_cfg()
+    c = await _ensure_org_credits(ev["org_id"])
+    bal = c.get("balance", 0)
+    cost = cfg["cost"]
+    st = ev.get("credit_state")
+    low = (st == "attivo" and cost is not None and bal < cost)
+    return {"event_id": ev["id"], "nome": ev.get("nome"), "credit_state": st or "preparazione",
+            "cost": cost, "period_days": cfg["period_days"], "balance": bal,
+            "activated_at": ev.get("activated_at"), "next_renewal_at": ev.get("next_renewal_at"),
+            "last_renewal_at": ev.get("last_renewal_at"), "renewal_count": ev.get("renewal_count", 0),
+            "event_date": _event_end_date(ev), "sufficient": (cost is not None and bal >= cost),
+            "low_balance": low, "can_reactivate": (st == "sospeso" and cost is not None and bal >= cost)}
+
+
+@api.get("/events/{event_id}/credit-status")
+async def event_credit_status(event_id: str, user: dict = Depends(require_admin)):
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    return await _event_credit_status(ev)
+
+
+@api.post("/events/{event_id}/activate")
+async def event_activate(event_id: str, user: dict = Depends(require_admin)):
+    """Attiva (preparazione) o riattiva (sospeso) l'evento: −20 crediti, nuovo periodo di 30 giorni."""
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    st = ev.get("credit_state")
+    if st == "attivo":
+        return await _event_credit_status(ev)
+    end = _event_end_date(ev)
+    if end and _date.fromisoformat(end) < datetime.now(timezone.utc).date():
+        raise HTTPException(status_code=400, detail="La data dell'evento è già trascorsa: nessuna attivazione necessaria")
+    mode = "reactivate" if st == "sospeso" else "activate"
+    await _charge_event_period(ev, user.get("user_id"), mode)
+    await record_audit(user, "event_activate", org_id=user["org_id"], meta={"event_id": event_id, "mode": mode})
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    return await _event_credit_status(ev)
+
+
+async def run_event_renewals(now_dt: Optional[datetime] = None) -> dict:
+    """Motore rinnovi: atomico/idempotente/multi-tenant. Rinnova gli eventi attivi con next_renewal
+    scaduto; sospende se saldo insufficiente; conclude se la data evento è trascorsa."""
+    now_dt = now_dt or datetime.now(timezone.utc)
+    today = now_dt.date(); nowiso = now_dt.isoformat()
+    out = {"renewed": [], "suspended": [], "concluded": []}
+    rows = await db.events.find({"credit_state": "attivo", "next_renewal_at": {"$lte": nowiso}}, {"_id": 0}).to_list(5000)
+    for ev in rows:
+        end = _event_end_date(ev)
+        if end and _date.fromisoformat(end) < today:
+            await db.events.update_one({"id": ev["id"], "org_id": ev["org_id"]},
+                                       {"$set": {"credit_state": "concluso", "next_renewal_at": None, "updated_at": nowiso}})
+            out["concluded"].append(ev["id"]); continue
+        try:
+            await _charge_event_period(ev, None, "renew")
+            out["renewed"].append(ev["id"])
+        except HTTPException as he:
+            if he.status_code == 402:
+                await db.events.update_one({"id": ev["id"], "org_id": ev["org_id"]},
+                                           {"$set": {"credit_state": "sospeso", "updated_at": nowiso}})
+                out["suspended"].append(ev["id"])
+            else:
+                raise
+    return out
+
+
+@api.post("/platform/events/run-renewals")
+async def platform_run_event_renewals(admin: dict = Depends(require_superadmin)):
+    """Esecuzione manuale/schedulata del motore rinnovi (sicura, idempotente)."""
+    return await run_event_renewals()
+
+
+@api.get("/platform/events/migration-dryrun")
+async def events_migration_dryrun(admin: dict = Depends(require_superadmin)):
+    """DRY-RUN (sola lettura): stato degli eventi esistenti col nuovo modello. Nessuna scrittura."""
+    cfg = await _event_period_cfg()
+    evs = await db.events.find({}, {"_id": 0, "id": 1, "nome": 1, "org_id": 1, "data_inizio": 1,
+                                    "data_fine": 1, "credit_state": 1}).to_list(5000)
+    orgs = {o["id"]: o for o in await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "credits": 1}).to_list(5000)}
+    today = datetime.now(timezone.utc).date()
+    rows = []
+    for ev in evs:
+        org = orgs.get(ev.get("org_id")) or {}
+        bal = (org.get("credits") or {}).get("balance", 0)
+        end = _event_end_date(ev)
+        past = bool(end and _date.fromisoformat(end) < today)
+        rows.append({"org_id": ev.get("org_id"), "org_nome": org.get("nome"), "event_id": ev["id"],
+                     "evento": ev.get("nome"), "data_evento": end, "past": past,
+                     "credit_state_attuale": ev.get("credit_state"), "org_balance": bal,
+                     "cosa_succederebbe": ("Nessuna azione (già concluso per data)" if past else
+                                           "Resterebbe 'in preparazione' finché l'organizzatore non lo attiva manualmente (−%s crediti). Nessun addebito automatico." % cfg["cost"])})
+    return {"period_cost": cfg["cost"], "period_days": cfg["period_days"], "total_events": len(rows),
+            "note": "Nessuna attivazione/addebito automatico. Gli eventi esistenti NON vengono migrati.", "events": rows}
 
 
 class PriceUpdateIn(BaseModel):

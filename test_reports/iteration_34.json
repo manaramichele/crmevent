@@ -1,0 +1,47 @@
+{
+  "summary": "Fase E.1 tested: Backend /api/credits/estimate and Super Admin services panel (Disponibile/Consumo) work correctly (5/5 pytest tests pass, all UI checks on Super Admin services tab pass). However end-to-end UI flow on /marketing/social is BROKEN because the page uses platformApi (?scope=platform) for both estimate and generate calls. As org admin: all requests -> 403 'Super Admin only'. As Super Admin (with impersonated org): estimate/generate -> 404 'Organizzazione non trovata'. Consequently cost-hint never renders, generation fails, no toast, no balance updates, no ledger entries.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/credits/estimate?scope=platform", "issue": "Returns 404 'Organizzazione non trovata' for Super Admin (with or without X-Org-Id header). The estimate endpoint has no platform-scope resolution, so the CostHint cannot be loaded when Social.jsx (which uses platformApi) calls it.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/social/generate?scope=platform", "issue": "Returns 404 for Super Admin - CRMEvent official social content generation is broken end-to-end. The whole Fase E.1 charge flow (reserve->settle) is unreachable from UI.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Social.jsx (loadCost + generate + regenerate + plan)", "issue": "Uses platformApi client which forces ?scope=platform on every request. For org admin: /api/credits/estimate?scope=platform -> 403 'Accesso riservato al Super Admin CRMEvent'. Result: [data-testid=cost-hint] is never rendered (svcCost stays null), Costo/Saldo hint MISSING in both ai-dialog and plan-dialog, edit-regenerate label shows plain 'Rigenera' (no ' · 2 cr' appended). AI generation also fails (403 for org admin, 404 for super admin).", "selector": "[data-testid='cost-hint']", "priority": "CRITICAL"},
+      {"component": "Social.jsx", "issue": "Regenerate button label lacks cost suffix because svcCost is null when loadCost fails silently. Expected 'Rigenera · 2 cr', got 'Rigenera'.", "selector": "[data-testid='edit-regenerate']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Genera contenuto (ai_content)", "issue": "Both estimate and generate use ?scope=platform. Org admin gets 403, Super Admin gets 404. No toast 'Contenuto generato · 2 crediti utilizzati' ever appears. Balance never updates. No ledger entry visible in /account.", "affected_selectors": ["[data-testid='cost-hint']", "[data-testid='ai-generate-btn']", "[data-testid='edit-regenerate']"]},
+      {"flow": "Genera piano editoriale", "issue": "cost-hint missing in plan-dialog for the same reason (platformApi ?scope=platform).", "affected_selectors": ["[data-testid='plan-dialog'] [data-testid='cost-hint']"]},
+      {"flow": "Area Account movimenti", "issue": "Could not verify 'Generazione contenuti' -2 entries because generation never succeeded from UI (see above).", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_faseE1_estimate.py",
+    "/app/test_reports/pytest/pytest_faseE1.xml"
+  ],
+  "action_items": [
+    "Decide the intended scope of /marketing/social: it currently uses platformApi (Super Admin CRMEvent official brand) but the AdminOnly wrapper lets any org admin in, breaking their experience with 403s.",
+    "For Super Admin platform scope: ensure /api/credits/estimate?scope=platform and /api/social/generate?scope=platform resolve to a real CRMEvent platform organization (or short-circuit and use the platform credit pool). Currently they return 404 'Organizzazione non trovata'.",
+    "After the routing fix, verify CostHint renders 'Costo: 2 crediti · Saldo: N' inside ai-dialog and plan-dialog, and that edit-regenerate label shows '· 2 cr'.",
+    "Also verify the org admin flow if this page is meant for org admins too - in that case Social.jsx should use plain `api` (not platformApi) so ai_content charges the org's own credit balance."
+  ],
+  "critical_code_review_comments": [
+    "Frontend/src/pages/Social.jsx imports platformApi. All requests hardcoded to ?scope=platform makes the page usable only by Super Admin in platform mode; org admins are locked out with 403 even though route uses <AdminOnly/> (allows every admin).",
+    "Backend credits_estimate endpoint currently ignores scope=platform - platform routing should be added so Super Admin's Fase E.1 flow works, OR route guard on Social.jsx should upgrade to <SuperAdminOnly/> AND platform scope must be implemented in credits_estimate.",
+    "loadCost() in Social.jsx silently swallows errors (svcCost stays null) - consider surfacing the failure to the user or logging so silent 403/404 is easier to detect."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_faseE1_estimate.py (new pytest suite, 5 tests)"
+  ],
+  "success_rate": {"backend": "100% for non-platform-scope /credits/estimate + platform/credit-services PUT (5/5 pytest)", "frontend": "40% (Super Admin services tab OK; entire /marketing/social Fase E.1 UX broken)"},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026!  and  manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "None. Cost of ai_content was temporarily changed to 3 then RESTORED to 2 during test (verified via super admin panel).",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Backend Fase E.1 core is solid (see test_faseE1_estimate.py 5/5). The broken piece is: (1) Social.jsx uses platformApi forcing ?scope=platform on all Fase E.1 calls, (2) credits/estimate and social/generate don't support scope=platform (404). After fix, re-run the same playwright checks: open create-ai-btn -> expect [data-testid=cost-hint] visible with 'Costo: 2 crediti · Saldo: N'; click ai-generate-btn -> toast 'Contenuto generato · 2 crediti utilizzati'; reopen dialog -> balance decreased by 2; open plan-open-btn -> cost-hint visible; open post-edit-* -> edit-regenerate label shows '· 2 cr'. Also verify /account shows 'Generazione contenuti' -2 ledger rows and that insufficient-credits-dialog + insuff-recharge-btn exist (only reachable if balance < cost).",
+  "rca of the issue": "Fase E.1 shipped a CostHint UI and loadCost() calling POST /credits/estimate, but Social.jsx already used `import api from '@/lib/platformApi'` from earlier work. platformApi's interceptor appends ?scope=platform to every request. Backend /credits/estimate does not understand scope=platform (it tries to resolve an organization via require_admin's normal path and either returns 403 (org admin lacks superadmin) or 404 (super admin has no matching CRMEvent platform-org record). Net effect: svcCost stays null -> CostHint returns null -> 'Costo/Saldo' never appears; the same axios client is used for generate/regenerate/plan so those also fail. Fix: either (a) switch Social.jsx's credit-related calls to the plain `api` client so charges go against the caller's org, or (b) make the backend estimate/generate endpoints platform-scope aware (map scope=platform to the CRMEvent platform org id / super admin's own credit pool)."
+}
