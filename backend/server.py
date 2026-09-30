@@ -263,6 +263,7 @@ async def _create_organization(name: str, owner_user_id: Optional[str] = None,
            "owner_user_id": owner_user_id, "subscription": sub,
            "created_at": now_iso(), "updated_at": now_iso()}
     await db.organizations.insert_one(org)
+    await _grant_signup_bonus(org["id"], org.get("nome"))
     return org
 
 
@@ -7889,6 +7890,277 @@ async def platform_pricing(admin: dict = Depends(require_superadmin)):
 async def platform_pricing_history(admin: dict = Depends(require_superadmin)):
     rows = await db.pricing_history.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return rows
+
+
+# ======================================================================
+# SISTEMA A CREDITI — FASE A (fondamenta). Nessun consumo reale attivo.
+# Saldo a livello di ORGANIZZAZIONE (condiviso), ledger immutabile,
+# catalogo servizi configurabile dal Super Admin, no saldo negativo, idempotenza.
+# ======================================================================
+SIGNUP_BONUS_CREDITS = 100
+DEFAULT_LOW_BALANCE_THRESHOLD = 20
+
+# key, name, category, pricing_mode (flat|per_unit|None), unit_label
+CREDIT_SERVICES_SEED = [
+    ("ai_analysis", "Assistente IA / analisi evento", "ai", "flat", "richiesta"),
+    ("ai_content", "Generazione contenuti", "ai", "flat", "richiesta"),
+    ("ai_briefing", "Generazione briefing", "ai", "flat", "richiesta"),
+    ("image_generation", "Generazione immagini", "image", "per_unit", "immagine"),
+    ("automation_run", "Automazioni", "automation", "flat", "esecuzione"),
+    ("newsletter_email", "Newsletter / email", "communication", "per_unit", "destinatario"),
+    ("google_calendar", "Google Calendar", "integration", None, None),
+    ("whatsapp_send", "WhatsApp", "communication", "per_unit", "messaggio"),
+    ("sms_send", "SMS (futuro)", "communication", "per_unit", "messaggio"),
+]
+_credits_indexes_done = False
+
+
+async def _ensure_credits_setup():
+    """Crea indici e semina il catalogo servizi (idempotente, lazy)."""
+    global _credits_indexes_done
+    if not _credits_indexes_done:
+        try:
+            await db.credit_ledger.create_index([("org_id", 1), ("created_at", -1)])
+            await db.credit_ledger.create_index(
+                [("org_id", 1), ("idempotency_key", 1)], unique=True,
+                partialFilterExpression={"idempotency_key": {"$type": "string"}})
+            await db.credit_services.create_index([("key", 1)], unique=True)
+        except Exception:
+            pass
+        _credits_indexes_done = True
+    for key, name, cat, mode, unit in CREDIT_SERVICES_SEED:
+        if not await db.credit_services.find_one({"key": key}):
+            await db.credit_services.insert_one({
+                "id": new_id(), "key": key, "name": name, "category": cat,
+                "pricing_mode": mode, "unit_label": unit, "unit_cost": None, "min_units": 1,
+                "active": False, "visible": True, "version": 1,
+                "created_at": now_iso(), "updated_at": now_iso()})
+
+
+async def _ensure_org_credits(org_id: str) -> dict:
+    """Ritorna il sotto-documento credits dell'org, inizializzandolo a zero se assente.
+    NB: NON accredita il bonus (quello è gestito da _grant_signup_bonus)."""
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "id": 1, "credits": 1})
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    c = org.get("credits")
+    if not c:
+        c = {"balance": 0, "reserved": 0, "lifetime_granted": 0, "lifetime_spent": 0,
+             "signup_bonus_granted": False, "low_balance_threshold": DEFAULT_LOW_BALANCE_THRESHOLD,
+             "low_balance_notified_at": None, "updated_at": now_iso()}
+        await db.organizations.update_one(
+            {"id": org_id, "$or": [{"credits": {"$exists": False}}, {"credits": None}]},
+            {"$set": {"credits": c}})
+    return c
+
+
+async def _apply_credit_movement(org_id, amount, reason_code, type_, *, service_key=None,
+                                 quantity=1, unit_cost=None, event_id=None, user_id=None,
+                                 idempotency_key=None, note=None):
+    """Applica un movimento crediti in modo atomico e immutabile.
+    amount > 0 = accredito, amount < 0 = addebito. Blocca il saldo negativo.
+    Idempotenza: se idempotency_key è già presente, non riapplica (claim-first)."""
+    from pymongo.errors import DuplicateKeyError
+    if amount == 0:
+        raise HTTPException(status_code=400, detail="Importo nullo non consentito")
+    await _ensure_org_credits(org_id)
+
+    ledger_id = None
+    if idempotency_key:
+        claim = {"id": new_id(), "org_id": org_id, "type": type_, "status": "pending",
+                 "amount": amount, "balance_after": None, "reason_code": reason_code,
+                 "service_key": service_key, "quantity": quantity, "unit_cost": unit_cost,
+                 "event_id": event_id, "user_id": user_id, "idempotency_key": idempotency_key,
+                 "note": note, "created_at": now_iso(), "settled_at": None}
+        try:
+            await db.credit_ledger.insert_one(claim)
+            ledger_id = claim["id"]
+        except DuplicateKeyError:
+            existing = await db.credit_ledger.find_one(
+                {"org_id": org_id, "idempotency_key": idempotency_key}, {"_id": 0})
+            return existing
+
+    if amount < 0:
+        res = await db.organizations.update_one(
+            {"id": org_id, "credits.balance": {"$gte": -amount}},
+            {"$inc": {"credits.balance": amount, "credits.lifetime_spent": -amount},
+             "$set": {"credits.updated_at": now_iso()}})
+        if res.modified_count == 0:
+            if ledger_id:
+                await db.credit_ledger.update_one(
+                    {"id": ledger_id}, {"$set": {"status": "released", "settled_at": now_iso()}})
+            org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+            bal = (org.get("credits") or {}).get("balance", 0)
+            raise HTTPException(status_code=402,
+                                detail=f"Crediti insufficienti (saldo {bal}, richiesti {-amount})")
+    else:
+        await db.organizations.update_one(
+            {"id": org_id},
+            {"$inc": {"credits.balance": amount, "credits.lifetime_granted": amount},
+             "$set": {"credits.updated_at": now_iso()}})
+
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+    bal_after = (org.get("credits") or {}).get("balance", 0)
+
+    if ledger_id:
+        await db.credit_ledger.update_one(
+            {"id": ledger_id},
+            {"$set": {"status": "committed", "balance_after": bal_after, "settled_at": now_iso()}})
+        return await db.credit_ledger.find_one({"id": ledger_id}, {"_id": 0})
+
+    doc = {"id": new_id(), "org_id": org_id, "type": type_, "status": "committed",
+           "amount": amount, "balance_after": bal_after, "reason_code": reason_code,
+           "service_key": service_key, "quantity": quantity, "unit_cost": unit_cost,
+           "event_id": event_id, "user_id": user_id, "idempotency_key": None,
+           "note": note, "created_at": now_iso(), "settled_at": now_iso()}
+    await db.credit_ledger.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+async def _grant_signup_bonus(org_id: str, org_name: Optional[str] = None):
+    """Accredita 100 crediti UNA SOLA VOLTA alla creazione dell'organizzazione."""
+    await _ensure_credits_setup()
+    await _ensure_org_credits(org_id)
+    # Flag atomico anti doppio-bonus + idempotency_key sul movimento.
+    res = await db.organizations.update_one(
+        {"id": org_id, "credits.signup_bonus_granted": False},
+        {"$set": {"credits.signup_bonus_granted": True}})
+    if res.modified_count == 0:
+        return  # bonus già assegnato
+    await _apply_credit_movement(
+        org_id, SIGNUP_BONUS_CREDITS, reason_code="signup_bonus", type_="grant",
+        idempotency_key=f"signup_bonus:{org_id}", note="Bonus 100 crediti alla registrazione")
+
+
+# ---------------- API org-side (saldo + storico) ----------------
+@api.get("/credits/balance")
+async def credits_balance(user: dict = Depends(require_admin)):
+    c = await _ensure_org_credits(user["org_id"])
+    thr = c.get("low_balance_threshold", DEFAULT_LOW_BALANCE_THRESHOLD)
+    return {"balance": c.get("balance", 0), "reserved": c.get("reserved", 0),
+            "lifetime_granted": c.get("lifetime_granted", 0),
+            "lifetime_spent": c.get("lifetime_spent", 0),
+            "low_balance_threshold": thr, "low_balance": c.get("balance", 0) <= thr}
+
+
+@api.get("/credits/ledger")
+async def credits_ledger(user: dict = Depends(require_admin), limit: int = 50, skip: int = 0,
+                         type: Optional[str] = None, event_id: Optional[str] = None):
+    q = {"org_id": user["org_id"]}
+    if type:
+        q["type"] = type
+    if event_id:
+        q["event_id"] = event_id
+    limit = max(1, min(limit, 200))
+    rows = await db.credit_ledger.find(q, {"_id": 0}).sort("created_at", -1).skip(max(0, skip)).limit(limit).to_list(limit)
+    total = await db.credit_ledger.count_documents(q)
+    return {"items": rows, "total": total, "skip": skip, "limit": limit}
+
+
+@api.get("/credits/services")
+async def credits_services_public(user: dict = Depends(require_admin)):
+    await _ensure_credits_setup()
+    rows = await db.credit_services.find({"visible": True}, {"_id": 0}).to_list(100)
+    return {"services": rows}
+
+
+# ---------------- API Super Admin (catalogo + gestione org) ----------------
+@api.get("/platform/credit-services")
+async def platform_credit_services(admin: dict = Depends(require_superadmin)):
+    await _ensure_credits_setup()
+    rows = await db.credit_services.find({}, {"_id": 0}).to_list(100)
+    return {"services": rows}
+
+
+class CreditServiceUpdateIn(BaseModel):
+    name: Optional[str] = None
+    active: Optional[bool] = None
+    visible: Optional[bool] = None
+    pricing_mode: Optional[str] = None
+    unit_label: Optional[str] = None
+    unit_cost: Optional[float] = None
+    min_units: Optional[int] = None
+
+
+@api.put("/platform/credit-services/{key}")
+async def update_credit_service(key: str, body: CreditServiceUpdateIn, admin: dict = Depends(require_superadmin)):
+    await _ensure_credits_setup()
+    svc = await db.credit_services.find_one({"key": key}, {"_id": 0})
+    if not svc:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    changes = {}
+    for f in ["name", "active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units"]:
+        v = getattr(body, f)
+        if v is not None and v != svc.get(f):
+            changes[f] = v
+    if not changes:
+        return svc
+    for f, newv in changes.items():
+        await db.credit_service_history.insert_one({
+            "id": new_id(), "service_key": key, "field": f, "old_value": svc.get(f),
+            "new_value": newv, "changed_by": admin.get("user_id"), "created_at": now_iso()})
+    changes["version"] = svc.get("version", 1) + 1
+    changes["updated_at"] = now_iso()
+    await db.credit_services.update_one({"key": key}, {"$set": changes})
+    await record_audit(admin, "credit_service_update", meta={"key": key, "changes": changes})
+    return await db.credit_services.find_one({"key": key}, {"_id": 0})
+
+
+@api.post("/platform/credit-services")
+async def create_credit_service(body: dict, admin: dict = Depends(require_superadmin)):
+    await _ensure_credits_setup()
+    key = (body.get("key") or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="key obbligatoria")
+    if await db.credit_services.find_one({"key": key}):
+        raise HTTPException(status_code=400, detail="Servizio già esistente")
+    doc = {"id": new_id(), "key": key, "name": body.get("name") or key,
+           "category": body.get("category"), "pricing_mode": body.get("pricing_mode"),
+           "unit_label": body.get("unit_label"), "unit_cost": body.get("unit_cost"),
+           "min_units": body.get("min_units", 1), "active": bool(body.get("active", False)),
+           "visible": bool(body.get("visible", True)), "version": 1,
+           "created_at": now_iso(), "updated_at": now_iso()}
+    await db.credit_services.insert_one(doc)
+    await record_audit(admin, "credit_service_create", meta={"key": key})
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.get("/platform/credit-services/history")
+async def credit_services_history(admin: dict = Depends(require_superadmin), key: Optional[str] = None):
+    q = {} if not key else {"service_key": key}
+    rows = await db.credit_service_history.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return rows
+
+
+@api.get("/platform/orgs/{org_id}/credits")
+async def platform_org_credits(org_id: str, admin: dict = Depends(require_superadmin), limit: int = 50):
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "nome": 1})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    c = await _ensure_org_credits(org_id)
+    rows = await db.credit_ledger.find({"org_id": org_id}, {"_id": 0}).sort("created_at", -1).limit(max(1, min(limit, 200))).to_list(200)
+    return {"org_id": org_id, "org_name": org.get("nome"), "credits": c, "ledger": rows}
+
+
+class CreditAdjustIn(BaseModel):
+    amount: int
+    note: Optional[str] = None
+    idempotency_key: Optional[str] = None
+
+
+@api.post("/platform/orgs/{org_id}/credits/adjust")
+async def platform_org_credits_adjust(org_id: str, body: CreditAdjustIn, admin: dict = Depends(require_superadmin)):
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "nome": 1})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+    if body.amount == 0:
+        raise HTTPException(status_code=400, detail="Importo non valido")
+    mv = await _apply_credit_movement(
+        org_id, int(body.amount), reason_code="manual_adjustment", type_="adjustment",
+        user_id=admin.get("user_id"), idempotency_key=body.idempotency_key, note=body.note)
+    await record_audit(admin, "credit_manual_adjustment", org_id=org_id, org_name=org.get("nome"),
+                       meta={"amount": body.amount, "note": body.note})
+    return {"ok": True, "movement": mv}
 
 
 class PriceUpdateIn(BaseModel):

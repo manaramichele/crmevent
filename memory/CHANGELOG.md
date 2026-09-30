@@ -1,5 +1,15 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Sistema a Crediti FASE A (fondamenta) implementata e testata ✅
+- **Schema**: `organizations.credits` (balance/reserved/lifetime_granted/lifetime_spent/signup_bonus_granted/low_balance_threshold), `credit_ledger` (immutabile: type/status/amount/balance_after/reason_code/service_key/quantity/unit_cost/event_id/user_id/idempotency_key/created_at), `credit_services` (catalogo configurabile), `credit_service_history` (append-only). Indici: ledger {org_id,created_at}, unique {org_id,idempotency_key}, services unique {key}.
+- **Bonus 100 crediti** assegnato automaticamente in `_create_organization` (idempotente: flag `signup_bonus_granted` + idempotency_key). Org esistenti NON accreditate (migrazione da concordare).
+- **No saldo negativo**: addebiti via update atomico condizionato `credits.balance >= importo` → 402 se insufficiente. **Idempotenza** claim-first sul ledger (unique index).
+- **Catalogo** seminato (inattivo): ai_analysis, ai_content, ai_briefing, image_generation, automation_run, newsletter_email, google_calendar (senza pricing), whatsapp_send, sms_send. Nessun consumo reale attivo.
+- **API org**: GET /api/credits/balance, /api/credits/ledger, /api/credits/services. **API Super Admin**: GET/POST/PUT /api/platform/credit-services (+ /history), GET /api/platform/orgs/{id}/credits, POST .../credits/adjust (accredito/rettifica con audit). 
+- **Test**: interni (9/9 PASS) + HTTP (creazione→100, no doppio bonus, accredito/addebito, blocco negativo 402, idempotenza, isolamento org, storico, permessi superadmin 403, no impact su /pricing ed esistente, audit log). Fix bug projection falsy in `_ensure_org_credits`.
+- Non toccati: Stripe, Fatture in Cloud, /prezzi, backend commerciale per-evento, trial/piani.
+
+
 ## 2026-06 — Home: ripristinato il design precedente, adattato al modello a crediti ✅
 - Ripristinata da git (commit ab56483) la struttura/grafica/sezioni della Home precedente (hero con DashboardMock, Problema, Funzionalità, Staff & Volontari, Sponsor, Multi-evento, Come funziona, Per chi è, Differenziazione, Screenshots, Demo form). La versione "tutta crediti" è stata sostituita.
 - Contenuti commerciali vecchi rimossi: niente Starter/Professional/Premium, prezzi per-evento, prova 14 giorni, abbonamenti, link pubblico a /prezzi (header desktop + mobile).
