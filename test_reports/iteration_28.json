@@ -1,0 +1,26 @@
+{
+  "summary": "Backend-only verification of the Instagram container-status polling fix (race condition 'Media ID is not available'). (1) Unit tests /app/backend/tests/test_instagram_publish.py — 4/4 PASS: publishes only after status_code=FINISHED; timeout NOT publishing → 504; container ERROR → 422; missing creation_id → 502. (2) Endpoint /api/social/posts/{id}/publish guard test (new file /app/backend/tests/test_publish_endpoint_guard.py) — 3/3 PASS: unauthenticated → 401; superadmin without org context → 428 'Seleziona un'organizzazione attiva' (NOT 500); when a post is reachable in scope=platform, missing IG account returns 400 with detail starting 'Impossibile pubblicare · da completare: ...'. (3) Static verification of /app/backend/server.py social_post_publish confirmed: L5165 validation list includes 'error'; L5180 atomic lock $in also includes 'error' (retry from failed post allowed); L5202 calls instagram_utils.create_and_publish (no more direct create_media+publish_media). /app/backend/instagram_utils.py contains container_status (L129) and create_and_publish (L137) with FINISHED polling, max_polls, ERROR/EXPIRED/timeout handling. Fix behaves as specified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_instagram_publish.py",
+    "/app/backend/tests/test_publish_endpoint_guard.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "instagram_utils.create_and_publish polling loop is correctly bounded by max_polls with async sleep injection — good testability. Consider surfacing the last container_status payload (error_code, error subcode from Graph) in GraphAPIError.detail so operators can distinguish MEDIA_UNSUPPORTED vs transient processing failures in server logs.",
+    "server.py:5165 & 5180 — 'error' state is correctly whitelisted for retry, but there is no attempt counter / cooldown: a spam-retry on a persistently failing post will re-create IG containers each time. Consider a small retry_count + backoff in social_posts.",
+    "server.py:5205-5214 — broad `except Exception` swallows the failure into a 502 unless it's a GraphAPIError client-error. A pytest.raises-style GraphAPIError with status_code==504 (polling timeout) will be re-raised as HTTP 502, which loses granularity. Consider forwarding e.status_code when it is a GraphAPIError so the client sees 504 for timeout, 422 for container ERROR, 502 only for true upstream failures."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_publish_endpoint_guard.py (new)"
+  ],
+  "success_rate": {"backend": "100% — 7/7 (4 unit + 3 endpoint guard)", "frontend": "n/a (skipped as requested)"},
+  "test_credentials": "manara.michele.pro@gmail.com / CrmEvent2026! (Super Admin, verified)",
+  "seed_data_creation": "None. No writes performed. No real Meta/IG calls attempted (per instructions).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Instagram publish race-condition fix verified. Unit tests in tests/test_instagram_publish.py cover FINISHED polling / timeout / container ERROR / missing creation_id. Endpoint guard test file tests/test_publish_endpoint_guard.py validates auth protection and 400 'da completare' shape without triggering real Graph API calls. Superadmin (no org_id) receives 428 on this endpoint by design; to fully exercise the 400 problems-list, run as an org-admin user in an org without a connected IG account.",
+  "rca of the issue": "Race condition: previous code called media_publish immediately after create_media returned a creation_id, but Meta processes the container asynchronously. When the container was still IN_PROGRESS Graph replied 'Media ID is not available'. Fix: instagram_utils.create_and_publish now polls container_status until status_code==FINISHED (bounded by max_polls with async sleep), and only then calls publish_media with the exact creation_id. ERROR/EXPIRED are surfaced as GraphAPIError 422; timeout as 504; missing creation_id as 502. Post status 'error' is added to both the validation whitelist and the atomic lock $in filter so a failed post can be retried (new container) without losing the record."
+}

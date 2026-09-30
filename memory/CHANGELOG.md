@@ -1,5 +1,12 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Fix pubblicazione Instagram "Media ID is not available" ✅
+- **RCA**: l'endpoint chiamava `media_publish` subito dopo la creazione del container, senza attendere `status_code=FINISHED` → race condition (container ancora `IN_PROGRESS`, Meta risponde 4xx "Media ID is not available"). Fase del fallimento: *container processing*. Token/scope/IG account/immagine HTTPS erano corretti.
+- **Fix**: nuovo `instagram_utils.create_and_publish` con polling di `container_status` (GET /{creation_id}?fields=status_code) finché `FINISHED` (max_polls, timeout→504, ERROR/EXPIRED→422, creation_id/media_id assenti→502) prima di pubblicare; log `container_created` con creation_id. Salva separatamente il vero Instagram Media ID.
+- **Retry da UI**: `social_post_publish` ora ammette lo stato `error` (validazione + lock atomico) → il post fallito è conservato e "Riprova pubblicazione" crea un NUOVO container. Frontend `Social.jsx`: pulsante mostrato anche per `error` con etichetta "Riprova pubblicazione".
+- Non toccati OAuth/token/immagini/calendario. Verificato: unit test `tests/test_instagram_publish.py` 4/4 + testing agent iter28 backend 100% (7/7).
+
+
 ## 2026-06 — Lead Finder FASE 3: menu, dashboard KPI, filtri ✅
 - Rimossa la voce di menu "Lead" da `PLATFORM_NAV` (`Layout.jsx`); route `/lead` → redirect a `/marketing/organizzatori?tab=leads` (`App.js`). Nessuna route/collection/componente backend eliminata (il componente Leads è riusato embedded).
 - LeadFinder legge il tab iniziale da `?tab=` (deep-link). Dashboard Organizzatori con 8 KPI cliccabili (`lf-kpis`): Lead totali/Demo/Manuali/Lead Finder → tab Lead con filtro Origine; Organizzatori/Eventi/Da verificare/Sincronizzati Brevo → tab+filtro corretti. Backend `lf_dashboard` esteso con leads_total/leads_demo/leads_manual/leads_lead_finder/brevo_synced.
