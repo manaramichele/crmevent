@@ -74,7 +74,7 @@ function AssignPopover({ it, persons, onAssign, trigger }) {
       <PopoverContent className="w-64 p-2" align="end" data-testid={`assign-popover-${it.task_id}`}>
         <Input autoFocus placeholder="Cerca persona…" value={q} onChange={(e) => setQ(e.target.value)} className="mb-2 h-8" data-testid="assign-search" />
         <div className="max-h-56 overflow-y-auto">
-          {list.length === 0 ? <div className="text-xs text-slate-400 px-2 py-3 text-center">Nessuna persona</div> :
+          {list.length === 0 ? <div className="text-xs text-slate-400 px-2 py-3 text-center">Nessuna persona in anagrafica.<br />Aggiungine una da Persone.</div> :
             list.map((p) => (
               <button key={p.id} onClick={() => { onAssign(it, p); setOpen(false); }} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100" data-testid={`assign-person-${p.id}`}>{pname(p)}</button>
             ))}

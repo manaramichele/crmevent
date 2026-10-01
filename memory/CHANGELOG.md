@@ -1,5 +1,18 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Azioni rapide attenzione + Guardia attivazione evento ✅ (backend curl 100%)
+**Parte A — Azioni rapide "Cosa richiede attenzione"** (Dashboard + /pipeline/attenzione):
+- ✓ Completa (conferma extra solo per attività Critiche), Assegna/Cambia responsabile (popover persone org), aggiornamento immediato lista+conteggi senza reload, toast "Attività completata". Se un'attività era in lista solo per "senza responsabile", dopo l'assegnazione sparisce. Nessun consumo crediti. Stessi permessi della modifica Pipeline (`PUT /pipeline/tasks`). Verificato: completamento rimuove dalla lista (102→101).
+
+**Parte B/C — "Attivo" = evento attivato a crediti + guardia operativa centralizzata**:
+- UI Eventi rietichettata: colonna "Stato"→**Fase** (pianificato→Pianificato, attivo→In corso, concluso→Concluso, annullato→Annullato), colonna "Attivazione"→**CRMEvent** (preparazione→Da attivare, attivo→Attivo, sospeso→Sospeso, concluso→Concluso). Logica DB invariata.
+- Rimossa l'opzione manuale "Attivo" dal form evento (Fase: solo Pianificato/Concluso/Annullato). Backend: `PUT /events` con `stato="attivo"`→400; create coerce `attivo`→`pianificato`. "Attivo" si ottiene SOLO via `POST /events/{id}/activate` (−30, idempotente).
+- Guardia `_assert_event_operational` applicata ai 4 endpoint bypass: **Briefing** (`/briefing-versions`), **Availability/Partecipa** (`/availability/link`, `/availabilities/confirm-bulk`), **Calendar-sync**, **Social event-scoped** (`/social/posts`, `/social/generate`, `/social/plan/generate`, `/social/media` quando `event_id`). Ora restituisce 403 strutturato `{code:"event_not_operational", event_id, credit_state, message}`.
+- Frontend: interceptor axios globale → `ActivationGate` (montato in Layout) intercetta il 403 e mostra il prompt "Attiva il tuo evento" con **costo letto da `/events/{id}/credit-status`** (non hardcoded), saldo e Mantenimento; conferma → `POST /events/{id}/activate` → reload. Sezioni restano visibili nel menu.
+- Regressione backend curl: preparazione→pianificato; PUT stato=attivo→400; briefing/availability/shift→403; activate −30 (140→110); post-attivazione 200; idempotenza nessun secondo addebito. Logica crediti/wallet/ledger/Stripe/Fatture in Cloud/Pipeline/Concluso-Annullato **non modificate**.
+- NOTA: account `manara.michele+60@gmail.com` NON presente nel DB preview/fork (account di produzione): verifica evento/ledger da fare in produzione (Deployer RCA). Nessun movimento retroattivo creato.
+
+
 ## 2026-06 — Dashboard · "Cosa richiede attenzione" ✅ (frontend testing 100%, backend via curl)
 - Nuova sezione nella Dashboard organizzatore (tra intestazione e KPI Eventi) + pagina dedicata `/pipeline/attenzione` ("Vedi tutte").
 - Aggrega le attività di **tutte le Pipeline attive** dell'org che richiedono intervento: in ritardo, critiche non completate, in scadenza ≤7gg, senza responsabile e in scadenza ≤14gg. Esclude completate e Pipeline non attive. Ordine: in ritardo → critiche → scadenza più vicina. Max 10 in dashboard, link "Vedi tutte (N)". Click su attività → Pipeline dell'evento. Nessun nuovo servizio/consumo crediti.

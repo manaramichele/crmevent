@@ -1,0 +1,67 @@
+{
+  "summary": "Frontend UI testing for (A) Azioni rapide 'Cosa richiede attenzione', (B) Eventi UI rietichettata (Fase/CRMEvent) + form senza 'Attivo', (C) Guardia operativa ActivationGate. 6/7 flussi completati con successo; l'assegnazione responsabile UI apre il popover correttamente ma la lista persone è vuota perché /api/persons dell'org QA ritorna 0 elementi (gap di seed data, non bug del componente).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      { "flow": "Assegna responsabile (azioni rapide)", "issue": "Popover si apre e assign-search è presente, ma la lista assign-person-* è vuota perché GET /api/persons restituisce [] per l'org QA. Il flusso UI è corretto ma non e2e verificabile fino a quando non esiste almeno una persona.", "affected_selectors": ["assign-popover-<taskId>", "assign-person-<personId>"] }
+    ],
+    "design_issues": [
+      { "screen": "Iubenda cookie banner", "issues": ["Il banner iubenda compare anche su /app, /eventi e /pipeline/attenzione (non solo sulla landing come indicato dal brief). Non blocca interazioni ma occupa spazio sotto. Minor."] }
+    ]
+  },
+  "test_results": {
+    "A_azioni_rapide_dashboard": {
+      "dashboard_attention_rendered": true,
+      "attention_total_before": "101",
+      "complete_non_critical_removes_item_and_decrements_total": true,
+      "attention_total_after_non_critical_complete": "100",
+      "critical_confirm_dialog_shown": true,
+      "critical_cancel_keeps_item": true,
+      "critical_confirm_removes_item": true,
+      "assign_popover_opens": true,
+      "assign_search_input_present": true,
+      "persons_api_count": 0,
+      "assign_e2e_blocked_by_empty_persons": true,
+      "see_all_link_navigates_to_attenzione_page": true,
+      "attention_page_shows_complete_buttons": true,
+      "attention_page_rows_total": 99
+    },
+    "B_ui_eventi": {
+      "table_headers": ["Evento","Tipologia","Città","Date","Fase","CRMEvent","Azioni"],
+      "fase_column_values_sample": ["Pianificato"],
+      "crmevent_column_values_sample": ["Attivo · fino al 10/09/2027","Da attivare","Concluso"],
+      "form_fase_options": ["Pianificato","Concluso","Annullato"],
+      "form_has_attivo_or_in_corso_option": false
+    },
+    "C_activation_gate": {
+      "trigger": "Click 'Pubblica versione' nel briefing di evento 'Maratona QA 2027' (preparazione) -> 403 event_not_operational",
+      "activation_gate_dialog_visible": true,
+      "title": "Attiva il tuo evento",
+      "balance_shown": "110 crediti",
+      "confirm_button_label": "Attiva evento · 30 crediti",
+      "cost_extracted_from_label": 30,
+      "credit_status_api_activation_cost": 30,
+      "cost_is_from_api_not_hardcoded": true,
+      "maintenance_cost_shown": "20 crediti/mese fino alla data evento"
+    },
+    "D_regression_post_activation": "non eseguita in UI per non consumare 30 crediti reali — da brief 'eseguire l'attivazione una sola volta'. Backend già verificato per il main agent."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Minor) Seed almeno 1-2 persone/anagrafiche nell'org QA per permettere il test e2e del flusso Assegna responsabile dalle azioni rapide.",
+    "(Minor) Verificare se il banner Iubenda deve comparire anche nelle pagine dell'app autenticata o solo sulla landing come indicato nel brief."
+  ],
+  "critical_code_review_comments": [
+    "PipelineAttention.jsx: useAttention gestisce errori silenziosamente (catch -> toast only). Il popover Assign mostra 'Nessuna persona' quando /persons è vuoto: ok come UX ma utile aggiungere messaggio tipo 'Nessuna persona in anagrafica — aggiungine una da Anagrafiche' per guidare l'utente.",
+    "ActivationGate.jsx: dopo attivazione fa window.location.reload() — effetto desiderato ma perde eventuali stati non salvati nella pagina corrente; accettabile per il flusso ma potrebbe essere sostituito con refetch mirato in futuro.",
+    "Events.jsx (STATO_LABEL): mappa 'attivo' -> 'In corso' per la colonna Fase. Dato che il brief prevede che gli utenti NON possano impostare manualmente 'In corso' e che 'Attivo' lato CRMEvent è separato, verificare che eventi legacy con stato=attivo siano visualizzati coerentemente (nel QA data tutti risultano 'Pianificato' lato Fase)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "skipped", "frontend": "~95% (UI assign e2e bloccato da seed persone vuoto)" },
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "Durante i test ho completato 2 attività (1 non-critica + 1 critica) sulla reale pipeline QA (total 101 -> 99). Nessun credito consumato. L'attivazione dell'evento 'Maratona QA 2027' NON è stata confermata in UI per non consumare 30 crediti reali.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Evento di test 'Maratona QA 2027' (id 36226833452140bd832992c5e332243c) è in stato 'Da attivare' con saldo 110 crediti e costo attivazione 30 (verificato /credit-status). Trigger consigliato per ActivationGate: aprire /eventi/<id>/briefing e cliccare 'Pubblica versione' -> appare dialog activation-gate-dialog. Attenzione: confermare l'attivazione consuma 30 crediti reali. L'org QA non ha persons in anagrafica, quindi il flusso Assegna del widget 'Cosa richiede attenzione' può solo essere verificato parzialmente (popover + search + lista vuota)."
+}
