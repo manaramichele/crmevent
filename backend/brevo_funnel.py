@@ -346,12 +346,13 @@ WEBHOOK_EVENTS = ["delivered", "opened", "uniqueOpened", "click", "hardBounce",
 REGISTERED_LIST_NAME = "CRMEvent · Utenti registrati"
 # Attributi sincronizzati per gli utenti registrati (utili ai funnel di onboarding). Nessun dato sensibile.
 USER_ATTRIBUTES = ["NOME", "COGNOME", "ORGANIZZAZIONE", "DATA_REGISTRAZIONE",
-                   "CREDITI_DISPONIBILI", "EVENTI_CREATI", "EVENTI_ATTIVATI", "ULTIMO_ACCESSO"]
+                   "CREDITI_DISPONIBILI", "EVENTI_CREATI", "EVENTI_ATTIVATI", "ULTIMO_ACCESSO",
+                   "CELLULARE", "RUOLO_UTENTE"]
 
 
 async def ensure_user_attributes():
     """Crea gli attributi contatto per gli utenti registrati su Brevo (idempotente)."""
-    for name in ["NOME", "COGNOME", "ORGANIZZAZIONE", "DATA_REGISTRAZIONE", "ULTIMO_ACCESSO"]:
+    for name in ["NOME", "COGNOME", "ORGANIZZAZIONE", "DATA_REGISTRAZIONE", "ULTIMO_ACCESSO", "CELLULARE", "RUOLO_UTENTE"]:
         await _request("POST", f"/v3/contactAttributes/normal/{name}", json={"type": "text"})
     for name in ["CREDITI_DISPONIBILI", "EVENTI_CREATI", "EVENTI_ATTIVATI"]:
         await _request("POST", f"/v3/contactAttributes/normal/{name}", json={"type": "float"})

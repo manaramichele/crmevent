@@ -103,7 +103,7 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-600">La sincronizzazione Google Calendar richiede la configurazione di <b>GOOGLE_CLIENT_ID</b> e <b>GOOGLE_CLIENT_SECRET</b> nei Secrets di produzione. Ogni utente collega poi il proprio calendario da <b>Profilo → Integrazioni</b>.</p>
       </SectionCard>
 
-      <div className="bg-white border border-red-200 rounded-xl shadow-sm p-5">
+      <div className="bg-white border border-red-200 rounded-xl shadow-sm p-5" style={{ display: user?.role === "superadmin" ? undefined : "none" }}>
         <div className="flex items-center gap-2 mb-2"><AlertTriangle className="w-5 h-5 text-red-500" /><h3 className="text-base font-semibold text-slate-800 font-display">Reset database operativo</h3></div>
         <p className="text-sm text-slate-600 mb-4">Elimina definitivamente tutti i dati operativi (eventi, aziende, persone, trattative, staff, team, turni, mappe, attività, follow-up e account staff/volontari) e disabilita il seed demo. L'account amministratore e le configurazioni restano. Usalo solo quando sei pronto a partire con i dati reali.</p>
         <AlertDialog>

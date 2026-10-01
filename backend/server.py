@@ -406,6 +406,26 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     return base
 
 
+import phonenumbers
+
+
+def _normalize_phone(value: Optional[str], *, required: bool = True) -> Optional[str]:
+    """Valida e normalizza un cellulare in formato E.164 (es. +393331234567). Richiede il prefisso
+    internazionale. Solleva 400 con messaggio uniforme se obbligatorio e mancante/non valido."""
+    v = (value or "").strip()
+    if not v:
+        if required:
+            raise HTTPException(status_code=400, detail="Inserisci un numero di cellulare valido.")
+        return None
+    try:
+        num = phonenumbers.parse(v, None)
+        if not phonenumbers.is_valid_number(num):
+            raise ValueError("invalid")
+        return phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Inserisci un numero di cellulare valido.")
+
+
 class OrgRegisterIn(BaseModel):
     nome: str
     cognome: Optional[str] = None
@@ -433,13 +453,14 @@ async def register_organization(body: OrgRegisterIn, response: Response):
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email già registrata")
+    phone = _normalize_phone(body.telefono)
     uid = f"user_{uuid.uuid4().hex[:12]}"
     org = await _create_organization(body.org_name.strip(), uid)
     full_name = f"{body.nome} {body.cognome or ''}".strip()
     await db.users.insert_one({"user_id": uid, "email": email, "name": full_name,
                                "nome": body.nome, "cognome": body.cognome, "registered_at": now_iso(),
                                "password_hash": hash_password(body.password), "role": "admin",
-                               "auth_provider": "password", "org_id": org["id"], "telefono": body.telefono,
+                               "auth_provider": "password", "org_id": org["id"], "telefono": phone,
                                "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso()})
     await _ensure_membership(uid, org["id"], "admin_org", uid)
     # Lead continuity: if this email already requested a demo, link that lead to the new account
@@ -471,9 +492,10 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
         raise HTTPException(status_code=400, detail="Devi accettare le condizioni per continuare")
     if not body.org_name.strip():
         raise HTTPException(status_code=400, detail="Il nome dell'organizzazione è obbligatorio")
+    phone = _normalize_phone(body.telefono)
     org = await _create_organization(body.org_name.strip(), user["user_id"])
     await db.users.update_one({"user_id": user["user_id"]},
-                              {"$set": {"org_id": org["id"], "role": "admin", "telefono": body.telefono,
+                              {"$set": {"org_id": org["id"], "role": "admin", "telefono": phone,
                                         "registered_at": now_iso(), "accepted_terms_at": now_iso()}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
     try:
@@ -3183,6 +3205,8 @@ async def sync_registered_user(user_id: str, org_id: str, *, nome=None, cognome=
     created = await db.events.count_documents({"org_id": org_id})
     activated = await db.events.count_documents({"org_id": org_id, "credit_state": {"$in": ["attivo", "sospeso", "concluso"]}})
     credits = (org.get("credits") or {}).get("balance", 0)
+    mem = await db.memberships.find_one({"user_id": user_id, "org_id": org_id}, {"_id": 0, "role": 1})
+    role_label = {"admin_org": "Admin Organizzazione", "user": "Utente"}.get((mem or {}).get("role"), "Admin Organizzazione")
     name = u.get("name") or ""
     attrs = {
         "NOME": nome or u.get("nome") or (name.split(" ")[0] if name else None),
@@ -3193,6 +3217,8 @@ async def sync_registered_user(user_id: str, org_id: str, *, nome=None, cognome=
         "EVENTI_CREATI": created,
         "EVENTI_ATTIVATI": activated,
         "ULTIMO_ACCESSO": now_iso()[:10],
+        "CELLULARE": u.get("telefono") or u.get("cellulare"),
+        "RUOLO_UTENTE": role_label,
     }
     try:
         await brevo_funnel.ensure_user_attributes()
@@ -3816,6 +3842,7 @@ async def cleanup_org_invites(org_id: str, user: dict = Depends(get_current_user
 class InviteRegisterIn(BaseModel):
     name: Optional[str] = None
     password: str
+    telefono: Optional[str] = None
 
 
 async def _get_valid_invite(token: str) -> dict:
@@ -3879,6 +3906,7 @@ async def register_via_invite(token: str, body: InviteRegisterIn, response: Resp
     uid = f"user_{uuid.uuid4().hex[:12]}"
     await db.users.insert_one({"user_id": uid, "email": email, "name": (body.name or email.split("@")[0]).strip(),
         "password_hash": hash_password(body.password), "role": "member", "auth_provider": "password",
+        "telefono": _normalize_phone(body.telefono), "registered_at": now_iso(),
         "org_id": inv["org_id"], "picture": "", "active": True, "last_login_at": now_iso(), "created_at": now_iso()})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
     await _accept_invite(inv, u)
@@ -4242,11 +4270,18 @@ OPERATIONAL = ["events", "companies", "persons", "deals", "staff", "teams", "shi
 
 
 @api.post("/admin/reset-data")
-async def reset_data(admin: dict = Depends(require_admin)):
+async def reset_data(request: Request, user: dict = Depends(get_current_user)):
+    # Riservato al Super Admin (anche via switcher "Org attiva"). Un Admin Organizzazione NON può
+    # eseguire il reset, nemmeno con chiamata API diretta.
+    if user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Operazione riservata al Super Admin")
+    org_id = await _resolve_active_org(request, user)
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Seleziona un'organizzazione attiva prima del reset")
     for c in OPERATIONAL:
-        await db[c].delete_many({"org_id": admin["org_id"]})
-    await db.users.delete_many({"role": {"$in": ["staff", "volunteer"]}, "org_id": admin["org_id"]})
-    counts = {c: await db[c].count_documents({"org_id": admin["org_id"]}) for c in OPERATIONAL}
+        await db[c].delete_many({"org_id": org_id})
+    await db.users.delete_many({"role": {"$in": ["staff", "volunteer"]}, "org_id": org_id})
+    counts = {c: await db[c].count_documents({"org_id": org_id}) for c in OPERATIONAL}
     return {"ok": True, "counts": counts}
 
 

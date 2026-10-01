@@ -10,6 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Sparkles, ShieldCheck, Gift, Coins, Infinity as InfinityIcon } from "lucide-react";
+import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
+import "react-phone-number-input/style.css";
 
 export default function Register() {
   const { setUser } = useAuth();
@@ -28,6 +30,7 @@ export default function Register() {
     e.preventDefault();
     if (!accept) { toast.error("Devi accettare le condizioni per registrarti"); return; }
     if (form.password.length < 8) { toast.error("La password deve avere almeno 8 caratteri"); return; }
+    if (!form.telefono || !isValidPhoneNumber(form.telefono)) { toast.error("Inserisci un numero di cellulare valido."); return; }
     setLoading(true);
     try {
       const { data } = await api.post("/auth/register-organization", { ...form, accept_terms: accept });
@@ -90,7 +93,7 @@ export default function Register() {
             </div>
             <div className="space-y-1.5"><Label htmlFor="org">Nome organizzazione</Label><Input id="org" data-testid="reg-org" value={form.org_name} onChange={ch("org_name")} placeholder="Es. La tua agenzia eventi" required /></div>
             <div className="space-y-1.5"><Label htmlFor="email">Email</Label><Input id="email" type="email" data-testid="reg-email" value={form.email} onChange={ch("email")} required /></div>
-            <div className="space-y-1.5"><Label htmlFor="tel">Telefono <span className="text-slate-400 font-normal">(facoltativo)</span></Label><Input id="tel" data-testid="reg-telefono" value={form.telefono} onChange={ch("telefono")} /></div>
+            <div className="space-y-1.5"><Label htmlFor="tel">Cellulare <span className="text-red-500">*</span></Label><PhoneInput id="tel" international defaultCountry="IT" value={form.telefono} onChange={(v) => setForm((f) => ({ ...f, telefono: v || "" }))} className="phone-input" data-testid="reg-telefono" /></div>
             <div className="space-y-1.5"><Label htmlFor="password">Password</Label><Input id="password" type="password" data-testid="reg-password" value={form.password} onChange={ch("password")} required /><p className="text-xs text-slate-400">Almeno 8 caratteri.</p></div>
 
             <label className="flex items-start gap-2.5 text-sm text-slate-600 cursor-pointer">

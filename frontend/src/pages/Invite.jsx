@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ShieldCheck, AlertTriangle, Eye, EyeOff } from "lucide-react";
+import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
+import "react-phone-number-input/style.css";
 
 const Card = ({ children }) => (
   <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
@@ -42,7 +44,7 @@ export default function Invite() {
   const [me, setMe] = useState(undefined); // undefined=loading, null=anon, obj=user
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", password: "" });
+  const [form, setForm] = useState({ name: "", password: "", telefono: "" });
   const [login, setLogin] = useState({ password: "" });
 
   useEffect(() => {
@@ -76,6 +78,7 @@ export default function Invite() {
   };
   const registerAndAccept = async () => {
     if (form.password.length < 8) { toast.error("La password deve avere almeno 8 caratteri"); return; }
+    if (!form.telefono || !isValidPhoneNumber(form.telefono)) { toast.error("Inserisci un numero di cellulare valido."); return; }
     setBusy(true);
     try { const { data } = await api.post(`/invites/${token}/register`, form); setUser(data); toast.success("Account creato e invito accettato"); window.location.href = "/app"; }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
@@ -130,6 +133,7 @@ export default function Invite() {
           ) : (
             <div className="space-y-3">
               <Input placeholder="Nome e cognome" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} data-testid="invite-reg-name" />
+              <PhoneInput international defaultCountry="IT" placeholder="Cellulare" value={form.telefono} onChange={(v) => setForm((f) => ({ ...f, telefono: v || "" }))} className="phone-input" data-testid="invite-reg-telefono" />
               <PwField placeholder="Crea una password (min 8)" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} testid="invite-reg-password" />
               <Button onClick={registerAndAccept} disabled={busy} data-testid="invite-reg-btn" className="w-full h-11 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">Crea account e accetta</Button>
             </div>

@@ -701,3 +701,9 @@ Task 2 — Creatività manuale:
 - UI Super Admin: pagina /marketing/brevo ("Email & Brevo", voce di menu nuova) con pannello RegisteredUsersPanel separato da Lead e da Disponibilità eventi.
 - NON modificati i funnel/automazioni Brevo esistenti (Lead/Demo). Nessun nuovo funnel creato (come richiesto).
 - NOTA: BREVO_API_KEY è vuota in preview (secret solo di produzione) → in preview la sync è un no-op graceful. La verifica reale su Brevo avviene in produzione.
+
+## 2026-06 — FASE 1: Cellulare obbligatorio (E.164) + Reset DB solo Super Admin + Brevo CELLULARE/RUOLO_UTENTE
+- Cellulare OBBLIGATORIO con selettore prefisso internazionale (react-phone-number-input, default IT, bandiera+prefisso+ricerca). Salvato sempre in E.164. Validazione FE (isValidPhoneNumber) + BE (phonenumbers, _normalize_phone → 400 "Inserisci un numero di cellulare valido."). Applicato a /registrati, complete-organization e registrazione via invito. Modulo pubblico Staff/Volontari NON toccato.
+- Reset database operativo: rimosso dall'Account organizzatori (card visibile solo a superadmin), endpoint /admin/reset-data ora riservato al Super Admin (403 per Admin Org, anche via API diretta) e opera sull'org attiva risolta via _resolve_active_org.
+- Brevo: aggiunti attributi CELLULARE (E.164) e RUOLO_UTENTE (Admin Organizzazione/Utente) alla sync Utenti registrati (attributo text custom, non il campo riservato SMS → evita "Invalid phone number"). Nessun funnel toccato.
+- Verificato in preview: validazione IT/US + storage E.164, reset 403, UI registrazione. Brevo reale verificabile solo in produzione (chiave nei Secrets).
