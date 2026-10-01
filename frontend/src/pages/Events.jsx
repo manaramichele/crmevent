@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 import { EventCreditDialog } from "@/components/EventCreditDialog";
 import { Coins, Rocket } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -258,6 +258,11 @@ export default function Events() {
   const settings = useSettings();
   const navigate = useNavigate();
   const [mapsFor, setMapsFor] = useState(null);
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    const m = sp.get("maps");
+    if (m) { setMapsFor(m); sp.delete("maps"); setSp(sp, { replace: true }); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [availFor, setAvailFor] = useState(null);
   const [creditFor, setCreditFor] = useState(null);
   const [recharge, setRecharge] = useState(false);

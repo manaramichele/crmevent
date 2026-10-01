@@ -9,9 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RechargeDialog } from "@/components/CreditsSection";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   ArrowLeft, Rocket, Coins, Wallet, CheckCircle2, Clock, AlertTriangle, Flame, Plus, Pencil,
   Copy, Trash2, RotateCcw, Check, FolderPlus, ListChecks, LayoutTemplate, CalendarClock, RefreshCw,
+  ExternalLink, Layers, MoreHorizontal,
 } from "lucide-react";
 
 const STATI = { da_fare: "Da fare", in_corso: "In corso", in_attesa: "In attesa", completata: "Completata" };
@@ -19,7 +21,19 @@ const STATO_CLS = { da_fare: "bg-slate-100 text-slate-600", in_corso: "bg-sky-50
 const PRIO = { normale: "Normale", importante: "Importante", critica: "Critica" };
 const PRIO_CLS = { normale: "bg-slate-100 text-slate-500", importante: "bg-indigo-50 text-indigo-700", critica: "bg-red-50 text-red-700" };
 const dmy = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
-const emptyTask = { titolo: "", descrizione: "", categoria_id: "", stato: "da_fare", priorita: "normale", scadenza: "", responsabile_id: "", azienda_id: "", persona_id: "", costo_previsto: "", costo_effettivo: "", note: "" };
+const CRM_NAV = {
+  staff: { label: "Staff e volontari", to: () => `/persone` },
+  volunteers: { label: "Staff e volontari", to: () => `/persone` },
+  persons: { label: "Persone", to: () => `/persone` },
+  companies: { label: "Aziende", to: () => `/aziende` },
+  sponsors: { label: "Sponsor & Partner", to: (id) => `/sponsor?evento=${id}` },
+  hospitality: { label: "Ospitalità & Pasti", to: (id) => `/ospitalita?evento=${id}` },
+  routes: { label: "Percorsi", to: (id) => `/eventi?maps=${id}` },
+  briefing: { label: "Briefing", to: (id) => `/eventi/${id}/briefing` },
+};
+const CRM_SECTION_KEYS = ["", "staff", "volunteers", "persons", "companies", "sponsors", "hospitality", "routes", "briefing"];
+const CRM_SECTION_LABELS = { "": "— Nessuna —", staff: "Staff e volontari", volunteers: "Volontari", persons: "Persone", companies: "Aziende / fornitori", sponsors: "Sponsor & Partner", hospitality: "Ospitalità & Pasti", routes: "Percorsi / GPX", briefing: "Briefing" };
+const emptyTask = { titolo: "", descrizione: "", categoria_id: "", stato: "da_fare", priorita: "normale", scadenza: "", responsabile_id: "", azienda_id: "", persona_id: "", costo_previsto: "", costo_effettivo: "", note: "", crm_section: "" };
 
 export default function EventPipeline() {
   const { id } = useParams();
@@ -42,6 +56,11 @@ export default function EventPipeline() {
   const [changeMode, setChangeMode] = useState(false); // chooser aperto per cambio modello
   const [genBusy, setGenBusy] = useState(false);
   const [dateDlg, setDateDlg] = useState(false);
+  const [crmCounts, setCrmCounts] = useState({});
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupSources, setDupSources] = useState([]);
+  const [dupSource, setDupSource] = useState(null);
+  const [dupBusy, setDupBusy] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try { const { data } = await api.get(`/events/${id}/pipeline/status`); setStatus(data); return data; }
@@ -61,16 +80,22 @@ export default function EventPipeline() {
     setCats(c.data); setTasks(t.data.tasks); setStats(t.data.stats);
   }, [id]);
 
+  const loadCrmCounts = useCallback(async () => {
+    try { const { data } = await api.get(`/events/${id}/pipeline/crm-counts`); setCrmCounts(data.counts || {}); }
+    catch { /* informativo: non bloccante */ }
+  }, [id]);
+
   const refreshActive = useCallback(async (s) => {
     if (s?.active && s?.template_key && s?.task_count) {
       await loadPipeline();
+      loadCrmCounts();
       api.get("/persons").then(({ data }) => setPersons(data)).catch(() => {});
       api.get("/companies").then(({ data }) => setCompanies(data)).catch(() => {});
       if (s.date_changed) setDateDlg(true);
     } else if (s?.active && s?.needs_template) {
       await loadTemplates();
     }
-  }, [loadPipeline, loadTemplates]);
+  }, [loadPipeline, loadTemplates, loadCrmCounts]);
 
   useEffect(() => { (async () => { const s = await loadStatus(); await refreshActive(s); })(); }, [loadStatus, refreshActive]);
 
@@ -121,12 +146,32 @@ export default function EventPipeline() {
 
   const openChangeModel = async () => { await loadTemplates(); setSelectedTpl(status?.template_key || null); setChangeMode(true); };
 
+  const openDup = async () => {
+    try { const { data } = await api.get(`/events/${id}/pipeline/duplicatable-sources`); setDupSources(data.sources); setDupSource(null); setDupOpen(true); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const doDuplicate = async (confirm = false) => {
+    if (!dupSource) { toast.error("Scegli un evento origine"); return; }
+    setDupBusy(true);
+    try {
+      const { data } = await api.post(`/events/${id}/pipeline/duplicate-from`, { source_event_id: dupSource, confirm });
+      toast.success(`Pipeline creata da edizione precedente: ${data.duplicated} attività${data.charged ? ` · −${status.cost} crediti` : ""}`);
+      setDupOpen(false); setDupSource(null);
+      const s = await loadStatus(); await refreshActive(s);
+    } catch (e) {
+      if (e.response?.status === 402) { toast.error("Crediti insufficienti"); setDupOpen(false); setRecharge(true); }
+      else if (e.response?.status === 409) { if (window.confirm(e.response.data.detail + "\n\nProcedere?")) { await doDuplicate(true); setDupBusy(false); return; } }
+      else toast.error(formatApiError(e.response?.data?.detail));
+    }
+    setDupBusy(false);
+  };
+
   const saveTask = async () => {
     const t = taskDlg;
     if (!t.titolo?.trim()) { toast.error("Titolo obbligatorio"); return; }
     const payload = { ...t };
     ["costo_previsto", "costo_effettivo"].forEach((k) => { payload[k] = payload[k] === "" || payload[k] == null ? null : Number(payload[k]); });
-    ["categoria_id", "responsabile_id", "azienda_id", "persona_id", "scadenza", "descrizione", "note"].forEach((k) => { if (payload[k] === "") payload[k] = null; });
+    ["categoria_id", "responsabile_id", "azienda_id", "persona_id", "scadenza", "descrizione", "note", "crm_section"].forEach((k) => { if (payload[k] === "") payload[k] = null; });
     try {
       if (t.id) await api.put(`/pipeline/tasks/${t.id}`, payload);
       else await api.post(`/events/${id}/pipeline/tasks`, payload);
@@ -175,6 +220,7 @@ export default function EventPipeline() {
 
   const showChooser = status.active && (status.needs_template || changeMode);
   const chosen = templates.find((t) => t.key === selectedTpl);
+  const dupSel = dupSources.find((s) => s.event_id === dupSource);
 
   return (
     <div className="max-w-6xl space-y-6" data-testid="event-pipeline-page">
@@ -189,6 +235,7 @@ export default function EventPipeline() {
           <div className="mt-6">
             <Button onClick={() => setConfirmOpen(true)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-activate-cta"><Rocket className="w-4 h-4 mr-1.5" />Attiva Pipeline Evento</Button>
           </div>
+          <button onClick={openDup} className="mt-4 text-sm text-slate-500 hover:text-tiffany-active inline-flex items-center gap-1.5" data-testid="pipeline-dup-intro"><Layers className="w-4 h-4" />oppure crea da un'edizione precedente</button>
         </div>
       ) : showChooser ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-3xl mx-auto" data-testid="pipeline-template-chooser">
@@ -243,7 +290,15 @@ export default function EventPipeline() {
                 <div className="text-3xl font-bold text-slate-900" data-testid="pipeline-percent">{stats.percent}% completato</div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={openChangeModel} data-testid="pipeline-change-model"><RefreshCw className="w-4 h-4 mr-1.5" />Cambia modello</Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" data-testid="pipeline-actions-menu"><MoreHorizontal className="w-4 h-4 mr-1.5" />Azioni Pipeline</Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={openChangeModel} data-testid="pipeline-change-model"><RefreshCw className="w-4 h-4 mr-2" />Cambia modello</DropdownMenuItem>
+                    <DropdownMenuItem onClick={openDup} data-testid="pipeline-duplicate-action"><Layers className="w-4 h-4 mr-2" />Crea da edizione precedente</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button onClick={() => setTaskDlg({ ...emptyTask })} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-add-task"><Plus className="w-4 h-4 mr-1.5" />Nuova attività</Button>
               </div>
             </div>
@@ -289,7 +344,15 @@ export default function EventPipeline() {
                   {filtered.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-slate-400">Nessuna attività. Creane una con "Nuova attività".</td></tr>}
                   {filtered.map((t) => (
                     <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50/50" data-testid={`pipeline-task-${t.id}`}>
-                      <td className="py-2.5 pr-3 font-medium text-slate-800">{t.titolo}</td>
+                      <td className="py-2.5 pr-3 font-medium text-slate-800">
+                        {t.titolo}
+                        {t.crm_section && CRM_NAV[t.crm_section] && (
+                          <button onClick={() => navigate(CRM_NAV[t.crm_section].to(id))} className="mt-0.5 flex items-center gap-1 text-xs text-tiffany-active hover:underline font-normal" data-testid={`task-crmlink-${t.id}`}>
+                            Vai a {CRM_NAV[t.crm_section].label}<ExternalLink className="w-3 h-3" />
+                            {crmCounts[t.crm_section] && <span className="text-slate-400">· {crmCounts[t.crm_section].count} {crmCounts[t.crm_section].label}</span>}
+                          </button>
+                        )}
+                      </td>
                       <td className="px-3 text-slate-500">{catName_[t.categoria_id] || "—"}</td>
                       <td className="px-3 text-slate-500">{t.responsabile_id ? nameOf(persons, t.responsabile_id) : "—"}</td>
                       <td className="px-3"><span className={t.late ? "text-red-600 font-semibold" : "text-slate-500"}>{dmy(t.scadenza)}{t.late && " · In ritardo"}{t.due_date_overridden && <span title="Scadenza modificata manualmente" className="ml-1 text-[10px] text-indigo-600">✎</span>}</span></td>
@@ -362,6 +425,7 @@ export default function EventPipeline() {
                 <div className="space-y-1.5"><Label>Azienda/fornitore</Label><Select value={taskDlg.azienda_id || "none"} onValueChange={(v) => setTaskDlg((t) => ({ ...t, azienda_id: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="—" /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.ragione_sociale || c.nome || c.id}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1.5"><Label>Costo previsto (€)</Label><Input type="number" value={taskDlg.costo_previsto ?? ""} onChange={(e) => setTaskDlg((t) => ({ ...t, costo_previsto: e.target.value }))} /></div>
                 <div className="space-y-1.5"><Label>Costo effettivo (€)</Label><Input type="number" value={taskDlg.costo_effettivo ?? ""} onChange={(e) => setTaskDlg((t) => ({ ...t, costo_effettivo: e.target.value }))} /></div>
+                <div className="space-y-1.5 col-span-2"><Label>Sezione CRMEvent collegata</Label><Select value={taskDlg.crm_section || "none"} onValueChange={(v) => setTaskDlg((t) => ({ ...t, crm_section: v === "none" ? "" : v }))}><SelectTrigger data-testid="task-crm-section"><SelectValue placeholder="— Nessuna —" /></SelectTrigger><SelectContent>{CRM_SECTION_KEYS.map((k) => <SelectItem key={k || "none"} value={k || "none"}>{CRM_SECTION_LABELS[k]}</SelectItem>)}</SelectContent></Select></div>
               </div>
               <div className="space-y-1.5"><Label>Note</Label><Textarea rows={2} value={taskDlg.note || ""} onChange={(e) => setTaskDlg((t) => ({ ...t, note: e.target.value }))} /></div>
             </div>
@@ -369,6 +433,45 @@ export default function EventPipeline() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setTaskDlg(null)}>Annulla</Button>
             <Button onClick={saveTask} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="task-save">Salva</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dupOpen} onOpenChange={setDupOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="pipeline-dup-dialog">
+          <DialogHeader><DialogTitle>Crea da edizione precedente</DialogTitle><DialogDescription>Copia categorie e attività da una Pipeline di un altro evento della tua organizzazione. Le scadenze verranno ricalcolate sulla data di questo evento.</DialogDescription></DialogHeader>
+          {dupSources.length === 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500" data-testid="pipeline-dup-empty">Nessuna Pipeline disponibile da copiare. Attiva e configura prima la Pipeline di un altro evento.</div>
+          ) : (
+            <div className="space-y-2">
+              {dupSources.map((s) => (
+                <button key={s.event_id} onClick={() => setDupSource(s.event_id)} className={`w-full text-left rounded-xl border p-3 transition-all ${dupSource === s.event_id ? "border-tiffany-active ring-2 ring-tiffany-active/30 bg-tiffany-light/10" : "border-slate-200 hover:border-slate-300"}`} data-testid={`pipeline-dup-src-${s.event_id}`}>
+                  <div className="flex items-center justify-between"><span className="font-semibold text-slate-800">{s.event_name}</span>{dupSource === s.event_id && <CheckCircle2 className="w-4 h-4 text-tiffany-active" />}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{s.data_inizio ? dmy(s.data_inizio) : "senza data"} · {s.task_count} attività{s.template_key ? ` · modello ${s.template_key}` : ""}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {dupSel && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-1" data-testid="pipeline-dup-summary">
+              <div className="flex justify-between"><span className="text-slate-500">Pipeline origine</span><span className="font-semibold">{dupSel.event_name}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Nuovo evento</span><span className="font-semibold">{status.event_name}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Attività da copiare</span><span className="font-semibold">{dupSel.task_count}</span></div>
+              {!status.active && (<>
+                <div className="border-t border-slate-200 my-2" />
+                <div className="flex items-center gap-1.5 text-slate-700 font-semibold"><Coins className="w-4 h-4 text-tiffany-active" />Attivazione Pipeline Evento Pro: {status.cost} crediti</div>
+                <div className="flex justify-between"><span className="text-slate-500">Saldo disponibile</span><span className="font-semibold">{status.balance}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Saldo dopo attivazione</span><span className="font-semibold">{status.balance_after}</span></div>
+                {!status.sufficient && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800">Crediti insufficienti per attivare la Pipeline su questo evento.</div>}
+              </>)}
+              {status.active && <div className="text-xs text-emerald-700">La Pipeline di questo evento è già attiva: la copia non consuma crediti.</div>}
+            </div>
+          )}
+          <DialogFooter className="mt-3">
+            <Button variant="outline" onClick={() => setDupOpen(false)}>Annulla</Button>
+            {(!status.active && !status.sufficient)
+              ? <Button onClick={() => { setDupOpen(false); setRecharge(true); }} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-dup-recharge"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
+              : <Button onClick={() => doDuplicate(false)} disabled={!dupSource || dupBusy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-dup-confirm"><Layers className="w-4 h-4 mr-1.5" />Crea Pipeline</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

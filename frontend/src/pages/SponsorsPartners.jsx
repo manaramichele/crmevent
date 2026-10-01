@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useCollection, EntityDialog, PageHeader, PrimaryButton, StatusBadge, formatEUR, useSettings, toOptions } from "@/components/crm";
 import { formatApiError } from "@/lib/api";
@@ -23,6 +24,10 @@ export default function SponsorsPartners() {
   const settings = useSettings();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [sp, setSp] = useSearchParams();
+  const eventFilter = sp.get("evento") || "all";
+  const setEventFilter = (v) => { if (v === "all") sp.delete("evento"); else sp.set("evento", v); setSp(sp, { replace: true }); };
+  const shownDeals = eventFilter === "all" ? deals : deals.filter((d) => d.evento_id === eventFilter);
 
   const compName = (id) => companies.find((c) => c.id === id)?.nome || "—";
   const eventName = (id) => events.find((e) => e.id === id)?.nome || "";
@@ -66,6 +71,13 @@ export default function SponsorsPartners() {
         action={<PrimaryButton onClick={() => { setEditing(null); setOpen(true); }} data-testid="add-deal-button"><Plus className="w-4 h-4 mr-1.5" />Nuova trattativa</PrimaryButton>}
       />
 
+      {eventFilter !== "all" && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-tiffany/40 bg-tiffany-light/20 px-3 py-2 text-sm" data-testid="sponsor-event-filter">
+          <span className="text-slate-600">Filtrato per evento: <strong>{eventName(eventFilter) || eventFilter}</strong></span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-slate-500" onClick={() => setEventFilter("all")} data-testid="sponsor-event-filter-clear">Rimuovi filtro</Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm"><div className="text-xs uppercase text-slate-500 font-medium">Trattative</div><div className="text-2xl font-bold font-display text-slate-900">{deals.length}</div></div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm"><div className="text-xs uppercase text-slate-500 font-medium">Valore pipeline</div><div className="text-2xl font-bold font-display text-slate-900">{formatEUR(totale)}</div></div>
@@ -75,7 +87,7 @@ export default function SponsorsPartners() {
       {loading ? <div className="text-slate-400">Caricamento...</div> : (
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
           {FASI.map((fase) => {
-            const col = deals.filter((d) => d.fase === fase);
+            const col = shownDeals.filter((d) => d.fase === fase);
             const val = col.reduce((s, d) => s + Number(d.valore || 0), 0);
             return (
               <div key={fase} className={`bg-slate-50/70 rounded-xl border border-slate-200 border-t-4 ${FASE_ACCENT[fase]} min-w-[240px]`} data-testid={`pipeline-col-${fase}`}>

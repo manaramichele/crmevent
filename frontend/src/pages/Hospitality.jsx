@@ -5,6 +5,7 @@ import SettingSelect from "@/components/SettingSelect";
 import StructureSelect from "@/components/StructureSelect";
 import MapsLink from "@/components/MapsLink";
 import { useAuth } from "@/context/AuthContext";
+import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -431,6 +432,7 @@ export default function Hospitality() {
   const { items: events } = useCollection("/events");
   const { items: teams } = useCollection("/teams");
   const [eventId, setEventId] = useState("");
+  const [sp] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [openPerson, setOpenPerson] = useState(null);
@@ -442,7 +444,7 @@ export default function Hospitality() {
   const [fEsig, setFEsig] = useState("");
   const [day, setDay] = useState("");
 
-  useEffect(() => { if (!eventId && events.length) setEventId(events[0].id); }, [events, eventId]);
+  useEffect(() => { if (!eventId && events.length) { const q = sp.get("evento"); setEventId(q && events.find((e) => e.id === q) ? q : events[0].id); } }, [events, eventId, sp]);
 
   const load = useCallback(async () => {
     if (!eventId) return;

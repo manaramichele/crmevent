@@ -9298,6 +9298,7 @@ class PipelineTaskIn(BaseModel):
     costo_effettivo: Optional[float] = None
     note: Optional[str] = None
     allegati: Optional[list] = None
+    crm_section: Optional[str] = None
 
 
 class PipelineTaskUpd(BaseModel):
@@ -9314,6 +9315,7 @@ class PipelineTaskUpd(BaseModel):
     costo_effettivo: Optional[float] = None
     note: Optional[str] = None
     allegati: Optional[list] = None
+    crm_section: Optional[str] = None
 
 
 @api.get("/events/{event_id}/pipeline/categories")
@@ -9710,6 +9712,177 @@ async def pipeline_keep_deadlines(event_id: str, user: dict = Depends(require_ad
     await db.event_pipelines.update_one({"org_id": org_id, "event_id": event_id},
         {"$set": {"pipeline_ref_date": _event_pipeline_ref_date(ev), "updated_at": now_iso()}})
     return await _pipeline_status_payload(org_id, ev)
+
+
+# =============================================================================
+# FASE 4 — Collegamenti CRMEvent (conteggi informativi) e duplicazione Pipeline
+# =============================================================================
+# Mappa crm_section -> dove portare l'organizzatore (il frontend risolve le rotte).
+PIPELINE_CRM_SECTIONS = ["staff", "volunteers", "sponsors", "hospitality", "routes", "briefing", "companies", "persons"]
+
+
+@api.get("/events/{event_id}/pipeline/crm-counts")
+async def pipeline_crm_counts(event_id: str, user: dict = Depends(require_admin)):
+    """Conteggi informativi dalle sezioni CRMEvent collegate (NON modificano lo stato Pipeline).
+    Riutilizza i dati esistenti con semplici count scoped per org+evento."""
+    org_id = user["org_id"]
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    staff_rows = await db.staff.find(oq(user, evento_id=event_id), {"_id": 0, "categoria": 1}).to_list(10000)
+    volontari = sum(1 for s in staff_rows if s.get("categoria") == "volontario")
+    staff_n = sum(1 for s in staff_rows if s.get("categoria") in ("staff", "collaboratore"))
+    shifts = await db.shifts.find(oq(user, evento_id=event_id), {"_id": 0, "persona_id": 1}).to_list(10000)
+    scoperti = sum(1 for s in shifts if not s.get("persona_id"))
+    counts = {
+        "volunteers": {"count": volontari, "label": "volontari"},
+        "staff": {"count": staff_n, "label": "membri staff", "extra": {"turni": len(shifts), "turni_scoperti": scoperti}},
+        "sponsors": {"count": await db.deals.count_documents(oq(user, evento_id=event_id)), "label": "sponsor/partner"},
+        "hospitality": {"count": await db.lodgings.count_documents(oq(user, evento_id=event_id)), "label": "pernottamenti"},
+        "routes": {"count": await db.event_maps.count_documents(oq(user, evento_id=event_id)), "label": "percorsi caricati"},
+        "briefing": {"count": await db.briefing_versions.count_documents(oq(user, evento_id=event_id)), "label": "versioni briefing"},
+        "companies": {"count": await db.companies.count_documents(oq(user)), "label": "aziende"},
+        "persons": {"count": await db.persons.count_documents(oq(user)), "label": "persone"},
+    }
+    return {"event_id": event_id, "counts": counts}
+
+
+@api.get("/events/{event_id}/pipeline/duplicatable-sources")
+async def pipeline_duplicatable_sources(event_id: str, user: dict = Depends(require_admin)):
+    """Eventi della STESSA organizzazione con una Pipeline attiva e almeno un'attività, utilizzabili come origine."""
+    org_id = user["org_id"]
+    dest = await db.events.find_one(oq(user, id=event_id), {"_id": 0, "id": 1})
+    if not dest:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    pipelines = await db.event_pipelines.find({"org_id": org_id, "active": True}, {"_id": 0, "event_id": 1, "template_key": 1}).to_list(2000)
+    out = []
+    for p in pipelines:
+        if p["event_id"] == event_id:
+            continue
+        n = await db.pipeline_tasks.count_documents({"org_id": org_id, "event_id": p["event_id"]})
+        if not n:
+            continue
+        ev = await db.events.find_one({"org_id": org_id, "id": p["event_id"]}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1})
+        if not ev:
+            continue
+        out.append({"event_id": ev["id"], "event_name": ev.get("nome"), "data_inizio": ev.get("data_inizio"),
+                    "template_key": p.get("template_key"), "task_count": n})
+    out.sort(key=lambda x: (x.get("data_inizio") or ""), reverse=True)
+    return {"sources": out}
+
+
+def _copy_offset(task: dict, src_ref):
+    """Offset relativo da usare nella copia. Per attività da modello mantiene l'offset originale
+    (anche se la scadenza è stata modificata a mano). Per attività manuali lo deriva da scadenza - data evento origine."""
+    off = task.get("giorni_offset")
+    if off is not None:
+        return int(off)
+    sc = task.get("scadenza")
+    if sc and src_ref:
+        try:
+            return (_date.fromisoformat(sc[:10]) - src_ref).days
+        except ValueError:
+            return None
+    return None
+
+
+class PipelineDuplicateIn(BaseModel):
+    source_event_id: str
+    confirm: Optional[bool] = False
+
+
+@api.post("/events/{event_id}/pipeline/duplicate-from")
+async def pipeline_duplicate_from(event_id: str, body: PipelineDuplicateIn, user: dict = Depends(require_admin)):
+    """Crea la Pipeline della nuova edizione copiando categorie e attività da una Pipeline origine
+    della STESSA organizzazione. Scadenze ricalcolate sulla data del nuovo evento con gli offset origine.
+    Addebita i crediti SOLO se la Pipeline destinazione non è ancora attiva (idempotente, nessun doppio addebito)."""
+    org_id = user["org_id"]
+    dest_ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    src_ev = await db.events.find_one(oq(user, id=body.source_event_id), {"_id": 0})
+    if not dest_ev or not src_ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    if body.source_event_id == event_id:
+        raise HTTPException(status_code=400, detail="L'evento origine e destinazione coincidono")
+    src_p = await _pipeline_doc(org_id, body.source_event_id)
+    if not (src_p and src_p.get("active")):
+        raise HTTPException(status_code=400, detail="La Pipeline origine non è attiva")
+    src_tasks = await db.pipeline_tasks.find({"org_id": org_id, "event_id": body.source_event_id}, {"_id": 0}).to_list(5000)
+    if not src_tasks:
+        raise HTTPException(status_code=400, detail="La Pipeline origine non contiene attività")
+    dest_ref = _event_pipeline_ref_date(dest_ev)
+    if not dest_ref:
+        raise HTTPException(status_code=400, detail="Imposta prima la data del nuovo evento")
+    dest_ref_date = _date.fromisoformat(dest_ref)
+    src_ref = _event_pipeline_ref_date(src_ev)
+    src_ref_date = _date.fromisoformat(src_ref) if src_ref else None
+
+    dest_p = await _pipeline_doc(org_id, event_id)
+    dest_active = bool(dest_p and dest_p.get("active"))
+    existing_tasks = await db.pipeline_tasks.count_documents({"org_id": org_id, "event_id": event_id})
+    if existing_tasks and not body.confirm:
+        raise HTTPException(status_code=409,
+            detail="La Pipeline destinazione contiene già attività. Confermando verranno eliminate e sostituite dalla copia.")
+
+    now = now_iso()
+    # Attivazione + addebito SOLO se non già attiva (idempotente via idempotency_key per evento).
+    if not dest_active:
+        cfg = await _svc_cfg(PIPELINE_SVC_KEY)
+        if not cfg["active"] or cfg["cost"] is None:
+            raise HTTPException(status_code=400, detail="Servizio 'Pipeline Evento Pro' non configurato")
+        await _apply_credit_movement(
+            org_id, -cfg["cost"], reason_code="event_pipeline_pro", type_="debit", service_key=PIPELINE_SVC_KEY,
+            event_id=event_id, user_id=user.get("user_id"), idempotency_key=f"event_pipeline:{event_id}",
+            note=f"Pipeline Evento Pro – {dest_ev.get('nome')}")
+        if dest_p:
+            await db.event_pipelines.update_one({"org_id": org_id, "event_id": event_id},
+                {"$set": {"active": True, "activated_at": now, "activation_cost": cfg["cost"], "updated_at": now}})
+        else:
+            await db.event_pipelines.insert_one({"id": new_id(), "org_id": org_id, "event_id": event_id,
+                "active": True, "activated_at": now, "activation_cost": cfg["cost"], "created_at": now, "updated_at": now})
+
+    # Copia categorie (per nome, crea le mancanti). Mappa nome->id origine e nome->id destinazione.
+    src_cats = await db.pipeline_categories.find({"org_id": org_id, "event_id": body.source_event_id}, {"_id": 0}).to_list(500)
+    src_cat_name = {c["id"]: c["name"] for c in src_cats}
+    dest_cats = await db.pipeline_categories.find({"org_id": org_id, "event_id": event_id}, {"_id": 0}).to_list(500)
+    dest_name_to_id = {c["name"]: c["id"] for c in dest_cats}
+    order_base = len(dest_cats)
+    for i, c in enumerate(sorted(src_cats, key=lambda x: x.get("order", 0))):
+        if c["name"] not in dest_name_to_id:
+            cid = new_id()
+            await db.pipeline_categories.insert_one({"id": cid, "org_id": org_id, "event_id": event_id,
+                "name": c["name"], "order": order_base + i, "created_at": now, "updated_at": now})
+            dest_name_to_id[c["name"]] = cid
+
+    # Rigenerazione destinazione.
+    await db.pipeline_tasks.delete_many({"org_id": org_id, "event_id": event_id})
+    docs = []
+    for t in src_tasks:
+        off = _copy_offset(t, src_ref_date)
+        scad = (dest_ref_date + _timedelta(days=off)).isoformat() if off is not None else None
+        cat_name = src_cat_name.get(t.get("categoria_id"))
+        docs.append({"id": new_id(), "org_id": org_id, "event_id": event_id,
+            "titolo": t.get("titolo"), "descrizione": t.get("descrizione"),
+            "categoria_id": dest_name_to_id.get(cat_name) if cat_name else None,
+            "stato": "da_fare", "priorita": t.get("priorita", "normale"), "scadenza": scad,
+            "giorni_offset": off, "due_date_overridden": False, "crm_section": t.get("crm_section"),
+            "responsabile_id": t.get("responsabile_id"),
+            "azienda_id": t.get("azienda_id"),  # aziende/fornitori sono org-scoped → stessa organizzazione
+            "persona_id": None, "costo_previsto": t.get("costo_previsto"),
+            "costo_effettivo": None, "note": t.get("note"), "allegati": None,
+            "created_at": now, "updated_at": now})
+    if docs:
+        await db.pipeline_tasks.insert_many(docs)
+    await db.event_pipelines.update_one({"org_id": org_id, "event_id": event_id},
+        {"$set": {"template_key": src_p.get("template_key"), "pipeline_ref_date": dest_ref,
+                  "duplicated_from": body.source_event_id, "updated_at": now}})
+    await record_audit(user, "pipeline_duplicate", org_id=org_id,
+        meta={"event_id": event_id, "source_event_id": body.source_event_id, "tasks": len(docs), "charged": not dest_active})
+    dest_ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    payload = await _pipeline_status_payload(org_id, dest_ev)
+    payload["duplicated"] = len(docs)
+    payload["charged"] = not dest_active
+    return payload
+
 
 
 
