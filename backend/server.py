@@ -4472,7 +4472,18 @@ async def audit_list(org_id: Optional[str] = None, actor_user_id: Optional[str] 
 # ---------------- stripe billing ----------------
 import stripe as stripe_sdk
 
-STRIPE_MODE = (os.environ.get("STRIPE_MODE") or "test").strip().strip('"').strip("'").lower()
+def _resolve_stripe_mode() -> str:
+    """Modalità Stripe in ordine di priorità: CRMEVENT_STRIPE_MODE (custom key,
+    modificabile dall'utente perché non intercettata dall'integrazione nativa) →
+    STRIPE_MODE → default 'test'. Valori ammessi: 'test' | 'live'."""
+    for _name in ("CRMEVENT_STRIPE_MODE", "STRIPE_MODE"):
+        _v = (os.environ.get(_name) or "").strip().strip('"').strip("'").lower()
+        if _v:
+            return _v
+    return "test"
+
+
+STRIPE_MODE = _resolve_stripe_mode()
 
 
 def _stripe_env(test_name: str, live_name: str) -> str:
