@@ -8524,6 +8524,28 @@ async def platform_org_credits_adjust(org_id: str, body: CreditAdjustIn, admin: 
     return {"ok": True, "movement": mv}
 
 
+@api.get("/platform/orgs-overview")
+async def platform_orgs_overview(admin: dict = Depends(require_superadmin)):
+    """Elenco organizzazioni con referente Admin e situazione crediti, per la ricerca e la
+    gestione del Super Admin. SOLA LETTURA: nessuna modifica a wallet/ledger."""
+    orgs = await db.organizations.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    out = []
+    for o in orgs:
+        owner = await db.users.find_one({"user_id": o.get("owner_user_id")}, {"_id": 0, "password_hash": 0})
+        c = o.get("credits") or {}
+        out.append({
+            "id": o["id"], "nome": o.get("nome"), "type": o.get("type", "cliente"),
+            "status": o.get("status", "active"),
+            "admin_name": (owner or {}).get("name"),
+            "admin_email": (owner or {}).get("email"),
+            "admin_phone": (owner or {}).get("telefono") or (owner or {}).get("phone"),
+            "balance": c.get("balance", 0),
+            "lifetime_spent": c.get("lifetime_spent", 0),
+            "lifetime_granted": c.get("lifetime_granted", 0),
+        })
+    return {"organizations": out}
+
+
 # ---------------- Catalogo RICARICHE (credit_packages) ----------------
 # price, credits_base, credits_bonus, bonus_pct (display)
 CREDIT_PACKAGES_SEED = [

@@ -348,6 +348,14 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Futura funzione "contenuti evento" lato org che usi ai_content. UI trasparenza consumi lato org quando esisterà. (P1)
 - Stripe LIVE + FIC reale. (P1)
 
+## Super Admin → Servizi e crediti → Organizzazioni — ricerca + gestione crediti — 2026-10 ✅ VERIFICATO
+- Sostituita la ricerca per ID con un unico campo "Cerca organizzazione, referente o email...": ricerca live (≥2 caratteri) per nome org / nome-cognome admin / email / telefono / ID (criterio tecnico). Click sul risultato → recupera internamente org_id e apre la scheda crediti.
+- Scheda org selezionata: Organizzazione, Admin, Email, Crediti disponibili / Acquistati-accreditati / Utilizzati. Sotto: Storico movimenti con filtri (data da/a, tipo accredito/addebito, servizio).
+- Nuova tabella "Tutte le organizzazioni" (Organizzazione | Admin | Email | Crediti | Utilizzati | Gestisci), filtrabile dallo stesso campo, senza bisogno di conoscere ID.
+- Dialog "Gestisci crediti": + Aggiungi / − Rimuovi, quantità, motivazione obbligatoria (preset Bonus commerciale/Assistenza cliente/Correzione saldo/Promozione + testo libero), anteprima Saldo attuale → Variazione → Nuovo saldo, "Conferma accredito/rimozione".
+- Backend: nuovo endpoint SOLA LETTURA GET /api/platform/orgs-overview (superadmin) con admin + crediti. Rettifica via endpoint ESISTENTE POST /api/platform/orgs/{org_id}/credits/adjust (ledger reason_code=manual_adjustment, note=motivazione, user_id=admin, created_at, balance_after; guardia sotto-zero via _apply_credit_movement → HTTP 402). Nessuna modifica a wallet/ledger/logica crediti, né a Stripe/FIC.
+- Solo Super Admin (route SuperAdminOnly + require_superadmin). Verificato: ricerca, dropdown, scheda, dialog con anteprima, creazione movimento ledger (+10 Bonus commerciale / −10 Correzione saldo), guardia sotto-zero (402), mobile.
+
 ## Consumo crediti AI centralizzato — 2026-06 ✅ Assistente CRMEvent COMPLETATO e VERIFICATO
 - RCA: l'endpoint `POST /api/support/chat` (widget Assistente CRMEvent) non aveva ALCUNA logica crediti → risposte AI gratuite. Inoltre l'infrastruttura reserve/settle (`_charge_begin`/`_credits_reserve`/`_credits_settle`/`_credits_release`) era definita ma NON agganciata a nessun endpoint.
 - Fix: helper CENTRALIZZATO `ai_charge(org_id, service_key, ...)` + classe `_AiChargeCtl` (server.py ~8960): legge costo dal catalogo (mai hardcoded) → verifica saldo e PRENOTA prima della chiamata AI (402 se insufficiente, AI non eseguita) → `ctl.settle()` solo su risultato utile, altrimenti release → idempotenza via `idempotency_key`.

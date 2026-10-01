@@ -3,10 +3,20 @@ import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Coins, Save, Search, Users2, AlertTriangle, PlayCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Coins, Save, Search, Users2, AlertTriangle, PlayCircle, Wallet, Plus, Minus, Building2, Settings2 } from "lucide-react";
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleString("it-IT") : "—");
 const TABS = [["servizi", "Servizi"], ["ricariche", "Ricariche"], ["org", "Organizzazioni"], ["migrazione", "Migrazione"]];
+const REASON_PRESETS = ["Bonus commerciale", "Assistenza cliente", "Correzione saldo", "Promozione"];
+const REASON_LABELS = {
+  manual_adjustment: "Rettifica Super Admin", signup_bonus: "Bonus registrazione",
+  event_activation: "Attivazione evento", event_maintenance: "Mantenimento evento",
+  event_pipeline_pro: "Pipeline Evento Pro", ai_assistant: "Assistente CRMEvent",
+  ai_content: "Generazione contenuti", purchase: "Acquisto crediti",
+  image_generation: "Generazione immagini",
+};
+const norm = (s) => (s || "").toString().trim().toLowerCase();
 
 function ServicesTab() {
   const [rows, setRows] = useState([]);
@@ -91,53 +101,204 @@ function PackagesTab() {
   );
 }
 
+function Stat3({ label, value, testid, tone }) {
+  return (
+    <div className={`rounded-xl border p-3 ${tone === "tiffany" ? "border-tiffany-border bg-tiffany-light/30" : "border-slate-200"}`}>
+      <div className="text-[11px] text-slate-400 uppercase tracking-wide">{label}</div>
+      <div className="text-2xl font-bold text-slate-900 mt-0.5" data-testid={testid}>{value}</div>
+    </div>
+  );
+}
+
 function OrgsTab() {
-  const [oid, setOid] = useState("");
+  const [overview, setOverview] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState("");
+  const [selId, setSelId] = useState(null);
   const [data, setData] = useState(null);
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  const load = async (id) => {
+  const [manage, setManage] = useState(null);
+  const [lf, setLf] = useState({ from: "", to: "", type: "all", service: "all" });
+
+  const loadOverview = useCallback(async () => {
+    setLoading(true);
+    try { const { data } = await api.get("/platform/orgs-overview"); setOverview(data.organizations || []); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { loadOverview(); }, [loadOverview]);
+
+  const loadCredits = useCallback(async (id) => {
     try { const { data } = await api.get(`/platform/orgs/${id}/credits`); setData(data); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setData(null); }
+  }, []);
+  const select = async (row) => { setSelId(row.id); setData(null); setQ(""); setLf({ from: "", to: "", type: "all", service: "all" }); await loadCredits(row.id); };
+
+  const match = (o, t) => [o.nome, o.admin_name, o.admin_email, o.admin_phone, o.id].some((f) => norm(f).includes(t));
+  const term = norm(q);
+  const results = term.length >= 2 ? overview.filter((o) => match(o, term)).slice(0, 8) : [];
+  const tableRows = term ? overview.filter((o) => match(o, term)) : overview;
+
+  const selRow = overview.find((o) => o.id === selId) || null;
+  const bal = data?.credits?.balance ?? selRow?.balance ?? 0;
+  const used = data?.credits?.lifetime_spent ?? selRow?.lifetime_spent ?? 0;
+  const granted = data?.credits?.lifetime_granted ?? selRow?.lifetime_granted ?? 0;
+
+  const services = Array.from(new Set((data?.ledger || []).map((m) => m.reason_code))).filter(Boolean);
+  const ledger = (data?.ledger || []).filter((m) => {
+    if (lf.type === "credit" && !(m.amount > 0)) return false;
+    if (lf.type === "debit" && !(m.amount < 0)) return false;
+    if (lf.service !== "all" && m.reason_code !== lf.service) return false;
+    const d = (m.created_at || "").slice(0, 10);
+    if (lf.from && d < lf.from) return false;
+    if (lf.to && d > lf.to) return false;
+    return true;
+  });
+
+  const amount = manage ? (manage.mode === "add" ? 1 : -1) * Math.abs(Number(manage.qty) || 0) : 0;
+  const newBal = bal + amount;
+  const canConfirm = !!manage && Math.abs(Number(manage.qty) || 0) > 0 && !!(manage.reason || "").trim() && newBal >= 0;
+  const doAdjust = async () => {
+    if (!canConfirm) return;
+    try {
+      await api.post(`/platform/orgs/${selId}/credits/adjust`, { amount, note: manage.reason.trim() });
+      toast.success(`Movimento registrato: ${amount > 0 ? "+" : ""}${amount} crediti`);
+      setManage(null); await loadCredits(selId); loadOverview();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
-  const adjust = async () => {
-    if (!note.trim()) return toast.error("La causale è obbligatoria");
-    if (!amount || Number(amount) === 0) return toast.error("Importo non valido");
-    try { await api.post(`/platform/orgs/${data.org_id}/credits/adjust`, { amount: Number(amount), note }); toast.success("Movimento registrato"); setAmount(""); setNote(""); load(data.org_id); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
+
   return (
     <div data-testid="orgs-tab">
-      <div className="flex gap-2 max-w-lg">
-        <Input placeholder="ID organizzazione" value={oid} onChange={(e) => setOid(e.target.value)} data-testid="org-search-input" />
-        <Button onClick={() => load(oid.trim())} disabled={!oid.trim()} data-testid="org-search-btn"><Search className="w-4 h-4 mr-1.5" />Carica</Button>
-      </div>
-      {data && (
-        <div className="mt-5 space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-400 uppercase">Saldo</div><div className="text-2xl font-bold text-slate-900" data-testid="org-balance">{data.credits.balance}</div></div>
-            <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-400 uppercase">Assegnati</div><div className="text-2xl font-bold text-slate-900">{data.credits.lifetime_granted}</div></div>
-            <div className="rounded-xl border border-slate-200 p-4"><div className="text-xs text-slate-400 uppercase">Utilizzati</div><div className="text-2xl font-bold text-slate-900">{data.credits.lifetime_spent}</div></div>
+      <div className="relative max-w-2xl">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca organizzazione, referente o email..." className="pl-9" data-testid="org-search-input" />
+        {results.length > 0 && (
+          <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden" data-testid="org-search-results">
+            {results.map((o) => (
+              <button key={o.id} onClick={() => select(o)} className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-50 last:border-0" data-testid={`org-result-${o.id}`}>
+                <div className="font-semibold text-slate-800 text-sm">{o.nome || "—"}</div>
+                <div className="text-xs text-slate-500">{o.admin_name || "—"} · {o.admin_email || "—"}</div>
+                <div className="text-xs text-tiffany-active font-medium">{o.balance} crediti disponibili</div>
+              </button>
+            ))}
           </div>
-          <div className="rounded-xl border border-slate-200 p-4">
-            <div className="font-semibold text-slate-800 mb-2">Accredito / rettifica manuale</div>
-            <div className="flex flex-wrap gap-2 items-center">
-              <Input type="number" placeholder="+50 / -20" className="w-32" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="adjust-amount" />
-              <Input placeholder="Causale (obbligatoria)" className="flex-1 min-w-[200px]" value={note} onChange={(e) => setNote(e.target.value)} data-testid="adjust-note" />
-              <Button onClick={adjust} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="adjust-btn">Registra</Button>
+        )}
+      </div>
+
+      {selId && selRow && (
+        <div className="mt-5 space-y-4" data-testid="org-selected-card">
+          <div className="rounded-2xl border border-slate-200 p-4 sm:p-5 bg-white">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-slate-900 font-bold text-lg"><Building2 className="w-5 h-5 text-tiffany-active" />{selRow.nome || "—"}</div>
+                <div className="text-sm text-slate-600 mt-1">Admin: <span className="font-medium">{selRow.admin_name || "—"}</span></div>
+                <div className="text-sm text-slate-500 break-all">{selRow.admin_email || "—"}{selRow.admin_phone ? ` · ${selRow.admin_phone}` : ""}</div>
+                <div className="text-[11px] text-slate-300 mt-1">ID tecnico: {selRow.id}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => { setSelId(null); setData(null); }} data-testid="org-deselect">Chiudi</Button>
+                <Button onClick={() => setManage({ mode: "add", qty: "", reason: "" })} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="org-manage-credits"><Wallet className="w-4 h-4 mr-1.5" />Gestisci crediti</Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+              <Stat3 label="Crediti disponibili" value={bal} testid="org-balance" tone="tiffany" />
+              <Stat3 label="Acquistati / accreditati" value={granted} testid="org-granted" />
+              <Stat3 label="Crediti utilizzati" value={used} testid="org-used" />
             </div>
           </div>
-          <div>
-            <div className="text-sm font-semibold text-slate-700 mb-2">Storico ({data.ledger.length})</div>
-            <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100"><th className="py-2 pr-3">Data</th><th className="py-2 pr-3">Causale</th><th className="py-2 pr-3 text-right">Crediti</th><th className="py-2 text-right">Saldo</th></tr></thead>
-              <tbody>{data.ledger.map((m) => (
-                <tr key={m.id} className="border-b border-slate-50"><td className="py-2 pr-3 text-slate-500 whitespace-nowrap">{fmtDate(m.created_at)}</td><td className="py-2 pr-3 text-slate-700">{m.reason_code}{m.note ? ` · ${m.note}` : ""}</td><td className={`py-2 pr-3 text-right font-semibold ${m.amount > 0 ? "text-emerald-600" : "text-slate-800"}`}>{m.amount > 0 ? "+" : ""}{m.amount}</td><td className="py-2 text-right text-slate-500">{m.balance_after ?? "—"}</td></tr>
-              ))}</tbody>
-            </table></div>
+
+          <div className="rounded-2xl border border-slate-200 p-4 sm:p-5 bg-white">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <div className="font-semibold text-slate-800">Storico movimenti ({ledger.length})</div>
+              <div className="flex flex-wrap gap-2">
+                <input type="date" value={lf.from} onChange={(e) => setLf((s) => ({ ...s, from: e.target.value }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm" data-testid="ledger-from" />
+                <input type="date" value={lf.to} onChange={(e) => setLf((s) => ({ ...s, to: e.target.value }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm" data-testid="ledger-to" />
+                <select value={lf.type} onChange={(e) => setLf((s) => ({ ...s, type: e.target.value }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm bg-white" data-testid="ledger-type">
+                  <option value="all">Tutti i tipi</option><option value="credit">Accrediti</option><option value="debit">Addebiti</option>
+                </select>
+                <select value={lf.service} onChange={(e) => setLf((s) => ({ ...s, service: e.target.value }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm bg-white" data-testid="ledger-service">
+                  <option value="all">Tutti i servizi</option>
+                  {services.map((s) => <option key={s} value={s}>{REASON_LABELS[s] || s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="ledger-table">
+                <thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100"><th className="py-2 pr-3">Data</th><th className="py-2 pr-3">Movimento</th><th className="py-2 pr-3 text-right">Crediti</th><th className="py-2 text-right">Saldo</th></tr></thead>
+                <tbody>
+                  {ledger.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-slate-400">Nessun movimento con questi filtri.</td></tr>}
+                  {ledger.map((m) => (
+                    <tr key={m.id} className="border-b border-slate-50"><td className="py-2 pr-3 text-slate-500 whitespace-nowrap">{fmtDate(m.created_at)}</td><td className="py-2 pr-3 text-slate-700">{REASON_LABELS[m.reason_code] || m.reason_code}{m.note ? ` · ${m.note}` : ""}</td><td className={`py-2 pr-3 text-right font-semibold ${m.amount > 0 ? "text-emerald-600" : "text-slate-800"}`}>{m.amount > 0 ? "+" : ""}{m.amount}</td><td className="py-2 text-right text-slate-500">{m.balance_after ?? "—"}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
+
+      <div className="mt-6">
+        <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-slate-700"><Users2 className="w-4 h-4 text-tiffany-active" />Tutte le organizzazioni ({tableRows.length})</div>
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-sm" data-testid="orgs-table">
+            <thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100 bg-slate-50/60">
+              <th className="py-2.5 px-3">Organizzazione</th><th className="py-2.5 px-3">Admin</th><th className="py-2.5 px-3">Email</th><th className="py-2.5 px-3 text-right">Crediti</th><th className="py-2.5 px-3 text-right">Utilizzati</th><th className="py-2.5 px-3"></th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Caricamento…</td></tr>}
+              {!loading && tableRows.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">Nessuna organizzazione trovata.</td></tr>}
+              {tableRows.map((o) => (
+                <tr key={o.id} className="border-b border-slate-50 hover:bg-slate-50/50" data-testid={`orgs-row-${o.id}`}>
+                  <td className="py-2.5 px-3 font-medium text-slate-800">{o.nome || "—"}{o.type && o.type !== "cliente" ? <span className="ml-1.5 text-[10px] uppercase text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{o.type}</span> : null}</td>
+                  <td className="py-2.5 px-3 text-slate-600">{o.admin_name || "—"}</td>
+                  <td className="py-2.5 px-3 text-slate-500 break-all">{o.admin_email || "—"}</td>
+                  <td className="py-2.5 px-3 text-right font-semibold text-slate-800">{o.balance}</td>
+                  <td className="py-2.5 px-3 text-right text-slate-500">{o.lifetime_spent}</td>
+                  <td className="py-2.5 px-3 text-right"><Button size="sm" variant="outline" onClick={() => select(o)} data-testid={`orgs-manage-${o.id}`}><Settings2 className="w-3.5 h-3.5 mr-1" />Gestisci</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Dialog open={!!manage} onOpenChange={(o) => !o && setManage(null)}>
+        <DialogContent className="max-w-md" data-testid="manage-credits-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Wallet className="w-5 h-5 text-tiffany-active" />Gestisci crediti</DialogTitle>
+            <DialogDescription>{selRow?.nome} · saldo attuale {bal} crediti</DialogDescription>
+          </DialogHeader>
+          {manage && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setManage((s) => ({ ...s, mode: "add" }))} className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold ${manage.mode === "add" ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500"}`} data-testid="manage-mode-add"><Plus className="w-4 h-4" />Aggiungi crediti</button>
+                <button onClick={() => setManage((s) => ({ ...s, mode: "remove" }))} className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold ${manage.mode === "remove" ? "border-red-400 bg-red-50 text-red-700" : "border-slate-200 text-slate-500"}`} data-testid="manage-mode-remove"><Minus className="w-4 h-4" />Rimuovi crediti</button>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Quantità crediti</label>
+                <Input type="number" min="1" value={manage.qty} onChange={(e) => setManage((s) => ({ ...s, qty: e.target.value }))} placeholder="es. 50" data-testid="manage-qty" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Motivazione (obbligatoria)</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {REASON_PRESETS.map((r, i) => (
+                    <button key={r} onClick={() => setManage((s) => ({ ...s, reason: r }))} className={`text-xs rounded-full px-2.5 py-1 border ${manage.reason === r ? "border-tiffany bg-tiffany-light/40 text-slate-800" : "border-slate-200 text-slate-500 hover:border-slate-300"}`} data-testid={`manage-reason-${i}`}>{r}</button>
+                  ))}
+                </div>
+                <Input value={manage.reason} onChange={(e) => setManage((s) => ({ ...s, reason: e.target.value }))} placeholder="Motivazione (testo libero)" data-testid="manage-reason-input" />
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm space-y-1" data-testid="manage-preview">
+                <div className="flex justify-between"><span className="text-slate-500">Saldo attuale</span><span className="font-semibold">{bal}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Variazione</span><span className={`font-semibold ${amount > 0 ? "text-emerald-600" : amount < 0 ? "text-red-600" : "text-slate-500"}`}>{amount > 0 ? "+" : ""}{amount}</span></div>
+                <div className="flex justify-between border-t border-slate-200 pt-1"><span className="text-slate-500">Nuovo saldo</span><span className="font-bold" data-testid="manage-newbal">{newBal}</span></div>
+              </div>
+              {manage.mode === "remove" && newBal < 0 && <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">Non è possibile portare il saldo sotto zero.</div>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManage(null)}>Annulla</Button>
+            <Button disabled={!canConfirm} onClick={doAdjust} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="manage-confirm">{amount >= 0 ? "Conferma accredito" : "Conferma rimozione"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
