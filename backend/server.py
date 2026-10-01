@@ -11,6 +11,7 @@ import secrets
 import time
 import hashlib
 import json
+import contextlib
 from collections import defaultdict
 import support_service
 from datetime import datetime, timezone, timedelta
@@ -1951,6 +1952,7 @@ class ChatIn(BaseModel):
     conversation_id: Optional[str] = None
     page_context: Optional[str] = None
     event_id: Optional[str] = None
+    request_id: Optional[str] = None  # idempotenza consumo crediti (UUID lato client, riusato sui retry)
 
 
 @api.post("/support/chat")
@@ -1970,19 +1972,40 @@ async def support_chat(body: ChatIn, request: Request, user: dict = Depends(get_
     hist = await db.support_messages.find({"conversation_id": conv["id"]}, {"_id": 0}).sort("created_at", 1).to_list(50)
     role = _support_role(user)
     ctx, sources, _ = await build_kb_context(body.question, role=role)
+    # Org reale dell'utente: serve sia per i dati operativi sia per il consumo crediti del wallet org.
+    oid, is_mgr = None, False
+    try:
+        oid, is_mgr = await _resolve_org_for_support(request, user)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Risoluzione org assistente non disponibile: %s", e)
     # Live operational data of the user's active org (STRICTLY isolated by org_id).
     # Only managers (org admin / super admin acting on an org) receive it.
     org_data = None
-    try:
-        oid, is_mgr = await _resolve_org_for_support(request, user)
-        if oid and is_mgr:
+    if oid and is_mgr:
+        try:
             org_data = await build_org_data_context(oid, body.question)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("Contesto dati assistente non disponibile: %s", e)
-        org_data = None
-    result = await support_service.answer_question(body.question, ctx, page_context=body.page_context,
-                                                   history=[{"role": m["role"], "content": m["content"]} for m in hist[:-1]],
-                                                   role=role, org_data=org_data)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Contesto dati assistente non disponibile: %s", e)
+            org_data = None
+
+    async def _ask():
+        return await support_service.answer_question(body.question, ctx, page_context=body.page_context,
+                                                     history=[{"role": m["role"], "content": m["content"]} for m in hist[:-1]],
+                                                     role=role, org_data=org_data)
+
+    # Consumo crediti centralizzato (servizio 'ai_assistant', costo letto dal catalogo).
+    # Saldo verificato PRIMA della chiamata AI (402 se insufficiente). Addebito SOLO se la risposta
+    # è realmente utile: answered=true e NON una semplice richiesta di funzionalità (feature request).
+    if oid:
+        idem = f"ai_assistant:{body.request_id}" if body.request_id else None
+        async with ai_charge(oid, "ai_assistant", user_id=user.get("user_id"), event_id=body.event_id,
+                             idempotency_key=idem, note="Assistente CRMEvent") as ctl:
+            result = await _ask()
+            if result.get("answered") and not result.get("is_feature_request"):
+                await ctl.settle()
+    else:
+        result = await _ask()
+
     amsg = await _create("support_messages", {"org_id": org, "conversation_id": conv["id"], "role": "assistant",
                                               "content": result["answer"], "category": result.get("category"),
                                               "confidence": result.get("confidence"), "answered": result.get("answered", True),
@@ -8820,7 +8843,7 @@ async def _credit_service_cost(service_key, quantity):
     return {"service": svc, "cost": int(round(cost)), "configured": True, "consumo_on": consumo_on, "quantity": q}
 
 
-async def _credits_reserve(org_id, service_key, quantity=1, user_id=None, event_id=None, idempotency_key=None):
+async def _credits_reserve(org_id, service_key, quantity=1, user_id=None, event_id=None, idempotency_key=None, note=None):
     from pymongo.errors import DuplicateKeyError
     await _assert_org_operational(org_id)
     info = await _credit_service_cost(service_key, quantity)
@@ -8838,7 +8861,7 @@ async def _credits_reserve(org_id, service_key, quantity=1, user_id=None, event_
     doc = {"id": new_id(), "org_id": org_id, "type": "debit", "status": "pending", "amount": -cost,
            "balance_after": None, "reason_code": service_key, "service_key": service_key, "quantity": q,
            "unit_cost": info["service"]["unit_cost"], "event_id": event_id, "user_id": user_id,
-           "idempotency_key": idempotency_key, "note": None, "created_at": now_iso(), "settled_at": None}
+           "idempotency_key": idempotency_key, "note": note, "created_at": now_iso(), "settled_at": None}
     try:
         await db.credit_ledger.insert_one(doc)
     except DuplicateKeyError:
@@ -8896,14 +8919,67 @@ class EstimateIn(BaseModel):
     quantity: int = 1
 
 
-async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, idempotency_key=None):
+async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, idempotency_key=None, note=None):
     """Prenota i crediti SOLO se il servizio è configurato E attivo; altrimenti ritorna None (uso gratuito).
     Se il saldo è insufficiente solleva HTTP 402 e il servizio NON deve essere eseguito.
     Pattern: reservation = await _charge_begin(...); try: <esegui>; _credits_settle(); except: _credits_release()."""
     svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
     if not _service_consumo_on(svc):
         return None
-    return await _credits_reserve(org_id, service_key, 1, user_id=user_id, event_id=event_id, idempotency_key=idempotency_key)
+    return await _credits_reserve(org_id, service_key, 1, user_id=user_id, event_id=event_id,
+                                  idempotency_key=idempotency_key, note=note)
+
+
+class _AiChargeCtl:
+    """Controller del consumo crediti AI. settle() addebita (impegno definitivo),
+    release() rilascia (nessun addebito). Idempotente: non addebita né rilascia due volte."""
+    def __init__(self, reservation):
+        self.reservation = reservation
+        self._done = False
+
+    @property
+    def will_charge(self) -> bool:
+        return bool(self.reservation)
+
+    async def settle(self):
+        if self.reservation and not self._done:
+            if self.reservation.get("status") == "pending":
+                await _credits_settle(self.reservation["id"])
+            self._done = True
+
+    async def release(self):
+        if self.reservation and not self._done:
+            if self.reservation.get("status") == "pending":
+                await _credits_release(self.reservation["id"])
+            self._done = True
+
+
+@contextlib.asynccontextmanager
+async def ai_charge(org_id, service_key, *, user_id=None, event_id=None, idempotency_key=None, note=None):
+    """Consumo crediti CENTRALIZZATO per le funzioni AI (riusabile da tutti gli endpoint AI).
+    1) legge servizio/costo dal catalogo Super Admin (mai hardcoded);
+    2) verifica il saldo e PRENOTA i crediti PRIMA di eseguire l'AI: se insufficiente solleva HTTP 402
+       e l'AI NON viene chiamata;
+    3) il chiamante invoca ctl.settle() SOLO se l'elaborazione produce un risultato realmente utile;
+    4) in caso di errore o risultato non utile i crediti vengono rilasciati (nessun addebito);
+    5) idempotente via idempotency_key: lo stesso tentativo non viene mai addebitato due volte.
+    Uso:
+        async with ai_charge(org_id, "ai_assistant", user_id=..., idempotency_key=...) as ctl:
+            result = await <chiamata AI>
+            if <risultato utile>: await ctl.settle()
+    """
+    reservation = await _charge_begin(org_id, service_key, user_id=user_id, event_id=event_id,
+                                      idempotency_key=idempotency_key, note=note)
+    ctl = _AiChargeCtl(reservation)
+    if reservation and reservation.get("status") != "pending":
+        ctl._done = True  # retry idempotente: movimento già committed/released, non toccarlo
+    try:
+        yield ctl
+    except Exception:
+        await ctl.release()
+        raise
+    else:
+        await ctl.release()  # no-op se già settled; rilascia i crediti se la risposta non è utile
 
 
 @api.post("/credits/estimate")

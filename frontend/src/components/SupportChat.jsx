@@ -3,7 +3,8 @@ import { useLocation } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Send, ThumbsUp, ThumbsDown, X, LifeBuoy, Check } from "lucide-react";
+import { Sparkles, Send, ThumbsUp, ThumbsDown, X, LifeBuoy, Check, Wallet } from "lucide-react";
+import { RechargeDialog } from "@/components/CreditsSection";
 import { toast } from "sonner";
 
 const CTX = {
@@ -20,6 +21,7 @@ export default function SupportChat({ bottomOffset = false }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [convId, setConvId] = useState(null);
+  const [recharge, setRecharge] = useState(false);
   const scrollRef = useRef(null);
   const pageContext = location.pathname.startsWith("/evento/") ? "Area personale — Dettaglio evento" : (CTX[location.pathname] || "CRMEvent");
 
@@ -32,12 +34,17 @@ export default function SupportChat({ bottomOffset = false }) {
     setMsgs((m) => [...m, { role: "user", content: question }]);
     setBusy(true);
     try {
-      const { data } = await api.post("/support/chat", { question, conversation_id: convId, page_context: pageContext });
+      const requestId = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+      const { data } = await api.post("/support/chat", { question, conversation_id: convId, page_context: pageContext, request_id: requestId });
       setConvId(data.conversation_id);
       setMsgs((m) => [...m, { role: "assistant", id: data.message_id, content: data.answer, answered: data.answered, feedback: null }]);
     } catch (e) {
-      setMsgs((m) => [...m, { role: "assistant", content: "Si è verificato un errore. Riprova tra poco.", answered: false, error: true }]);
-      toast.error(formatApiError(e.response?.data?.detail));
+      if (e.response?.status === 402) {
+        setMsgs((m) => [...m, { role: "assistant", insufficient: true, answered: false, content: "Crediti insufficienti. Per utilizzare l'Assistente CRMEvent devi ricaricare i tuoi crediti." }]);
+      } else {
+        setMsgs((m) => [...m, { role: "assistant", content: "Si è verificato un errore. Riprova tra poco.", answered: false, error: true }]);
+        toast.error(formatApiError(e.response?.data?.detail));
+      }
     } finally { setBusy(false); }
   };
 
@@ -91,7 +98,7 @@ export default function SupportChat({ bottomOffset = false }) {
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-tiffany text-slate-900 rounded-br-sm" : "bg-white border border-slate-200 text-slate-700 rounded-bl-sm"}`} data-testid={m.role === "assistant" ? "support-answer" : undefined}>
                     {m.content}
-                    {m.role === "assistant" && !m.error && (
+                    {m.role === "assistant" && !m.error && !m.insufficient && (
                       <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-3">
                         {m.id && (
                           <div className="flex items-center gap-1.5">
@@ -102,7 +109,10 @@ export default function SupportChat({ bottomOffset = false }) {
                         {m.feedback && <span className="text-xs text-slate-400 flex items-center gap-1"><Check className="w-3 h-3" />Grazie</span>}
                       </div>
                     )}
-                    {m.role === "assistant" && m.answered === false && !m.error && (
+                    {m.insufficient && (
+                      <button onClick={() => setRecharge(true)} data-testid="support-recharge-btn" className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold bg-tiffany hover:bg-tiffany-hover text-slate-900 rounded-lg px-3 py-2 transition-colors"><Wallet className="w-3.5 h-3.5" />Ricarica crediti</button>
+                    )}
+                    {m.role === "assistant" && m.answered === false && !m.error && !m.insufficient && (
                       <button onClick={openTicket} data-testid="support-ticket-btn" className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold bg-slate-900 text-white rounded-lg px-3 py-2 hover:bg-slate-800 transition-colors"><LifeBuoy className="w-3.5 h-3.5" />Invia richiesta al supporto</button>
                     )}
                   </div>
@@ -119,6 +129,7 @@ export default function SupportChat({ bottomOffset = false }) {
           </div>
         </div>
       )}
+      <RechargeDialog open={recharge} onClose={() => setRecharge(false)} />
     </>
   );
 }
