@@ -348,6 +348,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Futura funzione "contenuti evento" lato org che usi ai_content. UI trasparenza consumi lato org quando esisterà. (P1)
 - Stripe LIVE + FIC reale. (P1)
 
+## FASE 1 — Audit pagamenti LIVE (Stripe + Fatture in Cloud) — 2026-10 (sola lettura)
+- Stripe ricariche (`/credits/checkout`): modalità TEST. `STRIPE_MODE` presente in .env ma NON usato nel codice → modalità dipende solo dalla chiave. Flusso completo e robusto: IVA 22% exclusive EUR via TaxRate on-demand, metadata credit_purchase (org_id/purchase_id/importi), success/cancel su origin_url client, webhook firmato `/api/stripe/webhook`, accredito idempotente (`credit_purchase:{session}` + status paid, indice unico), nessun doppio accredito su retry, storico `credit_purchases`.
+- Fatture in Cloud: SOLO simulazione/dry-run. Webhook crea solo record fattura (`da_emettere`), non emette. `/fic/issue` forzato dry_run=True; `/fic/simulate` nessuna chiamata FIC/SDI. Manca flusso emissione reale su pagamento + metodo di pagamento nel payload. OAuth predisposto (token in `fic_settings`).
+- Dati fatturazione (`BillingDetails` su org.billing): struttura OK ma validazione debole (checkout blocca solo su `paese` mancante). Da rafforzare per azienda/professionista (P.IVA, indirizzo, SDI/PEC) e privato (CF) prima del LIVE.
+- Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
+- NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
+
 ## Fix visibilità "Utenti e accessi" — 2026-10 ✅
 - Il gate era solo `org_role === "admin_org"` → nascondeva la sezione al Super Admin (il cui payload non ha org_role/active_org_id; l'org attiva è in `localStorage.acting_org_id`).
 - Nuova regola in `Profile.jsx`: `canManageUsers = org_role === "admin_org" || role === "superadmin"`. Per il Super Admin `manageOrgId = localStorage.acting_org_id` (org attiva); fallback messaggio "Seleziona un'organizzazione per gestire utenti e accessi." se nessuna org attiva. Utente normale: non visibile.
