@@ -9884,6 +9884,58 @@ async def pipeline_duplicate_from(event_id: str, body: PipelineDuplicateIn, user
     return payload
 
 
+@api.get("/pipeline/attention")
+async def pipeline_attention(limit: int = 10, user: dict = Depends(require_admin)):
+    """Attività Pipeline che richiedono attenzione su tutti gli eventi con Pipeline ATTIVA dell'organizzazione.
+    Mostra: in ritardo, critiche non completate, in scadenza entro 7gg, senza responsabile e in scadenza entro 14gg.
+    Esclude le attività completate e le Pipeline non attive. Nessun consumo crediti."""
+    org_id = user["org_id"]
+    pipelines = await db.event_pipelines.find({"org_id": org_id, "active": True}, {"_id": 0, "event_id": 1}).to_list(5000)
+    event_ids = [p["event_id"] for p in pipelines]
+    if not event_ids:
+        return {"items": [], "total": 0}
+    events = await db.events.find({"org_id": org_id, "id": {"$in": event_ids}}, {"_id": 0, "id": 1, "nome": 1}).to_list(5000)
+    ev_name = {e["id"]: e.get("nome") for e in events}
+    tasks = await db.pipeline_tasks.find(
+        {"org_id": org_id, "event_id": {"$in": event_ids}, "stato": {"$ne": "completata"}}, {"_id": 0}).to_list(50000)
+    cats = await db.pipeline_categories.find({"org_id": org_id, "event_id": {"$in": event_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(10000)
+    cat_name = {c["id"]: c["name"] for c in cats}
+    persons = await db.persons.find(oq(user), {"_id": 0, "id": 1, "nome": 1, "cognome": 1}).to_list(50000)
+    person_name = {p["id"]: f"{p.get('nome', '')} {p.get('cognome', '')}".strip() for p in persons}
+    today = datetime.now(timezone.utc).date()
+    out = []
+    for t in tasks:
+        sc = t.get("scadenza")
+        try:
+            d = _date.fromisoformat(sc[:10]) if sc else None
+        except ValueError:
+            d = None
+        days = (d - today).days if d else None
+        late = bool(d and d < today)
+        critica = t.get("priorita") == "critica"
+        due7 = bool(days is not None and 0 <= days <= 7)
+        unassigned14 = bool(not t.get("responsabile_id") and days is not None and 0 <= days <= 14)
+        if not (late or critica or due7 or unassigned14):
+            continue
+        reasons = []
+        if late: reasons.append("late")
+        if critica: reasons.append("critica")
+        if due7: reasons.append("due_soon")
+        if unassigned14: reasons.append("unassigned")
+        out.append({"event_id": t["event_id"], "event_name": ev_name.get(t["event_id"]),
+                    "task_id": t["id"], "titolo": t.get("titolo"), "priorita": t.get("priorita", "normale"),
+                    "scadenza": sc, "late": late, "days_to_due": days,
+                    "responsabile": person_name.get(t.get("responsabile_id")) if t.get("responsabile_id") else None,
+                    "categoria": cat_name.get(t.get("categoria_id")), "reasons": reasons,
+                    "_bucket": 0 if late else (1 if critica else 2), "_sort": d.isoformat() if d else "9999-12-31"})
+    out.sort(key=lambda x: (x["_bucket"], x["_sort"]))
+    total = len(out)
+    for x in out:
+        x.pop("_bucket", None); x.pop("_sort", None)
+    return {"items": out[:max(1, limit)], "total": total}
+
+
+
 
 
 @api.get("/platform/events/migration-dryrun")

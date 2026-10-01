@@ -22,6 +22,7 @@ import OrgDetail from "@/pages/OrgDetail";
 import PricingAdmin from "@/pages/PricingAdmin";
 import PlatformCredits from "@/pages/PlatformCredits";
 import PipelineTemplates from "@/pages/PipelineTemplates";
+import PipelineAttentionPage from "@/pages/PipelineAttentionPage";
 import Invite from "@/pages/Invite";
 import { trackPageView } from "@/lib/analytics";
 import AuditLog from "@/pages/AuditLog";
@@ -121,6 +122,7 @@ function Shell() {
         <Route path="/eventi" element={<Protected><AdminOnly><Events /></AdminOnly></Protected>} />
         <Route path="/eventi/:id/briefing" element={<Protected><AdminOnly><Briefing /></AdminOnly></Protected>} />
         <Route path="/eventi/:id/pipeline" element={<Protected><AdminOnly><EventPipeline /></AdminOnly></Protected>} />
+        <Route path="/pipeline/attenzione" element={<Protected><AdminOnly><PipelineAttentionPage /></AdminOnly></Protected>} />
         <Route path="/aziende" element={<Protected><AdminOnly><Companies /></AdminOnly></Protected>} />
         <Route path="/persone" element={<Protected><AdminOnly><Persons /></AdminOnly></Protected>} />
         <Route path="/ospitalita" element={<Protected><AdminOnly><Hospitality /></AdminOnly></Protected>} />

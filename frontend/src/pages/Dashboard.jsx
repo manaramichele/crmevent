@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { useCollection, SectionCard, formatEUR } from "@/components/crm";
+import PipelineAttention from "@/components/PipelineAttention";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -68,6 +69,8 @@ export default function Dashboard() {
           </Select>
         </div>
       </div>
+
+      <PipelineAttention />
 
       <div>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Eventi</h2>
