@@ -13,8 +13,10 @@ import OrgUsers from "@/components/OrgUsers";
 export default function Profile() {
   const { user } = useAuth();
   const isPw = user?.auth_provider === "password";
-  const canManageUsers = user?.org_role === "admin_org";
-  const manageOrgId = user?.active_org_id || user?.org_id;
+  const isSuper = user?.role === "superadmin";
+  const actingOrgId = typeof window !== "undefined" ? localStorage.getItem("acting_org_id") : null;
+  const canManageUsers = user?.org_role === "admin_org" || isSuper;
+  const manageOrgId = isSuper ? actingOrgId : (user?.active_org_id || user?.org_id);
   const [cur, setCur] = useState(""); const [np, setNp] = useState(""); const [np2, setNp2] = useState("");
   const [cal, setCal] = useState(null);
   const [cals, setCals] = useState([]);
@@ -49,9 +51,13 @@ export default function Profile() {
         </div>
       </SectionCard>
 
-      {canManageUsers && manageOrgId && (
+      {canManageUsers && (
         <SectionCard title="Utenti e accessi">
-          <OrgUsers orgId={manageOrgId} />
+          {manageOrgId ? (
+            <OrgUsers orgId={manageOrgId} />
+          ) : (
+            <p className="text-sm text-slate-500" data-testid="org-users-no-org">Seleziona un'organizzazione per gestire utenti e accessi.</p>
+          )}
         </SectionCard>
       )}
 

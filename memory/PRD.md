@@ -348,6 +348,11 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Futura funzione "contenuti evento" lato org che usi ai_content. UI trasparenza consumi lato org quando esisterà. (P1)
 - Stripe LIVE + FIC reale. (P1)
 
+## Fix visibilità "Utenti e accessi" — 2026-10 ✅
+- Il gate era solo `org_role === "admin_org"` → nascondeva la sezione al Super Admin (il cui payload non ha org_role/active_org_id; l'org attiva è in `localStorage.acting_org_id`).
+- Nuova regola in `Profile.jsx`: `canManageUsers = org_role === "admin_org" || role === "superadmin"`. Per il Super Admin `manageOrgId = localStorage.acting_org_id` (org attiva); fallback messaggio "Seleziona un'organizzazione per gestire utenti e accessi." se nessuna org attiva. Utente normale: non visibile.
+- Verificato in preview i 3 casi (Super Admin+org → visibile, Super Admin → org attiva, Utente → nascosto). Richiede redeploy per la produzione.
+
 ## Multiutenza Admin Organizzazione — "Utenti e accessi" in Profilo & Account — 2026-10 ✅ VERIFICATO (preview)
 - Riuso TOTALE del backend esistente (nessuna nuova tabella/sistema/endpoint): `/platform/organizations/{org_id}/members` (GET/POST/PATCH) e `/invites` (GET/POST, resend, revoke) — già gated da `_require_manage` (Admin Org gestisce solo la propria org; cross-tenant 403).
 - Estensione MINIMA e retrocompatibile dell'invito: `InviteCreateIn`/`_create_invite`/`_invite_view`/`get_invite` ora includono nome/cognome/telefono; `_member_view` include telefono. `create_org_invite` richiede nome+cognome+telefono (telefono validato con `_normalize_phone`, stesso sistema della registrazione). Vecchi inviti senza questi campi continuano a funzionare.
