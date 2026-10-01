@@ -8129,6 +8129,7 @@ CREDIT_SERVICES_SEED = [
     ("event_active_period", "Attivazione evento", "event", "flat", "attivazione"),
     ("event_activation", "Attivazione evento", "event", "flat", "attivazione"),
     ("event_maintenance", "Mantenimento evento", "event", "flat", "mese"),
+    ("event_pipeline_pro", "Pipeline Evento Pro", "pro", "flat", "evento"),
 ]
 # FASE E: valori iniziali di consumo (applicati UNA SOLA VOLTA quando il servizio non è ancora
 # configurato, così le modifiche del Super Admin non vengono mai sovrascritte). NON hardcoded a runtime:
@@ -8143,6 +8144,8 @@ FASE_E_INITIAL = {
     "event_active_period": {"name": "Attivazione evento", "pricing_mode": "flat", "unit_label": "attivazione", "unit_cost": 20, "period_days": None},
     "event_activation": {"name": "Attivazione evento", "pricing_mode": "flat", "unit_label": "attivazione", "unit_cost": 30, "period_days": None},
     "event_maintenance": {"name": "Mantenimento evento", "pricing_mode": "flat", "unit_label": "mese", "unit_cost": 20, "period_days": 30},
+    "event_pipeline_pro": {"name": "Pipeline Evento Pro", "pricing_mode": "flat", "unit_label": "evento", "unit_cost": 20, "period_days": None,
+                           "description": "Attiva la Pipeline di preparazione dell'evento: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni e tutte le attività necessarie prima dell'evento."},
 }
 _credits_indexes_done = False
 
@@ -8174,6 +8177,7 @@ async def _ensure_credits_setup():
             await db.credit_services.update_one({"key": key}, {"$set": {
                 "name": cfg["name"], "pricing_mode": cfg["pricing_mode"], "unit_label": cfg["unit_label"],
                 "unit_cost": cfg["unit_cost"], "period_days": cfg.get("period_days"),
+                "description": cfg.get("description"),
                 "active": True, "consumo_active": True, "updated_at": now_iso()}})
     # FASE E.2b: il vecchio servizio unico 'event_active_period' è sostituito da due servizi distinti
     # event_activation (30, una tantum) + event_maintenance (20, mensile). Dismetti il vecchio.
@@ -9144,6 +9148,73 @@ async def run_event_renewals(now_dt: Optional[datetime] = None) -> dict:
 async def platform_run_event_renewals(admin: dict = Depends(require_superadmin)):
     """Esecuzione manuale (Super Admin). Conclude gli eventi con data trascorsa. Nessun cron attivo."""
     return await run_event_renewals()
+
+
+# ==================== PIPELINE EVENTO PRO (servizio a crediti) · FASE 1 ====================
+PIPELINE_SVC_KEY = "event_pipeline_pro"
+
+
+class PipelineActivateIn(BaseModel):
+    template_key: Optional[str] = None
+
+
+async def _pipeline_doc(org_id: str, event_id: str):
+    return await db.event_pipelines.find_one({"org_id": org_id, "event_id": event_id}, {"_id": 0})
+
+
+async def _pipeline_status_payload(org_id: str, ev: dict) -> dict:
+    cfg = await _svc_cfg(PIPELINE_SVC_KEY)
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
+    bal = ((org or {}).get("credits") or {}).get("balance", 0)
+    cost = cfg["cost"]
+    p = await _pipeline_doc(org_id, ev["id"])
+    return {"event_id": ev["id"], "event_name": ev.get("nome"),
+            "active": bool(p and p.get("active")), "activated_at": (p or {}).get("activated_at"),
+            "template_key": (p or {}).get("template_key"),
+            "service_active": cfg["active"], "cost": cost, "balance": bal,
+            "sufficient": (cost is not None and bal >= cost),
+            "balance_after": (bal - cost) if cost is not None else None}
+
+
+@api.get("/events/{event_id}/pipeline/status")
+async def pipeline_status(event_id: str, user: dict = Depends(require_admin)):
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    return await _pipeline_status_payload(user["org_id"], ev)
+
+
+@api.post("/events/{event_id}/pipeline/activate")
+async def pipeline_activate(event_id: str, body: PipelineActivateIn, user: dict = Depends(require_admin)):
+    """Attiva la Pipeline Evento Pro: addebito UNA TANTUM letto dal catalogo (idempotente per evento),
+    multi-tenant via oq(). 402 se crediti insufficienti. Lo storico riporta 'Pipeline Evento Pro – [evento]'."""
+    org_id = user["org_id"]
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    existing = await _pipeline_doc(org_id, event_id)
+    if existing and existing.get("active"):
+        return await _pipeline_status_payload(org_id, ev)
+    cfg = await _svc_cfg(PIPELINE_SVC_KEY)
+    if not cfg["active"] or cfg["cost"] is None:
+        raise HTTPException(status_code=400, detail="Servizio 'Pipeline Evento Pro' non configurato")
+    await _apply_credit_movement(
+        org_id, -cfg["cost"], reason_code="event_pipeline_pro", type_="debit", service_key=PIPELINE_SVC_KEY,
+        event_id=event_id, user_id=user.get("user_id"), idempotency_key=f"event_pipeline:{event_id}",
+        note=f"Pipeline Evento Pro – {ev.get('nome')}")
+    now = now_iso()
+    if existing:
+        await db.event_pipelines.update_one({"org_id": org_id, "event_id": event_id},
+                                            {"$set": {"active": True, "activated_at": now,
+                                                      "activation_cost": cfg["cost"], "template_key": body.template_key,
+                                                      "updated_at": now}})
+    else:
+        await db.event_pipelines.insert_one({"id": new_id(), "org_id": org_id, "event_id": event_id,
+                                             "active": True, "activated_at": now, "activation_cost": cfg["cost"],
+                                             "template_key": body.template_key, "created_at": now, "updated_at": now})
+    await record_audit(user, "pipeline_activate", org_id=org_id, meta={"event_id": event_id, "cost": cfg["cost"]})
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    return await _pipeline_status_payload(org_id, ev)
 
 
 @api.get("/platform/events/migration-dryrun")

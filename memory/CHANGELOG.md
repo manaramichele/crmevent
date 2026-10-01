@@ -707,3 +707,10 @@ Task 2 — Creatività manuale:
 - Reset database operativo: rimosso dall'Account organizzatori (card visibile solo a superadmin), endpoint /admin/reset-data ora riservato al Super Admin (403 per Admin Org, anche via API diretta) e opera sull'org attiva risolta via _resolve_active_org.
 - Brevo: aggiunti attributi CELLULARE (E.164) e RUOLO_UTENTE (Admin Organizzazione/Utente) alla sync Utenti registrati (attributo text custom, non il campo riservato SMS → evita "Invalid phone number"). Nessun funnel toccato.
 - Verificato in preview: validazione IT/US + storage E.164, reset 403, UI registrazione. Brevo reale verificabile solo in produzione (chiave nei Secrets).
+
+## 2026-06 — Pipeline Evento Pro · FASE 1 (servizio + addebito + attivazione + struttura dati)
+- Nuovo servizio a crediti event_pipeline_pro ("Pipeline Evento Pro", categoria pro, 20 crediti/evento) nel catalogo Super Admin, configurabile (nome/costo/stato) come gli altri; costo letto SEMPRE dal catalogo (_svc_cfg), mai hardcoded. Aggiunto campo description al catalogo.
+- Endpoint GET /api/events/{id}/pipeline/status (active, cost, balance, sufficient, balance_after, template_key) e POST /api/events/{id}/pipeline/activate (addebito una tantum, idempotente per evento via idempotency_key event_pipeline:{id}, multi-tenant via oq(), 402 se crediti insufficienti). Ledger: "Pipeline Evento Pro – [Nome evento]". Audit pipeline_activate.
+- Nuova collezione event_pipelines {org_id,event_id,active,activated_at,activation_cost,template_key}. Modello PipelineActivateIn {template_key}.
+- Riuso totale del wallet/catalogo/ledger esistenti. Nessuna modifica a Stripe/FIC/altri servizi. Verificato e2e in preview (status→activate -20→doppia attivazione idempotente→ledger). UI e logica attività = FASE 2/3/4.
+- PENDENTE da richiesta precedente: "Utenti e accessi" FASE 2 (multiutenza nell'Account) + sync Brevo su accettazione invito.
