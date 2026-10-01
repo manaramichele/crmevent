@@ -39,7 +39,7 @@ export default function Profile() {
   const selectCal = async (id) => { await api.post("/calendar/select", { calendar_id: id }); setCal((c) => ({ ...c, calendar_id: id })); toast.success("Calendario aggiornato"); };
 
   return (
-    <div className="animate-fade-up space-y-6 max-w-3xl">
+    <div className="animate-fade-up space-y-6 max-w-6xl">
       <PageHeader title="Profilo & Account" subtitle="Gestisci password e integrazioni" />
 
       <SectionCard title="Dati account">

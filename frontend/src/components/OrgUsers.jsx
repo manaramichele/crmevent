@@ -62,7 +62,7 @@ export default function OrgUsers({ orgId }) {
         <Button onClick={() => setOpen(true)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="org-invite-btn"><UserPlus className="w-4 h-4 mr-1.5" />Invita utente</Button>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full text-sm" data-testid="org-users-table">
+        <table className="w-full min-w-[920px] text-sm" data-testid="org-users-table">
           <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
             <th className="text-left px-3 py-2.5">Nome</th><th className="text-left px-3 py-2.5">Email</th><th className="text-left px-3 py-2.5">Cellulare</th><th className="text-left px-3 py-2.5">Ruolo</th><th className="text-left px-3 py-2.5">Stato</th><th className="text-left px-3 py-2.5">Ultimo accesso</th><th className="text-right px-3 py-2.5">Azioni</th>
           </tr></thead>
@@ -73,7 +73,7 @@ export default function OrgUsers({ orgId }) {
               return (
                 <tr key={m.user_id} className="border-t border-slate-100" data-testid={`user-row-${m.user_id}`}>
                   <td className="px-3 py-2.5 font-medium text-slate-800">{m.name || "—"}{m.is_superadmin && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-tiffany/20 text-tiffany-fg">Super Admin</span>}</td>
-                  <td className="px-3 py-2.5 text-slate-600 break-all">{m.email}</td>
+                  <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{m.email}</td>
                   <td className="px-3 py-2.5 text-slate-500">{m.telefono || "—"}</td>
                   <td className="px-3 py-2.5">{m.is_superadmin ? <StatusBadge color="tiffany">{m.role_label}</StatusBadge> : <select className="h-9 px-2 rounded-lg border border-slate-200 text-sm" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`user-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</td>
                   <td className="px-3 py-2.5"><StatusBadge color={st[0]}>{st[1]}</StatusBadge></td>
@@ -88,7 +88,7 @@ export default function OrgUsers({ orgId }) {
               return (
                 <tr key={iv.id} className="border-t border-slate-100 bg-amber-50/30" data-testid={`invite-row-${iv.id}`}>
                   <td className="px-3 py-2.5 font-medium text-slate-700">{nm || "—"}</td>
-                  <td className="px-3 py-2.5 text-slate-600 break-all">{iv.email}</td>
+                  <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{iv.email}</td>
                   <td className="px-3 py-2.5 text-slate-500">{iv.telefono || "—"}</td>
                   <td className="px-3 py-2.5 text-slate-500">{iv.role_label}</td>
                   <td className="px-3 py-2.5"><StatusBadge color={st[0]}>{st[1]}</StatusBadge></td>
