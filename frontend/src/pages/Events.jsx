@@ -240,6 +240,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
 const EV_STATE = {
   preparazione: ["In preparazione", "bg-slate-100 text-slate-600"],
   attivo: ["Attivo", "bg-emerald-50 text-emerald-700"],
+  sospeso: ["Sospeso", "bg-red-50 text-red-700"],
   concluso: ["Concluso", "bg-slate-100 text-slate-500"],
 };
 const dmyEv = (d) => (d ? d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4) : "");
@@ -247,6 +248,7 @@ function eventDisplayState(r) {
   const end = r.data_fine || r.data_inizio;
   if (end && new Date(end + "T23:59:59") < new Date()) return "concluso";
   if (r.credit_state === "attivo") return "attivo";
+  if (r.credit_state === "sospeso") return "sospeso";
   if (r.credit_state === "concluso") return "concluso";
   if (!r.credit_state) return "attivo"; // legacy: operativo, nessun prompt
   return "preparazione";
@@ -324,7 +326,7 @@ export default function Events() {
       return (
         <button onClick={() => setCreditFor(r.id)} data-testid={`event-credit-badge-${r.id}`} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${cls} hover:opacity-80 transition`}>
           <Coins className="w-3.5 h-3.5" />
-          {s === "attivo" && end ? `Attivo · fino al ${dmyEv(end)}` : s === "preparazione" ? "Attiva evento · 20" : lbl}
+          {s === "attivo" && end ? `Attivo · fino al ${dmyEv(end)}` : s === "preparazione" ? "Attiva evento · 30" : lbl}
         </button>
       );
     } },

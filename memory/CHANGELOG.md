@@ -682,3 +682,13 @@ Task 2 — Creatività manuale:
 - Header: più respiro verticale + safe-area (app Layout + Home).
 - Audit: log cambio data evento (event_date_change).
 - Testing: 16/16 pytest backend + UI verificata. Demo org pristina (saldo 100, 0 eventi, welcome disponibile).
+
+## 2026-06 — Crediti: Attivazione (30, una tantum) + Mantenimento (20/mese)
+- Due servizi distinti e configurabili in Super Admin "Servizi e crediti": event_activation (Fisso, 30, "attivazione", una tantum) e event_maintenance (Fisso, 20, "mese", mensile). Vecchio event_active_period dismesso (inattivo/invisibile).
+- RIMOSSA logica "primo evento gratis"/flag welcome: anche il primo evento paga 30 all'attivazione (restano i 100 crediti di benvenuto una tantum per org).
+- Attivazione: -30 una tantum (idempotente per evento), evento "Attivo", next_maintenance_at = oggi + 1 mese di calendario (clamp ultimo giorno mese).
+- Mantenimento mensile: -20 ad ogni scadenza (incremento 1 mese di calendario), fino alla data evento. Nessun addebito se la scadenza cade >= data evento. Motore run_event_renewals: conclude eventi a data trascorsa, addebita mantenimento dovuto, sospende se saldo < 20. SOLO manuale (superadmin), nessun cron.
+- Stato "Sospeso" reintrodotto: dati consultabili, scritture bloccate (_assert_event_operational blocca preparazione+sospeso). Riattivazione: addebita solo -20 (non 30), nuovo ciclo mensile da adesso, nessun recupero retroattivo.
+- Regola saldo minimo globale invariata (saldo 0 = sola consultazione, ripristino automatico dopo ricarica).
+- UI: EventCreditDialog con rami preparazione(30+20/mese)/attivo(prossimo addebito)/sospeso(riattiva 20 o ricarica)/concluso. Colonna Eventi "Attiva evento · 30" / "Attivo · fino al.." / "Sospeso" / "Concluso".
+- E2e backend verificato (attivazione 30, mantenimento 20 via motore, sospensione, riattivazione, no-charge oltre data evento, ledger). UI dialog + catalogo SA verificati via screenshot. Demo org pristina (saldo 100).

@@ -4,12 +4,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { RechargeDialog } from "@/components/CreditsSection";
-import { Coins, Zap, Gift, AlertTriangle, CheckCircle2, CalendarClock, Wallet } from "lucide-react";
+import { Coins, Zap, AlertTriangle, CheckCircle2, CalendarClock, Wallet, RefreshCw } from "lucide-react";
 
 const fmtDate = (s) => (s ? new Date(s + "T00:00:00").toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" }) : "—");
 const STATE = {
   preparazione: ["In preparazione", "text-slate-600 bg-slate-100"],
   attivo: ["Attivo", "text-emerald-700 bg-emerald-50"],
+  sospeso: ["Sospeso", "text-red-700 bg-red-50"],
   concluso: ["Concluso", "text-slate-500 bg-slate-100"],
 };
 
@@ -30,10 +31,9 @@ export function EventCreditDialog({ eventId, open, onOpenChange }) {
     try {
       const { data } = await api.post(`/events/${eventId}/activate`);
       setSt(data);
-      if (data.activation_free) toast.success("Primo evento attivato gratuitamente · saldo invariato");
-      else toast.success(`Evento attivo · ${data.cost} crediti utilizzati · nuovo saldo ${data.balance}`);
+      toast.success(`Operazione completata · nuovo saldo ${data.balance} crediti`);
     } catch (e) {
-      if (e.response?.status === 402) toast.error("Crediti insufficienti per attivare l'evento");
+      if (e.response?.status === 402) toast.error("Crediti insufficienti per questa operazione");
       else toast.error(formatApiError(e.response?.data?.detail));
       load();
     }
@@ -42,6 +42,8 @@ export function EventCreditDialog({ eventId, open, onOpenChange }) {
 
   const disp = st?.display_state || "preparazione";
   const [label, cls] = STATE[disp] || STATE.preparazione;
+  const actCost = st?.activation_cost;
+  const mntCost = st?.maintenance_cost;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,29 +63,23 @@ export function EventCreditDialog({ eventId, open, onOpenChange }) {
               <span className="font-semibold text-slate-900" data-testid="event-credit-balance">{st.balance} crediti</span>
             </div>
 
-            {disp === "preparazione" && st.welcome_free_available && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm space-y-2" data-testid="event-welcome-box">
-                <div className="font-semibold text-emerald-800 flex items-center gap-1.5"><Gift className="w-4 h-4" />Il tuo primo evento è gratuito</div>
-                <p className="text-emerald-700">Attiva gratuitamente il tuo primo evento CRMEvent {st.event_date ? <>fino al <b>{fmtDate(st.event_date)}</b></> : "fino alla sua data"}. I tuoi <b>{st.balance} crediti di benvenuto</b> restano interamente disponibili.</p>
-                <Button onClick={activate} disabled={busy} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" data-testid="event-activate-free-btn">
-                  <Gift className="w-4 h-4 mr-1.5" />Attiva gratuitamente
-                </Button>
-              </div>
-            )}
-
-            {disp === "preparazione" && !st.welcome_free_available && (
+            {disp === "preparazione" && (
               <div className="rounded-lg border border-tiffany-border bg-tiffany-light/30 p-4 text-sm space-y-2" data-testid="event-activate-box">
                 <div className="font-semibold text-slate-800 flex items-center gap-1.5"><Zap className="w-4 h-4 text-tiffany-active" />Attiva il tuo evento</div>
-                <p className="text-slate-600">Attiva tutte le funzioni operative di CRMEvent per questo evento {st.event_date ? <>fino al <b>{fmtDate(st.event_date)}</b></> : "fino alla sua data"}. Costo: <b>{st.cost} crediti</b> una tantum. Nessun rinnovo.</p>
-                {st.balance < st.cost ? (
+                <p className="text-slate-600">Attiva tutte le funzioni operative di CRMEvent per questo evento {st.event_date ? <>fino al <b>{fmtDate(st.event_date)}</b></> : "fino alla sua data"}.</p>
+                <ul className="text-slate-600 space-y-0.5">
+                  <li>• Attivazione: <b>{actCost} crediti</b> (una tantum)</li>
+                  <li>• Mantenimento: <b>{mntCost} crediti/mese</b> fino alla data dell'evento</li>
+                </ul>
+                {st.balance < actCost ? (
                   <div className="rounded border border-amber-200 bg-amber-50 p-2 text-amber-800" data-testid="event-insufficient-box">
                     <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />Crediti insufficienti</div>
-                    <p>Servono {st.cost} crediti per attivare questo evento. Saldo disponibile: {st.balance} crediti.</p>
+                    <p>Servono {actCost} crediti per attivare questo evento. Saldo disponibile: {st.balance} crediti.</p>
                     <Button size="sm" variant="outline" className="mt-1" onClick={() => setRecharge(true)} data-testid="event-recharge-prep"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
                   </div>
                 ) : (
                   <Button onClick={activate} disabled={busy} className="w-full bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="event-activate-btn">
-                    <Zap className="w-4 h-4 mr-1.5" />Attiva evento · {st.cost} crediti
+                    <Zap className="w-4 h-4 mr-1.5" />Attiva evento · {actCost} crediti
                   </Button>
                 )}
               </div>
@@ -92,9 +88,28 @@ export function EventCreditDialog({ eventId, open, onOpenChange }) {
             {disp === "attivo" && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm space-y-1" data-testid="event-active-box">
                 <div className="font-semibold text-emerald-800 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" />Evento attivo</div>
-                <div className="flex items-center gap-1.5 text-slate-600"><CalendarClock className="w-4 h-4" />Attivo fino al <b>{fmtDate(st.event_date)}</b></div>
-                {st.activation_free && <div className="text-xs text-emerald-700">Attivato gratuitamente (bonus benvenuto).</div>}
-                <p className="text-xs text-slate-500 pt-1">Nessun altro consumo per mantenere attivo questo evento.</p>
+                <div className="text-slate-600">Attivazione: <b>completata</b></div>
+                <div className="text-slate-600">Mantenimento: <b>{mntCost} crediti/mese</b></div>
+                {st.next_maintenance_at && <div className="flex items-center gap-1.5 text-slate-600"><CalendarClock className="w-4 h-4" />Prossimo addebito: <b>{fmtDate(st.next_maintenance_at)}</b></div>}
+                <div className="flex items-center gap-1.5 text-slate-500 text-xs pt-1"><CalendarClock className="w-3.5 h-3.5" />Attivo fino al {fmtDate(st.event_date)}</div>
+                {st.low_balance && (
+                  <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-amber-800">
+                    <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />Crediti in esaurimento</div>
+                    <p>Il prossimo mantenimento richiederà {mntCost} crediti.</p>
+                    <Button size="sm" variant="outline" className="mt-1" onClick={() => setRecharge(true)} data-testid="event-recharge-low"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {disp === "sospeso" && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm space-y-2" data-testid="event-suspended-box">
+                <div className="font-semibold text-red-800 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />Evento sospeso</div>
+                <p className="text-slate-600">Non hai crediti sufficienti per il mantenimento dell'evento. Costo mantenimento: <b>{mntCost} crediti</b> · saldo {st.balance}.</p>
+                {st.can_reactivate
+                  ? <Button onClick={activate} disabled={busy} className="w-full bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="event-reactivate-btn"><RefreshCw className="w-4 h-4 mr-1.5" />Riattiva evento · {mntCost} crediti</Button>
+                  : <Button onClick={() => setRecharge(true)} className="w-full bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="event-recharge-suspended"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>}
+                <p className="text-xs text-slate-500">I dati dell'evento restano consultabili.</p>
               </div>
             )}
 

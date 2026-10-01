@@ -13,8 +13,8 @@ const REASON = {
   ai_briefing: "Generazione briefing", image_generation: "Generazione immagini",
   automation_run: "Automazione", newsletter_email: "Newsletter / email",
   google_calendar: "Google Calendar", whatsapp_send: "WhatsApp", sms_send: "SMS", purchase: "Ricarica crediti",
-  event_activation: "Attivazione evento", event_active_period: "Attivazione evento",
-  welcome_event_activation: "Attivazione primo evento (gratuita)",
+  event_activation: "Attivazione evento", event_maintenance: "Mantenimento evento",
+  event_active_period: "Attivazione evento",
 };
 const PURCHASE_STATUS = {
   pending: ["In attesa", "text-amber-700 bg-amber-50 border-amber-200"],
