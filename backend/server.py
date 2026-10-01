@@ -4475,23 +4475,20 @@ import stripe as stripe_sdk
 STRIPE_MODE = (os.environ.get("STRIPE_MODE") or "test").strip().strip('"').strip("'").lower()
 
 
-def _stripe_env(name: str) -> str:
-    """Legge un secret Stripe preferendo la variante ESPLICITA per modalità
-    (es. STRIPE_SECRET_KEY_LIVE / _TEST). In TEST accetta anche il nome generico
-    come compatibilità. In LIVE NON usa mai il nome generico: nessun fallback LIVE→TEST."""
-    explicit = (os.environ.get(f"{name}_{STRIPE_MODE.upper()}") or "").strip()
-    if explicit:
-        return explicit
-    if STRIPE_MODE == "test":
-        return (os.environ.get(name) or "").strip()
-    return ""
+def _stripe_env(test_name: str, live_name: str) -> str:
+    """TEST → legge il secret generico gestito dall'integrazione Stripe di Emergent
+    (comportamento IDENTICO a oggi). LIVE → legge ESCLUSIVAMENTE il secret custom
+    CRMEVENT_STRIPE_*_LIVE (non intercettato dall'integrazione Stripe), senza alcun fallback su TEST."""
+    if STRIPE_MODE == "live":
+        return (os.environ.get(live_name) or "").strip()
+    return (os.environ.get(test_name) or "").strip()
 
 
-STRIPE_SECRET_KEY = _stripe_env("STRIPE_SECRET_KEY")
-STRIPE_PUBLISHABLE_KEY = _stripe_env("STRIPE_PUBLISHABLE_KEY")
-STRIPE_WEBHOOK_SECRET = _stripe_env("STRIPE_WEBHOOK_SECRET")
-STRIPE_ACCOUNT_ID = _stripe_env("STRIPE_ACCOUNT_ID")
-STRIPE_TAX_RATE_ID = _stripe_env("STRIPE_TAX_RATE_ID")
+STRIPE_SECRET_KEY = _stripe_env("STRIPE_SECRET_KEY", "CRMEVENT_STRIPE_SECRET_KEY_LIVE")
+STRIPE_PUBLISHABLE_KEY = _stripe_env("STRIPE_PUBLISHABLE_KEY", "CRMEVENT_STRIPE_PUBLISHABLE_KEY_LIVE")
+STRIPE_WEBHOOK_SECRET = _stripe_env("STRIPE_WEBHOOK_SECRET", "CRMEVENT_STRIPE_WEBHOOK_SECRET_LIVE")
+STRIPE_ACCOUNT_ID = _stripe_env("STRIPE_ACCOUNT_ID", "CRMEVENT_STRIPE_ACCOUNT_ID_LIVE")
+STRIPE_TAX_RATE_ID = _stripe_env("STRIPE_TAX_RATE_ID", "CRMEVENT_STRIPE_TAX_RATE_ID_LIVE")
 
 
 def _validate_stripe_config():
@@ -4501,15 +4498,15 @@ def _validate_stripe_config():
         return False, [f"STRIPE_MODE non valido: '{STRIPE_MODE}' (ammessi: test | live)"]
     sk, pk = STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY
     if STRIPE_MODE == "live":
-        if not sk.startswith("sk_live_"):
-            errs.append("STRIPE_MODE=live ma manca STRIPE_SECRET_KEY_LIVE (sk_live_...)")
+        if not (sk.startswith("sk_live_") or sk.startswith("rk_live_")):
+            errs.append("STRIPE_MODE=live ma manca CRMEVENT_STRIPE_SECRET_KEY_LIVE (sk_live_... o rk_live_...)")
         if pk and not pk.startswith("pk_live_"):
-            errs.append("STRIPE_PUBLISHABLE_KEY_LIVE non è una chiave live (pk_live_...)")
+            errs.append("CRMEVENT_STRIPE_PUBLISHABLE_KEY_LIVE non è una chiave live (pk_live_...)")
         if not STRIPE_WEBHOOK_SECRET.startswith("whsec_"):
-            errs.append("STRIPE_WEBHOOK_SECRET_LIVE mancante")
+            errs.append("CRMEVENT_STRIPE_WEBHOOK_SECRET_LIVE mancante")
     else:
-        if sk.startswith("sk_live_"):
-            errs.append("STRIPE_MODE=test ma la secret key è LIVE (sk_live_...). Configurazione incoerente.")
+        if sk.startswith("sk_live_") or sk.startswith("rk_live_"):
+            errs.append("STRIPE_MODE=test ma la secret key è LIVE. Configurazione incoerente.")
         if pk.startswith("pk_live_"):
             errs.append("STRIPE_MODE=test ma la publishable key è LIVE. Configurazione incoerente.")
     return (len(errs) == 0), errs
