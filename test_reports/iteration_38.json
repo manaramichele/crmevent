@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only UI testing of 'Cosa richiede attenzione' Dashboard section and dedicated page /pipeline/attenzione. All 4 requested flows verified successfully with admin QA user.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "dashboard_attention_section_rendered": true,
+    "attention_total_badge": "102",
+    "dashboard_items_count": 10,
+    "items_show_title_event_category_tags_duedate": true,
+    "colored_tags_rendered": ["In ritardo (red)", "Critica (orange)"],
+    "click_item_navigates_to_event_pipeline": "OK (/eventi/ev_qa_1/pipeline)",
+    "see_all_link_present_and_text": "Vedi tutte (102)",
+    "attention_page_reached": "/pipeline/attenzione",
+    "attention_page_full_items": 102,
+    "attention_back_present_and_working": true,
+    "ordering_non_decreasing_buckets_late_then_critica_then_other": true,
+    "no_completed_tasks_included": true
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PipelineAttention.jsx: silently swallows API errors in try/catch and sets empty data - acceptable for widget UX but no error state displayed to user. Minor.",
+    "PipelineAttentionPage.jsx: fetches with limit=1000 which is a reasonable cap; could paginate in future if list grows."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped", "frontend": "100%"},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "none - used existing QA org with 102 attention tasks",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All data-testid hooks present and working: dashboard-attention, attention-total, attention-item-<id>, attention-see-all, attention-page, attention-back. Login landing page requires /login path directly (home '/' is landing/marketing). Iubenda cookie banner on landing but not on /login."
+}

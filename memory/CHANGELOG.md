@@ -1,5 +1,10 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Dashboard · "Cosa richiede attenzione" ✅ (frontend testing 100%, backend via curl)
+- Nuova sezione nella Dashboard organizzatore (tra intestazione e KPI Eventi) + pagina dedicata `/pipeline/attenzione` ("Vedi tutte").
+- Aggrega le attività di **tutte le Pipeline attive** dell'org che richiedono intervento: in ritardo, critiche non completate, in scadenza ≤7gg, senza responsabile e in scadenza ≤14gg. Esclude completate e Pipeline non attive. Ordine: in ritardo → critiche → scadenza più vicina. Max 10 in dashboard, link "Vedi tutte (N)". Click su attività → Pipeline dell'evento. Nessun nuovo servizio/consumo crediti.
+- Endpoint: `GET /api/pipeline/attention?limit=N` → `{items, total}` (require_admin, org-scoped). Componenti: `components/PipelineAttention.jsx`, `pages/PipelineAttentionPage.jsx`. Test: backend curl (total 102, ordinamento per bucket corretto, nessuna completata) + testing agent frontend 100% (iteration_38).
+
 ## 2026-06 — Pipeline Evento Pro · FASE 4 (Collegamenti CRMEvent & duplicazione edizione) ✅ (backend curl 100% · frontend testing agent verificato)
 - **Collegamenti CRMEvent**: il campo `crm_section` (già in FASE 3) ora è impostabile anche sulle attività manuali (dialog attività → "Sezione CRMEvent collegata") e viene copiato dal modello in generazione. Sezioni supportate: staff, volunteers, persons, companies, sponsors, hospitality, routes, briefing (architettura estendibile).
 - **"Vai alla sezione →"** sulle attività con `crm_section`, con conteggio informativo (da `GET /events/{id}/pipeline/crm-counts`, es. "· 42 volontari"). La navigazione **mantiene l'evento corrente**: sponsors→`/sponsor?evento=`, hospitality→`/ospitalita?evento=`, routes→`/eventi?maps=` (apre dialog mappe), briefing→`/eventi/{id}/briefing`, staff/volunteers/persons→`/persone`, companies→`/aziende`. I conteggi sono **solo informativi** e non cambiano lo stato delle attività (nessun completamento automatico).
