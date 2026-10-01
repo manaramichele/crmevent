@@ -4471,8 +4471,62 @@ async def audit_list(org_id: Optional[str] = None, actor_user_id: Optional[str] 
 
 # ---------------- stripe billing ----------------
 import stripe as stripe_sdk
-stripe_sdk.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+STRIPE_MODE = (os.environ.get("STRIPE_MODE") or "test").strip().strip('"').strip("'").lower()
+
+
+def _stripe_env(name: str) -> str:
+    """Legge un secret Stripe preferendo la variante ESPLICITA per modalità
+    (es. STRIPE_SECRET_KEY_LIVE / _TEST). In TEST accetta anche il nome generico
+    come compatibilità. In LIVE NON usa mai il nome generico: nessun fallback LIVE→TEST."""
+    explicit = (os.environ.get(f"{name}_{STRIPE_MODE.upper()}") or "").strip()
+    if explicit:
+        return explicit
+    if STRIPE_MODE == "test":
+        return (os.environ.get(name) or "").strip()
+    return ""
+
+
+STRIPE_SECRET_KEY = _stripe_env("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = _stripe_env("STRIPE_PUBLISHABLE_KEY")
+STRIPE_WEBHOOK_SECRET = _stripe_env("STRIPE_WEBHOOK_SECRET")
+STRIPE_ACCOUNT_ID = _stripe_env("STRIPE_ACCOUNT_ID")
+STRIPE_TAX_RATE_ID = _stripe_env("STRIPE_TAX_RATE_ID")
+
+
+def _validate_stripe_config():
+    """Coerenza modalità↔chiavi. Nessun fallback LIVE→TEST. Ritorna (ok, errori)."""
+    errs = []
+    if STRIPE_MODE not in ("test", "live"):
+        return False, [f"STRIPE_MODE non valido: '{STRIPE_MODE}' (ammessi: test | live)"]
+    sk, pk = STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY
+    if STRIPE_MODE == "live":
+        if not sk.startswith("sk_live_"):
+            errs.append("STRIPE_MODE=live ma manca STRIPE_SECRET_KEY_LIVE (sk_live_...)")
+        if pk and not pk.startswith("pk_live_"):
+            errs.append("STRIPE_PUBLISHABLE_KEY_LIVE non è una chiave live (pk_live_...)")
+        if not STRIPE_WEBHOOK_SECRET.startswith("whsec_"):
+            errs.append("STRIPE_WEBHOOK_SECRET_LIVE mancante")
+    else:
+        if sk.startswith("sk_live_"):
+            errs.append("STRIPE_MODE=test ma la secret key è LIVE (sk_live_...). Configurazione incoerente.")
+        if pk.startswith("pk_live_"):
+            errs.append("STRIPE_MODE=test ma la publishable key è LIVE. Configurazione incoerente.")
+    return (len(errs) == 0), errs
+
+
+STRIPE_CONFIG_OK, STRIPE_CONFIG_ERRORS = _validate_stripe_config()
+# In TEST senza chiave esplicita si usa il placeholder gestito da Emergent (solo test).
+stripe_sdk.api_key = STRIPE_SECRET_KEY or ("sk_test_emergent" if STRIPE_MODE == "test" else "")
+if not STRIPE_CONFIG_OK:
+    logger.error("Configurazione Stripe NON coerente (mode=%s): %s", STRIPE_MODE, "; ".join(STRIPE_CONFIG_ERRORS))
+else:
+    logger.info("Stripe inizializzato in modalità %s", STRIPE_MODE.upper())
+
+
+def _assert_stripe_ready():
+    if not STRIPE_CONFIG_OK:
+        raise HTTPException(status_code=503, detail="Configurazione Stripe non valida o incoerente. Contatta l'amministratore.")
 PRICE_LOOKUPS = {"monthly": "crmevent_monthly", "yearly": "crmevent_yearly"}
 STRIPE_STATUS_MAP = {"active": "active", "trialing": "active", "past_due": "past_due",
                      "canceled": "canceled", "unpaid": "suspended", "incomplete": "past_due",
@@ -4496,10 +4550,50 @@ class BillingDetails(BaseModel):
     email_fatturazione: Optional[str] = None
 
 
+def _billing_missing(b: dict) -> list:
+    """Dati minimi per la fatturazione (regole standard italiane / fattura elettronica).
+    Privato: nome, cognome, codice fiscale (IT), indirizzo. Azienda/professionista IT:
+    ragione sociale, P.IVA, indirizzo e Codice Destinatario SDI oppure PEC. Estero: SDI/PEC non richiesti."""
+    b = b or {}
+    tipo = (b.get("tipo") or "azienda").lower()
+    paese = (b.get("paese") or "IT").upper()
+    missing = []
+
+    def need(field, label):
+        if not (str(b.get(field) or "").strip()):
+            missing.append(label)
+
+    need("paese", "Paese")
+    need("indirizzo", "Indirizzo")
+    need("cap", "CAP")
+    need("citta", "Città")
+    if paese == "IT":
+        need("provincia", "Provincia")
+    if tipo == "privato":
+        need("nome", "Nome")
+        need("cognome", "Cognome")
+        if paese == "IT":
+            need("codice_fiscale", "Codice fiscale")
+    else:
+        need("ragione_sociale", "Ragione sociale")
+        if paese == "IT":
+            need("partita_iva", "Partita IVA")
+            if not (str(b.get("codice_sdi") or "").strip()) and not (str(b.get("pec") or "").strip()):
+                missing.append("Codice Destinatario (SDI) oppure PEC")
+    return missing
+
+
 @api.get("/account/billing")
 async def get_billing(user: dict = Depends(require_admin)):
     org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
     return (org or {}).get("billing") or {}
+
+
+@api.get("/account/billing/validate")
+async def validate_billing(user: dict = Depends(require_admin)):
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+    missing = _billing_missing((org or {}).get("billing") or {})
+    return {"valid": len(missing) == 0, "missing": missing}
 
 
 @api.put("/account/billing")
@@ -4531,6 +4625,7 @@ class CheckoutIn(BaseModel):
 
 @api.post("/account/checkout")
 async def create_checkout(body: CheckoutIn, user: dict = Depends(require_admin)):
+    _assert_stripe_ready()
     if body.billing_cycle not in PRICE_LOOKUPS:
         raise HTTPException(status_code=400, detail="Ciclo di fatturazione non valido")
     org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
@@ -4749,6 +4844,10 @@ FIC_CLIENT_SECRET = os.environ.get("FIC_CLIENT_SECRET", "")
 FIC_REDIRECT_URI = os.environ.get("FIC_REDIRECT_URI", "")
 FIC_COMPANY_ID = os.environ.get("FIC_COMPANY_ID", "")
 FIC_SCOPES = "issued_documents.invoices:r issued_documents.invoices:a settings:r"
+# Modalità Fatture in Cloud: 'test' = dry-run (nessun documento reale, nessun SDI); 'live' = emissione reale.
+FIC_MODE = (os.environ.get("FIC_MODE") or "test").strip().strip('"').strip("'").lower()
+FIC_PAYMENT_ACCOUNT_ID = (os.environ.get("FIC_PAYMENT_ACCOUNT_ID") or "").strip()
+FIC_PAYMENT_METHOD_NAME = (os.environ.get("FIC_PAYMENT_METHOD_NAME") or "Carta di credito (Stripe)").strip()
 
 
 def fic_configured() -> bool:
@@ -4897,6 +4996,15 @@ async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
         line["vat"] = {"value": a["aliquota_iva"]}
     body = {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
                      "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"}}}
+    # Metodo di pagamento (solo emissione reale): pagamento già incassato via Stripe/carta.
+    # L'account di pagamento FIC NON viene hardcodato: usato solo se FIC_PAYMENT_ACCOUNT_ID è configurato.
+    if not dry_run:
+        today = datetime.now(timezone.utc).date().isoformat()
+        pay = {"amount": a.get("totale") or net, "due_date": today, "paid_date": today, "status": "paid"}
+        if FIC_PAYMENT_ACCOUNT_ID.isdigit():
+            pay["payment_account"] = {"id": int(FIC_PAYMENT_ACCOUNT_ID)}
+        body["data"]["payment_method"] = {"name": FIC_PAYMENT_METHOD_NAME}
+        body["data"]["payments_list"] = [pay]
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents",
                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, json=body)
@@ -8702,9 +8810,12 @@ async def credits_checkout(body: CreditCheckoutIn, user: dict = Depends(require_
     l'accredito avviene solo dopo conferma del pagamento (webhook Stripe)."""
     await _ensure_credit_packages_seeded()
     await _ensure_credit_purchases_setup()
+    _assert_stripe_ready()
     org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
-    if not (org.get("billing") or {}).get("paese"):
-        raise HTTPException(status_code=400, detail="Completa prima i dati di fatturazione")
+    missing = _billing_missing(org.get("billing") or {})
+    if missing:
+        raise HTTPException(status_code=400, detail={"code": "billing_incomplete",
+            "message": "Completa i dati di fatturazione", "missing": missing})
     pkg = await db.credit_packages.find_one({"id": body.package_id, "active": True}, {"_id": 0})
     if not pkg:
         raise HTTPException(status_code=404, detail="Taglio di ricarica non trovato o non attivo")
@@ -8781,6 +8892,40 @@ async def _record_credit_invoice(purchase: dict, sess: dict) -> Optional[str]:
     return doc["id"]
 
 
+async def _emit_credit_invoice(inv_id: str):
+    """Emissione fattura FIC per una ricarica. NON blocca mai pagamento/accredito e idempotente.
+    Rispetta FIC_MODE: 'live' = documento reale; altrimenti dry-run (nessun invio SDI).
+    Se FIC non è connesso o fallisce, registra lo stato errore ma non solleva eccezioni."""
+    inv = await db.invoices.find_one({"id": inv_id}, {"_id": 0})
+    if not inv:
+        return
+    # Anti-duplicato: se un documento esiste già non ricrearlo.
+    if inv.get("fic_document_id"):
+        await db.invoices.update_one({"id": inv_id}, {"$set": {
+            "fic_stato_documento": ("emessa" if FIC_MODE == "live" else "creato_test"),
+            "fic_error": None, "updated_at": now_iso()}})
+        return
+    attempts = int(inv.get("fic_attempts") or 0) + 1
+    base_upd = {"fic_attempts": attempts, "fic_last_attempt_at": now_iso(), "fic_mode": FIC_MODE, "updated_at": now_iso()}
+    ficdoc = await db.fic_settings.find_one({"provider": "fic"})
+    if not fic_configured() or not ficdoc:
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base_upd,
+            "fic_stato_documento": "da_emettere",
+            "fic_error": "Fatture in Cloud non connesso (OAuth mancante)"}})
+        return
+    try:
+        res = await _fic_issue_document(inv, dry_run=(FIC_MODE != "live"))
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base_upd, "fic_error": None,
+            "fic_stato_documento": ("emessa" if FIC_MODE == "live" else "creato_test")}})
+        return res
+    except HTTPException as e:
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base_upd,
+            "fic_stato_documento": "errore_emissione", "fic_error": str(e.detail)[:500]}})
+    except Exception as e:  # noqa: BLE001
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base_upd,
+            "fic_stato_documento": "errore_emissione", "fic_error": str(e)[:500]}})
+
+
 async def _activate_credit_purchase_from_session(sess: dict):
     """Accredito crediti SERVER-SIDE da sessione PAGATA. Idempotente per session id.
     Doppia protezione anti-doppione: stato 'paid' del purchase + idempotency_key sul ledger."""
@@ -8803,6 +8948,11 @@ async def _activate_credit_purchase_from_session(sess: dict):
         {"stripe_session_id": sid},
         {"$set": {"status": "paid", "stripe_payment_intent": pi, "paid_at": now_iso(),
                   "ledger_id": (mv or {}).get("id"), "invoice_id": inv_id, "updated_at": now_iso()}})
+    # Emissione fattura FIC: NON blocca MAI pagamento/accredito (già avvenuti). Idempotente.
+    try:
+        await _emit_credit_invoice(inv_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Emissione fattura ricarica non riuscita (accredito già effettuato): %s", e)
 
 
 @api.get("/credits/checkout-confirmation")
@@ -8833,6 +8983,58 @@ async def credits_purchases(user: dict = Depends(require_admin)):
     await _ensure_credit_purchases_setup()
     rows = await db.credit_purchases.find({"org_id": user["org_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return {"purchases": rows}
+
+
+@api.get("/platform/integrations/status")
+async def platform_integrations_status(admin: dict = Depends(require_superadmin)):
+    """Stato integrazioni per il Super Admin. NON espone alcun secret."""
+    ficdoc = await db.fic_settings.find_one({"provider": "fic"}, {"_id": 0, "access_token": 0, "refresh_token": 0})
+    return {
+        "stripe": {"mode": STRIPE_MODE, "config_ok": STRIPE_CONFIG_OK, "errors": STRIPE_CONFIG_ERRORS,
+                   "secret_key_set": bool(STRIPE_SECRET_KEY), "publishable_key_set": bool(STRIPE_PUBLISHABLE_KEY),
+                   "webhook_secret_set": bool(STRIPE_WEBHOOK_SECRET), "account_id_set": bool(STRIPE_ACCOUNT_ID),
+                   "tax_rate_id_set": bool(STRIPE_TAX_RATE_ID)},
+        "fic": {"configured": fic_configured(), "connected": bool(ficdoc), "mode": FIC_MODE,
+                "company_id_set": bool(await _fic_company_id()),
+                "payment_account_set": bool(FIC_PAYMENT_ACCOUNT_ID)},
+    }
+
+
+@api.get("/platform/credit-invoices")
+async def platform_credit_invoices(admin: dict = Depends(require_superadmin)):
+    """Stato per ricarica: Pagamento / Crediti / Fattura (per il pannello Super Admin)."""
+    purchases = await db.credit_purchases.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    out = []
+    for p in purchases:
+        inv = await db.invoices.find_one({"id": p.get("invoice_id")}, {"_id": 0}) if p.get("invoice_id") else None
+        org = await db.organizations.find_one({"id": p["org_id"]}, {"_id": 0, "nome": 1})
+        out.append({
+            "purchase_id": p["id"], "org_id": p["org_id"], "org_name": (org or {}).get("nome"),
+            "created_at": p.get("created_at"), "paid_at": p.get("paid_at"),
+            "amount_net": p.get("amount_net"), "amount_vat": p.get("amount_vat"), "amount_gross": p.get("amount_gross"),
+            "credits_total": p.get("credits_total"), "payment_status": p.get("status"),
+            "credits_granted": bool(p.get("ledger_id")), "invoice_id": p.get("invoice_id"),
+            "fic_mode": (inv or {}).get("fic_mode"), "fic_stato": (inv or {}).get("fic_stato_documento") or "da_emettere",
+            "fic_numero": (inv or {}).get("fic_numero"), "fic_error": (inv or {}).get("fic_error"),
+            "fic_attempts": (inv or {}).get("fic_attempts") or 0,
+            "stripe_payment_intent": p.get("stripe_payment_intent"),
+        })
+    return {"invoices": out}
+
+
+@api.post("/platform/invoices/{invoice_id}/retry-emit")
+async def retry_emit_invoice(invoice_id: str, admin: dict = Depends(require_superadmin)):
+    """Riprova emissione fattura FIC (idempotente, nessun documento duplicato)."""
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Fattura non trovata")
+    await _emit_credit_invoice(invoice_id)
+    upd = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    await record_audit(admin, "fic_retry_emit", org_id=inv.get("org_id"),
+                       detail=f"Stato: {upd.get('fic_stato_documento')}")
+    return {"id": invoice_id, "fic_stato_documento": upd.get("fic_stato_documento"),
+            "fic_numero": upd.get("fic_numero"), "fic_error": upd.get("fic_error"),
+            "fic_attempts": upd.get("fic_attempts")}
 
 
 # ---------------- Impostazioni crediti org (soglia) ----------------
@@ -10198,6 +10400,8 @@ _TAX_RATE_CACHE = {}
 
 
 def _get_tax_rate_id():
+    if STRIPE_TAX_RATE_ID:
+        return STRIPE_TAX_RATE_ID
     if _TAX_RATE_CACHE.get("id"):
         return _TAX_RATE_CACHE["id"]
     for r in stripe_sdk.TaxRate.list(active=True, limit=100).auto_paging_iter():

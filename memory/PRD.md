@@ -348,6 +348,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Futura funzione "contenuti evento" lato org che usi ai_content. UI trasparenza consumi lato org quando esisterà. (P1)
 - Stripe LIVE + FIC reale. (P1)
 
+## FASE prep LIVE (Stripe mode + billing + FIC emissione reale + pannello SA) — 2026-10 ✅ (resta TEST/dry-run)
+- Stripe: modalità esplicita `STRIPE_MODE` (test|live) con risoluzione secret per-mode (`*_LIVE`/`*_TEST`, generico solo in test), coerenza all'avvio (nessun fallback LIVE→TEST), `_assert_stripe_ready()` blocca checkout se incoerente. `_get_tax_rate_id` usa `STRIPE_TAX_RATE_ID` se presente.
+- Billing: `_billing_missing()` (Privato: nome/cognome/CF IT; Azienda IT: ragione sociale/P.IVA/indirizzo + SDI o PEC). Gate HARD in `/credits/checkout` (400 billing_incomplete) + endpoint `/account/billing/validate`. Form frontend già Privato/Azienda.
+- FIC: `FIC_MODE` (test=dry-run|live). `_emit_credit_invoice()` emette automaticamente dopo accredito, NON blocca pagamento/accredito, idempotente anti-duplicato, salva attempts/last_attempt/error/stato/doc_id/numero/importi. Metodo di pagamento aggiunto solo in live (FIC_PAYMENT_ACCOUNT_ID/METHOD, non hardcodato). Retry `/platform/invoices/{id}/retry-emit`.
+- Super Admin: `/platform/integrations/status` (no secret) + `/platform/credit-invoices` + tab "Fatture & Integrazioni" (Pagamento/Crediti/Fattura + Riprova emissione).
+- Testato: Stripe config_ok test, gate billing 400 con lista campi mancanti, SA list, retry 404, badge stato. Tutto resta TEST/dry-run; nessuna transazione reale.
+
 ## FASE 1 — Audit pagamenti LIVE (Stripe + Fatture in Cloud) — 2026-10 (sola lettura)
 - Stripe ricariche (`/credits/checkout`): modalità TEST. `STRIPE_MODE` presente in .env ma NON usato nel codice → modalità dipende solo dalla chiave. Flusso completo e robusto: IVA 22% exclusive EUR via TaxRate on-demand, metadata credit_purchase (org_id/purchase_id/importi), success/cancel su origin_url client, webhook firmato `/api/stripe/webhook`, accredito idempotente (`credit_purchase:{session}` + status paid, indice unico), nessun doppio accredito su retry, storico `credit_purchases`.
 - Fatture in Cloud: SOLO simulazione/dry-run. Webhook crea solo record fattura (`da_emettere`), non emette. `/fic/issue` forzato dry_run=True; `/fic/simulate` nessuna chiamata FIC/SDI. Manca flusso emissione reale su pagamento + metodo di pagamento nel payload. OAuth predisposto (token in `fic_settings`).

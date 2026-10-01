@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Coins, Save, Search, Users2, AlertTriangle, PlayCircle, Wallet, Plus, Minus, Building2, Settings2 } from "lucide-react";
+import { StatusBadge } from "@/components/crm";
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleString("it-IT") : "—");
-const TABS = [["servizi", "Servizi"], ["ricariche", "Ricariche"], ["org", "Organizzazioni"], ["migrazione", "Migrazione"]];
+const TABS = [["servizi", "Servizi"], ["ricariche", "Ricariche"], ["org", "Organizzazioni"], ["fatture", "Fatture & Integrazioni"], ["migrazione", "Migrazione"]];
 const REASON_PRESETS = ["Bonus commerciale", "Assistenza cliente", "Correzione saldo", "Promozione"];
 const REASON_LABELS = {
   manual_adjustment: "Rettifica Super Admin", signup_bonus: "Bonus registrazione",
@@ -369,6 +370,76 @@ function MigrationTab() {
     </div>
   );
 }
+function IntegrationBadge({ ok, mode }) {
+  const live = mode === "live";
+  const color = !ok ? "red" : (live ? "green" : "amber");
+  return <StatusBadge color={color}>{!ok ? "Non connesso / Errore" : (live ? "Produzione" : "Test")} · {ok ? "Connesso" : "—"}</StatusBadge>;
+}
+
+const FIC_STATO = {
+  da_emettere: ["amber", "Da emettere"], creato_test: ["blue", "Creata (test/dry-run)"],
+  emessa: ["green", "Emessa"], errore_emissione: ["red", "Errore"], simulato_test: ["blue", "Simulata (test)"],
+};
+
+function InvoicesTab() {
+  const [st, setSt] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      const [s, i] = await Promise.all([api.get("/platform/integrations/status"), api.get("/platform/credit-invoices")]);
+      setSt(s.data); setRows(i.data.invoices || []);
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const retry = async (id) => {
+    if (!id) return;
+    setBusy(id);
+    try { const { data } = await api.post(`/platform/invoices/${id}/retry-emit`); toast[data.fic_error ? "warning" : "success"](data.fic_error ? `Errore: ${data.fic_error}` : `Fattura ${data.fic_stato_documento}`); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(null); }
+  };
+  const eur = (n) => `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return (
+    <div data-testid="invoices-tab">
+      <div className="grid sm:grid-cols-2 gap-3 mb-5">
+        <div className="rounded-xl border border-slate-200 p-4" data-testid="stripe-status">
+          <div className="text-sm font-semibold text-slate-700 mb-1">Stripe</div>
+          {st ? <IntegrationBadge ok={st.stripe.config_ok} mode={st.stripe.mode} /> : <span className="text-xs text-slate-400">…</span>}
+          {st && !st.stripe.config_ok && <ul className="mt-2 text-xs text-red-600 list-disc pl-4">{st.stripe.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>}
+        </div>
+        <div className="rounded-xl border border-slate-200 p-4" data-testid="fic-status">
+          <div className="text-sm font-semibold text-slate-700 mb-1">Fatture in Cloud</div>
+          {st ? <IntegrationBadge ok={st.fic.connected} mode={st.fic.mode} /> : <span className="text-xs text-slate-400">…</span>}
+        </div>
+      </div>
+      <div className="text-sm font-semibold text-slate-700 mb-2">Ricariche crediti</div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full text-sm min-w-[820px]" data-testid="credit-invoices-table">
+          <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase">
+            <th className="text-left px-3 py-2.5">Organizzazione</th><th className="text-left px-3 py-2.5">Importo</th><th className="text-left px-3 py-2.5">Pagamento</th><th className="text-left px-3 py-2.5">Crediti</th><th className="text-left px-3 py-2.5">Fattura</th><th className="text-right px-3 py-2.5">Azioni</th>
+          </tr></thead>
+          <tbody>
+            {rows.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">Nessuna ricarica.</td></tr>}
+            {rows.map((r) => {
+              const fs = FIC_STATO[r.fic_stato] || ["gray", r.fic_stato];
+              return (
+                <tr key={r.purchase_id} className="border-t border-slate-100" data-testid={`ci-row-${r.purchase_id}`}>
+                  <td className="px-3 py-2.5 font-medium text-slate-800">{r.org_name || "—"}</td>
+                  <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{eur(r.amount_gross)} <span className="text-xs text-slate-400">({r.credits_total} cr)</span></td>
+                  <td className="px-3 py-2.5"><StatusBadge color={r.payment_status === "paid" ? "green" : "amber"}>{r.payment_status === "paid" ? "Pagato" : r.payment_status}</StatusBadge></td>
+                  <td className="px-3 py-2.5"><StatusBadge color={r.credits_granted ? "green" : "gray"}>{r.credits_granted ? "Accreditati" : "No"}</StatusBadge></td>
+                  <td className="px-3 py-2.5"><StatusBadge color={fs[0]}>{fs[1]}</StatusBadge>{r.fic_error && <div className="text-[11px] text-red-500 mt-0.5 max-w-[220px] truncate" title={r.fic_error}>{r.fic_error}</div>}</td>
+                  <td className="px-3 py-2.5 text-right">{(r.fic_stato === "errore_emissione" || r.fic_stato === "da_emettere") && r.invoice_id ? <Button size="sm" variant="outline" disabled={busy === r.invoice_id} onClick={() => retry(r.invoice_id)} data-testid={`ci-retry-${r.purchase_id}`}>{busy === r.invoice_id ? "…" : "Riprova emissione"}</Button> : <span className="text-xs text-slate-300">—</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 
 export default function PlatformCredits() {
   const [tab, setTab] = useState("servizi");
@@ -385,6 +456,7 @@ export default function PlatformCredits() {
         {tab === "servizi" && <ServicesTab />}
         {tab === "ricariche" && <PackagesTab />}
         {tab === "org" && <OrgsTab />}
+        {tab === "fatture" && <InvoicesTab />}
         {tab === "migrazione" && <MigrationTab />}
       </div>
     </div>
