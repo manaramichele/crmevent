@@ -1,19 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "@/lib/api";
-import { AttentionRow } from "@/components/PipelineAttention";
+import { AttentionRow, CriticalConfirmDialog, useAttention } from "@/components/PipelineAttention";
 import { ArrowLeft, CalendarClock, CheckCircle2 } from "lucide-react";
 
 export default function PipelineAttentionPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-
-  const load = useCallback(async () => {
-    try { const { data } = await api.get("/pipeline/attention", { params: { limit: 1000 } }); setData(data); }
-    catch { setData({ items: [], total: 0 }); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
+  const { data, persons, requestComplete, assign, confirmItem, setConfirmItem, confirmComplete } = useAttention(1000);
   const openItem = (it) => navigate(`/eventi/${it.event_id}/pipeline`);
 
   return (
@@ -32,9 +23,10 @@ export default function PipelineAttentionPage() {
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl p-3 divide-y divide-slate-50">
-          {data.items.map((it) => <AttentionRow key={it.task_id} it={it} onOpen={openItem} />)}
+          {data.items.map((it) => <AttentionRow key={it.task_id} it={it} persons={persons} onOpen={openItem} onComplete={requestComplete} onAssign={assign} />)}
         </div>
       )}
+      <CriticalConfirmDialog item={confirmItem} onCancel={() => setConfirmItem(null)} onConfirm={confirmComplete} />
     </div>
   );
 }

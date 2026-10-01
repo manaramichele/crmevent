@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
+import ActivationGate from "@/components/ActivationGate";
 import { RechargeDialog } from "@/components/CreditsSection";
 
 const ORG_NAV = [
@@ -352,6 +353,7 @@ export default function Layout({ children }) {
         </main>
       </div>
       <SupportChat />
+      <ActivationGate />
     </div>
   );
 }

@@ -20,7 +20,12 @@ import AvailabilityDialog from "@/components/AvailabilityDialog";
 import { RechargeDialog } from "@/components/CreditsSection";
 
 const STATO = { attivo: "green", pianificato: "tiffany", concluso: "gray", annullato: "red" };
-const STATO_LABEL = { attivo: "Attivo", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
+const STATO_LABEL = { attivo: "In corso", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
+const FASE_EDIT_OPTIONS = [
+  { value: "pianificato", label: "Pianificato" },
+  { value: "concluso", label: "Concluso" },
+  { value: "annullato", label: "Annullato" },
+];
 
 const EMPTY = { nome: "", tipologia: "", descrizione: "", immagine_url: "", pdf_url: "", file_url: "", gpx_url: "", distanza: null, url_esterno: "", google_maps_url: "" };
 
@@ -238,7 +243,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
 }
 
 const EV_STATE = {
-  preparazione: ["In preparazione", "bg-slate-100 text-slate-600"],
+  preparazione: ["Da attivare", "bg-slate-100 text-slate-600"],
   attivo: ["Attivo", "bg-emerald-50 text-emerald-700"],
   sospeso: ["Sospeso", "bg-red-50 text-red-700"],
   concluso: ["Concluso", "bg-slate-100 text-slate-500"],
@@ -304,7 +309,7 @@ export default function Events() {
     { name: "telefono", label: "Telefono", type: "tel" },
     { name: "partecipanti_previsti", label: "Partecipanti previsti", type: "number" },
     { name: "budget", label: "Budget (€)", type: "number" },
-    { name: "stato", label: "Stato", keepOrder: true, type: "select", options: Object.keys(STATO_LABEL).map((v) => ({ value: v, label: STATO_LABEL[v] })) },
+    { name: "stato", label: "Fase evento", keepOrder: true, type: "select", options: FASE_EDIT_OPTIONS },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
@@ -323,15 +328,15 @@ export default function Events() {
         </div>
       );
     } },
-    { key: "stato", label: "Stato", render: (r) => <StatusBadge color={STATO[r.stato] || "gray"}>{STATO_LABEL[r.stato] || r.stato}</StatusBadge> },
-    { key: "credit_state", label: "Attivazione", render: (r) => {
+    { key: "stato", label: "Fase", render: (r) => <StatusBadge color={STATO[r.stato] || "gray"}>{STATO_LABEL[r.stato] || r.stato}</StatusBadge> },
+    { key: "credit_state", label: "CRMEvent", render: (r) => {
       const s = eventDisplayState(r);
       const [lbl, cls] = EV_STATE[s] || EV_STATE.preparazione;
       const end = r.data_fine || r.data_inizio;
       return (
         <button onClick={() => setCreditFor(r.id)} data-testid={`event-credit-badge-${r.id}`} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${cls} hover:opacity-80 transition`}>
           <Coins className="w-3.5 h-3.5" />
-          {s === "attivo" && end ? `Attivo · fino al ${dmyEv(end)}` : s === "preparazione" ? "Attiva evento · 30" : lbl}
+          {s === "attivo" && end ? `Attivo · fino al ${dmyEv(end)}` : lbl}
         </button>
       );
     } },

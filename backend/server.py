@@ -956,6 +956,8 @@ def crud_routes(path, coll, model, org_scoped=True):
         if coll == "events":
             await _assert_can_create_event(user["org_id"])
             data.setdefault("credit_state", "preparazione")
+            if data.get("stato") == "attivo":
+                data["stato"] = "pianificato"  # 'Attivo' si ottiene solo via attivazione a crediti
         else:
             await _assert_org_operational(user["org_id"])
             if data.get("evento_id"):
@@ -983,6 +985,8 @@ def crud_routes(path, coll, model, org_scoped=True):
                     await _assert_event_operational(user["org_id"], existing["evento_id"])
         old_ev = None
         if coll == "events":
+            if clean.get("stato") == "attivo":
+                raise HTTPException(status_code=400, detail="Lo stato 'Attivo' si ottiene solo attivando l'evento a crediti (Attiva evento · crediti).")
             old_ev = await db[coll].find_one(oq(user, id=item_id), {"_id": 0, "data_inizio": 1, "data_fine": 1})
         res = await db[coll].update_one(oq(user, id=item_id), {"$set": clean})
         if res.matched_count == 0:
@@ -2425,6 +2429,7 @@ async def sync_event(event_id: str, user: dict = Depends(require_admin)):
     e = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not e:
         raise HTTPException(status_code=404, detail="Evento non trovato")
+    await _assert_event_operational(user["org_id"], event_id)
     link = f"{APP_URL}/eventi?id={event_id}"
     desc = (e.get("descrizione") or "") + f"\n\nScheda evento: {link}"
     loc = ", ".join([x for x in [e.get("localita"), e.get("indirizzo"), e.get("citta")] if x])
@@ -4234,6 +4239,7 @@ class BriefingPublishIn(BaseModel):
 
 @api.post("/events/{event_id}/briefing-versions")
 async def publish_briefing(event_id: str, body: BriefingPublishIn, admin: dict = Depends(require_admin)):
+    await _assert_event_operational(admin["org_id"], event_id)
     data = await _build_briefing(event_id, admin["org_id"])
     last = await db.briefing_versions.find_one(oq(admin, evento_id=event_id), sort=[("versione", -1)])
     versione = (last.get("versione", 0) + 1) if last else 1
@@ -5220,6 +5226,8 @@ async def social_post_get(post_id: str, user: dict = Depends(require_admin)):
 
 @api.post("/social/posts")
 async def social_post_create(body: SocialPostIn, user: dict = Depends(require_admin)):
+    if body.event_id:
+        await _assert_event_operational(user["org_id"], body.event_id)
     data = _sanitize_post(user, body)
     data.update({"org_id": user["org_id"], "status": "draft", "platform": data.get("platform") or "instagram",
                  "source": "manual", "created_by": user.get("user_id"),
@@ -6409,6 +6417,8 @@ async def _record_generation(user: dict, gen_type: str, payload: dict, result) -
 
 @api.post("/social/generate")
 async def social_generate(body: SocialGenerateIn, user: dict = Depends(require_admin)):
+    if body.event_id:
+        await _assert_event_operational(user["org_id"], body.event_id)
     settings = await _get_social_settings(user["org_id"])
     event_ctx = None
     if body.event_id:
@@ -6455,6 +6465,8 @@ async def social_regenerate(post_id: str, body: SocialGenerateIn, user: dict = D
 
 @api.post("/social/plan/generate")
 async def social_plan_generate(body: SocialPlanIn, user: dict = Depends(require_admin)):
+    if body.event_id:
+        await _assert_event_operational(user["org_id"], body.event_id)
     settings = await _get_social_settings(user["org_id"])
     event_ctx = await _event_public_context(body.event_id, user["org_id"]) if body.event_id else None
     dates = _plan_dates(body.date_from, body.date_to, body.posts_per_week, settings.get("preferred_times"))
@@ -6515,6 +6527,8 @@ async def social_media_upload(file: UploadFile = File(...), name: str = Form(Non
                               category: str = Form(None), event_id: str = Form(None),
                               description: str = Form(None), tags: str = Form(None),
                               user: dict = Depends(require_admin)):
+    if event_id:
+        await _assert_event_operational(user["org_id"], event_id)
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
     fid = new_id()
     path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/{fid}.{ext}"
@@ -7240,6 +7254,7 @@ async def avail_generate_link(event_id: str, user: dict = Depends(require_admin)
     event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not event:
         raise HTTPException(status_code=404, detail="Evento non trovato")
+    await _assert_event_operational(user["org_id"], event_id)
     await db.avail_links.update_many({"org_id": user["org_id"], "evento_id": event_id, "active": True},
                                      {"$set": {"active": False, "revoked_at": now_iso()}})
     code = secrets.token_urlsafe(24)
@@ -7607,6 +7622,7 @@ async def avail_confirm_bulk(event_id: str, body: BulkConfirm, user: dict = Depe
     event = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not event:
         raise HTTPException(status_code=404, detail="Evento non trovato")
+    await _assert_event_operational(user["org_id"], event_id)
     org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0}) or {}
     confirmed, emailed = 0, 0
     for aid in (body.ids or []):
@@ -8998,9 +9014,13 @@ async def _assert_event_operational(org_id: str, event_id: str):
         return
     st = ev.get("credit_state")
     if st == "preparazione":
-        raise HTTPException(status_code=403, detail="Attiva l'evento per gestire le sue funzioni operative.")
+        raise HTTPException(status_code=403, detail={
+            "code": "event_not_operational", "credit_state": st, "event_id": event_id,
+            "message": "Attiva l'evento per gestire le sue funzioni operative."})
     if st == "sospeso":
-        raise HTTPException(status_code=403, detail="Evento sospeso per crediti insufficienti. Ricarica e riattiva l'evento per modificarlo.")
+        raise HTTPException(status_code=403, detail={
+            "code": "event_not_operational", "credit_state": st, "event_id": event_id,
+            "message": "Evento sospeso per crediti insufficienti. Ricarica e riattiva l'evento per modificarlo."})
 
 
 async def _charge_event_activation(ev: dict, user_id: Optional[str]) -> dict:
