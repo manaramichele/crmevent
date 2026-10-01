@@ -1581,7 +1581,7 @@ async def search(q: str, admin: dict = Depends(require_admin)):
 # ---------------- settings ----------------
 def default_settings(org_id="global"):
     return {"id": org_id,
-            "tipologie_evento": ["Fiera", "Congresso", "Concerto", "Festival", "Conferenza", "Workshop", "Gala"],
+            "tipologie_evento": ["Fiera", "Congresso", "Concerto", "Festival", "Conferenza", "Workshop", "Gala", "Running", "Trail", "Triathlon", "Nuoto", "Ciclismo", "Tennis"],
             "settori": ["Tecnologia", "Food & Beverage", "Moda", "Automotive", "Finanza", "Media", "No Profit"],
             "tipi_azienda": ["Azienda", "Espositore", "Fornitore", "Istituzione", "Partner", "Prospect", "Sponsor"],
             "ruoli_staff": ["Coordinatore", "Hostess", "Tecnico", "Sicurezza", "Accoglienza", "Logistica"],

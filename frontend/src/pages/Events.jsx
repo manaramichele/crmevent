@@ -28,6 +28,13 @@ const FASE_EDIT_OPTIONS = [
 ];
 
 const EMPTY = { nome: "", tipologia: "", descrizione: "", immagine_url: "", pdf_url: "", file_url: "", gpx_url: "", distanza: null, url_esterno: "", google_maps_url: "" };
+const STD_TIPOLOGIE = ["Concerto", "Conferenza", "Congresso", "Festival", "Fiera", "Gala", "Workshop", "Running", "Trail", "Triathlon", "Nuoto", "Ciclismo", "Tennis"];
+const mergeStd = (std, extra) => {
+  const seen = new Set(std.map((s) => s.trim().toLowerCase()));
+  const out = [...std];
+  (extra || []).forEach((e) => { const k = String(e || "").trim().toLowerCase(); if (e && !seen.has(k)) { seen.add(k); out.push(e); } });
+  return out;
+};
 
 function haversine(a, b) {
   const R = 6371, toRad = (x) => (x * Math.PI) / 180;
@@ -288,7 +295,7 @@ export default function Events() {
     { name: "nome", label: "Nome evento", required: true, full: true },
     { name: "logo_url", label: "Logo evento (PNG/JPG)", type: "image", full: true },
     { name: "edizione", label: "Edizione" },
-    { name: "tipologia", label: "Tipologia", type: "select", options: toOptions(settings.tipologie_evento) },
+    { name: "tipologia", label: "Tipologia", type: "select", settingKey: "tipologie_evento", addLabel: "Aggiungi tipologia", options: mergeStd(STD_TIPOLOGIE, settings.tipologie_evento) },
     { name: "data_inizio_allestimento", label: "Data inizio allestimento (facoltativa)", type: "date" },
     { name: "data_inizio", label: "Data inizio", type: "date" },
     { name: "data_fine", label: "Data fine", type: "date" },

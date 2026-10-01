@@ -1,5 +1,11 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Tipologia evento personalizzabile (riuso sistema opzioni org) ✅
+- Campo "Tipologia" dell'evento ora usa il componente riutilizzabile `SettingSelect` (inline "+ Aggiungi tipologia", dedupe case-insensitive, salvataggio per-org su `settings.tipologie_evento`). Selezione automatica della nuova voce, disponibile per gli eventi successivi, isolata per org_id.
+- Aggiunte tipologie sport standard CRMEvent (Running, Trail, Triathlon, Nuoto, Ciclismo, Tennis) ai default + mostrate sempre a tutte le org via union `mergeStd` (nessuna migrazione distruttiva).
+- Gestione (rinomina/elimina con controllo utilizzo via `USAGE_MAP`) già disponibile in Impostazioni (`/impostazioni`). NOTA: sistema centralizzato opzioni (SettingSelect + pagina Impostazioni + USAGE_MAP) già presente e riutilizzato; non è stata creata logica parallela.
+
+
 ## 2026-06 — Azioni rapide attenzione + Guardia attivazione evento ✅ (backend curl 100%)
 **Parte A — Azioni rapide "Cosa richiede attenzione"** (Dashboard + /pipeline/attenzione):
 - ✓ Completa (conferma extra solo per attività Critiche), Assegna/Cambia responsabile (popover persone org), aggiornamento immediato lista+conteggi senza reload, toast "Attività completata". Se un'attività era in lista solo per "senza responsabile", dopo l'assegnazione sparisce. Nessun consumo crediti. Stessi permessi della modifica Pipeline (`PUT /pipeline/tasks`). Verificato: completamento rimuove dalla lista (102→101).
