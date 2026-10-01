@@ -714,3 +714,11 @@ Task 2 — Creatività manuale:
 - Nuova collezione event_pipelines {org_id,event_id,active,activated_at,activation_cost,template_key}. Modello PipelineActivateIn {template_key}.
 - Riuso totale del wallet/catalogo/ledger esistenti. Nessuna modifica a Stripe/FIC/altri servizi. Verificato e2e in preview (status→activate -20→doppia attivazione idempotente→ledger). UI e logica attività = FASE 2/3/4.
 - PENDENTE da richiesta precedente: "Utenti e accessi" FASE 2 (multiutenza nell'Account) + sync Brevo su accettazione invito.
+
+## 2026-06 — Pipeline Evento Pro · FASE 2 (interfaccia)
+- Pagina /eventi/:id/pipeline (EventPipeline.jsx) + azione "Pipeline" (icona Rocket) nella lista Eventi. Visibile anche a servizio non attivo.
+- Intro (non attiva): testo + "Attivazione Pipeline Evento Pro: XX crediti" (da GET status) + CTA. Dialog conferma con crediti disponibili/costo/saldo-dopo; se insufficiente → messaggio + Ricarica (RechargeDialog esistente). Attivazione via POST activate (nessuna logica crediti nel FE). Saldo aggiornato dopo attivazione.
+- Dashboard: "Preparazione evento XX%" (completate/totale), barra, 4 indicatori Completate/Da fare/In ritardo/Critiche (0% se nessuna attività, no div/0).
+- Categorie: 12 default seminate all'attivazione; aggiungi/rinomina/elimina (409 se contiene attività → conferma esplicita).
+- Attività: CRUD completo + completa/riapri/duplica. Campi: titolo, descrizione, categoria, stato (da_fare/in_corso/in_attesa/completata), priorità (normale/importante/critica), scadenza, responsabile (persona), azienda, persona, costo previsto/effettivo, note, allegati(campo). Filtri per categoria/stato/priorità. "In ritardo" = condizione calcolata (scadenza<oggi e non completata), non persistita.
+- Backend: endpoint /events/{id}/pipeline/categories (CRUD) e /pipeline/tasks (CRUD + duplicate), stats server-side, multi-tenant via oq(). Verificato e2e + UI screenshot. FASE 3 (modelli Running/generico + scadenze relative) e FASE 4 (integrazioni + duplicazione edizioni) ancora da fare.

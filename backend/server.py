@@ -9213,8 +9213,172 @@ async def pipeline_activate(event_id: str, body: PipelineActivateIn, user: dict 
                                              "active": True, "activated_at": now, "activation_cost": cfg["cost"],
                                              "template_key": body.template_key, "created_at": now, "updated_at": now})
     await record_audit(user, "pipeline_activate", org_id=org_id, meta={"event_id": event_id, "cost": cfg["cost"]})
+    await _seed_pipeline_categories(org_id, event_id)
     ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     return await _pipeline_status_payload(org_id, ev)
+
+
+PIPELINE_DEFAULT_CATEGORIES = ["Autorizzazioni", "Percorso", "Allestimenti", "Staff e volontari",
+    "Sicurezza", "Iscrizioni", "Materiali", "Comunicazione", "Sponsor e partner", "Merchandising",
+    "Logistica", "Post evento"]
+PIPELINE_STATI = ["da_fare", "in_corso", "in_attesa", "completata"]
+PIPELINE_PRIORITA = ["normale", "importante", "critica"]
+
+
+async def _seed_pipeline_categories(org_id, event_id):
+    if await db.pipeline_categories.count_documents({"org_id": org_id, "event_id": event_id}):
+        return
+    now = now_iso()
+    await db.pipeline_categories.insert_many([
+        {"id": new_id(), "org_id": org_id, "event_id": event_id, "name": n, "order": i,
+         "created_at": now, "updated_at": now} for i, n in enumerate(PIPELINE_DEFAULT_CATEGORIES)])
+
+
+def _task_is_late(t) -> bool:
+    if t.get("stato") == "completata":
+        return False
+    sc = t.get("scadenza")
+    try:
+        return bool(sc and _date.fromisoformat(sc[:10]) < datetime.now(timezone.utc).date())
+    except ValueError:
+        return False
+
+
+def _serialize_task(t: dict) -> dict:
+    t = {k: v for k, v in t.items() if k != "_id"}
+    t["late"] = _task_is_late(t)
+    return t
+
+
+async def _pipeline_stats(org_id, event_id) -> dict:
+    rows = await db.pipeline_tasks.find({"org_id": org_id, "event_id": event_id}, {"_id": 0}).to_list(5000)
+    total = len(rows)
+    completate = sum(1 for t in rows if t.get("stato") == "completata")
+    in_ritardo = sum(1 for t in rows if _task_is_late(t))
+    critiche = sum(1 for t in rows if t.get("priorita") == "critica" and t.get("stato") != "completata")
+    return {"total": total, "completate": completate, "da_fare": total - completate,
+            "in_ritardo": in_ritardo, "critiche": critiche,
+            "percent": (round(completate / total * 100) if total else 0)}
+
+
+class PipelineCategoryIn(BaseModel):
+    name: str
+
+
+class PipelineTaskIn(BaseModel):
+    titolo: str
+    descrizione: Optional[str] = None
+    categoria_id: Optional[str] = None
+    stato: Optional[str] = "da_fare"
+    priorita: Optional[str] = "normale"
+    scadenza: Optional[str] = None
+    responsabile_id: Optional[str] = None
+    azienda_id: Optional[str] = None
+    persona_id: Optional[str] = None
+    costo_previsto: Optional[float] = None
+    costo_effettivo: Optional[float] = None
+    note: Optional[str] = None
+    allegati: Optional[list] = None
+
+
+class PipelineTaskUpd(BaseModel):
+    titolo: Optional[str] = None
+    descrizione: Optional[str] = None
+    categoria_id: Optional[str] = None
+    stato: Optional[str] = None
+    priorita: Optional[str] = None
+    scadenza: Optional[str] = None
+    responsabile_id: Optional[str] = None
+    azienda_id: Optional[str] = None
+    persona_id: Optional[str] = None
+    costo_previsto: Optional[float] = None
+    costo_effettivo: Optional[float] = None
+    note: Optional[str] = None
+    allegati: Optional[list] = None
+
+
+@api.get("/events/{event_id}/pipeline/categories")
+async def pipeline_categories_list(event_id: str, user: dict = Depends(require_admin)):
+    return await db.pipeline_categories.find(oq(user, event_id=event_id), {"_id": 0}).sort("order", 1).to_list(500)
+
+
+@api.post("/events/{event_id}/pipeline/categories")
+async def pipeline_category_create(event_id: str, body: PipelineCategoryIn, user: dict = Depends(require_admin)):
+    n = (body.name or "").strip()
+    if not n:
+        raise HTTPException(status_code=400, detail="Nome categoria obbligatorio")
+    cnt = await db.pipeline_categories.count_documents(oq(user, event_id=event_id))
+    doc = {"id": new_id(), "org_id": user["org_id"], "event_id": event_id, "name": n, "order": cnt,
+           "created_at": now_iso(), "updated_at": now_iso()}
+    await db.pipeline_categories.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.put("/pipeline/categories/{cat_id}")
+async def pipeline_category_update(cat_id: str, body: PipelineCategoryIn, user: dict = Depends(require_admin)):
+    r = await db.pipeline_categories.update_one(oq(user, id=cat_id),
+                                                {"$set": {"name": (body.name or "").strip(), "updated_at": now_iso()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Categoria non trovata")
+    return {"ok": True}
+
+
+@api.delete("/pipeline/categories/{cat_id}")
+async def pipeline_category_delete(cat_id: str, confirm: bool = False, user: dict = Depends(require_admin)):
+    cat = await db.pipeline_categories.find_one(oq(user, id=cat_id), {"_id": 0})
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria non trovata")
+    n = await db.pipeline_tasks.count_documents(oq(user, categoria_id=cat_id))
+    if n and not confirm:
+        raise HTTPException(status_code=409, detail=f"La categoria contiene {n} attività. Conferma l'eliminazione.")
+    await db.pipeline_tasks.delete_many(oq(user, categoria_id=cat_id))
+    await db.pipeline_categories.delete_one(oq(user, id=cat_id))
+    return {"ok": True, "deleted_tasks": n}
+
+
+@api.get("/events/{event_id}/pipeline/tasks")
+async def pipeline_tasks_list(event_id: str, user: dict = Depends(require_admin)):
+    rows = await db.pipeline_tasks.find(oq(user, event_id=event_id), {"_id": 0}).sort("created_at", 1).to_list(5000)
+    return {"tasks": [_serialize_task(t) for t in rows], "stats": await _pipeline_stats(user["org_id"], event_id)}
+
+
+@api.post("/events/{event_id}/pipeline/tasks")
+async def pipeline_task_create(event_id: str, body: PipelineTaskIn, user: dict = Depends(require_admin)):
+    if not (body.titolo or "").strip():
+        raise HTTPException(status_code=400, detail="Titolo obbligatorio")
+    data = body.model_dump()
+    data.update({"id": new_id(), "org_id": user["org_id"], "event_id": event_id,
+                 "created_at": now_iso(), "updated_at": now_iso()})
+    await db.pipeline_tasks.insert_one(data)
+    return _serialize_task(data)
+
+
+@api.put("/pipeline/tasks/{task_id}")
+async def pipeline_task_update(task_id: str, body: PipelineTaskUpd, user: dict = Depends(require_admin)):
+    clean = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    clean["updated_at"] = now_iso()
+    r = await db.pipeline_tasks.update_one(oq(user, id=task_id), {"$set": clean})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Attività non trovata")
+    t = await db.pipeline_tasks.find_one(oq(user, id=task_id), {"_id": 0})
+    return _serialize_task(t)
+
+
+@api.delete("/pipeline/tasks/{task_id}")
+async def pipeline_task_delete(task_id: str, user: dict = Depends(require_admin)):
+    await db.pipeline_tasks.delete_one(oq(user, id=task_id))
+    return {"ok": True}
+
+
+@api.post("/pipeline/tasks/{task_id}/duplicate")
+async def pipeline_task_duplicate(task_id: str, user: dict = Depends(require_admin)):
+    t = await db.pipeline_tasks.find_one(oq(user, id=task_id), {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Attività non trovata")
+    t.update({"id": new_id(), "titolo": f"{t.get('titolo')} (copia)", "stato": "da_fare",
+              "created_at": now_iso(), "updated_at": now_iso()})
+    await db.pipeline_tasks.insert_one(t)
+    return _serialize_task(t)
 
 
 @api.get("/platform/events/migration-dryrun")

@@ -40,6 +40,7 @@ import Social from "@/pages/Social";
 import SocialCalendar from "@/pages/SocialCalendar";
 import SocialSettings from "@/pages/SocialSettings";
 import MarketingBrevo from "@/pages/MarketingBrevo";
+import EventPipeline from "@/pages/EventPipeline";
 import LeadFinder from "@/pages/LeadFinder";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
@@ -117,6 +118,7 @@ function Shell() {
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />
         <Route path="/eventi" element={<Protected><AdminOnly><Events /></AdminOnly></Protected>} />
         <Route path="/eventi/:id/briefing" element={<Protected><AdminOnly><Briefing /></AdminOnly></Protected>} />
+        <Route path="/eventi/:id/pipeline" element={<Protected><AdminOnly><EventPipeline /></AdminOnly></Protected>} />
         <Route path="/aziende" element={<Protected><AdminOnly><Companies /></AdminOnly></Protected>} />
         <Route path="/persone" element={<Protected><AdminOnly><Persons /></AdminOnly></Protected>} />
         <Route path="/ospitalita" element={<Protected><AdminOnly><Hospitality /></AdminOnly></Protected>} />

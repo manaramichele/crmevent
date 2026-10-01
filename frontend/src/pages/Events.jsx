@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { EventCreditDialog } from "@/components/EventCreditDialog";
-import { Coins } from "lucide-react";
+import { Coins, Rocket } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList } from "lucide-react";
 import L from "leaflet";
@@ -342,6 +342,7 @@ export default function Events() {
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Crediti evento (attiva / stato)" onClick={() => setCreditFor(row.id)} data-testid={`event-credits-${row.id}`}><Coins className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Raccolta disponibilità" onClick={() => setAvailFor(row.id)} data-testid={`availability-${row.id}`}><ClipboardList className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Briefing evento" onClick={() => navigate(`/eventi/${row.id}/briefing`)} data-testid={`briefing-${row.id}`}><FileText className="w-4 h-4" /></Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Pipeline evento" onClick={() => navigate(`/eventi/${row.id}/pipeline`)} data-testid={`pipeline-${row.id}`}><Rocket className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Mappe & Percorsi" onClick={() => setMapsFor(row.id)} data-testid={`maps-${row.id}`}><MapIcon className="w-4 h-4" /></Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Aggiungi a Google Calendar" onClick={() => syncCal(row)} data-testid={`calsync-${row.id}`}><CalendarPlus className="w-4 h-4" /></Button>
     </>
