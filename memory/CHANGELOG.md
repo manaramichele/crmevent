@@ -1,5 +1,14 @@
 # CRMEvent — Changelog
 
+## 2026-06 — Pipeline Evento Pro · FASE 3 (Modelli & scadenze automatiche) ✅ (frontend testing 100%, backend via curl)
+- **Super Admin → "Modelli Pipeline"** (nuova voce menu, `/piattaforma/modelli-pipeline`, `PipelineTemplates.jsx`): CRUD modelli (nome, codice, descrizione, attivo/disattivo, ordine) + CRUD attività del modello (titolo, descrizione, categoria, giorni_offset relativi all'evento, priorità, ordine, attivo, `crm_section` opzionale per FASE 4). Architettura data-driven: nuovi tipi (Trail/Triathlon/...) aggiungibili senza toccare codice.
+- **Seed iniziale idempotente** (`backend/pipeline_seed.py`): modello **Running** (114 attività su tutte le 12 categorie standard) e **Evento generico** (32 attività). Le modifiche del Super Admin non vengono mai sovrascritte.
+- **Flusso organizzatore** (`EventPipeline.jsx`): dopo l'attivazione (addebito 20 crediti invariato) step "Che tipo di evento?" con i modelli attivi + anteprima "Verranno create N attività…" → "Crea Pipeline". Pipeline già attive senza modello → "Scegli un modello per iniziare". **Cambia modello** elimina+rigenera con warning. **NESSUN consumo crediti** su generate/cambio modello.
+- **Scadenze automatiche**: `data_scadenza = data_inizio_evento + giorni_offset`. Cambio data evento → banner + dialog "Mantieni / Ricalcola scadenze" (`recalculate-deadlines` / `keep-deadlines`), ricalcolo mantiene l'offset e **salta le attività con `due_date_overridden`** (scadenza modificata a mano, impostata automaticamente al PUT del task).
+- **Endpoint**: `GET/POST/PUT/DELETE /api/platform/pipeline-templates[/{key}][/tasks]`, `PUT/DELETE /api/platform/pipeline-template-tasks/{id}`, `GET /api/events/{id}/pipeline/templates`, `POST /api/events/{id}/pipeline/generate` (409 se attività esistenti senza confirm), `POST .../recalculate-deadlines`, `POST .../keep-deadlines`. Collezioni: `pipeline_templates`, `pipeline_template_tasks`.
+- **Test**: backend curl (templates, activate, generate offset -180/0/+15 corretti, no doppio addebito, 409→confirm, date_changed, recalc con protezione override, SA CRUD) + testing agent frontend 100% (iteration_37). Stato QA: ev_qa_1 ora con pipeline generico, saldo org 180.
+
+
 ## 2026-06 — Sistema a Crediti FASE B (UI + catalogo ricariche + motore) ✅ (frontend testing 100%)
 - **Area Account · "Crediti CRMEvent"** (`CreditsSection.jsx`): saldo, "I crediti non scadono", soglia saldo basso, banner saldo basso, storico movimenti paginato (data/causale-servizio/evento/±crediti/saldo), pulsante "Ricarica crediti".
 - **Finestra "Ricarica crediti"**: 6 tagli letti da backend (`/api/credits/packages`), bonus e crediti totali evidenziati, bottoni acquisto DISABILITATI ("Non disponibile in preview"), "Contattaci" + "Ricarica automatica — prossimamente". Nessun pagamento reale.
