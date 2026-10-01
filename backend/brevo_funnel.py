@@ -342,6 +342,55 @@ WEBHOOK_EVENTS = ["delivered", "opened", "uniqueOpened", "click", "hardBounce",
                   "softBounce", "blocked", "spam", "unsubscribed", "invalid", "deferred", "error"]
 
 
+# ===================== Utenti registrati CRMEvent (lista separata dai Lead) =====================
+REGISTERED_LIST_NAME = "CRMEvent · Utenti registrati"
+# Attributi sincronizzati per gli utenti registrati (utili ai funnel di onboarding). Nessun dato sensibile.
+USER_ATTRIBUTES = ["NOME", "COGNOME", "ORGANIZZAZIONE", "DATA_REGISTRAZIONE",
+                   "CREDITI_DISPONIBILI", "EVENTI_CREATI", "EVENTI_ATTIVATI", "ULTIMO_ACCESSO"]
+
+
+async def ensure_user_attributes():
+    """Crea gli attributi contatto per gli utenti registrati su Brevo (idempotente)."""
+    for name in ["NOME", "COGNOME", "ORGANIZZAZIONE", "DATA_REGISTRAZIONE", "ULTIMO_ACCESSO"]:
+        await _request("POST", f"/v3/contactAttributes/normal/{name}", json={"type": "text"})
+    for name in ["CREDITI_DISPONIBILI", "EVENTI_CREATI", "EVENTI_ATTIVATI"]:
+        await _request("POST", f"/v3/contactAttributes/normal/{name}", json={"type": "float"})
+
+
+async def ensure_registered_list():
+    """Trova o crea la lista 'CRMEvent · Utenti registrati'. Ritorna {ok, id, name, created, error}."""
+    lid = await _find_list_by_name(REGISTERED_LIST_NAME)
+    if lid:
+        return {"ok": True, "id": lid, "name": REGISTERED_LIST_NAME, "created": False, "error": None}
+    folder_id = await _ensure_folder()
+    if not folder_id:
+        return {"ok": False, "id": None, "name": REGISTERED_LIST_NAME, "created": False,
+                "error": "Impossibile creare/trovare la cartella su Brevo"}
+    sc, data, err = await _request("POST", "/v3/contacts/lists", json={"name": REGISTERED_LIST_NAME, "folderId": folder_id})
+    nid = (data or {}).get("id") if isinstance(data, dict) else None
+    return {"ok": sc in (200, 201) and bool(nid), "id": nid, "name": REGISTERED_LIST_NAME, "created": True, "error": err}
+
+
+async def list_contact_count(list_id):
+    """Numero di contatti nella lista (totalSubscribers)."""
+    sc, data, err = await _request("GET", f"/v3/contacts/lists/{int(list_id)}")
+    if sc == 200 and isinstance(data, dict):
+        return data.get("totalSubscribers", data.get("uniqueSubscribers"))
+    return None
+
+
+async def upsert_registered_contact(*, email, attributes: dict, list_ids=None):
+    """Crea/aggiorna (updateEnabled) un contatto per email senza duplicati e lo aggiunge alla lista
+    Utenti registrati. Aggiorna SOLO gli attributi forniti: SOURCE/FUNNEL_STATUS/origine restano intatti.
+    Non rimuove il contatto da altre liste (es. Lead)."""
+    attrs = {k: v for k, v in (attributes or {}).items() if v is not None}
+    body = {"email": email, "updateEnabled": True, "attributes": attrs}
+    if list_ids:
+        body["listIds"] = [int(x) for x in list_ids]
+    sc, data, err = await _request("POST", "/v3/contacts", json=body)
+    return {"ok": sc in (200, 201, 204), "status": sc, "error": err}
+
+
 async def register_webhook(callback_url: str):
     """Create or update the transactional Brevo webhook for the given callback URL (idempotent).
     The callback URL (which contains the secret token) is never returned to the caller."""

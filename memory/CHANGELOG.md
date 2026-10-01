@@ -692,3 +692,12 @@ Task 2 — Creatività manuale:
 - Regola saldo minimo globale invariata (saldo 0 = sola consultazione, ripristino automatico dopo ricarica).
 - UI: EventCreditDialog con rami preparazione(30+20/mese)/attivo(prossimo addebito)/sospeso(riattiva 20 o ricarica)/concluso. Colonna Eventi "Attiva evento · 30" / "Attivo · fino al.." / "Sospeso" / "Concluso".
 - E2e backend verificato (attivazione 30, mantenimento 20 via motore, sospensione, riattivazione, no-charge oltre data evento, ledger). UI dialog + catalogo SA verificati via screenshot. Demo org pristina (saldo 100).
+
+## 2026-06 — Brevo: separazione Lead / Utenti registrati (solo sync, no funnel)
+- Nuova lista Brevo "CRMEvent · Utenti registrati" (brevo_funnel.ensure_registered_list) nella cartella CRMEvent, separata dai Lead. List ID salvato in settings (brevo_registered_list_id).
+- Sync automatica all'atto della registrazione (register-organization + complete-organization): upsert per email senza duplicati (updateEnabled), aggiunta alla lista Utenti registrati, origine/SOURCE/FUNNEL_STATUS preservati (nessuna rimozione dalla lista Lead). Best-effort, nessuna email inviata.
+- Attributi sincronizzati: NOME, COGNOME, ORGANIZZAZIONE, DATA_REGISTRAZIONE, CREDITI_DISPONIBILI, EVENTI_CREATI, EVENTI_ATTIVATI, ULTIMO_ACCESSO (nessun dato sensibile). CRMEvent resta fonte di verità.
+- Salvati su user: nome, cognome, registered_at. Endpoint Super Admin GET /api/platform/brevo/registered-users (list_id, contatti, ultima sync, attributi).
+- UI Super Admin: pagina /marketing/brevo ("Email & Brevo", voce di menu nuova) con pannello RegisteredUsersPanel separato da Lead e da Disponibilità eventi.
+- NON modificati i funnel/automazioni Brevo esistenti (Lead/Demo). Nessun nuovo funnel creato (come richiesto).
+- NOTA: BREVO_API_KEY è vuota in preview (secret solo di produzione) → in preview la sync è un no-op graceful. La verifica reale su Brevo avviene in produzione.

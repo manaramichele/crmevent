@@ -437,6 +437,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
     org = await _create_organization(body.org_name.strip(), uid)
     full_name = f"{body.nome} {body.cognome or ''}".strip()
     await db.users.insert_one({"user_id": uid, "email": email, "name": full_name,
+                               "nome": body.nome, "cognome": body.cognome, "registered_at": now_iso(),
                                "password_hash": hash_password(body.password), "role": "admin",
                                "auth_provider": "password", "org_id": org["id"], "telefono": body.telefono,
                                "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso()})
@@ -450,6 +451,10 @@ async def register_organization(body: OrgRegisterIn, response: Response):
         await _sync_brevo_funnel_status(email, "trial_started")
         # Immediate STOP: close the active demo enrollment so emails 2/3/4 never fire post-conversion.
         await _stop_active_demo_enrollment(lead["id"], "trial_started")
+    try:
+        await sync_registered_user(uid, org["id"], nome=body.nome, cognome=body.cognome, source="registration")
+    except Exception as e:
+        logger.error(f"registered-user sync error: {e}")
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
@@ -469,8 +474,12 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
     org = await _create_organization(body.org_name.strip(), user["user_id"])
     await db.users.update_one({"user_id": user["user_id"]},
                               {"$set": {"org_id": org["id"], "role": "admin", "telefono": body.telefono,
-                                        "accepted_terms_at": now_iso()}})
+                                        "registered_at": now_iso(), "accepted_terms_at": now_iso()}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
+    try:
+        await sync_registered_user(user["user_id"], org["id"], source="registration")
+    except Exception as e:
+        logger.error(f"registered-user sync error: {e}")
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return await user_payload(u)
 
@@ -3144,6 +3153,80 @@ async def _lead_list_id(create: bool = True):
         await _set_setting("brevo_lead_list_name", res.get("name") or brevo_funnel.LIST_NAME)
         return res["id"]
     return None
+
+
+# ---------------- Utenti registrati CRMEvent (lista Brevo separata dai Lead) ----------------
+async def _registered_list_id(create: bool = True):
+    lid = await _get_setting("brevo_registered_list_id")
+    if lid:
+        return lid
+    if not (create and brevo_funnel.is_configured()):
+        return None
+    res = await brevo_funnel.ensure_registered_list()
+    if res.get("id"):
+        await _set_setting("brevo_registered_list_id", res["id"])
+        await _set_setting("brevo_registered_list_name", res.get("name") or brevo_funnel.REGISTERED_LIST_NAME)
+        return res["id"]
+    return None
+
+
+async def sync_registered_user(user_id: str, org_id: str, *, nome=None, cognome=None, source="registration"):
+    """Sincronizza un utente REGISTRATO nella lista Brevo 'CRMEvent · Utenti registrati' (best-effort,
+    nessuna email). CRMEvent resta la fonte di verità: a Brevo vanno solo gli attributi utili ai funnel.
+    Non rimuove il contatto dalla lista Lead (origine/storico preservati)."""
+    if not brevo_funnel.is_configured():
+        return {"ok": False, "skipped": True}
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0})
+    if not u or not org or not u.get("email"):
+        return {"ok": False, "error": "utente/organizzazione non trovati"}
+    created = await db.events.count_documents({"org_id": org_id})
+    activated = await db.events.count_documents({"org_id": org_id, "credit_state": {"$in": ["attivo", "sospeso", "concluso"]}})
+    credits = (org.get("credits") or {}).get("balance", 0)
+    name = u.get("name") or ""
+    attrs = {
+        "NOME": nome or u.get("nome") or (name.split(" ")[0] if name else None),
+        "COGNOME": cognome or u.get("cognome") or (" ".join(name.split(" ")[1:]) or None),
+        "ORGANIZZAZIONE": org.get("nome"),
+        "DATA_REGISTRAZIONE": (u.get("registered_at") or u.get("created_at") or now_iso())[:10],
+        "CREDITI_DISPONIBILI": credits,
+        "EVENTI_CREATI": created,
+        "EVENTI_ATTIVATI": activated,
+        "ULTIMO_ACCESSO": now_iso()[:10],
+    }
+    try:
+        await brevo_funnel.ensure_user_attributes()
+    except Exception:
+        pass
+    lid = await _registered_list_id(create=True)
+    try:
+        res = await brevo_funnel.upsert_registered_contact(email=u["email"], attributes=attrs, list_ids=([lid] if lid else None))
+    except Exception as e:
+        logger.error(f"brevo registered sync failed: {e}")
+        return {"ok": False, "error": str(e)}
+    if res.get("ok"):
+        await _set_setting("brevo_registered_last_sync", now_iso())
+        await db.organizations.update_one({"id": org_id}, {"$set": {"brevo_registered_synced_at": now_iso()}})
+    return res
+
+
+@api.get("/platform/brevo/registered-users")
+async def platform_registered_users(admin: dict = Depends(require_superadmin)):
+    """Stato della lista Brevo 'Utenti registrati' (separata da Lead e Disponibilità eventi)."""
+    if not brevo_funnel.is_configured():
+        return {"configured": False, "list_id": None, "name": brevo_funnel.REGISTERED_LIST_NAME,
+                "contacts": None, "last_sync": None, "attributes": brevo_funnel.USER_ATTRIBUTES}
+    lid = await _registered_list_id(create=True)
+    count = None
+    if lid:
+        try:
+            count = await brevo_funnel.list_contact_count(lid)
+        except Exception:
+            count = None
+    return {"configured": True, "list_id": lid,
+            "name": await _get_setting("brevo_registered_list_name") or brevo_funnel.REGISTERED_LIST_NAME,
+            "contacts": count, "last_sync": await _get_setting("brevo_registered_last_sync"),
+            "attributes": brevo_funnel.USER_ATTRIBUTES}
 
 
 async def _sync_brevo_funnel_status(email: str, funnel_status: str):
