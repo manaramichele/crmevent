@@ -8997,6 +8997,136 @@ async def platform_integrations_status(admin: dict = Depends(require_superadmin)
     }
 
 
+@api.get("/platform/stripe/live-diagnostics")
+async def platform_stripe_live_diagnostics(admin: dict = Depends(require_superadmin)):
+    """Diagnostica READ-ONLY dei secret CRMEVENT_STRIPE_*_LIVE. Funziona anche con
+    STRIPE_MODE=test (legge i secret LIVE direttamente da env, con client Stripe isolato).
+    Solo chiamate NON transazionali (retrieve/list). Non crea/modifica nulla su Stripe.
+    Non restituisce mai valori sensibili: solo esiti OK/ERRORE e metadati innocui."""
+    def _env(n: str) -> str:
+        return (os.environ.get(n) or "").strip()
+
+    sk = _env("CRMEVENT_STRIPE_SECRET_KEY_LIVE")
+    pk = _env("CRMEVENT_STRIPE_PUBLISHABLE_KEY_LIVE")
+    whsec = _env("CRMEVENT_STRIPE_WEBHOOK_SECRET_LIVE")
+    tax_id = _env("CRMEVENT_STRIPE_TAX_RATE_ID_LIVE")
+    WEBHOOK_URL = "https://crmevent.it/api/stripe/webhook"
+
+    checks: dict = {}
+
+    def ok(key, detail=""):
+        checks[key] = {"status": "OK", "detail": detail}
+
+    def err(key, detail=""):
+        checks[key] = {"status": "ERRORE", "detail": detail}
+
+    # 1) Secret Key LIVE — formato/presenza
+    if not sk or sk == "placeholder":
+        err("secret_key_live", "mancante o placeholder")
+    elif not (sk.startswith("sk_live_") or sk.startswith("rk_live_")):
+        err("secret_key_live", "formato non LIVE (atteso sk_live_ o rk_live_)")
+    else:
+        ok("secret_key_live", "formato LIVE valido")
+
+    # 2) Publishable Key LIVE — formato/presenza
+    if not pk or pk == "placeholder":
+        err("publishable_key_live", "mancante o placeholder")
+    elif not pk.startswith("pk_live_"):
+        err("publishable_key_live", "formato non LIVE (atteso pk_live_)")
+    else:
+        ok("publishable_key_live", "formato LIVE valido")
+
+    # 4) Signing Secret — formato/presenza (il valore non viene mai mostrato né confrontato)
+    if not whsec or whsec == "placeholder":
+        err("signing_secret", "mancante o placeholder")
+    elif not whsec.startswith("whsec_"):
+        err("signing_secret", "formato non valido (atteso whsec_)")
+    else:
+        ok("signing_secret", "formato valido")
+
+    # Client Stripe ISOLATO con la secret key LIVE (non tocca stripe_sdk.api_key globale)
+    client = None
+    if checks["secret_key_live"]["status"] == "OK":
+        try:
+            client = stripe_sdk.StripeClient(sk)
+        except Exception as e:
+            err("secret_key_live", f"inizializzazione client fallita: {type(e).__name__}")
+
+    # 2b) Account Stripe LIVE + livemode (NON transazionale)
+    if client is None:
+        err("account_live", "non verificabile: secret key non valida")
+    else:
+        try:
+            bal = await asyncio.to_thread(client.v1.balance.retrieve)
+            if getattr(bal, "livemode", False):
+                ok("account_live", "chiave valida, account in modalità LIVE")
+            else:
+                err("account_live", "chiave valida ma NON in modalità live (livemode=false)")
+        except Exception as e:
+            err("account_live", f"chiamata Stripe fallita: {type(e).__name__}")
+
+    # 3) Tax Rate LIVE 22% exclusive IT active (NON transazionale)
+    if client is None:
+        err("tax_rate_live", "non verificabile: secret key non valida")
+    elif not tax_id or tax_id == "placeholder":
+        err("tax_rate_live", "CRMEVENT_STRIPE_TAX_RATE_ID_LIVE mancante o placeholder")
+    else:
+        try:
+            tr = await asyncio.to_thread(client.v1.tax_rates.retrieve, tax_id)
+            problems = []
+            if float(getattr(tr, "percentage", 0) or 0) != 22.0:
+                problems.append(f"percentage={getattr(tr, 'percentage', None)} (atteso 22)")
+            if getattr(tr, "inclusive", None) is not False:
+                problems.append("non è exclusive (inclusive!=false)")
+            if (getattr(tr, "country", None) or "").upper() != "IT":
+                problems.append(f"country={getattr(tr, 'country', None)} (atteso IT)")
+            if not getattr(tr, "active", False):
+                problems.append("non attivo")
+            if not getattr(tr, "livemode", False):
+                problems.append("non in modalità live")
+            if problems:
+                err("tax_rate_live", "; ".join(problems))
+            else:
+                ok("tax_rate_live", "22% exclusive IT attivo LIVE")
+        except Exception as e:
+            err("tax_rate_live", f"TaxRate non recuperabile: {type(e).__name__}")
+
+    # 5) Webhook LIVE su crmevent.it con evento checkout.session.completed (NON transazionale)
+    if client is None:
+        err("webhook_live", "non verificabile: secret key non valida")
+    else:
+        try:
+            eps = await asyncio.to_thread(lambda: list(client.v1.webhook_endpoints.list({"limit": 100}).auto_paging_iter()))
+            match = next((e for e in eps if (getattr(e, "url", "") or "") == WEBHOOK_URL), None)
+            if match is None:
+                err("webhook_live", f"nessun endpoint con url {WEBHOOK_URL}")
+            else:
+                problems = []
+                if getattr(match, "status", None) != "enabled":
+                    problems.append(f"status={getattr(match, 'status', None)} (atteso enabled)")
+                evts = list(getattr(match, "enabled_events", []) or [])
+                if "checkout.session.completed" not in evts and "*" not in evts:
+                    problems.append("evento checkout.session.completed non sottoscritto")
+                if not getattr(match, "livemode", False):
+                    problems.append("non in modalità live")
+                if problems:
+                    err("webhook_live", "; ".join(problems))
+                else:
+                    ok("webhook_live", "endpoint LIVE enabled con checkout.session.completed")
+        except Exception as e:
+            err("webhook_live", f"WebhookEndpoint.list fallita: {type(e).__name__}")
+
+    ready = all(c["status"] == "OK" for c in checks.values())
+    tech_errors = [f"{k}: {v['detail']}" for k, v in checks.items() if v["status"] == "ERRORE"]
+    if tech_errors:
+        logger.warning("Stripe LIVE diagnostics NON pronta: %s", "; ".join(tech_errors))
+    return {
+        "stripe_mode": STRIPE_MODE,
+        "checks": checks,
+        "overall": "PRONTA" if ready else "NON PRONTA",
+    }
+
+
 @api.get("/platform/credit-invoices")
 async def platform_credit_invoices(admin: dict = Depends(require_superadmin)):
     """Stato per ricarica: Pagamento / Crediti / Fattura (per il pannello Super Admin)."""
