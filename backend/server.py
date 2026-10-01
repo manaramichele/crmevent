@@ -2727,6 +2727,7 @@ async def _require_manage(user: dict, org_id: str) -> None:
 async def _member_view(m: dict) -> dict:
     u = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0, "password_hash": 0})
     return {"user_id": m["user_id"], "email": (u or {}).get("email"), "name": (u or {}).get("name"),
+            "telefono": (u or {}).get("telefono"),
             "role": m["role"], "role_label": ORG_ROLE_LABELS.get(m["role"], m["role"]),
             "active": m.get("active", True), "account_active": (u or {}).get("active", True),
             "created_at": (u or {}).get("created_at"), "last_login_at": (u or {}).get("last_login_at"),
@@ -2768,6 +2769,9 @@ class MemberUpdateIn(BaseModel):
 class InviteCreateIn(BaseModel):
     email: EmailStr
     role: str = "user"
+    nome: Optional[str] = None
+    cognome: Optional[str] = None
+    telefono: Optional[str] = None
 
 
 @api.post("/platform/organizations")
@@ -3745,6 +3749,7 @@ def _invite_status(inv: dict) -> str:
 def _invite_view(inv: dict) -> dict:
     return {"id": inv["id"], "email": inv["email"], "role": inv["role"],
             "role_label": ORG_ROLE_LABELS.get(inv["role"], inv["role"]),
+            "nome": inv.get("nome"), "cognome": inv.get("cognome"), "telefono": inv.get("telefono"),
             "status": _invite_status(inv), "created_at": inv.get("created_at"), "expires_at": inv.get("expires_at")}
 
 
@@ -3759,11 +3764,13 @@ async def _send_invite_email(email: str, org_name: str, token: str, role: str) -
             footer_note="L'invito scade tra 7 giorni ed è utilizzabile una sola volta."))
 
 
-async def _create_invite(org: dict, email: str, role: str, invited_by: str, lead_id: Optional[str] = None) -> dict:
+async def _create_invite(org: dict, email: str, role: str, invited_by: str, lead_id: Optional[str] = None,
+                         nome: Optional[str] = None, cognome: Optional[str] = None, telefono: Optional[str] = None) -> dict:
     await db.org_invites.update_many({"org_id": org["id"], "email": email, "status": "pending"},
                                      {"$set": {"status": "revoked", "updated_at": now_iso()}})
     token = secrets.token_urlsafe(32)
     inv = {"id": new_id(), "org_id": org["id"], "email": email, "role": role, "token": token,
+           "nome": (nome or "").strip() or None, "cognome": (cognome or "").strip() or None, "telefono": telefono,
            "status": "pending", "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
            "invited_by": invited_by, "lead_id": lead_id, "created_at": now_iso(), "updated_at": now_iso()}
     await db.org_invites.insert_one(inv)
@@ -3782,10 +3789,14 @@ async def create_org_invite(org_id: str, body: InviteCreateIn, user: dict = Depe
     await _require_manage(user, org_id)
     org = await _org_or_404(org_id)
     email, role = body.email.lower(), _norm_role(body.role)
+    if not (body.nome or "").strip() or not (body.cognome or "").strip():
+        raise HTTPException(status_code=400, detail="Nome e cognome sono obbligatori")
+    telefono = _normalize_phone(body.telefono, required=True)
     eu = await db.users.find_one({"email": email}, {"_id": 0})
     if eu and await db.memberships.find_one({"user_id": eu["user_id"], "org_id": org_id, "active": True}):
         raise HTTPException(status_code=400, detail="Questo utente è già associato all'organizzazione")
-    inv = await _create_invite(org, email, role, user["user_id"])
+    inv = await _create_invite(org, email, role, user["user_id"],
+                               nome=body.nome, cognome=body.cognome, telefono=telefono)
     sent = True
     try:
         await _send_invite_email(email, org.get("nome"), inv["token"], role)
@@ -3921,6 +3932,7 @@ async def get_invite(token: str):
     org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
     exists = bool(await db.users.find_one({"email": inv["email"].lower()}))
     return {"email": inv["email"], "role": inv["role"], "role_label": ORG_ROLE_LABELS.get(inv["role"], inv["role"]),
+            "nome": inv.get("nome"), "cognome": inv.get("cognome"), "telefono": inv.get("telefono"),
             "org_name": (org or {}).get("nome"), "status": _invite_status(inv), "account_exists": exists}
 
 
@@ -3933,9 +3945,12 @@ async def register_via_invite(token: str, body: InviteRegisterIn, response: Resp
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="La password deve avere almeno 8 caratteri")
     uid = f"user_{uuid.uuid4().hex[:12]}"
-    await db.users.insert_one({"user_id": uid, "email": email, "name": (body.name or email.split("@")[0]).strip(),
+    inv_name = f"{(inv.get('nome') or '').strip()} {(inv.get('cognome') or '').strip()}".strip()
+    full_name = (body.name or inv_name or email.split("@")[0]).strip()
+    phone = _normalize_phone(body.telefono or inv.get("telefono"))
+    await db.users.insert_one({"user_id": uid, "email": email, "name": full_name,
         "password_hash": hash_password(body.password), "role": "member", "auth_provider": "password",
-        "telefono": _normalize_phone(body.telefono), "registered_at": now_iso(),
+        "telefono": phone, "registered_at": now_iso(),
         "org_id": inv["org_id"], "picture": "", "active": True, "last_login_at": now_iso(), "created_at": now_iso()})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
     await _accept_invite(inv, u)

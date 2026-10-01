@@ -63,7 +63,7 @@ export default function Invite() {
           return;
         } catch (e) { setError(formatApiError(e.response?.data?.detail)); }
       }
-      try { const { data } = await api.get(`/invites/${token}`); setInvite(data); }
+      try { const { data } = await api.get(`/invites/${token}`); setInvite(data); setForm((f) => ({ ...f, name: f.name || `${data.nome || ""} ${data.cognome || ""}`.trim(), telefono: f.telefono || data.telefono || "" })); }
       catch (e) { setError(formatApiError(e.response?.data?.detail) || "Invito non valido"); }
       try { const { data } = await api.get("/auth/me"); setMe(data); } catch { setMe(null); }
     })();

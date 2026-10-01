@@ -8,10 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { CalendarCheck2, Link2, Unplug } from "lucide-react";
+import OrgUsers from "@/components/OrgUsers";
 
 export default function Profile() {
   const { user } = useAuth();
   const isPw = user?.auth_provider === "password";
+  const canManageUsers = user?.org_role === "admin_org";
+  const manageOrgId = user?.active_org_id || user?.org_id;
   const [cur, setCur] = useState(""); const [np, setNp] = useState(""); const [np2, setNp2] = useState("");
   const [cal, setCal] = useState(null);
   const [cals, setCals] = useState([]);
@@ -45,6 +48,12 @@ export default function Profile() {
           <div><div className="text-xs uppercase text-slate-400 font-medium">Accesso</div><div className="text-slate-800 font-medium">{isPw ? "Email / Password" : "Google"}</div></div>
         </div>
       </SectionCard>
+
+      {canManageUsers && manageOrgId && (
+        <SectionCard title="Utenti e accessi">
+          <OrgUsers orgId={manageOrgId} />
+        </SectionCard>
+      )}
 
       <SectionCard title="Cambia password">
         {isPw ? (
