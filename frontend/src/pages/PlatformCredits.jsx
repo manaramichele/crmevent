@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Coins, Save, Search, Users2, AlertTriangle, PlayCircle, Wallet, Plus, Minus, Building2, Settings2 } from "lucide-react";
+import { Coins, Save, Search, Users2, AlertTriangle, PlayCircle, Wallet, Plus, Minus, Building2, Settings2, ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleString("it-IT") : "—");
@@ -381,6 +381,57 @@ const FIC_STATO = {
   emessa: ["green", "Emessa"], errore_emissione: ["red", "Errore"], simulato_test: ["blue", "Simulata (test)"],
 };
 
+function StripeLiveDiagnostics() {
+  const LABELS = [
+    ["secret_key_live", "Secret Key LIVE"],
+    ["account_live", "Account Stripe LIVE"],
+    ["publishable_key_live", "Publishable Key LIVE"],
+    ["tax_rate_live", "Tax Rate IVA 22% LIVE"],
+    ["webhook_live", "Webhook LIVE"],
+    ["signing_secret", "Signing Secret"],
+  ];
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.get("/platform/stripe/live-diagnostics");
+      setRes(data);
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 mb-5" data-testid="stripe-live-diagnostics">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Diagnostica Stripe LIVE</span></div>
+        <Button size="sm" onClick={run} disabled={busy} className="bg-slate-900 text-white" data-testid="stripe-live-diag-run">{busy ? "Verifica…" : "Verifica configurazione Stripe LIVE"}</Button>
+      </div>
+      {res && (
+        <div className="mt-4 space-y-1.5" data-testid="stripe-live-diag-result">
+          {LABELS.map(([key, label]) => {
+            const c = res.checks?.[key];
+            const okv = c?.status === "OK";
+            return (
+              <div key={key} className="flex items-start justify-between gap-3 text-sm" data-testid={`diag-${key}`}>
+                <span className="text-slate-600">{label}</span>
+                <span className="flex items-center gap-1.5 text-right">
+                  {okv ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <XCircle className="w-4 h-4 text-red-500" />}
+                  <span className={`font-semibold ${okv ? "text-green-700" : "text-red-600"}`}>{c?.status || "—"}</span>
+                  {!okv && c?.detail && <span className="text-xs text-slate-400">— {c.detail}</span>}
+                </span>
+              </div>
+            );
+          })}
+          <div className="flex items-center justify-between gap-3 pt-2 mt-2 border-t border-slate-100 text-sm" data-testid="diag-overall">
+            <span className="font-semibold text-slate-700">Configurazione complessiva</span>
+            <span className={`font-bold ${res.overall === "PRONTA" ? "text-green-700" : "text-red-600"}`}>{res.overall}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function InvoicesTab() {
   const [st, setSt] = useState(null);
   const [rows, setRows] = useState([]);
@@ -401,6 +452,7 @@ function InvoicesTab() {
   const eur = (n) => `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return (
     <div data-testid="invoices-tab">
+      <StripeLiveDiagnostics />
       <div className="grid sm:grid-cols-2 gap-3 mb-5">
         <div className="rounded-xl border border-slate-200 p-4" data-testid="stripe-status">
           <div className="text-sm font-semibold text-slate-700 mb-1">Stripe</div>
