@@ -1,0 +1,23 @@
+{
+  "summary": "Testato il consumo crediti centralizzato per l'Assistente CRMEvent (POST /api/support/chat). 8/8 test backend passano: addebito -1 su domanda utile, nessun addebito su domanda non utile (release), idempotenza su stesso request_id, due addebiti su request_id diversi, HTTP 402 su saldo insufficiente (nessuna risposta AI, nessun commit), isolamento multi-tenant verificato, /api/credits/balance aggiornato immediatamente, servizio ai_assistant a catalogo con unit_cost=1 e active=true.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_iter40_ai_assistant_credits.py",
+    "/app/test_reports/pytest/iter40_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ai_charge in server.py gestisce correttamente reserve->settle/release con idempotenza via idempotency_key composto 'ai_assistant:{request_id}'. Pattern corretto: 402 sollevato PRIMA dell'ingresso nel contesto quando il saldo e' insufficiente, quindi _ask() non viene eseguita.",
+    "Nota minore (non bug): quando il client riusa lo stesso request_id dopo un commit (idempotenza), _ask() viene comunque chiamato sul backend (consumo LLM) ma non addebita; se si volesse evitare la chiamata AI sui retry gia' committed, si potrebbe cortocircuitare support_chat quando ctl.reservation.status == 'committed'. Non e' richiesto dalla spec attuale.",
+    "server.py >10k linee: valutare lo split in moduli (credits, support, platform, events)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter40_ai_assistant_credits.py"],
+  "success_rate": { "backend": "100%", "frontend": "N/A (skipped per richiesta)" },
+  "test_credentials": "QA org admin qa.eventi@crmeventqa.it / QaEvents2026! (org_qa_eventi) - Super Admin manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Nessuno. Il test crea solo movimenti nel credit_ledger di org_qa_eventi (useful/released) e ripristina sempre il saldo con un adjust di importo opposto in caso di azzeramento (test insufficient balance).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Il test iter40 copre esclusivamente l'Assistente CRMEvent (POST /api/support/chat) e il relativo consumo crediti centralizzato (ai_charge, service_key='ai_assistant'). Il modulo Social (per decisione utente) NON deve ancora consumare crediti e NON e' coperto. Il test altera temporaneamente il saldo di org_qa_eventi: in caso di failure improvviso del test 06, verificare manualmente che il saldo sia stato ripristinato (il blocco finally lo ripristina). Login via cookie HTTP-only (session_token/access_token).",
+  "rca of the issue": "N/A - testing di una fix gia' applicata. La fix in support_chat ora passa attraverso ai_charge() che: 1) legge costo dal catalogo (credit_services.ai_assistant.unit_cost=1), 2) riserva i crediti PRIMA della chiamata AI (402 se insufficiente), 3) addebita (settle) solo se result.answered e not is_feature_request, 4) rilascia su errore o risultato non utile, 5) idempotenza garantita da indice unique parziale su (org_id, idempotency_key) in credit_ledger."
+}

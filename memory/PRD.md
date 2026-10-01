@@ -348,6 +348,16 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Futura funzione "contenuti evento" lato org che usi ai_content. UI trasparenza consumi lato org quando esisterà. (P1)
 - Stripe LIVE + FIC reale. (P1)
 
+## Consumo crediti AI centralizzato — 2026-06 ✅ Assistente CRMEvent COMPLETATO e VERIFICATO
+- RCA: l'endpoint `POST /api/support/chat` (widget Assistente CRMEvent) non aveva ALCUNA logica crediti → risposte AI gratuite. Inoltre l'infrastruttura reserve/settle (`_charge_begin`/`_credits_reserve`/`_credits_settle`/`_credits_release`) era definita ma NON agganciata a nessun endpoint.
+- Fix: helper CENTRALIZZATO `ai_charge(org_id, service_key, ...)` + classe `_AiChargeCtl` (server.py ~8960): legge costo dal catalogo (mai hardcoded) → verifica saldo e PRENOTA prima della chiamata AI (402 se insufficiente, AI non eseguita) → `ctl.settle()` solo su risultato utile, altrimenti release → idempotenza via `idempotency_key`.
+- Assistente collegato a servizio `ai_assistant` (1 credito). Addebita SOLO se `answered=true` e NON feature-request (regola 2B). Idempotency key = `ai_assistant:{request_id}` (request_id UUID generato dal widget). Ledger note "Assistente CRMEvent" con org_id/user_id/event_id/timestamp. Org risolta con `_resolve_org_for_support` (il wallet addebitato è quello dell'org reale, non DEFAULT_ORG).
+- Frontend `SupportChat.jsx`: invia `request_id`; su 402 mostra "Crediti insufficienti…" + CTA "Ricarica crediti" (RechargeDialog).
+- Test: iteration_40 backend 8/8 (addebito utile, no-addebito non-utile=released, idempotenza stesso request_id, 2 addebiti request_id diversi, 402 saldo insufficiente senza chiamata AI, isolamento multi-tenant, saldo aggiornato subito). File: backend/tests/test_iter40_ai_assistant_credits.py.
+- SOSPESO (decisione utente): modulo Social (`/social/generate`, `/social/posts/{id}/regenerate`, `/social/plan/generate`) NON consuma ancora crediti — l'utente deciderà nome/costo di un servizio dedicato (per il piano: 2 crediti flat per generazione, non per post).
+- SEGNALATO (nessun endpoint AI collegato, nulla da agganciare): `ai_briefing`/`ai_analysis`/`ai_checklist` (_build_briefing è sola aggregazione) e `image_generation` (`social_creative.generate_background` definita ma mai chiamata).
+- NESSUN addebito retroattivo su richieste già effettuate (incl. account prod manara.michele+60@gmail.com).
+
 ## Modello crediti — regole DEFINITIVE (agg. 2026-06)
 - Attivazione evento: 20 crediti UNA TANTUM, copre fino alla data evento. Nessun rinnovo 30gg, nessuno stato 'sospeso'.
 - Primo evento di ogni org: attivazione GRATIS (flag org welcome_event_activation_used, una volta per org). 100 crediti benvenuto restano interi.
