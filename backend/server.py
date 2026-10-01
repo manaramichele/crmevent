@@ -36,6 +36,7 @@ import instagram_utils
 import leadfinder_scraper
 import seed_leadfinder
 import brevo_client
+import pipeline_seed
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -9162,15 +9163,33 @@ async def _pipeline_doc(org_id: str, event_id: str):
     return await db.event_pipelines.find_one({"org_id": org_id, "event_id": event_id}, {"_id": 0})
 
 
+def _event_pipeline_ref_date(ev: dict):
+    """Data evento usata per calcolare le scadenze relative (giorno della gara = data_inizio)."""
+    d = ev.get("data_inizio") or ev.get("data_fine")
+    return d[:10] if d else None
+
+
 async def _pipeline_status_payload(org_id: str, ev: dict) -> dict:
     cfg = await _svc_cfg(PIPELINE_SVC_KEY)
     org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
     bal = ((org or {}).get("credits") or {}).get("balance", 0)
     cost = cfg["cost"]
     p = await _pipeline_doc(org_id, ev["id"])
+    active = bool(p and p.get("active"))
+    template_key = (p or {}).get("template_key")
+    task_count = 0
+    if active:
+        task_count = await db.pipeline_tasks.count_documents({"org_id": org_id, "event_id": ev["id"]})
+    event_ref_date = _event_pipeline_ref_date(ev)
+    pipeline_ref_date = (p or {}).get("pipeline_ref_date")
+    date_changed = bool(active and template_key and task_count and pipeline_ref_date
+                        and event_ref_date and pipeline_ref_date != event_ref_date)
     return {"event_id": ev["id"], "event_name": ev.get("nome"),
-            "active": bool(p and p.get("active")), "activated_at": (p or {}).get("activated_at"),
-            "template_key": (p or {}).get("template_key"),
+            "active": active, "activated_at": (p or {}).get("activated_at"),
+            "template_key": template_key, "task_count": task_count,
+            "needs_template": bool(active and not template_key),
+            "event_ref_date": event_ref_date, "pipeline_ref_date": pipeline_ref_date,
+            "date_changed": date_changed,
             "service_active": cfg["active"], "cost": cost, "balance": bal,
             "sufficient": (cost is not None and bal >= cost),
             "balance_after": (bal - cost) if cost is not None else None}
@@ -9357,6 +9376,11 @@ async def pipeline_task_create(event_id: str, body: PipelineTaskIn, user: dict =
 async def pipeline_task_update(task_id: str, body: PipelineTaskUpd, user: dict = Depends(require_admin)):
     clean = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
     clean["updated_at"] = now_iso()
+    # Scadenza modificata manualmente → proteggila dai ricalcoli automatici per cambio data.
+    if "scadenza" in clean:
+        existing = await db.pipeline_tasks.find_one(oq(user, id=task_id), {"_id": 0, "scadenza": 1})
+        if existing and (existing.get("scadenza") or None) != (clean.get("scadenza") or None):
+            clean["due_date_overridden"] = True
     r = await db.pipeline_tasks.update_one(oq(user, id=task_id), {"$set": clean})
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="Attività non trovata")
@@ -9379,6 +9403,314 @@ async def pipeline_task_duplicate(task_id: str, user: dict = Depends(require_adm
               "created_at": now_iso(), "updated_at": now_iso()})
     await db.pipeline_tasks.insert_one(t)
     return _serialize_task(t)
+
+
+# =============================================================================
+# FASE 3 — Modelli Pipeline (gestiti dal Super Admin) e generazione attività
+# =============================================================================
+_pipeline_templates_seeded = False
+
+
+async def _ensure_pipeline_templates():
+    """Semina i modelli iniziali (Running, Evento generico) una sola volta, idempotente.
+    Le modifiche del Super Admin NON vengono mai sovrascritte."""
+    global _pipeline_templates_seeded
+    if _pipeline_templates_seeded:
+        return
+    try:
+        await db.pipeline_templates.create_index([("key", 1)], unique=True)
+    except Exception:
+        pass
+    for tpl in pipeline_seed.PIPELINE_TEMPLATES_SEED:
+        if await db.pipeline_templates.find_one({"key": tpl["key"]}):
+            continue
+        now = now_iso()
+        await db.pipeline_templates.insert_one({
+            "id": new_id(), "key": tpl["key"], "name": tpl["name"],
+            "description": tpl.get("description", ""), "active": True, "order": tpl.get("order", 0),
+            "created_at": now, "updated_at": now})
+        tasks = []
+        for i, t in enumerate(tpl["tasks"]):
+            tasks.append({"id": new_id(), "template_key": tpl["key"], "titolo": t["titolo"],
+                          "descrizione": t.get("descrizione", ""), "categoria": t["categoria"],
+                          "giorni_offset": int(t["giorni_offset"]), "priorita": t.get("priorita", "normale"),
+                          "order": i, "active": True, "crm_section": t.get("crm_section"),
+                          "created_at": now, "updated_at": now})
+        if tasks:
+            await db.pipeline_template_tasks.insert_many(tasks)
+    _pipeline_templates_seeded = True
+
+
+def _clean_template(t: dict) -> dict:
+    return {k: v for k, v in t.items() if k != "_id"}
+
+
+class PipelineTemplateIn(BaseModel):
+    key: Optional[str] = None
+    name: str
+    description: Optional[str] = ""
+    active: Optional[bool] = True
+    order: Optional[int] = 0
+
+
+class PipelineTemplateUpd(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    active: Optional[bool] = None
+    order: Optional[int] = None
+
+
+class PipelineTemplateTaskIn(BaseModel):
+    titolo: str
+    descrizione: Optional[str] = ""
+    categoria: str
+    giorni_offset: int = 0
+    priorita: Optional[str] = "normale"
+    order: Optional[int] = 0
+    active: Optional[bool] = True
+    crm_section: Optional[str] = None
+
+
+class PipelineTemplateTaskUpd(BaseModel):
+    titolo: Optional[str] = None
+    descrizione: Optional[str] = None
+    categoria: Optional[str] = None
+    giorni_offset: Optional[int] = None
+    priorita: Optional[str] = None
+    order: Optional[int] = None
+    active: Optional[bool] = None
+    crm_section: Optional[str] = None
+
+
+# -------- Super Admin: gestione modelli ---------------------------------------
+@api.get("/platform/pipeline-templates")
+async def platform_pipeline_templates(admin: dict = Depends(require_superadmin)):
+    await _ensure_pipeline_templates()
+    rows = await db.pipeline_templates.find({}, {"_id": 0}).sort("order", 1).to_list(200)
+    counts = {}
+    for r in rows:
+        counts[r["key"]] = await db.pipeline_template_tasks.count_documents({"template_key": r["key"]})
+    for r in rows:
+        r["task_count"] = counts.get(r["key"], 0)
+    return {"templates": rows}
+
+
+@api.post("/platform/pipeline-templates")
+async def platform_pipeline_template_create(body: PipelineTemplateIn, admin: dict = Depends(require_superadmin)):
+    await _ensure_pipeline_templates()
+    key = (body.key or body.name or "").strip().lower().replace(" ", "_")
+    if not key:
+        raise HTTPException(status_code=400, detail="Codice/nome obbligatorio")
+    if await db.pipeline_templates.find_one({"key": key}):
+        raise HTTPException(status_code=400, detail="Esiste già un modello con questo codice")
+    now = now_iso()
+    doc = {"id": new_id(), "key": key, "name": (body.name or "").strip(),
+           "description": body.description or "", "active": bool(body.active), "order": body.order or 0,
+           "created_at": now, "updated_at": now}
+    await db.pipeline_templates.insert_one(doc)
+    await record_audit(admin, "pipeline_template_create", meta={"key": key})
+    return _clean_template(doc)
+
+
+@api.put("/platform/pipeline-templates/{key}")
+async def platform_pipeline_template_update(key: str, body: PipelineTemplateUpd, admin: dict = Depends(require_superadmin)):
+    clean = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if not clean:
+        raise HTTPException(status_code=400, detail="Nessuna modifica")
+    clean["updated_at"] = now_iso()
+    r = await db.pipeline_templates.update_one({"key": key}, {"$set": clean})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Modello non trovato")
+    await record_audit(admin, "pipeline_template_update", meta={"key": key, "changes": clean})
+    return _clean_template(await db.pipeline_templates.find_one({"key": key}, {"_id": 0}))
+
+
+@api.delete("/platform/pipeline-templates/{key}")
+async def platform_pipeline_template_delete(key: str, admin: dict = Depends(require_superadmin)):
+    if not await db.pipeline_templates.find_one({"key": key}):
+        raise HTTPException(status_code=404, detail="Modello non trovato")
+    await db.pipeline_template_tasks.delete_many({"template_key": key})
+    await db.pipeline_templates.delete_one({"key": key})
+    await record_audit(admin, "pipeline_template_delete", meta={"key": key})
+    return {"ok": True}
+
+
+@api.get("/platform/pipeline-templates/{key}/tasks")
+async def platform_pipeline_template_tasks(key: str, admin: dict = Depends(require_superadmin)):
+    tpl = await db.pipeline_templates.find_one({"key": key}, {"_id": 0})
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Modello non trovato")
+    rows = await db.pipeline_template_tasks.find({"template_key": key}, {"_id": 0}).sort("order", 1).to_list(1000)
+    return {"template": tpl, "tasks": rows, "categories": pipeline_seed.STANDARD_CATEGORIES}
+
+
+@api.post("/platform/pipeline-templates/{key}/tasks")
+async def platform_pipeline_template_task_create(key: str, body: PipelineTemplateTaskIn, admin: dict = Depends(require_superadmin)):
+    if not await db.pipeline_templates.find_one({"key": key}):
+        raise HTTPException(status_code=404, detail="Modello non trovato")
+    cnt = await db.pipeline_template_tasks.count_documents({"template_key": key})
+    now = now_iso()
+    doc = {"id": new_id(), "template_key": key, **body.model_dump(),
+           "created_at": now, "updated_at": now}
+    if not body.order:
+        doc["order"] = cnt
+    await db.pipeline_template_tasks.insert_one(doc)
+    return _clean_template(doc)
+
+
+@api.put("/platform/pipeline-template-tasks/{task_id}")
+async def platform_pipeline_template_task_update(task_id: str, body: PipelineTemplateTaskUpd, admin: dict = Depends(require_superadmin)):
+    clean = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    if not clean:
+        raise HTTPException(status_code=400, detail="Nessuna modifica")
+    clean["updated_at"] = now_iso()
+    r = await db.pipeline_template_tasks.update_one({"id": task_id}, {"$set": clean})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Attività modello non trovata")
+    return _clean_template(await db.pipeline_template_tasks.find_one({"id": task_id}, {"_id": 0}))
+
+
+@api.delete("/platform/pipeline-template-tasks/{task_id}")
+async def platform_pipeline_template_task_delete(task_id: str, admin: dict = Depends(require_superadmin)):
+    await db.pipeline_template_tasks.delete_one({"id": task_id})
+    return {"ok": True}
+
+
+# -------- Organizzatore: scelta modello e generazione attività ----------------
+@api.get("/events/{event_id}/pipeline/templates")
+async def pipeline_templates_for_event(event_id: str, user: dict = Depends(require_admin)):
+    """Modelli ATTIVI disponibili per la scelta, con numero di attività che verranno generate."""
+    await _ensure_pipeline_templates()
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    rows = await db.pipeline_templates.find({"active": True}, {"_id": 0}).sort("order", 1).to_list(200)
+    out = []
+    for r in rows:
+        n = await db.pipeline_template_tasks.count_documents({"template_key": r["key"], "active": True})
+        out.append({"key": r["key"], "name": r["name"], "description": r.get("description", ""), "task_count": n})
+    return {"templates": out}
+
+
+async def _generate_pipeline_from_template(org_id: str, event_id: str, template_key: str, ev: dict) -> int:
+    """Genera (o rigenera) le attività della pipeline dal modello. Nessun consumo di crediti.
+    Elimina le attività attuali e ricostruisce dalle attività attive del modello."""
+    tpl = await db.pipeline_templates.find_one({"key": template_key, "active": True}, {"_id": 0})
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Modello non trovato o non attivo")
+    tmpl_tasks = await db.pipeline_template_tasks.find(
+        {"template_key": template_key, "active": True}, {"_id": 0}).sort("order", 1).to_list(2000)
+    ref = _event_pipeline_ref_date(ev)
+    if not ref:
+        raise HTTPException(status_code=400, detail="Imposta prima la data dell'evento")
+    ref_date = _date.fromisoformat(ref)
+    now = now_iso()
+    # Categorie: standard + quelle usate dal modello. Crea quelle mancanti.
+    wanted = list(pipeline_seed.STANDARD_CATEGORIES)
+    for t in tmpl_tasks:
+        if t.get("categoria") and t["categoria"] not in wanted:
+            wanted.append(t["categoria"])
+    existing_cats = await db.pipeline_categories.find({"org_id": org_id, "event_id": event_id}, {"_id": 0}).to_list(500)
+    name_to_id = {c["name"]: c["id"] for c in existing_cats}
+    order_base = len(existing_cats)
+    for i, name in enumerate(wanted):
+        if name not in name_to_id:
+            cid = new_id()
+            await db.pipeline_categories.insert_one({"id": cid, "org_id": org_id, "event_id": event_id,
+                "name": name, "order": order_base + i, "created_at": now, "updated_at": now})
+            name_to_id[name] = cid
+    # Rigenerazione: elimina attività attuali.
+    await db.pipeline_tasks.delete_many({"org_id": org_id, "event_id": event_id})
+    docs = []
+    for i, t in enumerate(tmpl_tasks):
+        due = (ref_date + _timedelta(days=int(t.get("giorni_offset") or 0))).isoformat()
+        docs.append({"id": new_id(), "org_id": org_id, "event_id": event_id,
+            "titolo": t["titolo"], "descrizione": t.get("descrizione", ""),
+            "categoria_id": name_to_id.get(t.get("categoria")), "stato": "da_fare",
+            "priorita": t.get("priorita", "normale"), "scadenza": due,
+            "giorni_offset": int(t.get("giorni_offset") or 0), "due_date_overridden": False,
+            "crm_section": t.get("crm_section"), "responsabile_id": None, "azienda_id": None,
+            "persona_id": None, "costo_previsto": None, "costo_effettivo": None, "note": None,
+            "created_at": now, "updated_at": now})
+    if docs:
+        await db.pipeline_tasks.insert_many(docs)
+    await db.event_pipelines.update_one({"org_id": org_id, "event_id": event_id},
+        {"$set": {"template_key": template_key, "template_applied_at": now,
+                  "pipeline_ref_date": ref, "updated_at": now}})
+    return len(docs)
+
+
+class PipelineGenerateIn(BaseModel):
+    template_key: str
+    confirm: Optional[bool] = False
+
+
+@api.post("/events/{event_id}/pipeline/generate")
+async def pipeline_generate(event_id: str, body: PipelineGenerateIn, user: dict = Depends(require_admin)):
+    """Applica un modello e genera le attività. Nessun addebito di crediti.
+    Se esistono già attività (cambio modello) serve confirm=true: le attività attuali vengono eliminate."""
+    org_id = user["org_id"]
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    p = await _pipeline_doc(org_id, event_id)
+    if not (p and p.get("active")):
+        raise HTTPException(status_code=400, detail="La Pipeline non è attiva per questo evento")
+    existing_tasks = await db.pipeline_tasks.count_documents({"org_id": org_id, "event_id": event_id})
+    if existing_tasks and not body.confirm:
+        raise HTTPException(status_code=409,
+            detail="La Pipeline contiene già attività. Confermando, le attività attuali e le personalizzazioni verranno eliminate.")
+    n = await _generate_pipeline_from_template(org_id, event_id, body.template_key, ev)
+    await record_audit(user, "pipeline_generate", org_id=org_id,
+                       meta={"event_id": event_id, "template_key": body.template_key, "tasks": n})
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    payload = await _pipeline_status_payload(org_id, ev)
+    payload["generated"] = n
+    return payload
+
+
+@api.post("/events/{event_id}/pipeline/recalculate-deadlines")
+async def pipeline_recalculate_deadlines(event_id: str, user: dict = Depends(require_admin)):
+    """Ricalcola le scadenze sulla nuova data evento mantenendo lo stesso offset relativo.
+    Le attività con scadenza modificata manualmente (due_date_overridden) NON vengono toccate."""
+    org_id = user["org_id"]
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    ref = _event_pipeline_ref_date(ev)
+    if not ref:
+        raise HTTPException(status_code=400, detail="Imposta prima la data dell'evento")
+    ref_date = _date.fromisoformat(ref)
+    rows = await db.pipeline_tasks.find({"org_id": org_id, "event_id": event_id}, {"_id": 0}).to_list(5000)
+    updated = 0
+    for t in rows:
+        if t.get("due_date_overridden"):
+            continue
+        if t.get("giorni_offset") is None:
+            continue
+        due = (ref_date + _timedelta(days=int(t["giorni_offset"]))).isoformat()
+        await db.pipeline_tasks.update_one({"org_id": org_id, "id": t["id"]},
+            {"$set": {"scadenza": due, "updated_at": now_iso()}})
+        updated += 1
+    await db.event_pipelines.update_one({"org_id": org_id, "event_id": event_id},
+        {"$set": {"pipeline_ref_date": ref, "updated_at": now_iso()}})
+    await record_audit(user, "pipeline_recalc", org_id=org_id, meta={"event_id": event_id, "updated": updated})
+    payload = await _pipeline_status_payload(org_id, ev)
+    payload["recalculated"] = updated
+    return payload
+
+
+@api.post("/events/{event_id}/pipeline/keep-deadlines")
+async def pipeline_keep_deadlines(event_id: str, user: dict = Depends(require_admin)):
+    """Mantieni le scadenze attuali: allinea solo la data di riferimento così l'avviso di cambio data sparisce."""
+    org_id = user["org_id"]
+    ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    await db.event_pipelines.update_one({"org_id": org_id, "event_id": event_id},
+        {"$set": {"pipeline_ref_date": _event_pipeline_ref_date(ev), "updated_at": now_iso()}})
+    return await _pipeline_status_payload(org_id, ev)
+
 
 
 @api.get("/platform/events/migration-dryrun")

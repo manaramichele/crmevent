@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RechargeDialog } from "@/components/CreditsSection";
 import {
   ArrowLeft, Rocket, Coins, Wallet, CheckCircle2, Clock, AlertTriangle, Flame, Plus, Pencil,
-  Copy, Trash2, RotateCcw, Check, FolderPlus, ListChecks,
+  Copy, Trash2, RotateCcw, Check, FolderPlus, ListChecks, LayoutTemplate, CalendarClock, RefreshCw,
 } from "lucide-react";
 
 const STATI = { da_fare: "Da fare", in_corso: "In corso", in_attesa: "In attesa", completata: "Completata" };
@@ -33,12 +33,23 @@ export default function EventPipeline() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [recharge, setRecharge] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [taskDlg, setTaskDlg] = useState(null); // task object or null
+  const [taskDlg, setTaskDlg] = useState(null);
   const [catName, setCatName] = useState("");
   const [filters, setFilters] = useState({ categoria: "all", stato: "all", priorita: "all" });
+  // FASE 3
+  const [templates, setTemplates] = useState([]);
+  const [selectedTpl, setSelectedTpl] = useState(null);
+  const [changeMode, setChangeMode] = useState(false); // chooser aperto per cambio modello
+  const [genBusy, setGenBusy] = useState(false);
+  const [dateDlg, setDateDlg] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try { const { data } = await api.get(`/events/${id}/pipeline/status`); setStatus(data); return data; }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  }, [id]);
+
+  const loadTemplates = useCallback(async () => {
+    try { const { data } = await api.get(`/events/${id}/pipeline/templates`); setTemplates(data.templates); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   }, [id]);
 
@@ -50,16 +61,18 @@ export default function EventPipeline() {
     setCats(c.data); setTasks(t.data.tasks); setStats(t.data.stats);
   }, [id]);
 
-  useEffect(() => {
-    (async () => {
-      const s = await loadStatus();
-      if (s?.active) {
-        await loadPipeline();
-        api.get("/persons").then(({ data }) => setPersons(data)).catch(() => {});
-        api.get("/companies").then(({ data }) => setCompanies(data)).catch(() => {});
-      }
-    })();
-  }, [loadStatus, loadPipeline]);
+  const refreshActive = useCallback(async (s) => {
+    if (s?.active && s?.template_key && s?.task_count) {
+      await loadPipeline();
+      api.get("/persons").then(({ data }) => setPersons(data)).catch(() => {});
+      api.get("/companies").then(({ data }) => setCompanies(data)).catch(() => {});
+      if (s.date_changed) setDateDlg(true);
+    } else if (s?.active && s?.needs_template) {
+      await loadTemplates();
+    }
+  }, [loadPipeline, loadTemplates]);
+
+  useEffect(() => { (async () => { const s = await loadStatus(); await refreshActive(s); })(); }, [loadStatus, refreshActive]);
 
   const activate = async () => {
     setBusy(true);
@@ -68,13 +81,45 @@ export default function EventPipeline() {
       toast.success("Pipeline attivata");
       setConfirmOpen(false);
       const s = await loadStatus();
-      if (s?.active) { await loadPipeline(); }
+      await refreshActive(s);
     } catch (e) {
       if (e.response?.status === 402) { toast.error("Crediti insufficienti"); setConfirmOpen(false); setRecharge(true); }
       else toast.error(formatApiError(e.response?.data?.detail));
     }
     setBusy(false);
   };
+
+  const generate = async (confirm = false) => {
+    if (!selectedTpl) { toast.error("Scegli un modello"); return; }
+    setGenBusy(true);
+    try {
+      const { data } = await api.post(`/events/${id}/pipeline/generate`, { template_key: selectedTpl, confirm });
+      toast.success(`Pipeline creata: ${data.generated} attività`);
+      setChangeMode(false); setSelectedTpl(null);
+      const s = await loadStatus();
+      await refreshActive(s);
+    } catch (e) {
+      if (e.response?.status === 409) {
+        if (window.confirm(e.response.data.detail + "\n\nProcedere?")) { await generate(true); setGenBusy(false); return; }
+      } else toast.error(formatApiError(e.response?.data?.detail));
+    }
+    setGenBusy(false);
+  };
+
+  const recalc = async () => {
+    setBusy(true);
+    try { const { data } = await api.post(`/events/${id}/pipeline/recalculate-deadlines`); toast.success(`Scadenze ricalcolate: ${data.recalculated} attività`); setDateDlg(false); const s = await loadStatus(); await refreshActive(s); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    setBusy(false);
+  };
+  const keepDeadlines = async () => {
+    setBusy(true);
+    try { await api.post(`/events/${id}/pipeline/keep-deadlines`); setDateDlg(false); const s = await loadStatus(); await refreshActive(s); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    setBusy(false);
+  };
+
+  const openChangeModel = async () => { await loadTemplates(); setSelectedTpl(status?.template_key || null); setChangeMode(true); };
 
   const saveTask = async () => {
     const t = taskDlg;
@@ -128,6 +173,9 @@ export default function EventPipeline() {
 
   if (!status) return <div className="text-slate-400 p-6">Caricamento…</div>;
 
+  const showChooser = status.active && (status.needs_template || changeMode);
+  const chosen = templates.find((t) => t.key === selectedTpl);
+
   return (
     <div className="max-w-6xl space-y-6" data-testid="event-pipeline-page">
       <button onClick={() => navigate("/eventi")} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800" data-testid="pipeline-back"><ArrowLeft className="w-4 h-4" />Torna agli eventi</button>
@@ -142,15 +190,62 @@ export default function EventPipeline() {
             <Button onClick={() => setConfirmOpen(true)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-activate-cta"><Rocket className="w-4 h-4 mr-1.5" />Attiva Pipeline Evento</Button>
           </div>
         </div>
+      ) : showChooser ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-3xl mx-auto" data-testid="pipeline-template-chooser">
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-2xl bg-tiffany-light/40 flex items-center justify-center mx-auto mb-4"><LayoutTemplate className="w-7 h-7 text-tiffany-active" /></div>
+            <h1 className="text-2xl font-bold text-slate-900">Che tipo di evento stai organizzando?</h1>
+            <p className="text-slate-500 mt-2">{changeMode ? "Scegli un nuovo modello per rigenerare la Pipeline." : "La tua Pipeline è attiva. Scegli un modello per iniziare: genereremo automaticamente le attività con le scadenze calcolate sulla data del tuo evento."}</p>
+          </div>
+          {changeMode && status.task_count > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" data-testid="pipeline-change-warning">
+              Cambiando modello verranno <strong>eliminate le attività attuali</strong>, gli stati e le personalizzazioni. Verrà generata una nuova Pipeline dal modello selezionato.
+            </div>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 mt-6">
+            {templates.map((t) => (
+              <button key={t.key} onClick={() => setSelectedTpl(t.key)} className={`text-left rounded-2xl border p-5 transition-all ${selectedTpl === t.key ? "border-tiffany-active ring-2 ring-tiffany-active/30 bg-tiffany-light/10" : "border-slate-200 hover:border-slate-300"}`} data-testid={`pipeline-tpl-${t.key}`}>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-slate-900 text-lg">{t.name}</h3>
+                  {selectedTpl === t.key && <CheckCircle2 className="w-5 h-5 text-tiffany-active" />}
+                </div>
+                <p className="text-sm text-slate-500 mt-1">{t.description}</p>
+                <div className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-600"><ListChecks className="w-4 h-4 text-tiffany-active" />{t.task_count} attività</div>
+              </button>
+            ))}
+          </div>
+          {chosen && (
+            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700" data-testid="pipeline-gen-preview">
+              Verranno create <strong>{chosen.task_count} attività</strong> organizzative con scadenze calcolate sulla data del tuo evento. Potrai modificarle o eliminarle liberamente.
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 mt-6">
+            {changeMode && <Button variant="outline" onClick={() => { setChangeMode(false); setSelectedTpl(null); }}>Annulla</Button>}
+            <Button onClick={() => generate(changeMode)} disabled={!selectedTpl || genBusy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-create-cta"><Rocket className="w-4 h-4 mr-1.5" />Crea Pipeline</Button>
+          </div>
+        </div>
       ) : (
         <>
+          {status.date_changed && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3" data-testid="pipeline-date-banner">
+              <CalendarClock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-semibold text-amber-900">Hai modificato la data dell'evento</div>
+                <div className="text-sm text-amber-800">La Pipeline contiene attività con scadenze calcolate sulla data precedente.</div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setDateDlg(true)} data-testid="pipeline-date-review">Rivedi scadenze</Button>
+            </div>
+          )}
           <div className="bg-white border border-slate-200 rounded-2xl p-6" data-testid="pipeline-dashboard">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                <div className="text-xs font-bold tracking-wider text-slate-400 uppercase">Preparazione evento</div>
+                <div className="text-xs font-bold tracking-wider text-slate-400 uppercase">Preparazione evento{status.template_key ? ` · modello ${status.template_key}` : ""}</div>
                 <div className="text-3xl font-bold text-slate-900" data-testid="pipeline-percent">{stats.percent}% completato</div>
               </div>
-              <Button onClick={() => setTaskDlg({ ...emptyTask })} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-add-task"><Plus className="w-4 h-4 mr-1.5" />Nuova attività</Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={openChangeModel} data-testid="pipeline-change-model"><RefreshCw className="w-4 h-4 mr-1.5" />Cambia modello</Button>
+                <Button onClick={() => setTaskDlg({ ...emptyTask })} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-add-task"><Plus className="w-4 h-4 mr-1.5" />Nuova attività</Button>
+              </div>
             </div>
             <div className="mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{ width: `${stats.percent}%` }} /></div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
@@ -197,7 +292,7 @@ export default function EventPipeline() {
                       <td className="py-2.5 pr-3 font-medium text-slate-800">{t.titolo}</td>
                       <td className="px-3 text-slate-500">{catName_[t.categoria_id] || "—"}</td>
                       <td className="px-3 text-slate-500">{t.responsabile_id ? nameOf(persons, t.responsabile_id) : "—"}</td>
-                      <td className="px-3"><span className={t.late ? "text-red-600 font-semibold" : "text-slate-500"}>{dmy(t.scadenza)}{t.late && " · In ritardo"}</span></td>
+                      <td className="px-3"><span className={t.late ? "text-red-600 font-semibold" : "text-slate-500"}>{dmy(t.scadenza)}{t.late && " · In ritardo"}{t.due_date_overridden && <span title="Scadenza modificata manualmente" className="ml-1 text-[10px] text-indigo-600">✎</span>}</span></td>
                       <td className="px-3"><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATO_CLS[t.stato]}`}>{STATI[t.stato]}</span></td>
                       <td className="px-3"><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PRIO_CLS[t.priorita]}`}>{PRIO[t.priorita]}</span></td>
                       <td className="px-3">
@@ -222,7 +317,7 @@ export default function EventPipeline() {
       {/* Conferma attivazione */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-sm" data-testid="pipeline-confirm-dialog">
-          <DialogHeader><DialogTitle>Attiva Pipeline Evento Pro</DialogTitle><DialogDescription>Il costo viene addebitato una sola volta per questo evento.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Attiva Pipeline Evento Pro</DialogTitle><DialogDescription>Il costo viene addebitato una sola volta per questo evento. Dopo l'attivazione sceglierai il modello.</DialogDescription></DialogHeader>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-slate-500">Crediti disponibili</span><span className="font-semibold">{status.balance}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Costo attivazione</span><span className="font-semibold">{status.cost}</span></div>
@@ -234,6 +329,18 @@ export default function EventPipeline() {
             {status.sufficient
               ? <Button onClick={activate} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-confirm-activate"><Coins className="w-4 h-4 mr-1.5" />Attiva per {status.cost} crediti</Button>
               : <Button onClick={() => { setConfirmOpen(false); setRecharge(true); }} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-confirm-recharge"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog cambio data evento */}
+      <Dialog open={dateDlg} onOpenChange={setDateDlg}>
+        <DialogContent className="max-w-md" data-testid="pipeline-date-dialog">
+          <DialogHeader><DialogTitle>Hai modificato la data dell'evento</DialogTitle><DialogDescription>Vuoi ricalcolare le scadenze della Pipeline sulla nuova data? Verrà mantenuto lo stesso numero di giorni relativo a ciascuna attività.</DialogDescription></DialogHeader>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Le scadenze modificate manualmente verranno mantenute.</div>
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={keepDeadlines} disabled={busy} data-testid="pipeline-keep-deadlines">Mantieni le scadenze attuali</Button>
+            <Button onClick={recalc} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-recalc-deadlines"><RefreshCw className="w-4 h-4 mr-1.5" />Ricalcola le scadenze</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
