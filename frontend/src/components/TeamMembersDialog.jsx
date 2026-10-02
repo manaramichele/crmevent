@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { MODAL, MODAL_TABLE_LAYOUT } from "@/lib/modal";
+import { useWheelScroll } from "@/lib/useWheelScroll";
 import { Users, UserPlus, X, Search, Crown } from "lucide-react";
 
 const pname = (p) => `${p?.nome || ""} ${p?.cognome || ""}`.trim() || p?.email || "—";
@@ -19,6 +20,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
   const [addQuery, setAddQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const { sort, toggle } = useSort({ key: "cognome", dir: "asc" });
+  const bindWheel = useWheelScroll();
 
   const eventName = events.find((e) => e.id === team?.evento_id)?.nome || "—";
 
@@ -120,7 +122,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
             </PopoverTrigger>
             <PopoverContent className="w-72 p-0 z-[200]" align="end" data-testid="team-add-popover">
               <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={addQuery} onChange={(e) => setAddQuery(e.target.value)} placeholder="Cerca staff/volontario..." className="h-8" data-testid="team-add-search" /></div>
-              <div className="max-h-56 overflow-y-auto p-1">
+              <div ref={bindWheel} className="max-h-56 overflow-y-auto p-1" data-testid="team-add-list">
                 {candidates.length === 0 ? <div className="px-2 py-3 text-xs text-slate-400 text-center" data-testid="team-add-empty">Nessuno Staff/Volontario dell'evento disponibile.</div> :
                   candidates.map((c) => (
                     <button key={c.id} onClick={() => addMember(c)} disabled={busy} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 flex items-center justify-between" data-testid={`team-add-opt-${c.id}`}>

@@ -5,6 +5,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useWheelScroll } from "@/lib/useWheelScroll";
 import { ChevronsUpDown, UserPlus, ArrowLeft } from "lucide-react";
 
 const pname = (p) => (p ? (`${p.nome || ""} ${p.cognome || ""}`.trim() || p.email || p.id) : "");
@@ -20,6 +21,7 @@ export function StaffAssignSelect({
   const [quick, setQuick] = useState(null);
   const [existing, setExisting] = useState(null);
   const [busy, setBusy] = useState(false);
+  const bindWheel = useWheelScroll();
 
   const selected = useMemo(() => {
     if (!value) return null;
@@ -37,6 +39,24 @@ export function StaffAssignSelect({
   const reset = () => { setQ(""); setQuick(null); setExisting(null); };
   const close = () => { setOpen(false); reset(); };
   const pick = (pid) => { onChange?.(pid); close(); };
+
+  const onListKeyDown = (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const btns = [...e.currentTarget.querySelectorAll("button[data-opt]")];
+    const idx = btns.indexOf(document.activeElement);
+    let next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+    if (next < 0) next = 0;
+    if (next >= btns.length) next = btns.length - 1;
+    btns[next]?.focus();
+  };
+  const focusFirstOpt = (e) => {
+    if (e.key !== "ArrowDown") return;
+    e.preventDefault();
+    const first = e.currentTarget.closest("[data-radix-popper-content-wrapper]")?.querySelector("button[data-opt]")
+      || document.querySelector("[data-testid='staff-assign-list'] button[data-opt]");
+    first?.focus();
+  };
 
   const submitQuick = async () => {
     if (!quick.nome.trim() || !quick.cognome.trim()) return toast.error("Nome e Cognome obbligatori");
@@ -93,11 +113,11 @@ export function StaffAssignSelect({
           </div>
         ) : (
           <>
-            <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca staff..." className="h-8" data-testid="staff-assign-search" /></div>
-            <div className="max-h-56 overflow-y-auto p-1">
-              <button type="button" onClick={() => pick(null)} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500" data-testid="staff-opt-none">—</button>
+            <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={focusFirstOpt} placeholder="Cerca staff..." className="h-8" data-testid="staff-assign-search" /></div>
+            <div ref={bindWheel} onKeyDown={onListKeyDown} className="max-h-56 overflow-y-auto p-1" data-testid="staff-assign-list">
+              <button type="button" data-opt onClick={() => pick(null)} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 focus:bg-slate-100 outline-none text-slate-500" data-testid="staff-opt-none">—</button>
               {list.map((p) => (
-                <button type="button" key={p.id} onClick={() => pick(p.id)} className={`w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 ${p.id === value ? "bg-tiffany-light/40 font-semibold" : ""}`} data-testid={`staff-opt-${p.id}`}>{pname(p)}</button>
+                <button type="button" data-opt key={p.id} onClick={() => pick(p.id)} className={`w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 focus:bg-slate-100 outline-none ${p.id === value ? "bg-tiffany-light/40 font-semibold" : ""}`} data-testid={`staff-opt-${p.id}`}>{pname(p)}</button>
               ))}
               {list.length === 0 && <div className="px-2 py-2 text-xs text-slate-400" data-testid="staff-opt-empty">Nessuno Staff trovato</div>}
               {isStale && selected && <div className="px-2 py-1.5 text-xs text-amber-700">{pname(selected)} · non più nello Staff</div>}
