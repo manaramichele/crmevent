@@ -2564,6 +2564,128 @@ async def event_cal_status(event_id: str, user: dict = Depends(get_current_user)
     return {"synced": bool(link), "html_link": link.get("html_link") if link else None}
 
 
+# ---------------- Google Calendar: sblocco a crediti + sync Attività/Follow-up ----------------
+GCAL_UNLOCK_COST = 20
+
+
+async def _gcal_unlocked(org_id: str) -> bool:
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "features": 1})
+    return bool((org or {}).get("features", {}).get("google_calendar"))
+
+
+@api.get("/calendar/feature")
+async def calendar_feature(user: dict = Depends(require_admin)):
+    oid = user["org_id"]
+    c = await _ensure_org_credits(oid)
+    return {"configured": gcal_utils.is_configured(), "unlocked": await _gcal_unlocked(oid),
+            "cost": GCAL_UNLOCK_COST, "balance": c.get("balance", 0)}
+
+
+@api.post("/calendar/unlock")
+async def calendar_unlock(user: dict = Depends(require_org_admin)):
+    oid = user["org_id"]
+    if await _gcal_unlocked(oid):
+        c = await _ensure_org_credits(oid)
+        return {"unlocked": True, "charged": False, "balance": c.get("balance", 0)}
+    await _ensure_credits_setup()
+    await _apply_credit_movement(oid, -GCAL_UNLOCK_COST, reason_code="google_calendar_unlock",
+                                 type_="spend", service_key="google_calendar", quantity=1,
+                                 unit_cost=GCAL_UNLOCK_COST, user_id=user.get("user_id"),
+                                 idempotency_key=f"gcal_unlock:{oid}", note="Attivazione Google Calendar")
+    await db.organizations.update_one({"id": oid}, {"$set": {"features.google_calendar": True, "features.google_calendar_at": now_iso()}})
+    c = await _ensure_org_credits(oid)
+    return {"unlocked": True, "charged": True, "balance": c.get("balance", 0)}
+
+
+@api.post("/platform/orgs/{org_id}/calendar-feature")
+async def calendar_feature_admin(org_id: str, body: dict, admin: dict = Depends(require_superadmin)):
+    active = bool(body.get("active"))
+    await db.organizations.update_one({"id": org_id}, {"$set": {"features.google_calendar": active, "features.google_calendar_at": now_iso()}})
+    return {"org_id": org_id, "unlocked": active}
+
+
+async def _gcal_record_body(kind: str, rec: dict, ora: Optional[str]):
+    oid = rec.get("org_id")
+    ev = await db.events.find_one({"id": rec.get("evento_id"), "org_id": oid}, {"_id": 0, "nome": 1}) if rec.get("evento_id") else None
+    az = await db.companies.find_one({"id": rec.get("azienda_id"), "org_id": oid}, {"_id": 0, "nome": 1}) if rec.get("azienda_id") else None
+    pe = await db.persons.find_one({"id": rec.get("persona_id"), "org_id": oid}, {"_id": 0, "nome": 1, "cognome": 1}) if rec.get("persona_id") else None
+    ref = (f"{pe.get('nome', '')} {pe.get('cognome', '')}".strip()) if pe else None
+    parts = [rec.get("note"), f"Evento: {ev['nome']}" if ev else None, f"Azienda: {az['nome']}" if az else None, f"Referente: {ref}" if ref else None]
+    if kind == "activity":
+        date = rec.get("data")
+    else:
+        date = rec.get("scadenza")
+        if rec.get("priorita"):
+            parts.append(f"Priorità: {rec.get('priorita')}")
+    if not date:
+        raise HTTPException(status_code=400, detail="Manca la data per creare l'evento su Google Calendar")
+    d = str(date)[:10]
+    desc = "\n".join([p for p in parts if p])
+    return gcal_utils.build_event_body(summary=rec.get("titolo") or "CRMEvent", description=desc,
+                                       location="", date_start=d, date_end=d, time_start=(ora or None))
+
+
+async def _gcal_sync_record(user: dict, coll: str, kind: str, rec_id: str, ora: Optional[str]):
+    oid = user["org_id"]
+    if not await _gcal_unlocked(oid):
+        raise HTTPException(status_code=402, detail="Funzione Google Calendar non attiva per questa organizzazione")
+    rec = await db[coll].find_one({"id": rec_id, "org_id": oid}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Record non trovato")
+    body = await _gcal_record_body(kind, rec, ora)
+    ev = await _sync_object(user["user_id"], kind, rec_id, body)
+    if ora is not None:
+        await db[coll].update_one({"id": rec_id, "org_id": oid}, {"$set": {"ora": ora}})
+    return {"ok": True, "google_event_id": ev["id"], "html_link": ev.get("htmlLink")}
+
+
+async def _gcal_delete(user: dict, kind: str, rec_id: str):
+    link = await db.calendar_event_links.find_one({"user_id": user["user_id"], "kind": kind, "ref_id": rec_id})
+    if not link:
+        return {"deleted": False}
+    conn = await db.calendar_connections.find_one({"user_id": user["user_id"]})
+    if conn:
+        try:
+            svc = gcal_utils.service_for(conn["tokens"])
+            svc.events().delete(calendarId=link.get("calendar_id", "primary"), eventId=link["google_event_id"]).execute()
+        except Exception as e:
+            logger.error(f"gcal delete error: {e}")
+    await db.calendar_event_links.delete_one({"user_id": user["user_id"], "kind": kind, "ref_id": rec_id})
+    return {"deleted": True}
+
+
+@api.post("/activities/{rec_id}/calendar-sync")
+async def activity_cal_sync(rec_id: str, body: dict = None, user: dict = Depends(require_admin)):
+    return await _gcal_sync_record(user, "activities", "activity", rec_id, (body or {}).get("ora"))
+
+
+@api.post("/followups/{rec_id}/calendar-sync")
+async def followup_cal_sync(rec_id: str, body: dict = None, user: dict = Depends(require_admin)):
+    return await _gcal_sync_record(user, "followups", "followup", rec_id, (body or {}).get("ora"))
+
+
+@api.get("/activities/{rec_id}/calendar-status")
+async def activity_cal_status(rec_id: str, user: dict = Depends(get_current_user)):
+    link = await db.calendar_event_links.find_one({"user_id": user["user_id"], "kind": "activity", "ref_id": rec_id}, {"_id": 0})
+    return {"synced": bool(link), "html_link": link.get("html_link") if link else None}
+
+
+@api.get("/followups/{rec_id}/calendar-status")
+async def followup_cal_status(rec_id: str, user: dict = Depends(get_current_user)):
+    link = await db.calendar_event_links.find_one({"user_id": user["user_id"], "kind": "followup", "ref_id": rec_id}, {"_id": 0})
+    return {"synced": bool(link), "html_link": link.get("html_link") if link else None}
+
+
+@api.delete("/activities/{rec_id}/calendar-event")
+async def activity_cal_delete(rec_id: str, user: dict = Depends(require_admin)):
+    return await _gcal_delete(user, "activity", rec_id)
+
+
+@api.delete("/followups/{rec_id}/calendar-event")
+async def followup_cal_delete(rec_id: str, user: dict = Depends(require_admin)):
+    return await _gcal_delete(user, "followup", rec_id)
+
+
 # ---------------- Staff / Volunteer personal area (/me) ----------------
 def _safe_colleague(p: dict, presence: dict, team: dict) -> dict:
     return {"nome": p.get("nome"), "cognome": p.get("cognome"), "ruolo": presence.get("ruolo"),

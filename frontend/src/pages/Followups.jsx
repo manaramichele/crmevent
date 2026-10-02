@@ -1,4 +1,6 @@
 import { EntityManager, StatusBadge, useCollection } from "@/components/crm";
+import api, { formatApiError } from "@/lib/api";
+import { toast } from "sonner";
 
 const PRIO_LABEL = { alta: "Alta", media: "Media", bassa: "Bassa" };
 const PRIO_COLOR = { alta: "red", media: "orange", bassa: "gray" };
@@ -29,13 +31,27 @@ export default function Followups() {
   const fields = [
     { name: "titolo", label: "Titolo", required: true, full: true },
     { name: "scadenza", label: "Scadenza", type: "date" },
+    { name: "ora", label: "Ora (facoltativa)", type: "time" },
     { name: "priorita", label: "Priorità", keepOrder: true, type: "select", options: Object.keys(PRIO_LABEL).map((v) => ({ value: v, label: PRIO_LABEL[v] })) },
     { name: "stato", label: "Stato", keepOrder: true, type: "select", options: [{ value: "aperto", label: "Aperto" }, { value: "completato", label: "Completato" }] },
     { name: "evento_id", label: "Evento", type: "select", options: events.map((e) => ({ value: e.id, label: e.nome })) },
     { name: "azienda_id", label: "Azienda", type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })) },
     { name: "persona_id", label: "Referente", type: "select", options: persons.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() })) },
     { name: "note", label: "Note", type: "textarea", full: true },
+    { name: "add_to_calendar", label: "Google Calendar", type: "gcalcheck", kind: "followup", full: true },
   ];
+
+  const onSaved = async (rec, form) => {
+    if (!form.add_to_calendar || !rec?.id) return;
+    try {
+      await api.post(`/followups/${rec.id}/calendar-sync`, { ora: form.ora || null });
+      toast.success("Aggiunto a Google Calendar");
+    } catch (e) {
+      const d = e.response?.data?.detail || "";
+      if (String(d).toLowerCase().includes("collegat")) toast.error("Collega prima Google Calendar per questo utente");
+      else toast.error(formatApiError(d));
+    }
+  };
 
   if (l1 || l2 || l3) return <div className="text-slate-400">Caricamento...</div>;
 
@@ -43,7 +59,7 @@ export default function Followups() {
     <EntityManager
       title="Follow-up" subtitle="Scadenze e promemoria commerciali"
       endpoint="/followups" fields={fields} columns={columns(events, companies)}
-      entityLabel="follow-up" testid="followup" searchKeys={["titolo"]}
+      entityLabel="follow-up" testid="followup" searchKeys={["titolo"]} onSaved={onSaved}
     />
   );
 }

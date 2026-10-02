@@ -18,6 +18,7 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { MODAL, MODAL_SCROLL } from "@/lib/modal";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
+import CalendarSyncField from "@/components/CalendarSyncField";
 
 export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 export const formatEUR = (n) => eurFmt.format(Number(n || 0));
@@ -309,10 +310,13 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
       </Select>
     );
   }
+  if (field.type === "gcalcheck") {
+    return <CalendarSyncField kind={field.kind} form={form} value={value} onChange={(v) => onChange(field.name, v)} />;
+  }
   return (
     <Input
       {...common}
-      type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type || "text"}
+      type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "time" ? "time" : field.type || "text"}
       value={value ?? ""}
       onChange={(e) => onChange(field.name, field.type === "number" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value)}
       placeholder={field.placeholder}
@@ -373,7 +377,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved }) {
   const { items, loading, create, update, remove } = useCollection(endpoint);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -384,8 +388,10 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
   const openEdit = (row) => { setEditing(row); setDialogOpen(true); };
 
   const onSubmit = async (form) => {
-    if (editing) { await update(editing.id, form); toast.success(`${entityLabel} aggiornato`); }
-    else { await create(form); toast.success(`${entityLabel} creato`); }
+    let rec;
+    if (editing) { rec = await update(editing.id, form); toast.success(`${entityLabel} aggiornato`); }
+    else { rec = await create(form); toast.success(`${entityLabel} creato`); }
+    if (onSaved) { try { await onSaved(rec || { ...editing, ...form }, form, !!editing); } catch { /* handled in onSaved */ } }
   };
 
   const onDelete = async (row) => {
