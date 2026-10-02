@@ -1,0 +1,33 @@
+{
+  "summary": "Tested new 'servizio_ospitalita' feature for Hospitality module: admin dialog conditional sections + backend round-trip + /api/me/events filter logic. All 5 states (da_definire, nessun_servizio, solo_ospitalita, solo_pasti, ospitalita_pasti) exercised through the UI; backend round-trip verified via pytest. Persistence after dialog close+reopen verified. State restored to 'da_definire' at end of test.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_hospitality_servizio.py",
+    "/app/test_reports/pytest/hosp_servizio.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is >11000 lines; strong candidate for modularization (hospitality, auth, events, me) into separate routers.",
+    "/api/me/events/{event_id} filter logic for servizio_ospitalita could not be verified end-to-end because no password-auth user is linked to persons of ev_qa_1 and no lodgings/meals are assigned to person_fa782807a3; logic was verified by code inspection (lines 2765-2774 in server.py) and matches spec.",
+    "Hospitality.jsx 'Esigenze alimentari' box shows only when meals are enabled (per spec). OK; however, note that saveServizio does not persist 'esigenze' separately, which is correct per spec but worth documenting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_hospitality_servizio.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin QA: qa.eventi@crmeventqa.it / QaEvents2026! (per /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. All test mutations restored to 'da_definire' at the end of both the pytest suite and the Playwright run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Event with persons for hospitality is 'Maratona QA' (id ev_qa_1), NOT 'Maratona QA 2027'. hosp-event-select dropdown lists events by name; select 'Maratona QA' exact=True. Example person row: hosp-person-person_fa782807a3 (presence staff_973eb8d3ff). The 'Servizio ospitalità' Radix Select options are: 'Da definire', 'Nessun servizio', 'Solo ospitalità', 'Solo pasti', 'Ospitalità + pasti'. Backend endpoint is PUT /api/staff/<presence_id> {servizio_ospitalita}. /api/me/events/{event_id} cannot be tested as person_fa782807a3 (no password-auth user linked).",
+  "verified_cases": [
+    "DEFAULT 'Da definire' -> only servizio-none-hint, no tabs, no save-esigenze",
+    "'Nessun servizio' -> only hint with 'Nessun servizio previsto...'",
+    "'Solo ospitalità' -> only tab-pernottamenti, no tab-pasti, no save-esigenze",
+    "'Solo pasti' -> only tab-pasti, no tab-pernottamenti, save-esigenze present",
+    "'Ospitalità + pasti' -> both tabs + save-esigenze",
+    "Persistence across dialog close/reopen",
+    "PUT /api/staff round-trip for all 5 values confirmed via GET /api/events/ev_qa_1/hospitality"
+  ]
+}

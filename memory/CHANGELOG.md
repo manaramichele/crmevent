@@ -795,3 +795,10 @@ Task 2 — Creatività manuale:
 - Allineato il conteggio "Vedi componenti (N)" nella tabella Team al filtro hasName() del dialog (niente record senza nominativo).
 - Team Leader resta solo Staff dell'evento; selettore componenti mostra Staff+Volontari ordinati Cognome→Nome.
 - Testing agent: 7/7 flussi verdi (iteration_53), inclusa propagazione cross-page Pipeline→Staff senza reload.
+
+## 2026-06 — Ospitalità: stato servizio per persona (5 stati)
+- Nuovo campo Presence.servizio_ospitalita (staff): Da definire | Nessun servizio | Solo ospitalità | Solo pasti | Ospitalità + pasti.
+- Maschera admin (/ospitalita, PersonPlanDialog): selettore 'Servizio ospitalità' (servizio-select); mostra SOLO le sezioni coerenti — nessun servizio/da definire => solo hint; solo_ospitalita => tab Pernottamenti; solo_pasti => tab Pasti + Esigenze; ospitalita_pasti => entrambe + Esigenze. Salvataggio immediato via PUT /api/staff/<presence_id>.
+- /api/events/{id}/hospitality: include servizio_ospitalita per persona (default da_definire).
+- Area personale (/api/me/events/{id}): filtra lodgings/meals per stato — nessun_servizio/da_definire => nulla; solo_ospitalita => solo pernottamenti; solo_pasti => solo pasti; ospitalita_pasti => entrambi. Nessuna sezione vuota/trattini nell'Area personale.
+- Testing agent iteration_54: 100% backend+frontend; 5 stati + persistenza verificati. Filtro /me/events verificato per ispezione codice (E2E bloccato: nessun utente volontario con password collegato alla persona QA). Test file: /app/backend/tests/test_hospitality_servizio.py.
