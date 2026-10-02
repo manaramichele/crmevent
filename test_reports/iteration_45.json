@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 45 full test (backend + frontend) for iter45 features: (A) generic sortable column headers via /app/frontend/src/lib/sortable.jsx applied to EntityManager (crm.jsx) and PeopleTable (Persons.jsx /staff-volontari), and (B) Pipeline quick-staff flow (new 'Aggiungi nuovo Staff' CTA in Responsabile dropdown + quick-staff-dialog + POST /api/staff/quick-add). All 6 backend tests PASS. All frontend acceptance checks PASS (sorting, empties-at-bottom in both dirs, subfilter+sort composition, quick-add E2E creation + auto-selection + preserved task fields, person visible in /staff-volontari Staff tab, not Volontario/Referente).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/aziende", "issues": ["Companies.jsx (/aziende route) does NOT use EntityManager and therefore does NOT inherit the new sortable headers. If the spec intends sorting on /aziende, Companies.jsx must be migrated to EntityManager or must adopt useSort/SortIcon/sortRows itself. The review example mentioned /aziende, but the generic feature was verified on another EntityManager page (/eventi) where all data headers are clickable, show ↑/↓ icon toggling, and 'Azioni' is non-sortable."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_staff_quick_add.py",
+    "/app/test_reports/pytest/iter45_quickadd.xml",
+    "/app/tests/seed_iter45_qa.py"
+  ],
+  "action_items": [
+    "Consider migrating /aziende (Companies.jsx) to the generic EntityManager (or wire it to the new sortable helper) so the sort UX is consistent with /eventi and other entity tables, as implied by the spec 'coerente in tutte le tabelle'."
+  ],
+  "critical_code_review_comments": [
+    "Backend @api.post /staff/quick-add is correct: normalizes phone, dedupes by email OR cellulare on current org; returns {status: 'exists'} with existing person when dedupe hits unless confirm_existing=True; use_existing_person_id short-circuits dedupe; creates staff link with categoria='staff', stato='da_contattare'; upgrades existing non-staff/collaboratore categoria to 'staff'. Does NOT create any volontario/referente artifact — persons-enriched flags verified: is_staff=True, is_volontario=False, is_referente=False.",
+    "sortable.jsx: empties-at-bottom rule enforced BEFORE applying dir multiplier (early returns `if (ea) return 1; if (eb) return -1;`) → correct 'vuoti sempre in fondo' behaviour verified in BOTH asc and desc on sort-cellulare.",
+    "EntityManager (crm.jsx line 416): headers use `c.sortable !== false && toggle(c.key)` and conditionally add 'cursor-pointer select-none group' + SortIcon — correct wiring. 'Azioni' column rendered as a plain <th> (no onClick, no cursor-pointer, no icon), satisfying the 'Azioni NON ordinabile' requirement.",
+    "PeopleTable (Persons.jsx line 164-168): colsMeta auto-built from ACC map with sortType='string'; Nome accessor is `${r.cognome} ${r.nome}` → 'ordina per Cognome+Nome' confirmed. All data headers carry data-testid=sort-<key>.",
+    "EventPipeline.jsx: Responsabile Select has sticky top search input, 'Nessuno Staff trovato' empty-state, and sticky bottom '+ Aggiungi nuovo Staff' CTA (data-testid=resp-add-staff). On click, pre-fills quick-staff nome with the current search query; opens quick-staff-dialog without closing the task dialog, so task fields are preserved.",
+    "On quick-add success the new person is appended to staffPersons and setTaskDlg(..., responsabile_id = person.id) is called → auto-select the just-created responsabile with no data loss in the task form (verified: titolo='TEST_QA_TaskKeep' retained).",
+    "Dedupe UX: when backend returns status='exists', the submit CTA swaps to 'Usa esistente' (qs-use-existing). Verified end-to-end at the backend (test_03/test_04); verified at the UI that the state is reachable from the quick-staff-dialog.",
+    "MINOR (/aziende): Companies.jsx renders a static thead without useSort/SortIcon/sortRows and is not driven by EntityManager, so the generic sort does not reach that page. The spec says 'in tutte le tabelle' — this is the only consistency gap found."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_staff_quick_add.py (new)",
+    "/app/tests/seed_iter45_qa.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% of acceptance checks that could be exercised on EntityManager pages; /aziende excluded because it does not yet use the new helper."},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! — verified working.",
+  "seed_data_creation": "Seeded in QA org: 1 TEST_QA_Iter45_Event with active pipeline (template_key=trail, credit_state=preparazione), 3 staff persons (Zara Ancona, Marco Bellini, Davide Delmonte), 3 extra persons (volontario/staff/vol with/without cellulare for empties-at-bottom), 3 TEST_QA_ aziende. All ephemeral seed + any quick-add TEST_* persons/events + staff links/pipeline categories/tasks cleaned up at the end (verified via mongo).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests reusable: /app/backend/tests/test_staff_quick_add.py (login QA, create temp event, POST /api/staff/quick-add new/dedupe/use_existing, GET /api/persons-enriched flag check, 400 validation). Seed: /app/tests/seed_iter45_qa.py (idempotent — recreates TEST_QA_ event + staff). Reusable testids added by iter45: in Persons.jsx PeopleTable Th: sort-nome, sort-cellulare, sort-ruolo_evento, sort-team, sort-evento, sort-qualifica, sort-aziende, sort-accesso; in EntityManager (crm.jsx): first `cursor-pointer` <th> per column; in EventPipeline.jsx: resp-add-staff, quick-staff-dialog, qs-nome, qs-cognome, qs-cellulare, qs-email, qs-submit, qs-use-existing. KNOWN BEHAVIOURAL NOTE: with the current operational-event guards, task-save on a brand-new TEST event may silently no-op if required fields missing — unrelated to iter45 scope. iubenda cookie banner must be dismissed/removed before interacting with the login form.",
+  "rca of the issue": "N/A — no bugs found in the iter45 scope. One cross-cutting consistency gap: Companies.jsx (/aziende) uses its own static table instead of EntityManager, so it does not benefit from the generic sort helper. Suggest migrating or wiring useSort/SortIcon/sortRows into Companies.jsx."
+}

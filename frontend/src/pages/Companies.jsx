@@ -8,6 +8,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import CompanyDialog from "@/components/CompanyDialog";
 import CompanyDetailDialog from "@/components/CompanyDetailDialog";
@@ -33,6 +34,12 @@ export default function Companies() {
 
   const del = async (r) => { try { await api.delete(`/companies/${r.id}`); await reload(); toast.success("Azienda eliminata"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const filtered = rows.filter((r) => !q || `${r.nome} ${r.settore || ""} ${r.citta || ""}`.toLowerCase().includes(q.toLowerCase()));
+  const { sort, toggle } = useSort();
+  const COLS = [
+    { key: "nome", label: "Azienda" }, { key: "settore", label: "Settore" }, { key: "citta", label: "Città" },
+    { key: "email", label: "Email" }, { key: "tipo", label: "Tipo", sortAccessor: (r) => TIPO_LABEL[r.tipo] || r.tipo || "" },
+  ];
+  const sorted = sortRows(filtered, sort, COLS);
 
   return (
     <div className="animate-fade-up">
@@ -46,12 +53,17 @@ export default function Companies() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
-              {["Azienda", "Settore", "Città", "Email", "Tipo", "Azioni"].map((h) => <th key={h} className={`text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap ${h === "Azioni" ? "text-right" : ""}`}>{h}</th>)}
+              {COLS.map((c) => (
+                <th key={c.key} onClick={() => toggle(c.key)} data-testid={`sort-${c.key}`} className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap cursor-pointer select-none group">
+                  <span className="inline-flex items-center gap-1">{c.label}<SortIcon active={sort.key === c.key} dir={sort.dir} /></span>
+                </th>
+              ))}
+              <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
             </tr></thead>
             <tbody>
               {loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Nessuna azienda trovata.</td></tr>
-                : filtered.map((r) => (
+                : sorted.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Nessuna azienda trovata.</td></tr>
+                : sorted.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => setDetailId(r.id)} data-testid={`company-row-${r.id}`}>
                     <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.nome}</span></td>
                     <td className="px-4 py-3 text-slate-700">{r.settore || "—"}</td>
