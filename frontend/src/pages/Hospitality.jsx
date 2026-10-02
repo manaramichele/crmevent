@@ -31,8 +31,8 @@ const MEAL_TYPE = { colazione: "Colazione", pranzo: "Pranzo", cena: "Cena" };
 const MEAL_ICON = { colazione: Coffee, pranzo: Sun, cena: Moon };
 const ESIGENZE = ["Vegetariano", "Vegano", "Senza glutine", "Senza lattosio", "Allergie", "Intolleranze", "Altro"];
 const PAY_STATE = { pagato: "Pagato", non_pagato: "Non pagato" };
-const STATO_COLOR = { completo: "green", parziale: "orange", da_definire: "red" };
-const STATO_LABEL = { completo: "Completo", parziale: "Parziale", da_definire: "Da definire" };
+const STATO_COLOR = { da_definire: "red", nessun_servizio: "gray", solo_ospitalita: "tiffany", solo_pasti: "tiffany", ospitalita_pasti: "green" };
+const STATO_LABEL = { da_definire: "Da definire", nessun_servizio: "Nessun servizio", solo_ospitalita: "Solo ospitalità", solo_pasti: "Solo pasti", ospitalita_pasti: "Ospitalità + pasti" };
 const CAT_LABEL = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const SERVIZIO = { da_definire: "Da definire", nessun_servizio: "Nessun servizio", solo_ospitalita: "Solo ospitalità", solo_pasti: "Solo pasti", ospitalita_pasti: "Ospitalità + pasti" };
 
@@ -345,7 +345,7 @@ function PersonPlanDialog({ person, eventId, canCosts, people = [], open, onOpen
       <DialogContent className="w-[95vw] max-w-4xl max-h-[92vh] overflow-y-auto" data-testid="person-plan-dialog">
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2">{fullName(person)}
-            <StatusBadge color={STATO_COLOR[person.stato]}>{STATO_LABEL[person.stato]}</StatusBadge></DialogTitle>
+            <StatusBadge color={STATO_COLOR[servizio]}>{SERVIZIO[servizio]}</StatusBadge></DialogTitle>
           <DialogDescription>{CAT_LABEL[person.categoria] || person.categoria || "—"}{person.ruolo ? ` · ${person.ruolo}` : ""}{person.team_nome ? ` · ${person.team_nome}` : ""}</DialogDescription>
         </DialogHeader>
         <div className="flex justify-end -mt-1 mb-1">

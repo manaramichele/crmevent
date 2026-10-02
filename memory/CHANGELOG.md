@@ -808,3 +808,8 @@ Task 2 — Creatività manuale:
 - Pulsante "Copia servizi" nel dialog persona: copia Ospitalità / Pasti / entrambi su più persone; messaggio "Stai per copiare questi servizi su X persone"; su conflitti chiede Mantieni esistenti vs Sostituisci; NON copia occupanti né esigenze alimentari; imposta servizio_ospitalita sui target. Endpoint POST /api/hospitality/copy.
 - Riepilogo camere nella dashboard (Totali/Singole/Doppie/Triple/Altre) e per struttura nella vista "Per struttura/servizio"; camera condivisa (occupanti comuni + stessa struttura/date) contata 1 volta. Endpoint /api/events/{id}/hospitality ritorna 'rooms'.
 - Testing agent iteration_55: 100% backend+frontend (fix import Popover applicato dal testing agent). Backend verificato via curl (occupanti, rooms de-dup, copy senza occupanti).
+
+## 2026-06 — Ospitalità: badge stato basato sulla scelta servizio
+- Il badge nel dialog persona ora riflette la scelta servizio_ospitalita (Da definire | Nessun servizio | Solo ospitalità | Solo pasti | Ospitalità + pasti) e si aggiorna all'istante (stato locale). Backend: persons.stato = servizio_ospitalita; filtro stato e righe lista usano i 5 stati.
+- Dashboard: "Servizi da definire" conta solo le persone con servizio_ospitalita = da_definire ('Nessun servizio' è uno stato definito, esclusa). "Senza sistemazione" conta solo chi ha scelto ospitalità (solo_ospitalita/ospitalita_pasti) ma non ha pernottamenti — 'Nessun servizio' e 'Solo pasti' non sono anomalie.
+- Verificato via curl (servizi_da_definire 6, senza_sistemazione 1 con A=nessun_servizio, B=solo_ospitalita senza lodging).

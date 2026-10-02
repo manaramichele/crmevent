@@ -1242,34 +1242,30 @@ async def event_hospitality(event_id: str, admin: dict = Depends(require_admin))
         eff_note = l.get("esigenze_note") or p.get("esigenze_note")
         plod = lod_by.get(l["persona_id"], [])
         pmeal = meal_by.get(l["persona_id"], [])
-        if not plod and not pmeal:
-            stato = "da_definire"
-        elif plod and pmeal:
-            stato = "completo"
-        else:
-            stato = "parziale"
+        servizio = l.get("servizio_ospitalita") or "da_definire"
         persons.append({
             "persona_id": p["id"], "nome": p.get("nome"), "cognome": p.get("cognome"),
             "ruolo": l.get("ruolo") or p.get("ruolo"), "categoria": l.get("categoria"),
             "team_id": l.get("team_id"), "team_nome": teams.get(l.get("team_id"), {}).get("nome"),
             "presence_id": l.get("id"),
-            "servizio_ospitalita": l.get("servizio_ospitalita") or "da_definire",
+            "servizio_ospitalita": servizio,
             "esigenze_alimentari": eff_esig or [], "esigenze_note": eff_note, "esigenze_override": override,
-            "lodgings": plod, "meals": pmeal, "stato": stato,
+            "lodgings": plod, "meals": pmeal, "stato": servizio,
         })
     persons.sort(key=lambda x: ((x.get("cognome") or "").lower(), (x.get("nome") or "").lower()))
 
     def _c(t):
         return len([m for m in meals if m.get("tipo_pasto") == t])
 
-    servizi_da_def = len([x for x in lodgings + meals if x.get("a_carico_di") in (None, "", "da_definire")])
+    servizi_da_def = len([x for x in persons if (x.get("servizio_ospitalita") or "da_definire") == "da_definire"])
+    senza_sist = len([x for x in persons if x.get("servizio_ospitalita") in ("solo_ospitalita", "ospitalita_pasti") and not x["lodgings"]])
     summary = {
         "persone_gestite": len([1 for x in persons if x["lodgings"] or x["meals"]]),
         "persone_totali": len(persons),
         "pernottamenti": len(lodgings), "camere": len(lodgings),
         "colazioni": _c("colazione"), "pranzi": _c("pranzo"), "cene": _c("cena"),
         "servizi_da_definire": servizi_da_def,
-        "senza_sistemazione": len([x for x in persons if not x["lodgings"]]),
+        "senza_sistemazione": senza_sist,
     }
     return {"event": event, "persons": persons, "lodgings": lodgings, "meals": meals,
             "summary": summary, "rooms": _compute_rooms(lodgings), "can_view_costs": can_costs}
