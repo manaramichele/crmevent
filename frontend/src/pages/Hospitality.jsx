@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 import {
   BedDouble, UtensilsCrossed, Users, Search, Plus, Pencil, Trash2, Coffee, Sun, Moon,
-  Building2, CalendarDays, Wallet, AlertTriangle, UserPlus, X,
+  Building2, CalendarDays, Wallet, AlertTriangle, UserPlus, X, Check, Copy,
 } from "lucide-react";
 
 const CARICO = { organizzazione: "Organizzazione", persona: "Persona", sponsor: "Sponsor/Partner", altro: "Altro", da_definire: "Da definire" };
@@ -44,6 +44,7 @@ function eachDay(start, end) {
   return out;
 }
 const fullName = (p) => `${p.nome || ""} ${p.cognome || ""}`.trim();
+const migrateLod = (l) => (l.occupanti || !l.compagni_camera) ? l : { ...l, occupanti: l.compagni_camera.split(",").map((s) => s.trim()).filter(Boolean).map((n) => ({ persona_id: null, nome: n })) };
 
 function Field({ label, children, full }) {
   return <div className={`space-y-1.5 ${full ? "sm:col-span-2" : ""}`}><Label className="text-xs">{label}</Label>{children}</div>;
@@ -98,8 +99,137 @@ function StructureMissingNote({ form }) {
   );
 }
 
+// ---- Occupanti della camera (multi-select staff + esterni) ----
+function OccupantiSelect({ people = [], excludeId, value = [], onChange }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [ext, setExt] = useState("");
+  const selectedIds = new Set(value.filter((o) => o.persona_id).map((o) => o.persona_id));
+  const list = people.filter((p) => p.persona_id !== excludeId)
+    .filter((p) => { const ql = q.trim().toLowerCase(); return !ql || `${p.cognome || ""} ${p.nome || ""}`.toLowerCase().includes(ql); })
+    .sort((a, b) => `${a.cognome || ""} ${a.nome || ""}`.trim().localeCompare(`${b.cognome || ""} ${b.nome || ""}`.trim(), "it", { sensitivity: "base" }));
+  const toggle = (p) => {
+    if (selectedIds.has(p.persona_id)) onChange(value.filter((o) => o.persona_id !== p.persona_id));
+    else onChange([...value, { persona_id: p.persona_id, nome: `${p.nome || ""} ${p.cognome || ""}`.trim() }]);
+  };
+  const addExt = () => { const n = ext.trim(); if (!n) return; onChange([...value, { persona_id: null, nome: n }]); setExt(""); };
+  return (
+    <div data-testid="occupanti-select">
+      <div className="flex flex-wrap gap-1.5 mb-1.5">
+        {value.length === 0 ? <span className="text-xs text-slate-400">Nessun occupante selezionato</span> :
+          value.map((o, i) => (
+            <span key={i} className="inline-flex items-center gap-1 rounded-full bg-tiffany-light text-tiffany-fg px-2.5 py-1 text-xs font-medium" data-testid={`occ-chip-${i}`}>
+              {o.nome}{!o.persona_id && <span className="text-[9px] opacity-70">(esterno)</span>}
+              <button type="button" onClick={() => onChange(value.filter((_, idx) => idx !== i))} className="hover:text-red-500"><X className="w-3 h-3" /></button>
+            </span>))}
+      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild><Button type="button" variant="outline" size="sm" className="h-8" data-testid="occupanti-add"><UserPlus className="w-3.5 h-3.5 mr-1" />Aggiungi occupante</Button></PopoverTrigger>
+        <PopoverContent className="w-72 p-0 z-[200]" align="start" data-testid="occupanti-popover">
+          <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca staff..." className="h-8" data-testid="occupanti-search" /></div>
+          <div className="max-h-48 overflow-y-auto p-1">
+            {list.length === 0 ? <div className="px-2 py-2 text-xs text-slate-400">Nessuno staff dell'evento</div> :
+              list.map((p) => (
+                <button type="button" key={p.persona_id} onClick={() => toggle(p)} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 flex items-center justify-between" data-testid={`occ-opt-${p.persona_id}`}>
+                  <span>{`${p.cognome || ""} ${p.nome || ""}`.trim()}</span>{selectedIds.has(p.persona_id) && <Check className="w-4 h-4 text-tiffany-active" />}
+                </button>))}
+          </div>
+          <div className="p-1.5 border-t border-slate-100 flex gap-1.5">
+            <Input value={ext} onChange={(e) => setExt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExt(); } }} placeholder="Nominativo esterno" className="h-8" data-testid="occupanti-ext-input" />
+            <Button type="button" size="sm" className="h-8 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={addExt} data-testid="occupanti-ext-add">Aggiungi</Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+// ---- Riepilogo camere ----
+function RoomsSummary({ rooms }) {
+  if (!rooms) return null;
+  const cards = [["Camere totali", rooms.totali], ["Singole", rooms.singole], ["Doppie", rooms.doppie], ["Triple", rooms.triple], ["Altre", rooms.altre]];
+  return (
+    <div className="mb-6" data-testid="rooms-summary">
+      <div className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Riepilogo camere</div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {cards.map(([l, v]) => (
+          <div key={l} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm" data-testid={`rooms-${l.toLowerCase().replace(/[^a-z]/g, "-")}`}>
+            <BedDouble className="w-4 h-4 mb-1 text-tiffany-active" /><div className="text-xl font-bold text-slate-900">{v}</div><div className="text-[11px] text-slate-500">{l}</div>
+          </div>))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Copia servizi su più persone ----
+function CopyServicesDialog({ eventId, source, people = [], open, onOpenChange, onDone }) {
+  const [what, setWhat] = useState("both");
+  const [sel, setSel] = useState(new Set());
+  const [q, setQ] = useState("");
+  const [confirmMode, setConfirmMode] = useState(false);
+  useEffect(() => { if (open) { setWhat("both"); setSel(new Set()); setQ(""); setConfirmMode(false); } }, [open]);
+  const list = people.filter((p) => p.persona_id !== source?.persona_id)
+    .filter((p) => !q || fullName(p).toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => `${a.cognome || ""} ${a.nome || ""}`.trim().localeCompare(`${b.cognome || ""} ${b.nome || ""}`.trim(), "it", { sensitivity: "base" }));
+  const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const conflicts = useMemo(() => people.filter((p) => sel.has(p.persona_id)).some((p) => {
+    const hasL = (p.lodgings || []).length > 0, hasM = (p.meals || []).length > 0;
+    return what === "ospitalita" ? hasL : what === "pasti" ? hasM : (hasL || hasM);
+  }), [sel, what, people]);
+  const doCopy = async (mode) => {
+    try {
+      const { data } = await api.post("/hospitality/copy", { evento_id: eventId, source_persona_id: source.persona_id, target_persona_ids: [...sel], what, mode });
+      toast.success(`Servizi copiati su ${data.count} persone`); onOpenChange(false); onDone();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const onConfirm = () => { if (sel.size === 0) return toast.error("Seleziona almeno una persona"); if (conflicts) setConfirmMode(true); else doCopy("keep"); };
+  const WHAT = { ospitalita: "Ospitalità", pasti: "Pasti", both: "Ospitalità + Pasti" };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[95vw] max-w-xl max-h-[90vh] overflow-y-auto" data-testid="copy-services-dialog">
+        <DialogHeader><DialogTitle className="font-display">Copia servizi</DialogTitle>
+          <DialogDescription>Copia i servizi di <b>{fullName(source || {})}</b> su altre persone dello Staff. Gli occupanti della camera e le esigenze alimentari non vengono copiati.</DialogDescription></DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Cosa copiare</Label>
+            <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 mt-1">
+              {Object.entries(WHAT).map(([k, v]) => (
+                <button key={k} onClick={() => setWhat(k)} className={`px-3 py-1 text-xs font-semibold rounded-md ${what === k ? "bg-white text-slate-800 shadow-sm" : "text-slate-500"}`} data-testid={`copy-what-${k}`}>{v}</button>))}
+            </div>
+          </div>
+          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input className="pl-9 h-9" placeholder="Cerca persona..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="copy-search" /></div>
+          <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+            {list.map((p) => (
+              <button key={p.persona_id} type="button" onClick={() => toggle(p.persona_id)} data-testid={`copy-person-${p.persona_id}`}
+                className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm ${sel.has(p.persona_id) ? "bg-tiffany-light/50" : "hover:bg-slate-50"}`}>
+                <span className="text-slate-800">{`${p.cognome || ""} ${p.nome || ""}`.trim()}</span>
+                {sel.has(p.persona_id) && <Check className="w-4 h-4 text-tiffany-active" />}
+              </button>))}
+          </div>
+        </div>
+        <DialogFooter className="flex-col sm:flex-col items-stretch gap-2">
+          {confirmMode ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" data-testid="copy-conflict">
+              Alcune persone hanno già servizi assegnati. Come procedere?
+              <div className="flex gap-2 mt-2">
+                <Button size="sm" variant="outline" onClick={() => doCopy("keep")} data-testid="copy-keep">Mantieni esistenti</Button>
+                <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={() => doCopy("replace")} data-testid="copy-replace">Sostituisci</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600" data-testid="copy-summary-text">Stai per copiare questi servizi su <b>{sel.size}</b> persone.</p>
+              <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={onConfirm} data-testid="copy-confirm"><Copy className="w-4 h-4 mr-1.5" />Copia su {sel.size} persone</Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ---- Lodging & Meal forms ----
-function LodgingForm({ form, set, canCosts }) {
+function LodgingForm({ form, set, canCosts, people = [], excludeId }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <Field label="Struttura (da anagrafica)" full>
@@ -110,7 +240,7 @@ function LodgingForm({ form, set, canCosts }) {
       <Field label="Check-in"><Input type="date" value={form.check_in || ""} onChange={(e) => set("check_in", e.target.value)} data-testid="lodging-checkin" /></Field>
       <Field label="Check-out"><Input type="date" value={form.check_out || ""} onChange={(e) => set("check_out", e.target.value)} data-testid="lodging-checkout" /></Field>
       <SelectField label="Tipologia camera" value={form.tipo_camera} onChange={(v) => set("tipo_camera", v)} options={TIPO_CAMERA} testid="lodging-camera" />
-      <Field label="Compagno/i di camera"><Input value={form.compagni_camera || ""} onChange={(e) => set("compagni_camera", e.target.value)} /></Field>
+      <Field label="Occupanti della camera" full><OccupantiSelect people={people} excludeId={excludeId} value={form.occupanti || []} onChange={(v) => set("occupanti", v)} /></Field>
       <Field label="Codice prenotazione"><Input value={form.codice_prenotazione || ""} onChange={(e) => set("codice_prenotazione", e.target.value)} /></Field>
       <SelectField label="A carico di" value={form.a_carico_di} onChange={(v) => set("a_carico_di", v)} options={CARICO} testid="lodging-carico" />
       <Field label="Referente struttura"><Input value={form.referente || ""} onChange={(e) => set("referente", e.target.value)} /></Field>
@@ -150,10 +280,11 @@ function MealForm({ form, set, canCosts, lockType }) {
 }
 
 // ---- Person plan dialog ----
-function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onChanged }) {
+function PersonPlanDialog({ person, eventId, canCosts, people = [], open, onOpenChange, onChanged }) {
   const [tab, setTab] = useState("pernottamenti");
   const [editL, setEditL] = useState(null);
   const [editM, setEditM] = useState(null);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [esig, setEsig] = useState({ list: [], note: "", override: false });
   const [servizio, setServizio] = useState("da_definire");
 
@@ -180,7 +311,7 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
 
   const saveLodging = async () => {
     try {
-      const body = { ...editL, evento_id: eventId, persona_id: person.persona_id };
+      const body = { ...editL, occupanti: editL.occupanti || [], compagni_camera: (editL.occupanti || []).map((o) => o.nome).join(", "), evento_id: eventId, persona_id: person.persona_id };
       if (editL.id) await api.put(`/lodgings/${editL.id}`, body); else await api.post("/lodgings", body);
       toast.success("Pernottamento salvato"); setEditL(null); onChanged();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -216,6 +347,9 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
             <StatusBadge color={STATO_COLOR[person.stato]}>{STATO_LABEL[person.stato]}</StatusBadge></DialogTitle>
           <DialogDescription>{CAT_LABEL[person.categoria] || person.categoria || "—"}{person.ruolo ? ` · ${person.ruolo}` : ""}{person.team_nome ? ` · ${person.team_nome}` : ""}</DialogDescription>
         </DialogHeader>
+        <div className="flex justify-end -mt-1 mb-1">
+          <Button variant="outline" size="sm" onClick={() => setCopyOpen(true)} data-testid="open-copy-services"><Copy className="w-4 h-4 mr-1.5" />Copia servizi</Button>
+        </div>
 
         <div className="rounded-lg border border-slate-200 p-3 mb-3">
           <div className="flex items-center justify-between mb-2"><Label className="text-xs font-semibold">Servizio ospitalità</Label></div>
@@ -261,14 +395,14 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
                   <div className="text-xs mt-0.5"><StatusBadge color={l.a_carico_di === "da_definire" || !l.a_carico_di ? "orange" : "tiffany"}>{CARICO[l.a_carico_di] || "A carico: da definire"}</StatusBadge>{canCosts && l.costo != null && <span className="ml-2 text-slate-500">€ {l.costo}{l.stato_pagamento ? ` · ${PAY_STATE[l.stato_pagamento]}` : ""}</span>}</div>
                 </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-tiffany-active" onClick={() => setEditL(l)} data-testid={`edit-lodging-${l.id}`}><Pencil className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-tiffany-active" onClick={() => setEditL(migrateLod(l))} data-testid={`edit-lodging-${l.id}`}><Pencil className="w-4 h-4" /></Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => delItem("lodgings", l.id)} data-testid={`del-lodging-${l.id}`}><Trash2 className="w-4 h-4" /></Button>
                 </div>
               </div>
             ))}
             {editL ? (
               <div className="border border-tiffany-border rounded-lg p-3 bg-tiffany-light/30">
-                <LodgingForm form={editL} set={(k, v) => setEditL((f) => ({ ...f, [k]: v }))} canCosts={canCosts} />
+                <LodgingForm form={editL} set={(k, v) => setEditL((f) => ({ ...f, [k]: v }))} canCosts={canCosts} people={people} excludeId={person.persona_id} />
                 <div className="flex gap-2 mt-3"><Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={saveLodging} data-testid="save-lodging">Salva</Button><Button variant="outline" onClick={() => setEditL(null)}>Annulla</Button></div>
               </div>
             ) : <Button variant="outline" size="sm" onClick={() => setEditL({})} data-testid="add-lodging"><Plus className="w-4 h-4 mr-1" />Aggiungi pernottamento</Button>}
@@ -303,6 +437,7 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
         </Tabs>
         </>
         )}
+        <CopyServicesDialog eventId={eventId} source={person} people={people} open={copyOpen} onOpenChange={setCopyOpen} onDone={onChanged} />
       </DialogContent>
     </Dialog>
   );
@@ -347,7 +482,7 @@ function BulkAssignDialog({ eventId, persons, teams, canCosts, open, onOpenChang
           <TabsList><TabsTrigger value="meal" data-testid="bulk-tab-meal"><UtensilsCrossed className="w-4 h-4 mr-1" />Pasto</TabsTrigger>
             <TabsTrigger value="lodging" data-testid="bulk-tab-lodging"><BedDouble className="w-4 h-4 mr-1" />Pernottamento</TabsTrigger></TabsList>
           <TabsContent value="meal" className="pt-2"><MealForm form={form} set={set} canCosts={canCosts} /></TabsContent>
-          <TabsContent value="lodging" className="pt-2"><LodgingForm form={form} set={set} canCosts={canCosts} /></TabsContent>
+          <TabsContent value="lodging" className="pt-2"><LodgingForm form={form} set={set} canCosts={canCosts} people={persons} /></TabsContent>
         </Tabs>
 
         <div className="mt-3 border-t border-slate-100 pt-3">
@@ -556,6 +691,7 @@ export default function Hospitality() {
         ) : (
         <>
           <Summary s={data.summary} />
+          <RoomsSummary rooms={data.rooms} />
           <Tabs defaultValue="persona">
             <TabsList className="mb-4 flex-wrap h-auto">
               <TabsTrigger value="persona" data-testid="view-persona"><Users className="w-4 h-4 mr-1" />Per persona</TabsTrigger>
@@ -624,6 +760,15 @@ export default function Hospitality() {
             </TabsContent>
 
             <TabsContent value="struttura">
+              {data.rooms?.per_struttura?.length > 0 && (
+                <div className="mb-4 bg-white border border-slate-200 rounded-xl p-4" data-testid="rooms-by-structure">
+                  <div className="font-semibold text-slate-800 mb-2 flex items-center gap-1.5"><BedDouble className="w-4 h-4 text-tiffany-active" />Camere per struttura</div>
+                  <ul className="space-y-1 text-sm">
+                    {data.rooms.per_struttura.map((s, i) => (
+                      <li key={i} className="text-slate-700"><span className="font-medium">{s.struttura}</span> — {s.totali} camere: {[s.singole && `${s.singole} singole`, s.doppie && `${s.doppie} doppie`, s.triple && `${s.triple} triple`, s.altre && `${s.altre} altre`].filter(Boolean).join(", ") || "—"}</li>))}
+                  </ul>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {structures.length === 0 ? <p className="text-slate-400">Nessun servizio configurato.</p> :
                   structures.map((g) => (
@@ -647,7 +792,7 @@ export default function Hospitality() {
         </>
       )}
 
-      {selectedPerson && <PersonPlanDialog person={selectedPerson} eventId={eventId} canCosts={canCosts} open={!!openPerson} onOpenChange={(o) => !o && setOpenPerson(null)} onChanged={load} />}
+      {selectedPerson && <PersonPlanDialog person={selectedPerson} eventId={eventId} canCosts={canCosts} people={persons} open={!!openPerson} onOpenChange={(o) => !o && setOpenPerson(null)} onChanged={load} />}
       <BulkAssignDialog eventId={eventId} persons={persons} teams={eventTeams} canCosts={canCosts} open={bulkOpen} onOpenChange={setBulkOpen} onDone={load} />
       <StructuresManager open={structOpen} onOpenChange={setStructOpen} />
     </div>

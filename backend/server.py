@@ -884,6 +884,7 @@ class Lodging(BaseModel):  # collection: lodgings — pernottamento (persona <->
     check_out: Optional[str] = None
     tipo_camera: Optional[str] = None  # singola/doppia/tripla/multipla
     compagni_camera: Optional[str] = None
+    occupanti: Optional[List[dict]] = None  # [{persona_id|None, nome}] — occupanti della camera (multi)
     codice_prenotazione: Optional[str] = None
     referente: Optional[str] = None
     telefono: Optional[str] = None
@@ -1161,6 +1162,55 @@ async def delete_hospitality_group(gruppo_id: str, tipo: str, admin: dict = Depe
     return {"ok": True, "deleted": res.deleted_count}
 
 
+def _room_bucket(t):
+    return {"singola": "singole", "doppia": "doppie", "tripla": "triple"}.get(t, "altre")
+
+
+def _compute_rooms(lodgings):
+    """Riepilogo camere: una camera condivisa (occupanti comuni + stessa struttura/date) conta 1 volta."""
+    n = len(lodgings)
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    members = []
+    for l in lodgings:
+        s = {l.get("persona_id")}
+        for occ in (l.get("occupanti") or []):
+            if isinstance(occ, dict) and occ.get("persona_id"):
+                s.add(occ["persona_id"])
+        members.append(s)
+    sig = [(l.get("struttura_nome") or "", l.get("check_in") or "", l.get("check_out") or "") for l in lodgings]
+    for i in range(n):
+        for j in range(i + 1, n):
+            if sig[i] == sig[j] and members[i] & members[j]:
+                union(i, j)
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+    by_type = {"singole": 0, "doppie": 0, "triple": 0, "altre": 0}
+    by_struct = {}
+    for idxs in groups.values():
+        tipos = [lodgings[i].get("tipo_camera") for i in idxs if lodgings[i].get("tipo_camera")]
+        bucket = _room_bucket(tipos[0] if tipos else None)
+        by_type[bucket] += 1
+        struct = lodgings[idxs[0]].get("struttura_nome") or "Struttura da definire"
+        bs = by_struct.setdefault(struct, {"struttura": struct, "totali": 0, "singole": 0, "doppie": 0, "triple": 0, "altre": 0})
+        bs["totali"] += 1
+        bs[bucket] += 1
+    return {"totali": sum(by_type.values()), **by_type,
+            "per_struttura": sorted(by_struct.values(), key=lambda x: x["struttura"].lower())}
+
+
 @api.get("/events/{event_id}/hospitality")
 async def event_hospitality(event_id: str, admin: dict = Depends(require_admin)):
     event = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
@@ -1222,7 +1272,57 @@ async def event_hospitality(event_id: str, admin: dict = Depends(require_admin))
         "senza_sistemazione": len([x for x in persons if not x["lodgings"]]),
     }
     return {"event": event, "persons": persons, "lodgings": lodgings, "meals": meals,
-            "summary": summary, "can_view_costs": can_costs}
+            "summary": summary, "rooms": _compute_rooms(lodgings), "can_view_costs": can_costs}
+
+
+class CopyServicesIn(BaseModel):
+    evento_id: str
+    source_persona_id: str
+    target_persona_ids: List[str]
+    what: str = "both"   # ospitalita | pasti | both
+    mode: str = "keep"   # keep | replace
+
+
+@api.post("/hospitality/copy")
+async def hospitality_copy(b: CopyServicesIn, admin: dict = Depends(require_admin)):
+    oid = admin["org_id"]
+    do_lod = b.what in ("ospitalita", "both")
+    do_meal = b.what in ("pasti", "both")
+    src_lod = await db.lodgings.find(oq(admin, evento_id=b.evento_id, persona_id=b.source_persona_id), {"_id": 0}).to_list(100) if do_lod else []
+    src_meal = await db.meals.find(oq(admin, evento_id=b.evento_id, persona_id=b.source_persona_id), {"_id": 0}).to_list(500) if do_meal else []
+    # Non si copiano: occupanti della camera (specifici per persona) né esigenze alimentari (in anagrafica).
+    STRIP = ("id", "persona_id", "gruppo_id", "occupanti", "compagni_camera", "created_at", "updated_at")
+
+    def _clone(rec, pid):
+        d = {k: v for k, v in rec.items() if k not in STRIP}
+        d.update({"id": new_id(), "org_id": oid, "persona_id": pid, "evento_id": b.evento_id, "created_at": now_iso()})
+        return d
+
+    count = 0
+    for tid in b.target_persona_ids:
+        if tid == b.source_persona_id:
+            continue
+        if do_lod:
+            existing = await db.lodgings.count_documents(oq(admin, evento_id=b.evento_id, persona_id=tid))
+            if not (existing and b.mode == "keep"):
+                if existing and b.mode == "replace":
+                    await db.lodgings.delete_many(oq(admin, evento_id=b.evento_id, persona_id=tid))
+                for r in src_lod:
+                    await db.lodgings.insert_one(_clone(r, tid))
+        if do_meal:
+            existing = await db.meals.count_documents(oq(admin, evento_id=b.evento_id, persona_id=tid))
+            if not (existing and b.mode == "keep"):
+                if existing and b.mode == "replace":
+                    await db.meals.delete_many(oq(admin, evento_id=b.evento_id, persona_id=tid))
+                for r in src_meal:
+                    await db.meals.insert_one(_clone(r, tid))
+        hl = await db.lodgings.count_documents(oq(admin, evento_id=b.evento_id, persona_id=tid))
+        hm = await db.meals.count_documents(oq(admin, evento_id=b.evento_id, persona_id=tid))
+        st = "ospitalita_pasti" if (hl and hm) else ("solo_ospitalita" if hl else ("solo_pasti" if hm else None))
+        if st:
+            await db.staff.update_many(oq(admin, evento_id=b.evento_id, persona_id=tid), {"$set": {"servizio_ospitalita": st}})
+        count += 1
+    return {"ok": True, "count": count}
 
 
 # ---------------- persons <-> companies relations & unified views ----------------
