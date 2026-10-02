@@ -1,0 +1,41 @@
+{
+  "summary": "Frontend-only review of the new 'Team Leader' selector in /staff-volontari → Team dialog (Aggiungi/Modifica). 5 of 6 specified acceptance criteria PASS, 1 CRITICAL regression on the Quick-Add flow. (1) The field correctly shows ONLY Staff of the selected Evento (Anna Bianchi, Elena Blu, Davide Mora, Sara Neri, Marco Rossi); all three Volontari (Luca Verdi, Paolo Gialli, Giulia Viola) are correctly excluded. (2) Ordering is Cognome→Nome (Bianchi, Blu, Mora, Neri, Rossi); '—' is first (staff-opt-none), '+ Aggiungi nuovo Staff' (staff-add-new) is last; search ('o') preserves cognome order (Mora, Rossi). (3) With no evento selected, the field renders the hint 'Seleziona prima l'Evento per scegliere lo Staff.' instead of a selectable list. (4) Saving a team with an EXISTING staff leader works end-to-end (POST /api/teams; row appears with Davide Mora in the Team Leader column). (5) Members (Vedi componenti) and regression paths otherwise look fine. (6) FAIL: Quick-Add '+ Aggiungi nuovo Staff' inside the team Aggiungi/Modifica dialog does NOT work — clicking qs-submit closes the entire team Dialog, no POST /api/staff/quick-add is fired, no console/page error is thrown, and no new Staff is persisted. Reproduced 2× with Zaira TestLeader and Yvonne QuickTest (both from Nuovo team and from Modifica team on Team Ristori). Same component works in Pipeline/Checklist (iter 48 green), so the problem is specific to its mount inside EntityManager's team Dialog in Persons.jsx.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "StaffAssignSelect inside team dialog (Persons.jsx EntityManager /teams)",
+        "issue": "Clicking qs-submit in the '+ Aggiungi nuovo Staff' popover does nothing (no network request to /api/staff/quick-add, no console error) AND closes the parent team Dialog. The new Staff is never created and the leader is not auto-selected. The exact same StaffAssignSelect works in Pipeline (iter 48). Likely root cause: the <Button data-testid=\"qs-submit\"> in StaffAssignSelect.jsx line 91 (and qs-use-existing line 90) has no explicit type=\"button\" — inside Radix Dialog + EntityManager the click bubbles / is interpreted as a form submission / outside-interaction and tears down the Dialog before the onClick submitQuick handler can run. Please add type=\"button\" to both Buttons AND verify the Popover's onInteractOutside doesn't close the parent Dialog (consider adding onPointerDownOutside={(e) => e.preventDefault()} / modal={false} patterns consistent with the Pipeline usage). Also note the Dialog's form likely wraps all fields and the staff Dialog form has required nome/evento_id — if the parent form intercepts the click, team-save is not fired (no /teams POST either), so the only observable effect is 'dialog closes'.",
+        "selector": "[data-testid=\"qs-submit\"] / [data-testid=\"qs-use-existing\"] in /app/frontend/src/components/StaffAssignSelect.jsx (lines 90-91)",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Quick-Add new Staff while creating/editing a Team",
+        "issue": "qs-submit does not call POST /api/staff/quick-add (verified via request logger); the team Dialog is closed without any API side-effect. Blocks the acceptance criterion 'dopo la creazione il nuovo Staff è selezionabile come Team Leader'.",
+        "affected_selectors": ["[data-testid=\"qs-submit\"]", "[data-testid=\"field-responsabile_id\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "In /app/frontend/src/components/StaffAssignSelect.jsx add type=\"button\" to the two action <Button> elements (qs-submit at line 91 and qs-use-existing at line 90), and also to the 'Annulla'/'Indietro' buttons for safety. This stops the inner-dialog form submission that currently tears down the Radix Dialog.",
+    "If the issue persists after adding type=\"button\", consider adding onPointerDownOutside / onInteractOutside guards to the PopoverContent (or wrap the parent Radix Dialog with modal={false} / add e.preventDefault inside StaffAssignSelect's PopoverContent handlers). Compare how StaffAssignSelect is embedded in EventPipeline.jsx (which works) vs Persons.jsx (which doesn't): the Persons team dialog is rendered through EntityManager — this helper may wrap fields in a <form> tag, which is the likely root cause for 'button type=submit' bubbling.",
+    "After the fix, re-run acceptance test 4 (Quick-add leader) and test 5 (team save) end-to-end on /staff-volontari → Team."
+  ],
+  "critical_code_review_comments": [
+    "StaffAssignSelect.jsx: the two <Button> elements inside the quick-add form lack an explicit `type` attribute. Default <button type=\"submit\"> inside a <form> submits that form. Add `type=\"button\"` to all buttons inside StaffAssignSelect to make the component safe for any parent form context.",
+    "Persons.jsx teamFields: the staffselect wiring (eventFrom, staffPersonsFor, allPersons, onStaffAdded=reloadTeamData) is correct and well-documented. Good job on dedup + onStaffAdded refresh.",
+    "crm.jsx Field 'staffselect': the no-event hint is implemented inline and prevents mounting the popover trigger. Good UX. Minor nit: the hint box reuses data-testid=field-responsabile_id so tests see the same selector — consistent with the request."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "5/6 acceptance items pass (83%). The Quick-Add leader flow is the only failing item but it is HIGH priority."},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! — OK. ev_qa_1 staff: Anna Bianchi, Sara Neri, Elena Blu, Davide Mora, Marco Rossi (Marco Rossi was already present from a prior iteration; is Staff of ev_qa_1). Volontari correctly excluded.",
+  "seed_data_creation": "Created and DELETED a temporary 'Team QA Existing Leader' to validate the save path with an existing staff leader. No residual data. No 'Zaira TestLeader' nor 'Yvonne QuickTest' Person was created — the quick-add click never reached the API (verified).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Only the quick-add leader submission inside the team Aggiungi/Modifica dialog is broken. Everything else about the staffselect field is green: filter by event (only Staff), order Cognome→Nome, '—' first, '+ Aggiungi nuovo Staff' last, search preserves order, no-event hint, selection + save with an existing staff. If the main agent adds type=\"button\" to the two action buttons in StaffAssignSelect.jsx (lines 90-91), that is very likely enough to fix it; otherwise look at onPointerDownOutside guards on the PopoverContent (the Radix Dialog in EntityManager is closing on the submit click). Note: the regression test on Pipeline/Checklist usage from iter 48 should be re-run after fix to make sure the explicit type doesn't break any existing behavior.",
+  "rca of the issue": "Reproduction: /staff-volontari → tab Team → Aggiungi (or Modifica a team) → select Evento=Maratona QA → open Team Leader (field-responsabile_id) → '+ Aggiungi nuovo Staff' → fill qs-nome='Zaira' qs-cognome='TestLeader' → click qs-submit. Expected: POST /api/staff/quick-add → new Person Zaira TestLeader linked as Staff of ev_qa_1 → list refreshes → trigger field-responsabile_id shows 'Zaira TestLeader'. Actual: no network request, no console error, the entire team Dialog closes, no Person created. Most probable RCA: StaffAssignSelect.jsx:91 <Button data-testid=\"qs-submit\"> inherits default type=\"submit\" and lives inside the EntityManager form of the team Dialog; the click triggers an implicit form submission which closes the Radix Dialog via its onSubmit path before the component's submitQuick onClick runs. Mitigation: add type=\"button\" to qs-submit and qs-use-existing (and ideally all buttons inside StaffAssignSelect). Pipeline modal doesn't have this symptom likely because its form wrapper differs or does not host StaffAssignSelect inside the submit scope."
+}

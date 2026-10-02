@@ -85,19 +85,19 @@ export function StaffAssignSelect({
             <div className="space-y-1"><Label className="text-xs">Email</Label><Input type="email" value={quick.email} onChange={(e) => setQuick((s) => ({ ...s, email: e.target.value }))} className="h-8" data-testid="qs-email" /></div>
             {existing && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Esiste già un'anagrafica con questi contatti: <b>{existing.nome} {existing.cognome}</b>. Usarla come Staff di questo evento?</div>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setQuick(null); setExisting(null); }}>Annulla</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => { setQuick(null); setExisting(null); }}>Annulla</Button>
               {existing
-                ? <Button size="sm" onClick={useExisting} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="qs-use-existing">Usa esistente</Button>
-                : <Button size="sm" onClick={submitQuick} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="qs-submit">Aggiungi</Button>}
+                ? <Button type="button" size="sm" onClick={useExisting} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="qs-use-existing">Usa esistente</Button>
+                : <Button type="button" size="sm" onClick={submitQuick} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="qs-submit">Aggiungi</Button>}
             </div>
           </div>
         ) : (
           <>
             <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca staff..." className="h-8" data-testid="staff-assign-search" /></div>
             <div className="max-h-56 overflow-y-auto p-1">
-              <button onClick={() => pick(null)} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500" data-testid="staff-opt-none">—</button>
+              <button type="button" onClick={() => pick(null)} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500" data-testid="staff-opt-none">—</button>
               {list.map((p) => (
-                <button key={p.id} onClick={() => pick(p.id)} className={`w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 ${p.id === value ? "bg-tiffany-light/40 font-semibold" : ""}`} data-testid={`staff-opt-${p.id}`}>{pname(p)}</button>
+                <button type="button" key={p.id} onClick={() => pick(p.id)} className={`w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 ${p.id === value ? "bg-tiffany-light/40 font-semibold" : ""}`} data-testid={`staff-opt-${p.id}`}>{pname(p)}</button>
               ))}
               {list.length === 0 && <div className="px-2 py-2 text-xs text-slate-400" data-testid="staff-opt-empty">Nessuno Staff trovato</div>}
               {isStale && selected && <div className="px-2 py-1.5 text-xs text-amber-700">{pname(selected)} · non più nello Staff</div>}
