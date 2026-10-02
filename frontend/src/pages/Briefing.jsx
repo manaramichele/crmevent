@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
-import { fileUrl, StatusBadge, formatEUR, formatDateRange } from "@/components/crm";
+import { fileUrl, StatusBadge, formatDateRange } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import MapsLink from "@/components/MapsLink";
 import {
   ArrowLeft, RefreshCw, FileDown, History, Presentation, CheckCircle2, AlertTriangle,
-  Users, Map as MapIcon, CalendarClock, Utensils, Handshake, Shield, UploadCloud,
+  Users, Map as MapIcon, CalendarClock, Utensils, Shield, UploadCloud,
   ChevronLeft, ChevronRight, X, Trash2, Clock, MapPin, Phone, Mail,
 } from "lucide-react";
 
@@ -88,6 +88,7 @@ function CoverHeader({ event }) {
 
 function BriefingBody({ data }) {
   const { event, sections, stats } = data;
+  const unassignedStaff = sections.staff.filter((s) => !s.team_id);
   return (
     <div className="space-y-5 briefing-print-body">
       <CoverHeader event={event} />
@@ -99,7 +100,6 @@ function BriefingBody({ data }) {
         <StatCard icon={CalendarClock} label="Turni" value={stats.turni_count} />
         <StatCard icon={AlertTriangle} label="Turni scoperti" value={stats.turni_scoperti} tone={stats.turni_scoperti ? "red" : "slate"} />
         <StatCard icon={MapIcon} label="Mappe" value={stats.mappe_count} />
-        <StatCard icon={Handshake} label="Sponsor/Partner" value={stats.sponsor_count} />
         <StatCard icon={Utensils} label="Pernottamenti" value={stats.pernottamenti} />
         <StatCard icon={Utensils} label="Pasti" value={stats.pasti} />
       </div>
@@ -128,8 +128,8 @@ function BriefingBody({ data }) {
                   <StatusBadge color="tiffany">{t.staff_count} staff</StatusBadge>
                   <StatusBadge color="blue">{t.volontari_count} volontari</StatusBadge>
                 </div>
-                {t.membri.length > 0 && (
-                  <div className="mt-2 text-xs text-slate-600">{t.membri.map((m) => `${m.nome} ${m.cognome || ""}`.trim()).join(", ")}</div>
+                {t.membri.filter((m) => m.categoria !== "volontario").length > 0 && (
+                  <div className="mt-2 text-xs text-slate-600">{t.membri.filter((m) => m.categoria !== "volontario").map((m) => `${m.nome} ${m.cognome || ""}`.trim()).join(", ")}</div>
                 )}
               </div>
             ))}
@@ -137,8 +137,8 @@ function BriefingBody({ data }) {
         )}
       </Section>
 
-      <Section id="staff" icon={Users} title="Staff & volontari" count={sections.staff.length}>
-        {sections.staff.length === 0 ? <Empty text="Nessuna persona collegata all'evento." /> : (
+      <Section id="staff" icon={Users} title="Staff & volontari non assegnati a un Team" count={unassignedStaff.length}>
+        {unassignedStaff.length === 0 ? <Empty text="Tutte le persone collegate all'evento sono già assegnate a un Team." /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-slate-200 text-left text-slate-500">
@@ -147,7 +147,7 @@ function BriefingBody({ data }) {
                 <th className="py-2 pr-3 font-semibold">Contatti</th><th className="py-2 pr-3 font-semibold">Arrivo/Partenza</th>
               </tr></thead>
               <tbody>
-                {sections.staff.map((s) => (
+                {unassignedStaff.map((s) => (
                   <tr key={s.persona_id} className="border-b border-slate-100 align-top" data-testid={`briefing-staff-${s.persona_id}`}>
                     <td className="py-2 pr-3">
                       <div className="font-medium text-slate-800">{s.nome} {s.cognome || ""}</div>
@@ -246,31 +246,6 @@ function BriefingBody({ data }) {
         )}
       </Section>
 
-      <Section id="sponsors" icon={Handshake} title="Sponsor & partner" count={sections.sponsors.length}>
-        {sections.sponsors.length === 0 ? <Empty text="Nessuno sponsor o partner collegato." /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-slate-200 text-left text-slate-500">
-                <th className="py-2 pr-3 font-semibold">Azienda</th><th className="py-2 pr-3 font-semibold">Tipo</th>
-                <th className="py-2 pr-3 font-semibold">Livello</th><th className="py-2 pr-3 font-semibold">Fase</th>
-                <th className="py-2 pr-3 font-semibold text-right">Confermato</th>
-              </tr></thead>
-              <tbody>
-                {sections.sponsors.map((s, i) => (
-                  <tr key={i} className="border-b border-slate-100" data-testid={`briefing-sponsor-${i}`}>
-                    <td className="py-2 pr-3 font-medium text-slate-800">{s.azienda}</td>
-                    <td className="py-2 pr-3 text-slate-600 capitalize">{s.tipo || "—"}</td>
-                    <td className="py-2 pr-3 text-slate-600">{s.livello || "—"}</td>
-                    <td className="py-2 pr-3 text-slate-600">{s.fase || "—"}</td>
-                    <td className="py-2 pr-3 text-right text-slate-700">{s.valore_confermato ? formatEUR(s.valore_confermato) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-
       <Section id="timeline" icon={CalendarClock} title="Timeline operativa" count={sections.timeline.length}>
         {sections.timeline.length === 0 ? <Empty text="Nessuna attività programmata con data." /> : (
           <div className="space-y-4">
@@ -322,15 +297,15 @@ function CompletenessPanel({ completeness }) {
 }
 
 function PresentationMode({ data, onClose }) {
+  const unassignedStaff = data.sections.staff.filter((s) => !s.team_id);
   const deck = [
     { title: null, node: <CoverHeader event={data.event} /> },
     { title: "Panoramica", node: <OverviewGrid stats={data.stats} /> },
     ...(data.sections.teams.length ? [{ title: "Team & responsabili", node: <TeamsDeck teams={data.sections.teams} /> }] : []),
-    ...(data.sections.staff.length ? [{ title: "Staff & volontari", node: <StaffDeck staff={data.sections.staff} /> }] : []),
+    ...(unassignedStaff.length ? [{ title: "Staff & volontari non assegnati a un Team", node: <StaffDeck staff={unassignedStaff} /> }] : []),
     ...(data.sections.shifts.length ? [{ title: "Turni", node: <ShiftsDeck shifts={data.sections.shifts} /> }] : []),
     ...(data.sections.maps.length ? [{ title: "Mappe & percorsi", node: <MapsDeck maps={data.sections.maps} /> }] : []),
     ...(data.sections.hospitality.length ? [{ title: "Ospitalità & pasti", node: <HospDeck hosp={data.sections.hospitality} /> }] : []),
-    ...(data.sections.sponsors.length ? [{ title: "Sponsor & partner", node: <SponsorsDeck sponsors={data.sections.sponsors} /> }] : []),
     ...(data.sections.timeline.length ? [{ title: "Timeline", node: <TimelineDeck timeline={data.sections.timeline} /> }] : []),
   ];
   const [i, setI] = useState(0);
@@ -422,16 +397,6 @@ const HospDeck = ({ hosp }) => (
       <div key={i} className="border border-slate-200 rounded-lg px-4 py-2">
         <div className="font-medium text-slate-800">{h.nome} {h.cognome || ""}</div>
         <div className="text-xs text-slate-500">{h.lodgings.length} pernott. · {h.meals.length} pasti</div>
-      </div>
-    ))}
-  </div>
-);
-const SponsorsDeck = ({ sponsors }) => (
-  <div className="grid gap-2 md:grid-cols-2">
-    {sponsors.map((s, i) => (
-      <div key={i} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2">
-        <span className="font-medium text-slate-800">{s.azienda}</span>
-        <span className="text-sm text-slate-500 capitalize">{s.livello || s.tipo}</span>
       </div>
     ))}
   </div>

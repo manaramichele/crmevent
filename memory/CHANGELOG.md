@@ -773,3 +773,9 @@ Task 2 — Creatività manuale:
 - Backend /api/staff/quick-add esteso con categoria (staff|volontario) + team_id.
 - Fix wiring Persons.jsx: onReloadStaff={reloadTeamData} (ricarica /staff + /persons-enriched) così la nuova persona compare subito.
 - Team Leader resta SOLO Staff (StaffAssignSelect). Testing agent: 11/11 flussi verdi (iteration_51).
+
+## 2026-06 — Briefing: rimozione SPONSOR & PARTNER + Team cards
+- Rimossa completamente la sezione "Sponsor & partner" dal Briefing (web, PDF via print e modalità Presentazione) senza toccare i dati Sponsor nel CRM. Rimossa anche la StatCard "Sponsor/Partner".
+- Card Team: i nominativi sotto al Team mostrano SOLO lo Staff (categoria != volontario); i volontari restano conteggiati ("N staff · N volontari") ma non elencati.
+- Sezione generale rinominata "Staff & volontari non assegnati a un Team": mostra solo le persone senza team_id, eliminando la duplicazione con i Team.
+- Diagnosi errore Cloudflare 520 in produzione (deployer RCA): era transitorio durante il rollout (probe 503 mentre l'immagine 776MB veniva scaricata); codice f7d17c5 sano, nessuna fix di codice necessaria.
