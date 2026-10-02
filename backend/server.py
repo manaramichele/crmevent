@@ -1321,6 +1321,8 @@ class StaffQuickAddIn(BaseModel):
     cognome: Optional[str] = None
     cellulare: Optional[str] = None
     email: Optional[str] = None
+    categoria: Optional[str] = "staff"
+    team_id: Optional[str] = None
     use_existing_person_id: Optional[str] = None
     confirm_existing: bool = False
 
@@ -1352,11 +1354,25 @@ async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_a
     if not person:
         person = {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()}
         await db.persons.insert_one({**person})
+    categoria = body.categoria if body.categoria in ("staff", "volontario") else "staff"
     link = await db.staff.find_one({**oq(admin), "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
     if not link:
-        await db.staff.insert_one({"id": new_id(), "org_id": admin["org_id"], "persona_id": person["id"], "evento_id": body.evento_id, "categoria": "staff", "stato": "da_contattare", "created_at": now_iso()})
-    elif link.get("categoria") not in ("staff", "collaboratore"):
-        await db.staff.update_one({"id": link["id"]}, {"$set": {"categoria": "staff"}})
+        doc = {"id": new_id(), "org_id": admin["org_id"], "persona_id": person["id"], "evento_id": body.evento_id, "categoria": categoria, "stato": "da_contattare", "created_at": now_iso()}
+        if body.team_id:
+            doc["team_id"] = body.team_id
+        await db.staff.insert_one({**doc})
+    else:
+        upd = {}
+        # Allinea la categoria se non è già coerente con una classificazione operativa
+        if categoria == "volontario":
+            if link.get("categoria") != "volontario":
+                upd["categoria"] = "volontario"
+        elif link.get("categoria") not in ("staff", "collaboratore"):
+            upd["categoria"] = "staff"
+        if body.team_id:
+            upd["team_id"] = body.team_id
+        if upd:
+            await db.staff.update_one({"id": link["id"]}, {"$set": upd})
     return {"status": "ok", "person": {"id": person["id"], "nome": person.get("nome"), "cognome": person.get("cognome")}}
 
 
