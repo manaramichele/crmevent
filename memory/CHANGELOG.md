@@ -802,3 +802,9 @@ Task 2 — Creatività manuale:
 - /api/events/{id}/hospitality: include servizio_ospitalita per persona (default da_definire).
 - Area personale (/api/me/events/{id}): filtra lodgings/meals per stato — nessun_servizio/da_definire => nulla; solo_ospitalita => solo pernottamenti; solo_pasti => solo pasti; ospitalita_pasti => entrambi. Nessuna sezione vuota/trattini nell'Area personale.
 - Testing agent iteration_54: 100% backend+frontend; 5 stati + persistenza verificati. Filtro /me/events verificato per ispezione codice (E2E bloccato: nessun utente volontario con password collegato alla persona QA). Test file: /app/backend/tests/test_hospitality_servizio.py.
+
+## 2026-06 — Ospitalità: Occupanti camera, Copia servizi, Riepilogo camere
+- Campo rinominato "Compagno/i di camera" -> "Occupanti della camera": multi-select dello Staff evento (ordine Cognome→Nome, esclusa la persona corrente) con ricerca, aggiunta nominativi esterni e chip occupanti. Nuovo Lodging.occupanti [{persona_id|null, nome}]; compagni_camera mantenuto come stringa derivata per retrocompatibilità.
+- Pulsante "Copia servizi" nel dialog persona: copia Ospitalità / Pasti / entrambi su più persone; messaggio "Stai per copiare questi servizi su X persone"; su conflitti chiede Mantieni esistenti vs Sostituisci; NON copia occupanti né esigenze alimentari; imposta servizio_ospitalita sui target. Endpoint POST /api/hospitality/copy.
+- Riepilogo camere nella dashboard (Totali/Singole/Doppie/Triple/Altre) e per struttura nella vista "Per struttura/servizio"; camera condivisa (occupanti comuni + stessa struttura/date) contata 1 volta. Endpoint /api/events/{id}/hospitality ritorna 'rooms'.
+- Testing agent iteration_55: 100% backend+frontend (fix import Popover applicato dal testing agent). Backend verificato via curl (occupanti, rooms de-dup, copy senza occupanti).

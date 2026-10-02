@@ -1,0 +1,34 @@
+{
+  "summary": "Verified UI for 3 Hospitality features on /ospitalita (ev_qa_1 'Maratona QA'): (1) OccupantiSelect with popover search, staff list sorted Cognome->Nome excluding current person, multi-select chips, external nominativo chip + persistence after save/reopen. (2) CopyServicesDialog with what-both/ospitalita/pasti toggle, target multi-select, correct 'Stai per copiare questi servizi su X persone' text, successful copy, target receives servizio_ospitalita but NO occupanti copied (verified empty chips on target lodging). (3) RoomsSummary block with 5 cards (totali/singole/doppie/triple/altre) in dashboard + 'Camere per struttura' block (rooms-by-structure) in view-struttura. Label 'Occupanti della camera' confirmed (old 'Compagno/i di camera' absent). All test data cleaned up (lodgings deleted, servizio reset to 'da_definire').",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FIXED by testing agent: Hospitality.jsx was missing import for Popover/PopoverTrigger/PopoverContent, causing a runtime error ('Popover is not defined') as soon as the lodging edit form rendered OccupantiSelect. Added import from '@/components/ui/popover'. Without this fix the entire feature was blocked. Main agent should ensure similar imports are added when introducing new Radix primitives.",
+    "After copy with what='both' when source has only lodgings (no meals), target's servizio_ospitalita is set to 'solo_ospitalita' rather than 'ospitalita_pasti'. This looks reasonable (reflects what was actually copied) but spec is ambiguous; worth confirming expected semantics with product.",
+    "Minor: conflict dialog (copy-conflict) could not be exercised in this run because target persons had no pre-existing services. Backend logic for keep/replace was previously verified via curl per main agent's note."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Hospitality.jsx (added missing Popover import)"
+  ],
+  "success_rate": {"backend": "100% (per prior curl verification)", "frontend": "100% after Popover import fix"},
+  "test_credentials": "Admin QA: qa.eventi@crmeventqa.it / QaEvents2026! (per /app/memory/test_credentials.md)",
+  "seed_data_creation": "Temporary: 3 lodgings created during flow (source + 2 copy targets). All removed; servizio_ospitalita reset to 'da_definire' for the 3 affected persons. Final state: 0 lodgings, 0 meals, rooms-summary all zero, 8 persone 'Senza sistemazione'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Hospitality.jsx now correctly imports Popover. Key testids verified: rooms-summary + rooms-{camere-totali,singole,doppie,triple,altre}; rooms-by-structure (view-struttura tab); occupanti-select / occupanti-add / occupanti-popover / occupanti-search / occ-opt-<pid> / occ-chip-<i> / occupanti-ext-input / occupanti-ext-add; open-copy-services / copy-services-dialog / copy-what-{both,ospitalita,pasti} / copy-search / copy-person-<pid> / copy-summary-text / copy-confirm / copy-conflict / copy-keep / copy-replace. To exercise copy-conflict, pre-seed target persons with existing lodging/meal and set servizio to a non-'da_definire' value before clicking copy-confirm.",
+  "verified_cases": [
+    "Dashboard shows RoomsSummary with 5 cards; values update after creating a lodging (totali=1, altre=1)",
+    "view-struttura shows rooms-by-structure block with 'Struttura da definire - 1 camere: 1 altre'",
+    "Lodging form label is 'Occupanti della camera' (old 'Compagno/i di camera' absent)",
+    "Occupanti popover lists staff sorted alphabetically Cognome Nome; current person excluded (7/8)",
+    "Multi-select of 2 staff + 1 external nominativo persisted after save/reopen",
+    "Copy services dialog opens from PersonPlanDialog; 'what' toggle works; target selection updates copy-summary-text ('su 2 persone')",
+    "Copy executed; target got servizio_ospitalita + lodging but NO occupanti chips (correctly excluded)"
+  ]
+}
