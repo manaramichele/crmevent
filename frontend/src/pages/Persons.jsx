@@ -135,23 +135,20 @@ function EventRolesDialog({ person, events, teams, settings, open, onOpenChange,
   );
 }
 
-function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, onRoleClick }) {
+function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite, onDelete, onRoleClick }) {
   const [q, setQ] = useState("");
-  const [sub, setSub] = useState("tutti");
+  const [evFilter, setEvFilter] = useState("all");
   const filtered = rows.filter((r) => {
     if (tab === "referenti_aziende" && !r.is_referente) return false;
-    if (tab === "staff_volontari" && !(r.is_staff || r.is_volontario)) return false;
+    if (tab === "staff" && !r.is_staff) return false;
+    if (tab === "volontari" && !r.is_volontario) return false;
     if (tab === "da_classificare" && (r.is_referente || r.is_staff || r.is_volontario)) return false;
-    if (tab === "staff_volontari") {
-      if (sub === "staff" && !r.is_staff) return false;
-      if (sub === "volontario" && !r.is_volontario) return false;
-    }
+    if (evFilter !== "all" && !(r.eventi_ids || []).includes(evFilter)) return false;
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
-  const SUBS = [{ v: "tutti", l: "Tutti" }, { v: "staff", l: "Staff" }, { v: "volontario", l: "Volontario" }];
   const { sort, toggle } = useSort();
-  const isStaffTab = tab === "staff_volontari" || tab === "da_classificare";
+  const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare";
   const ACC = {
     nome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
     cellulare: (r) => r.cellulare || "",
@@ -199,12 +196,15 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, o
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input className="pl-9" placeholder="Cerca persone..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-person-input" />
         </div>
-        {tab === "staff_volontari" && (
-          <div className="flex flex-wrap gap-1.5" data-testid="sv-subfilter">
-            {SUBS.map((s) => (
-              <button key={s.v} type="button" onClick={() => setSub(s.v)} data-testid={`sv-sub-${s.v}`}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${sub === s.v ? "bg-tiffany text-slate-900 border-tiffany" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}`}>{s.l}</button>
-            ))}
+        {isStaffTab && (
+          <div className="w-full sm:w-56" data-testid="people-event-filter">
+            <Select value={evFilter} onValueChange={setEvFilter}>
+              <SelectTrigger><SelectValue placeholder="Tutti gli eventi" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti gli eventi</SelectItem>
+                {events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         )}
       </div>
@@ -372,16 +372,17 @@ export default function Persons({ mode = "anagrafiche" }) {
         subtitle={isStaff ? "Persone operative degli eventi: staff, volontari, team e turni" : "Referenti e contatti delle aziende"}
         action={<PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi persona</PrimaryButton>} />
       {isStaff ? (
-        <Tabs defaultValue="staff_volontari">
+        <Tabs defaultValue="staff">
           <TabsList className="mb-4 flex-wrap h-auto">
-            <TabsTrigger value="staff_volontari" data-testid="tab-staff-volontari">Staff &amp; Volontari</TabsTrigger>
+            <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
+            <TabsTrigger value="volontari" data-testid="tab-volontari">Volontari</TabsTrigger>
             <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare</TabsTrigger>
             <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
             <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
           </TabsList>
-          {["staff_volontari", "da_classificare"].map((t) => (
+          {["staff", "volontari", "da_classificare"].map((t) => (
             <TabsContent key={t} value={t}>
-              <PeopleTable tab={t} {...peopleProps} />
+              <PeopleTable tab={t} events={events} {...peopleProps} />
             </TabsContent>
           ))}
           <TabsContent value="team">

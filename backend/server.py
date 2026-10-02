@@ -1310,6 +1310,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "aziende_nomi": aziende,
                     "teams_nomi": teams_nomi,
                     "eventi_nomi": eventi_nomi,
+                    "eventi_ids": list({x["evento_id"] for x in prs}),
                     "eventi_count": len({x["evento_id"] for x in prs})})
     return out
 
