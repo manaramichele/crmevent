@@ -2759,7 +2759,11 @@ async def _require_manage(user: dict, org_id: str) -> None:
 
 async def _member_view(m: dict) -> dict:
     u = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0, "password_hash": 0})
-    return {"user_id": m["user_id"], "email": (u or {}).get("email"), "name": (u or {}).get("name"),
+    uu = u or {}
+    _nm = uu.get("name") or ""
+    return {"user_id": m["user_id"], "email": uu.get("email"), "name": uu.get("name"),
+            "nome": uu.get("nome") or (_nm.split(" ")[0] if _nm else ""),
+            "cognome": uu.get("cognome") or (" ".join(_nm.split(" ")[1:]) if _nm else ""),
             "telefono": (u or {}).get("telefono"),
             "role": m["role"], "role_label": ORG_ROLE_LABELS.get(m["role"], m["role"]),
             "active": m.get("active", True), "account_active": (u or {}).get("active", True),
@@ -3030,6 +3034,55 @@ async def platform_user_delete(user_id: str, admin: dict = Depends(require_super
     await record_audit(admin, "account_deleted", org_id=u.get("org_id"),
                        target_email=u.get("email"), target_name=u.get("name"),
                        detail="Account eliminato · anagrafica Persona e dati organizzazione conservati")
+    return {"ok": True}
+
+
+class PlatformUserProfileIn(BaseModel):
+    nome: str
+    cognome: Optional[str] = None
+    email: str
+    telefono: Optional[str] = None
+
+
+@api.patch("/platform/users/{user_id}/profile")
+async def platform_user_profile_update(user_id: str, body: PlatformUserProfileIn, admin: dict = Depends(require_superadmin)):
+    """Super Admin: corregge l'anagrafica di un account collegato (Nome, Cognome, Email, Cellulare).
+    Il cellulare è obbligatorio e salvato in E.164 (permette di completare utenti legacy senza numero).
+    Non tocca crediti, ruoli od organizzazioni; aggiorna solo il contatto Brevo dell'utente registrato."""
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Account non trovato")
+    if u.get("role") == "superadmin":
+        raise HTTPException(status_code=400, detail="L'anagrafica del Super Admin non è modificabile da qui")
+    nome = (body.nome or "").strip()
+    cognome = (body.cognome or "").strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Il nome è obbligatorio")
+    email = (body.email or "").strip().lower()
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Email non valida")
+    if email != (u.get("email") or "").lower():
+        clash = await db.users.find_one({"email": email, "user_id": {"$ne": user_id}})
+        if clash:
+            raise HTTPException(status_code=400, detail="Esiste già un account con questa email")
+    phone = _normalize_phone(body.telefono)
+    full_name = f"{nome} {cognome}".strip()
+    changes = []
+    if full_name != (u.get("name") or ""): changes.append("nome")
+    if email != (u.get("email") or "").lower(): changes.append("email")
+    if phone != (u.get("telefono") or ""): changes.append("cellulare")
+    await db.users.update_one({"user_id": user_id}, {"$set": {
+        "name": full_name, "nome": nome, "cognome": cognome,
+        "email": email, "telefono": phone, "updated_at": now_iso()}})
+    mem = await db.memberships.find_one({"user_id": user_id, "active": True}, {"_id": 0})
+    if mem and mem.get("org_id"):
+        try:
+            await sync_registered_user(user_id, mem["org_id"], nome=nome, cognome=cognome, source="profile_edit")
+        except Exception as e:
+            logger.error(f"registered-user sync error: {e}")
+    await record_audit(admin, "account_profile_updated", org_id=u.get("org_id"),
+                       target_email=email, target_name=full_name,
+                       detail="Anagrafica aggiornata: " + (", ".join(changes) if changes else "nessuna modifica"))
     return {"ok": True}
 
 

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Coins, Save, Search, Users2, AlertTriangle, PlayCircle, Wallet, Plus, Minus, Building2, Settings2, ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
+import OrgUsers from "@/components/OrgUsers";
 import { StatusBadge } from "@/components/crm";
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleString("it-IT") : "—");
@@ -205,6 +206,11 @@ function OrgsTab() {
               <Stat3 label="Acquistati / accreditati" value={granted} testid="org-granted" />
               <Stat3 label="Crediti utilizzati" value={used} testid="org-used" />
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 p-4 sm:p-5 bg-white">
+            <div className="flex items-center gap-2 mb-3 font-semibold text-slate-800"><Users2 className="w-4 h-4 text-tiffany-active" />Utenti dell'organizzazione</div>
+            <OrgUsers orgId={selId} allowProfileEdit />
           </div>
 
           <div className="rounded-2xl border border-slate-200 p-4 sm:p-5 bg-white">

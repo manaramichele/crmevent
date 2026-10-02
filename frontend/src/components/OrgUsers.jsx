@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/crm";
 import { toast } from "sonner";
-import { UserPlus, RefreshCw, XCircle } from "lucide-react";
+import { UserPlus, RefreshCw, XCircle, Pencil } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 
@@ -18,12 +18,15 @@ const STATUS = {
 };
 const emptyForm = { nome: "", cognome: "", email: "", telefono: "", role: "user" };
 
-export default function OrgUsers({ orgId }) {
+export default function OrgUsers({ orgId, allowProfileEdit = false }) {
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const [ef, setEf] = useState({ nome: "", cognome: "", email: "", telefono: "" });
+  const [ebusy, setEbusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +45,19 @@ export default function OrgUsers({ orgId }) {
   const toggleActive = async (uid, active) => { try { await api.patch(`/platform/organizations/${orgId}/members/${uid}`, { active }); toast.success(active ? "Accesso riattivato" : "Accesso disattivato"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const resend = async (id) => { try { const { data } = await api.post(`/platform/invites/${id}/resend`); toast[data.email_sent ? "success" : "warning"](data.email_sent ? "Invito reinviato" : "Invito aggiornato (email non inviata)"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const revoke = async (id) => { if (!window.confirm("Revocare questo invito?")) return; try { await api.delete(`/platform/invites/${id}`); toast.success("Invito revocato"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+
+  const openEdit = (m) => { setEf({ nome: m.nome || "", cognome: m.cognome || "", email: m.email || "", telefono: m.telefono || "" }); setEdit(m); };
+  const submitEdit = async () => {
+    if (!ef.nome.trim()) return toast.error("Il nome è obbligatorio");
+    if (!ef.email.trim()) return toast.error("Email obbligatoria");
+    if (!ef.telefono || !isValidPhoneNumber(ef.telefono)) return toast.error("Inserisci un cellulare valido");
+    setEbusy(true);
+    try {
+      await api.patch(`/platform/users/${edit.user_id}/profile`, { nome: ef.nome.trim(), cognome: ef.cognome.trim(), email: ef.email.trim(), telefono: ef.telefono });
+      toast.success("Anagrafica aggiornata");
+      setEdit(null); load();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setEbusy(false); }
+  };
 
   const submitInvite = async () => {
     if (!f.nome.trim() || !f.cognome.trim()) return toast.error("Nome e cognome sono obbligatori");
@@ -78,7 +94,7 @@ export default function OrgUsers({ orgId }) {
                   <td className="px-3 py-2.5">{m.is_superadmin ? <StatusBadge color="tiffany">{m.role_label}</StatusBadge> : <select className="h-9 px-2 rounded-lg border border-slate-200 text-sm" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`user-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</td>
                   <td className="px-3 py-2.5"><StatusBadge color={st[0]}>{st[1]}</StatusBadge></td>
                   <td className="px-3 py-2.5 text-slate-500">{fmt(m.last_login_at)}</td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap">{m.is_superadmin ? <span className="text-xs text-slate-400">—</span> : <Button variant="outline" size="sm" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`user-toggle-${m.user_id}`}>{m.active ? "Disattiva accesso" : "Riattiva accesso"}</Button>}</td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">{m.is_superadmin ? <span className="text-xs text-slate-400">—</span> : <>{allowProfileEdit && <Button variant="outline" size="sm" className="mr-1" onClick={() => openEdit(m)} data-testid={`user-edit-${m.user_id}`} title="Modifica anagrafica"><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>}<Button variant="outline" size="sm" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`user-toggle-${m.user_id}`}>{m.active ? "Disattiva accesso" : "Riattiva accesso"}</Button></>}</td>
                 </tr>
               );
             })}
@@ -121,6 +137,24 @@ export default function OrgUsers({ orgId }) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
             <Button disabled={busy} onClick={submitInvite} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="invite-submit">Invia invito</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
+        <DialogContent className="max-w-md" data-testid="user-edit-dialog">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5 text-tiffany-active" />Modifica anagrafica</DialogTitle><DialogDescription>Correggi i dati dell'account collegato. Il cellulare è salvato in formato internazionale (E.164).</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label>Nome *</Label><Input value={ef.nome} onChange={(e) => setEf((s) => ({ ...s, nome: e.target.value }))} data-testid="edit-nome" /></div>
+              <div className="space-y-1.5"><Label>Cognome</Label><Input value={ef.cognome} onChange={(e) => setEf((s) => ({ ...s, cognome: e.target.value }))} data-testid="edit-cognome" /></div>
+            </div>
+            <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={ef.email} onChange={(e) => setEf((s) => ({ ...s, email: e.target.value }))} data-testid="edit-email" /></div>
+            <div className="space-y-1.5"><Label>Cellulare *</Label><PhoneInput international defaultCountry="IT" value={ef.telefono} onChange={(v) => setEf((s) => ({ ...s, telefono: v || "" }))} className="phone-input" numberInputProps={{ "data-testid": "edit-telefono-input" }} data-testid="edit-telefono" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEdit(null)}>Annulla</Button>
+            <Button disabled={ebusy} onClick={submitEdit} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="edit-submit">Salva modifiche</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
