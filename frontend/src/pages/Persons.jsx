@@ -11,7 +11,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, UserPlus, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, UserPlus, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
 
@@ -148,6 +148,40 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, o
     return true;
   });
   const SUBS = [{ v: "tutti", l: "Tutti" }, { v: "staff", l: "Staff" }, { v: "volontario", l: "Volontario" }];
+  const [sort, setSort] = useState({ key: null, dir: "asc" });
+  const isStaffTab = tab === "staff_volontari" || tab === "da_classificare";
+  const toggleSort = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  const displayRows = (isStaffTab && sort.key === "team")
+    ? [...filtered].sort((a, b) => {
+        const ka = (a.teams_nomi || []).join(", ").toLowerCase();
+        const kb = (b.teams_nomi || []).join(", ").toLowerCase();
+        if (!ka && !kb) return 0; if (!ka) return 1; if (!kb) return -1;
+        return ka.localeCompare(kb, "it", { sensitivity: "base" }) * (sort.dir === "asc" ? 1 : -1);
+      })
+    : filtered;
+  const roleBadges = (r) => (
+    <button type="button" onClick={() => onRoleClick(r)} title="Gestisci ruoli evento" data-testid={`role-cell-${r.id}`}
+      className="flex flex-wrap items-center gap-1 rounded-md px-1.5 py-1 -ml-1.5 hover:bg-tiffany-light/60 transition-colors group">
+      {r.is_staff && <StatusBadge color="blue">Staff</StatusBadge>}{r.is_volontario && <StatusBadge color="green">Volontario</StatusBadge>}
+      {r.is_referente && <StatusBadge color="tiffany">Referente</StatusBadge>}
+      {!r.is_staff && !r.is_volontario && !r.is_referente && <span className="text-slate-400">—</span>}
+      <Pencil className="w-3 h-3 text-slate-300 group-hover:text-tiffany-active" />
+    </button>
+  );
+  const actionsCell = (r) => (
+    <div className="flex items-center justify-end gap-1">
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Invita" onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle><AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Annulla</AlertDialogCancel><AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(r)} data-testid={`confirm-delete-person-${r.id}`}>Elimina</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+  const teamsCell = (r) => ((r.teams_nomi && r.teams_nomi.length)
+    ? <div className="flex flex-wrap gap-1">{r.teams_nomi.map((t, i) => <span key={i} className="inline-flex items-center rounded-full bg-tiffany-light text-tiffany-fg px-2 py-0.5 text-xs font-medium whitespace-nowrap">{t}</span>)}</div>
+    : <span className="text-slate-400">—</span>);
   return (
     <div>
       <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -168,37 +202,43 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, o
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
-              {["Nome", "Qualifica", "Aziende", "Ruolo eventi", "Accesso", "Azioni"].map((h) => <th key={h} className={`text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap ${h === "Azioni" ? "text-right" : ""}`}>{h}</th>)}
+              {isStaffTab ? (
+                <>
+                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Nome e Cognome</th>
+                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Cellulare</th>
+                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Ruolo evento</th>
+                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap select-none cursor-pointer group" onClick={() => toggleSort("team")} data-testid="sort-team">
+                    <span className="inline-flex items-center gap-1">Team {sort.key === "team" ? (sort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-40" />}</span>
+                  </th>
+                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Evento</th>
+                  <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
+                </>
+              ) : (
+                ["Nome", "Qualifica", "Aziende", "Ruolo eventi", "Accesso", "Azioni"].map((h) => <th key={h} className={`text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap ${h === "Azioni" ? "text-right" : ""}`}>{h}</th>)
+              )}
             </tr></thead>
             <tbody>
               {loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
-                : filtered.map((r) => (
+                : displayRows.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
+                : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
                     <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.nome} {r.cognome}</span></td>
-                    <td className="px-4 py-3 text-slate-700">{r.ruolo || "—"}</td>
-                    <td className="px-4 py-3 text-slate-700">{(r.aziende_nomi && r.aziende_nomi.length) ? r.aziende_nomi.join(", ") : "—"}</td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" onClick={() => onRoleClick(r)} title="Gestisci ruoli evento" data-testid={`role-cell-${r.id}`}
-                        className="flex flex-wrap items-center gap-1 rounded-md px-1.5 py-1 -ml-1.5 hover:bg-tiffany-light/60 transition-colors group">
-                        {r.is_staff && <StatusBadge color="blue">Staff</StatusBadge>}{r.is_volontario && <StatusBadge color="green">Volontario</StatusBadge>}
-                        {r.is_referente && <StatusBadge color="tiffany">Referente</StatusBadge>}
-                        {!r.is_staff && !r.is_volontario && !r.is_referente && <span className="text-slate-400">—</span>}
-                        <Pencil className="w-3 h-3 text-slate-300 group-hover:text-tiffany-active" />
-                      </button>
-                    </td>
-                    <td className="px-4 py-3"><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Invita" onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle><AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Annulla</AlertDialogCancel><AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(r)} data-testid={`confirm-delete-person-${r.id}`}>Elimina</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </td>
+                    {isStaffTab ? (
+                      <>
+                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
+                        <td className="px-4 py-3">{teamsCell(r)}</td>
+                        <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 text-slate-700">{r.ruolo || "—"}</td>
+                        <td className="px-4 py-3 text-slate-700">{(r.aziende_nomi && r.aziende_nomi.length) ? r.aziende_nomi.join(", ") : "—"}</td>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
+                        <td className="px-4 py-3"><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
+                      </>
+                    )}
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{actionsCell(r)}</td>
                   </tr>
                 ))}
             </tbody>

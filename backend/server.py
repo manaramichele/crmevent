@@ -1272,6 +1272,8 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
     rels = await db.person_companies.find(oq(admin), {"_id": 0}).to_list(10000)
     pres = await db.staff.find(oq(admin), {"_id": 0}).to_list(10000)
     companies = {c["id"]: c for c in await _list("companies", oq(admin))}
+    teams_map = {t["id"]: t.get("nome") for t in await _list("teams", oq(admin))}
+    events_map = {e["id"]: e.get("nome") for e in await _list("events", oq(admin))}
     rel_by = defaultdict(list)
     for r in rels:
         rel_by[r["person_id"]].append(r)
@@ -1289,6 +1291,16 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
             n = companies[p["azienda_id"]]["nome"]
             if n not in aziende:
                 aziende.append(n)
+        teams_nomi = []
+        for x in prs:
+            tn = teams_map.get(x.get("team_id"))
+            if tn and tn not in teams_nomi:
+                teams_nomi.append(tn)
+        eventi_nomi = []
+        for x in prs:
+            en = events_map.get(x.get("evento_id"))
+            if en and en not in eventi_nomi:
+                eventi_nomi.append(en)
         out.append({**p,
                     "is_referente": bool(rp) or bool(p.get("azienda_id")),
                     "is_evento": bool(prs),
@@ -1296,6 +1308,8 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "is_volontario": "volontario" in cats,
                     "is_team": "team" in cats,
                     "aziende_nomi": aziende,
+                    "teams_nomi": teams_nomi,
+                    "eventi_nomi": eventi_nomi,
                     "eventi_count": len({x["evento_id"] for x in prs})})
     return out
 
