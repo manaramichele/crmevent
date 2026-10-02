@@ -59,7 +59,7 @@ export default function Invite() {
           const { data } = await api.get("/auth/me");
           setUser(data);
           toast.success("Invito accettato");
-          window.location.href = "/app";
+          window.location.href = data && data.needs_phone ? "/completa-profilo" : "/app";
           return;
         } catch (e) { setError(formatApiError(e.response?.data?.detail)); }
       }

@@ -370,9 +370,14 @@ def public_user(u: dict) -> dict:
             "org_id": u.get("org_id")}
 
 
+def _user_has_phone(u: dict) -> bool:
+    return bool((u.get("telefono") or u.get("cellulare") or "").strip())
+
+
 async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base = public_user(u)
     role = u.get("role")
+    base["needs_phone"] = (role != "superadmin") and not _user_has_phone(u)
     if role == "superadmin":
         base["needs_org"] = False
         return base
@@ -504,6 +509,34 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
         await sync_registered_user(user["user_id"], org["id"], source="registration")
     except Exception as e:
         logger.error(f"registered-user sync error: {e}")
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return await user_payload(u)
+
+
+class CompleteProfileIn(BaseModel):
+    telefono: Optional[str] = None
+
+
+@api.post("/auth/complete-profile")
+async def complete_profile(body: CompleteProfileIn, user: dict = Depends(get_current_user)):
+    """Completamento profilo: il cellulare (E.164) è obbligatorio per qualunque account attivo
+    (nuovo Google, Google su invito, anagrafiche legacy senza cellulare). Non crea org, trial o
+    crediti e non altera il ruolo/organizzazione. Sincronizza Brevo solo per utenti registrati
+    (membri di un'organizzazione), includendo CELLULARE."""
+    if user.get("role") == "superadmin":
+        raise HTTPException(status_code=400, detail="Il Super Admin non richiede questo passaggio")
+    phone = _normalize_phone(body.telefono)
+    full = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
+    upd = {"telefono": phone}
+    if not full.get("registered_at"):
+        upd["registered_at"] = now_iso()
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
+    mem = await db.memberships.find_one({"user_id": user["user_id"], "active": True}, {"_id": 0})
+    if mem and mem.get("org_id"):
+        try:
+            await sync_registered_user(user["user_id"], mem["org_id"], source="profile_completion")
+        except Exception as e:
+            logger.error(f"registered-user sync error: {e}")
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return await user_payload(u)
 

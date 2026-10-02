@@ -10,6 +10,7 @@ import DemoPage from "@/pages/DemoPage";
 import Partecipa from "@/pages/Partecipa";import Pricing from "@/pages/Pricing";
 import Register from "@/pages/Register";
 import CompleteOrg from "@/pages/CompleteOrg";
+import CompleteProfile from "@/pages/CompleteProfile";
 import Legal from "@/pages/Legal";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
@@ -65,6 +66,7 @@ function Protected({ children }) {
   if (loading || user === null) return <div className="min-h-screen flex items-center justify-center text-slate-400">Caricamento...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (!isSuper(user) && user.needs_org) return <Navigate to="/completa-organizzazione" replace />;
+  if (!isSuper(user) && !user.needs_org && user.needs_phone) return <Navigate to="/completa-profilo" replace />;
   if (isVol(user)) return <VolunteerLayout>{children}</VolunteerLayout>;
   return <Layout>{children}</Layout>;
 }
@@ -101,6 +103,7 @@ function Shell() {
         <Route path="/prezzi" element={<Pricing />} />
         <Route path="/registrati" element={<Register />} />
         <Route path="/completa-organizzazione" element={<CompleteOrg />} />
+        <Route path="/completa-profilo" element={<CompleteProfile />} />
         <Route path="/privacy-policy" element={<Legal type="privacy" />} />
         <Route path="/privacy" element={<Navigate to="/privacy-policy" replace />} />
         <Route path="/cookie" element={<Legal type="cookie" />} />
