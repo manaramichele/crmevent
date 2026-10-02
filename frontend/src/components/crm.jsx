@@ -18,6 +18,7 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { MODAL, MODAL_SCROLL } from "@/lib/modal";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
+import TeamSelect from "@/components/TeamSelect";
 import CalendarSyncField from "@/components/CalendarSyncField";
 
 export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -289,6 +290,11 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
         onStaffAdded={field.onStaffAdded} align="start" triggerTestid={`field-${field.name}`} />
     );
   }
+  if (field.type === "teamselect") {
+    const eventoId = form?.[field.eventFrom || "evento_id"] || "";
+    return <TeamSelect value={value || ""} eventoId={eventoId} onChange={(v) => onChange(field.name, v)}
+      testid={`field-${field.name}`} align="start" noEventHint={field.noEventHint || "Seleziona prima l'Evento per scegliere o creare un Team."} />;
+  }
   if (field.type === "select" && field.settingKey) {
     return <SettingSelect settingKey={field.settingKey} value={value} onChange={(v) => onChange(field.name, v)}
       options={options?.[field.source] || field.options || []} placeholder={field.placeholder}
@@ -378,7 +384,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, entityCreators }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators }) {
   const { items, loading, create, update, remove } = useCollection(endpoint);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -393,10 +399,11 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
     if (editing) { rec = await update(editing.id, form); toast.success(`${entityLabel} aggiornato`); }
     else { rec = await create(form); toast.success(`${entityLabel} creato`); }
     if (onSaved) { try { await onSaved(rec || { ...editing, ...form }, form, !!editing); } catch { /* handled in onSaved */ } }
+    if (onMutate) { try { await onMutate(); } catch { /* noop */ } }
   };
 
   const onDelete = async (row) => {
-    try { await remove(row.id); toast.success(`${entityLabel} eliminato`); }
+    try { await remove(row.id); toast.success(`${entityLabel} eliminato`); if (onMutate) { try { await onMutate(); } catch { /* noop */ } } }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
 

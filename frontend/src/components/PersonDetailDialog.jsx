@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import TeamSelect from "@/components/TeamSelect";
 import { Pencil, UserPlus, Trash2, CalendarDays, Users, Clock, ListChecks, IdCard, KeyRound, Plus, X, Save, AlertTriangle } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
@@ -28,7 +29,7 @@ function Initials({ p }) {
     : <div className="w-14 h-14 rounded-full bg-tiffany-light text-tiffany-fg flex items-center justify-center font-bold text-lg">{t}</div>;
 }
 
-export default function PersonDetailDialog({ personId, open, onOpenChange, events = [], teams = [], settings, onChanged, onInvite }) {
+export default function PersonDetailDialog({ personId, open, onOpenChange, events = [], settings, onChanged, onInvite }) {
   const [d, setD] = useState(null);
   const [pf, setPf] = useState({ categoria: "volontario", stato: "da_contattare" });
   const [edit, setEdit] = useState(null);
@@ -193,9 +194,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                     <Select value={pf.categoria} onValueChange={(v) => setPf((f) => ({ ...f, categoria: v }))}>
                       <SelectTrigger data-testid="presence-cat"><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
                       <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent></Select>
-                    <Select value={pf.team_id || ""} onValueChange={(v) => setPf((f) => ({ ...f, team_id: v }))}>
-                      <SelectTrigger data-testid="presence-team"><SelectValue placeholder="Team (opzionale)" /></SelectTrigger>
-                      <SelectContent>{teams.filter((t) => !pf.evento_id || t.evento_id === pf.evento_id).map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
+                    <TeamSelect value={pf.team_id || ""} eventoId={pf.evento_id} onChange={(v) => setPf((f) => ({ ...f, team_id: v }))} testid="presence-team" noEventHint="Seleziona prima l'Evento." />
                     <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold sm:col-span-3" onClick={addPresence} data-testid="presence-add">Associa</Button>
                   </div>
                 </div>
@@ -210,9 +209,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                         <Select value={["staff", "volontario"].includes(x.presence.categoria) ? x.presence.categoria : ""} onValueChange={(v) => (v === "none" ? delPresence(x.presence.id) : savePresence(x.presence, { categoria: v }))}>
                           <SelectTrigger data-testid={`presence-edit-cat-${x.presence.id}`}><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
                           <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem><SelectItem value="none">Nessun ruolo (rimuovi)</SelectItem></SelectContent></Select>
-                        <Select value={x.presence.team_id || "none"} onValueChange={(v) => savePresence(x.presence, { team_id: v === "none" ? "" : v })}>
-                          <SelectTrigger data-testid={`presence-edit-team-${x.presence.id}`}><SelectValue placeholder="Team" /></SelectTrigger>
-                          <SelectContent><SelectItem value="none">— Nessun team —</SelectItem>{teams.filter((t) => t.evento_id === x.presence.evento_id).map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
+                        <TeamSelect value={x.presence.team_id || ""} eventoId={x.presence.evento_id} onChange={(v) => savePresence(x.presence, { team_id: v })} testid={`presence-edit-team-${x.presence.id}`} />
                       </div>
                     </div>
                   ))}

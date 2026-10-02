@@ -16,7 +16,8 @@ import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
 import TeamMembersDialog from "@/components/TeamMembersDialog";
-import TeamQuickCreate from "@/components/TeamQuickCreate";
+import TeamSelect from "@/components/TeamSelect";
+import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 
 const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
 const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Attivo", accesso_disabilitato: "Disabilitato" };
@@ -59,7 +60,7 @@ function InviteDialog({ person, open, onOpenChange, onDone }) {
   );
 }
 
-function EventRolesDialog({ person, events, teams, settings, open, onOpenChange, onDone }) {
+function EventRolesDialog({ person, events, settings, open, onOpenChange, onDone }) {
   const [links, setLinks] = useState([]);
   const [nf, setNf] = useState({ categoria: "staff" });
   const load = useCallback(async () => {
@@ -99,7 +100,6 @@ function EventRolesDialog({ person, events, teams, settings, open, onOpenChange,
           {links.length === 0 && <p className="text-sm text-slate-400">Nessun evento collegato.</p>}
           {links.map((x) => {
             const p = x.presence;
-            const evTeams = teams.filter((t) => t.evento_id === x.evento_id || t.evento_id === p.evento_id);
             return (
               <div key={p.id} className="border border-slate-200 rounded-lg px-3 py-3" data-testid={`role-link-${p.id}`}>
                 <div className="flex items-center justify-between mb-2">
@@ -110,9 +110,7 @@ function EventRolesDialog({ person, events, teams, settings, open, onOpenChange,
                   <Select value={["staff", "volontario"].includes(p.categoria) ? p.categoria : ""} onValueChange={(v) => (v === "none" ? del(p.id) : save(p, { categoria: v }))}>
                     <SelectTrigger data-testid={`role-cat-${p.id}`}><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
                     <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem><SelectItem value="none">Nessun ruolo (rimuovi)</SelectItem></SelectContent></Select>
-                  <Select value={p.team_id || "none"} onValueChange={(v) => save(p, { team_id: v === "none" ? "" : v })}>
-                    <SelectTrigger data-testid={`role-team-${p.id}`}><SelectValue placeholder="Team" /></SelectTrigger>
-                    <SelectContent><SelectItem value="none">— Nessun team —</SelectItem>{evTeams.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent></Select>
+                  <TeamSelect value={p.team_id || ""} eventoId={p.evento_id} onChange={(v) => save(p, { team_id: v })} testid={`role-team-${p.id}`} />
                 </div>
               </div>
             );
@@ -264,8 +262,8 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
 export default function Persons({ mode = "anagrafiche" }) {
   const { items: companies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
-  const { items: teams, reload: reloadTeams } = useCollection("/teams");
   const { items: staffLinks, reload: reloadStaff } = useCollection("/staff");
+  const { teams } = useTeams();
   const settings = useSettings();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -348,7 +346,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts }, { name: "persona_id", label: "Persona (vuoto = scoperto)", type: "select", options: personOpts },
     { name: "data", label: "Data", type: "date" }, { name: "ora_inizio", label: "Ora inizio", type: "time" }, { name: "ora_fine", label: "Ora fine", type: "time" },
     { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "ruolo", label: "Ruolo", type: "select", settingKey: "ruoli_staff", addLabel: "Aggiungi nuovo Ruolo", options: settings?.ruoli_staff || [] },
-    { name: "team_id", label: "Team", type: "select", options: teamOpts, addEntity: "Aggiungi nuovo Team" }, { name: "luogo", label: "Luogo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
+    { name: "team_id", label: "Team", type: "teamselect", eventFrom: "evento_id" }, { name: "luogo", label: "Luogo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
   const shiftCols = [
@@ -387,14 +385,11 @@ export default function Persons({ mode = "anagrafiche" }) {
           ))}
           <TabsContent value="team">
             <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
-              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" searchKeys={["nome", "area"]} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]} />
+              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]} />
           </TabsContent>
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
               fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" searchKeys={["ruolo", "area", "luogo"]}
-              entityCreators={{ team_id: ({ onClose, onCreated, form }) => (
-                <TeamQuickCreate eventoId={form?.evento_id} onClose={onClose} onCreated={async (t) => { await reloadTeams(); onCreated(t); }} />
-              ) }}
               filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
           </TabsContent>
         </Tabs>
@@ -405,10 +400,10 @@ export default function Persons({ mode = "anagrafiche" }) {
       <EntityDialog open={formOpen} onOpenChange={setFormOpen} title={editing ? "Modifica persona" : "Nuova persona"}
         fields={personFields} initial={editing} onSubmit={submitPerson} testid="person" />
       {detailId && <PersonDetailDialog personId={detailId} open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}
-        events={events} teams={teams} settings={settings} onChanged={reload}
+        events={events} settings={settings} onChanged={reload}
         onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={(p) => { setDetailId(null); setInvite(p); }} />}
       {invite && <InviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
-      {rolesFor && <EventRolesDialog person={rolesFor} events={events} teams={teams} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
+      {rolesFor && <EventRolesDialog person={rolesFor} events={events} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
       {teamMembersFor && <TeamMembersDialog team={teamMembersFor} open={!!teamMembersFor} onOpenChange={(o) => !o && setTeamMembersFor(null)}
         persons={rows} staffLinks={staffLinks} events={events} onReloadStaff={reloadTeamData}
         onOpenPerson={(pid) => { setTeamMembersFor(null); setDetailId(pid); }} />}
