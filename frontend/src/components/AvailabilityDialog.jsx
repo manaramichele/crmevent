@@ -93,27 +93,27 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto" data-testid="availability-dialog">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] max-w-[1200px] max-h-[90vh] flex flex-col overflow-hidden" data-testid="availability-dialog">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="font-display flex items-center gap-2"><ClipboardList className="w-5 h-5 text-tiffany-active" />Raccolta disponibilità</DialogTitle>
             <DialogDescription className="sr-only">Genera il link pubblico e consulta le disponibilità ricevute</DialogDescription>
           </DialogHeader>
 
           {event && (event.data_inizio || event.data_inizio_allestimento) && (
-            <p className="text-sm text-slate-500 -mt-2">
+            <p className="text-sm text-slate-500 -mt-2 shrink-0">
               {event.data_inizio_allestimento && <span className="text-amber-600">Allestimento dal {dm(event.data_inizio_allestimento)} · </span>}
               {event.data_inizio && <span>Evento {dm(event.data_inizio)}{event.data_fine && event.data_fine !== event.data_inizio ? `–${dm(event.data_fine)}` : ""}</span>}
               {event.data_fine_disallestimento && <span className="text-violet-600"> · Disallestimento fino al {dm(event.data_fine_disallestimento)}</span>}
             </p>
           )}
 
-          <Tabs defaultValue="link" className="mt-2">
-            <TabsList>
+          <Tabs defaultValue="link" className="mt-2 flex flex-col min-h-0 flex-1">
+            <TabsList className="shrink-0">
               <TabsTrigger value="link" data-testid="avtab-link"><Link2 className="w-4 h-4 mr-1" />Link pubblico</TabsTrigger>
               <TabsTrigger value="ricevute" data-testid="avtab-ricevute"><Users className="w-4 h-4 mr-1" />Disponibilità ricevute{rows.length ? ` (${rows.length})` : ""}</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="link" className="pt-3">
+            <TabsContent value="link" className="pt-3 overflow-y-auto">
               {link?.active ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
@@ -173,12 +173,12 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
               )}
             </TabsContent>
 
-            <TabsContent value="ricevute" className="pt-3">
+            <TabsContent value="ricevute" className="pt-3 flex flex-col min-h-0 flex-1 data-[state=inactive]:hidden">
               {loading ? <p className="text-sm text-slate-400 py-8 text-center">Caricamento...</p>
                 : rows.length === 0 ? <p className="text-sm text-slate-400 py-8 text-center">Nessuna disponibilità ricevuta finora.</p>
                 : (
-                  <>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3" data-testid="avail-kpi">
+                  <div className="flex flex-col min-h-0 flex-1">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3 shrink-0" data-testid="avail-kpi">
                       {[
                         { k: "total", label: "Ricevute", val: rows.length, on: () => { setFRuolo("all"); setFStato("all"); }, color: "text-slate-900" },
                         { k: "nuovi", label: "Nuovi", val: rows.filter((r) => (r.stato || "nuova") === "nuova").length, on: () => setFStato("nuova"), color: "text-blue-600" },
@@ -206,7 +206,7 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
                         </div>
                       );
                     })()}
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <div className="flex flex-wrap items-center gap-2 mb-3 shrink-0">
                       <Select value={fRuolo} onValueChange={setFRuolo}>
                         <SelectTrigger className="h-8 w-40" data-testid="avail-filter-ruolo"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -239,9 +239,9 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
                         </AlertDialog>
                       )}
                     </div>
-                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <div className="flex-1 min-h-0 overflow-auto border border-slate-200 rounded-xl">
                       <table className="w-full text-sm">
-                        <thead><tr className="border-b border-slate-200 bg-slate-50/70 text-left">
+                        <thead className="sticky top-0 z-10"><tr className="border-b border-slate-200 bg-slate-100 text-left">
                           <th className="px-3 py-2.5"><Checkbox checked={allSel} onCheckedChange={toggleAll} data-testid="avail-select-all" /></th>
                           {["Nome", "Cellulare", "Email", "Età", "Disponibilità", "Preferenza", "Ruolo evento", "Confermato", "Stato"].map((h) => <th key={h} className="font-semibold text-slate-600 px-3 py-2.5 whitespace-nowrap">{h}</th>)}
                         </tr></thead>
@@ -287,7 +287,7 @@ export default function AvailabilityDialog({ eventId, open, onOpenChange }) {
                         </tbody>
                       </table>
                     </div>
-                  </>
+                  </div>
                 )}
             </TabsContent>
           </Tabs>

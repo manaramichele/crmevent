@@ -13,7 +13,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import {
   ArrowLeft, Rocket, Coins, Wallet, CheckCircle2, Clock, AlertTriangle, Flame, Plus, Pencil,
   Copy, Trash2, RotateCcw, Check, FolderPlus, ListChecks, LayoutTemplate, CalendarClock, RefreshCw,
-  ExternalLink, Layers, MoreHorizontal,
+  ExternalLink, Layers, MoreHorizontal, ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 
 const STATI = { da_fare: "Da fare", in_corso: "In corso", in_attesa: "In attesa", completata: "Completata" };
@@ -52,6 +52,7 @@ export default function EventPipeline() {
   const [taskDlg, setTaskDlg] = useState(null);
   const [catName, setCatName] = useState("");
   const [filters, setFilters] = useState({ categoria: "all", stato: "all", priorita: "all" });
+  const [sort, setSort] = useState({ key: null, dir: "asc" });
   // FASE 3
   const [templates, setTemplates] = useState([]);
   const [selectedTpl, setSelectedTpl] = useState(null);
@@ -228,6 +229,45 @@ export default function EventPipeline() {
     (filters.stato === "all" || t.stato === filters.stato) &&
     (filters.priorita === "all" || t.priorita === filters.priorita));
 
+  const PRIO_RANK = { critica: 0, importante: 1, normale: 2 };
+  const toggleSort = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  const sorted = useMemo(() => {
+    if (!sort.key) return filtered;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const cmpStr = (a, b) => (a || "").localeCompare(b || "", "it", { sensitivity: "base" });
+    const val = {
+      titolo: (t) => t.titolo || "",
+      categoria: (t) => catName_[t.categoria_id] || "",
+      stato: (t) => STATI[t.stato] || "",
+    };
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      if (sort.key === "scadenza") {
+        const sa = a.scadenza || "", sb = b.scadenza || "";
+        if (!sa && !sb) return 0;
+        if (!sa) return 1;   // vuote sempre in fondo
+        if (!sb) return -1;
+        return sa < sb ? -1 * dir : sa > sb ? 1 * dir : 0;
+      }
+      if (sort.key === "responsabile") {
+        const pa = persons.find((p) => p.id === a.responsabile_id);
+        const pb = persons.find((p) => p.id === b.responsabile_id);
+        const ka = pa ? `${pa.cognome || ""} ${pa.nome || ""}`.trim() : "";
+        const kb = pb ? `${pb.cognome || ""} ${pb.nome || ""}`.trim() : "";
+        if (!ka && !kb) return 0;
+        if (!ka) return 1;
+        if (!kb) return -1;
+        return cmpStr(ka, kb) * dir;
+      }
+      if (sort.key === "priorita") {
+        const ra = PRIO_RANK[a.priorita] ?? 99, rb = PRIO_RANK[b.priorita] ?? 99;
+        return (ra - rb) * dir;
+      }
+      return cmpStr(val[sort.key](a), val[sort.key](b)) * dir;
+    });
+    return arr;
+  }, [filtered, sort, catName_, persons]);
+
   if (!status) return <div className="text-slate-400 p-6">Caricamento…</div>;
 
   const showChooser = status.active && (status.needs_template || changeMode);
@@ -351,10 +391,19 @@ export default function EventPipeline() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm" data-testid="pipeline-tasks-table">
-                <thead><tr className="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100"><th className="py-2 pr-3">Attività</th><th className="px-3">Categoria</th><th className="px-3">Responsabile</th><th className="px-3">Scadenza</th><th className="px-3">Stato</th><th className="px-3">Priorità</th><th className="px-3"></th></tr></thead>
+                <thead><tr className="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100">
+                  {[["titolo", "Attività"], ["categoria", "Categoria"], ["responsabile", "Responsabile"], ["scadenza", "Scadenza"], ["stato", "Stato"], ["priorita", "Priorità"]].map(([key, label], i) => (
+                    <th key={key} className={`${i === 0 ? "py-2 pr-3" : "px-3"} select-none cursor-pointer group`} onClick={() => toggleSort(key)} data-testid={`sort-${key}`}>
+                      <span className={`inline-flex items-center gap-1 ${sort.key === key ? "text-slate-700" : "group-hover:text-slate-600"}`}>{label}
+                        {sort.key === key ? (sort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-40" />}
+                      </span>
+                    </th>
+                  ))}
+                  <th className="px-3"></th>
+                </tr></thead>
                 <tbody>
-                  {filtered.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-slate-400">Nessuna attività. Creane una con "Nuova attività".</td></tr>}
-                  {filtered.map((t) => (
+                  {sorted.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-slate-400">Nessuna attività. Creane una con "Nuova attività".</td></tr>}
+                  {sorted.map((t) => (
                     <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50/50" data-testid={`pipeline-task-${t.id}`}>
                       <td className="py-2.5 pr-3 font-medium text-slate-800">
                         {t.titolo}
