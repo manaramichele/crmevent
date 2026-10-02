@@ -303,26 +303,23 @@ export default function Persons({ mode = "anagrafiche" }) {
 
   // team & shift configs
   const personOpts = rows.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() }));
-  // Team Leader: solo Staff & Volontari (esclude chi è SOLO referente azienda),
-  // filtrati per l'evento selezionato nel form del team quando presente.
-  const staffVolByEvent = useMemo(() => {
+  // Team Leader: solo Staff dell'evento selezionato (esclude Volontari, Da classificare,
+  // Referenti aziendali non-staff e Staff di altri eventi).
+  const staffByEvent = useMemo(() => {
     const m = {};
     (staffLinks || []).forEach((l) => {
-      if (["staff", "collaboratore", "volontario"].includes(l.categoria)) {
+      if (["staff", "collaboratore"].includes(l.categoria)) {
         (m[l.evento_id] = m[l.evento_id] || new Set()).add(l.persona_id);
       }
     });
     return m;
   }, [staffLinks]);
-  const staffVolAll = useMemo(() => {
-    const s = new Set();
-    Object.values(staffVolByEvent).forEach((set) => set.forEach((id) => s.add(id)));
-    return s;
-  }, [staffVolByEvent]);
-  const leaderOptions = useCallback((form) => {
-    const allowed = form?.evento_id ? (staffVolByEvent[form.evento_id] || new Set()) : staffVolAll;
-    return rows.filter((p) => allowed.has(p.id)).map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() }));
-  }, [rows, staffVolByEvent, staffVolAll]);
+  const staffPersonsForEvent = useCallback((eid) => {
+    if (!eid) return [];
+    const set = staffByEvent[eid] || new Set();
+    return rows.filter((p) => set.has(p.id));
+  }, [rows, staffByEvent]);
+  const reloadTeamData = useCallback(async () => { await Promise.all([reloadStaff(), reload()]); }, [reloadStaff, reload]);
   const eventOpts = events.map((e) => ({ value: e.id, label: e.nome }));
   const teamOpts = teams.map((t) => ({ value: t.id, label: t.nome }));
   const areaOpts = toOptions(settings?.aree_operative);
@@ -333,7 +330,7 @@ export default function Persons({ mode = "anagrafiche" }) {
 
   const teamFields = [
     { name: "nome", label: "Nome team", required: true, full: true }, { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts },
-    { name: "area", label: "Area", type: "select", options: areaOpts }, { name: "responsabile_id", label: "Team Leader", type: "select", dynamicOptions: leaderOptions, placeholder: "Solo Staff & Volontari dell'evento" },
+    { name: "area", label: "Area", type: "select", options: areaOpts }, { name: "responsabile_id", label: "Team Leader", type: "staffselect", eventFrom: "evento_id", staffPersonsFor: (form) => staffPersonsForEvent(form?.evento_id), allPersons: rows, onStaffAdded: reloadTeamData, noEventHint: "Seleziona prima l'Evento per scegliere lo Staff." },
     { name: "luogo_operativo", label: "Luogo operativo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
   ];

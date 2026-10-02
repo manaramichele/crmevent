@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
+import { StaffAssignSelect } from "@/components/StaffAssignSelect";
 
 export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 export const formatEUR = (n) => eurFmt.format(Number(n || 0));
@@ -273,6 +274,18 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
   }
   if (field.type === "textarea") {
     return <Textarea {...common} value={value || ""} onChange={(e) => onChange(field.name, e.target.value)} placeholder={field.placeholder} />;
+  }
+  if (field.type === "staffselect") {
+    const eventoId = form?.[field.eventFrom || "evento_id"] || "";
+    const staffPersons = field.staffPersonsFor ? field.staffPersonsFor(form) : [];
+    if (!eventoId) {
+      return <div className="text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-2.5" data-testid={`field-${field.name}`}>{field.noEventHint || "Seleziona prima l'evento."}</div>;
+    }
+    return (
+      <StaffAssignSelect eventoId={eventoId} staffPersons={staffPersons} allPersons={field.allPersons || []}
+        value={value || null} onChange={(pid) => onChange(field.name, pid || "")}
+        onStaffAdded={field.onStaffAdded} align="start" triggerTestid={`field-${field.name}`} />
+    );
   }
   if (field.type === "select" && field.settingKey) {
     return <SettingSelect settingKey={field.settingKey} value={value} onChange={(v) => onChange(field.name, v)}
