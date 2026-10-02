@@ -43,6 +43,8 @@ export default function EventPipeline() {
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState({ percent: 0, completate: 0, da_fare: 0, in_ritardo: 0, critiche: 0 });
   const [persons, setPersons] = useState([]);
+  const [staffLinks, setStaffLinks] = useState([]);
+  const [respQuery, setRespQuery] = useState("");
   const [companies, setCompanies] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [recharge, setRecharge] = useState(false);
@@ -90,6 +92,7 @@ export default function EventPipeline() {
       await loadPipeline();
       loadCrmCounts();
       api.get("/persons").then(({ data }) => setPersons(data)).catch(() => {});
+      api.get("/staff").then(({ data }) => setStaffLinks(data)).catch(() => {});
       api.get("/companies").then(({ data }) => setCompanies(data)).catch(() => {});
       if (s.date_changed) setDateDlg(true);
     } else if (s?.active && s?.needs_template) {
@@ -211,6 +214,15 @@ export default function EventPipeline() {
 
   const catName_ = useMemo(() => Object.fromEntries(cats.map((c) => [c.id, c.name])), [cats]);
   const nameOf = (arr, pid) => { const p = arr.find((x) => x.id === pid); return p ? (p.nome ? `${p.nome} ${p.cognome || ""}`.trim() : p.ragione_sociale || p.name) : "—"; };
+  const eventStaffIds = useMemo(() => {
+    const s = new Set();
+    (staffLinks || []).forEach((l) => { if (l.evento_id === id && ["staff", "collaboratore"].includes(l.categoria)) s.add(l.persona_id); });
+    return s;
+  }, [staffLinks, id]);
+  const staffPersons = useMemo(() => (
+    (persons || []).filter((p) => eventStaffIds.has(p.id))
+      .sort((a, b) => `${a.cognome || ""} ${a.nome || ""}`.trim().localeCompare(`${b.cognome || ""} ${b.nome || ""}`.trim(), "it", { sensitivity: "base" }))
+  ), [persons, eventStaffIds]);
   const filtered = tasks.filter((t) =>
     (filters.categoria === "all" || t.categoria_id === filters.categoria) &&
     (filters.stato === "all" || t.stato === filters.stato) &&
@@ -409,7 +421,7 @@ export default function EventPipeline() {
       </Dialog>
 
       {/* Dialog attività */}
-      <Dialog open={!!taskDlg} onOpenChange={(o) => !o && setTaskDlg(null)}>
+      <Dialog open={!!taskDlg} onOpenChange={(o) => { if (!o) { setTaskDlg(null); setRespQuery(""); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="pipeline-task-dialog">
           <DialogHeader><DialogTitle>{taskDlg?.id ? "Modifica attività" : "Nuova attività"}</DialogTitle></DialogHeader>
           {taskDlg && (
@@ -421,7 +433,13 @@ export default function EventPipeline() {
                 <div className="space-y-1.5"><Label>Scadenza</Label><Input type="date" value={taskDlg.scadenza || ""} onChange={(e) => setTaskDlg((t) => ({ ...t, scadenza: e.target.value }))} data-testid="task-scadenza" /></div>
                 <div className="space-y-1.5"><Label>Stato</Label><Select value={taskDlg.stato} onValueChange={(v) => setTaskDlg((t) => ({ ...t, stato: v }))}><SelectTrigger data-testid="task-stato"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(STATI).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1.5"><Label>Priorità</Label><Select value={taskDlg.priorita} onValueChange={(v) => setTaskDlg((t) => ({ ...t, priorita: v }))}><SelectTrigger data-testid="task-priorita"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(PRIO).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-1.5"><Label>Responsabile</Label><Select value={taskDlg.responsabile_id || "none"} onValueChange={(v) => setTaskDlg((t) => ({ ...t, responsabile_id: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="—" /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{persons.map((p) => <SelectItem key={p.id} value={p.id}>{`${p.nome || ""} ${p.cognome || ""}`.trim() || p.id}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-1.5"><Label>Responsabile <span className="text-xs font-normal text-slate-400">(solo Staff dell'evento)</span></Label><Select value={taskDlg.responsabile_id || "none"} onValueChange={(v) => setTaskDlg((t) => ({ ...t, responsabile_id: v === "none" ? "" : v }))}><SelectTrigger data-testid="task-responsabile"><SelectValue placeholder="—" /></SelectTrigger><SelectContent>
+                  <div className="p-1.5 sticky top-0 bg-white z-10 border-b border-slate-100"><Input autoFocus value={respQuery} onChange={(e) => setRespQuery(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Cerca staff..." className="h-8" data-testid="task-responsabile-search" /></div>
+                  <SelectItem value="none">—</SelectItem>
+                  {staffPersons.filter((p) => { const s = `${p.nome || ""} ${p.cognome || ""}`.toLowerCase(); return !respQuery || s.includes(respQuery.toLowerCase()); }).map((p) => <SelectItem key={p.id} value={p.id} data-testid={`resp-opt-${p.id}`}>{`${p.nome || ""} ${p.cognome || ""}`.trim() || p.id}</SelectItem>)}
+                  {taskDlg.responsabile_id && !eventStaffIds.has(taskDlg.responsabile_id) && <SelectItem value={taskDlg.responsabile_id} className="text-amber-700" data-testid="resp-opt-stale">{`${nameOf(persons, taskDlg.responsabile_id)} · non più nello Staff`}</SelectItem>}
+                  {staffPersons.length === 0 && <div className="px-2 py-3 text-xs text-slate-400">Nessuno Staff associato a questo evento.</div>}
+                </SelectContent></Select></div>
                 <div className="space-y-1.5"><Label>Azienda/fornitore</Label><Select value={taskDlg.azienda_id || "none"} onValueChange={(v) => setTaskDlg((t) => ({ ...t, azienda_id: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="—" /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.ragione_sociale || c.nome || c.id}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1.5"><Label>Costo previsto (€)</Label><Input type="number" value={taskDlg.costo_previsto ?? ""} onChange={(e) => setTaskDlg((t) => ({ ...t, costo_previsto: e.target.value }))} /></div>
                 <div className="space-y-1.5"><Label>Costo effettivo (€)</Label><Input type="number" value={taskDlg.costo_effettivo ?? ""} onChange={(e) => setTaskDlg((t) => ({ ...t, costo_effettivo: e.target.value }))} /></div>
