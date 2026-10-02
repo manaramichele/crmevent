@@ -328,7 +328,8 @@ export default function Persons({ mode = "anagrafiche" }) {
     { key: "responsabile_id", label: "Team Leader", render: (r) => r.responsabile_id ? pName(r.responsabile_id) : <StatusBadge color="orange">Da assegnare</StatusBadge> },
     { key: "luogo_operativo", label: "Luogo" },
     { key: "componenti", label: "Componenti", sortable: false, render: (r) => {
-        const n = new Set((staffLinks || []).filter((l) => l.team_id === r.id).map((l) => l.persona_id)).size;
+        const named = new Set(rows.filter((p) => `${p.cognome || ""} ${p.nome || ""}`.trim() || p.email).map((p) => p.id));
+        const n = new Set((staffLinks || []).filter((l) => l.team_id === r.id && named.has(l.persona_id)).map((l) => l.persona_id)).size;
         return <button onClick={() => setTeamMembersFor(r)} className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-2.5 py-1 text-xs font-semibold hover:bg-tiffany-light/70 whitespace-nowrap" data-testid={`team-members-btn-${r.id}`}><Users className="w-3.5 h-3.5" />Vedi componenti ({n})</button>;
       } },
   ];

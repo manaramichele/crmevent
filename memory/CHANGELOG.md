@@ -787,3 +787,11 @@ Task 2 — Creatività manuale:
 - crm.jsx: nuovo field type "teamselect"; EntityManager accetta onMutate (chiamata dopo create/update/delete) -> Team manager usa onMutate=invalidateTeams.
 - Backend: DELETE /teams/{id} ora esegue cascade (scoped org) azzerando team_id sui record staff e shifts referenzianti (niente riferimenti orfani). Verificato via curl.
 - Testing agent: 7/7 flussi verdi (iteration_52), inclusa propagazione cross-dialog e eliminazione.
+
+## 2026-06 — Store globale Persone (Staff/Volontari) real-time
+- Nuovo store globale /app/frontend/src/lib/peopleStore.js (useSyncExternalStore + invalidatePeople): unica sorgente per /staff + /persons-enriched. Ogni create/update/delete persona, assegnazione/rimozione ruolo evento o Team aggiorna in tempo reale TUTTI i selettori Staff/Volontari senza reload.
+- Consumatori collegati allo store: Persons.jsx (staffLinks + rows), EventPipeline.jsx (reloadStaffData=invalidatePeople), PipelineAttention.jsx (loadStaff=invalidatePeople), TeamMembersDialog (onReloadStaff), StaffAssignSelect (onStaffAdded -> reload).
+- Fix bug: persona creata da Team → Aggiungi componente → + Aggiungi nuova persona ora compare IMMEDIATAMENTE come componente (con ruolo Staff/Volontario e aggiunta al Team) e il conteggio si aggiorna senza reload.
+- Allineato il conteggio "Vedi componenti (N)" nella tabella Team al filtro hasName() del dialog (niente record senza nominativo).
+- Team Leader resta solo Staff dell'evento; selettore componenti mostra Staff+Volontari ordinati Cognome→Nome.
+- Testing agent: 7/7 flussi verdi (iteration_53), inclusa propagazione cross-page Pipeline→Staff senza reload.
