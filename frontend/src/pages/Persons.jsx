@@ -138,17 +138,16 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, o
   const [sub, setSub] = useState("tutti");
   const filtered = rows.filter((r) => {
     if (tab === "referenti_aziende" && !r.is_referente) return false;
-    if (tab === "staff_volontari" && !r.is_evento) return false;
-    if (tab === "da_classificare" && (r.is_referente || r.is_evento)) return false;
+    if (tab === "staff_volontari" && !(r.is_staff || r.is_volontario)) return false;
+    if (tab === "da_classificare" && (r.is_referente || r.is_staff || r.is_volontario)) return false;
     if (tab === "staff_volontari") {
       if (sub === "staff" && !r.is_staff) return false;
       if (sub === "volontario" && !r.is_volontario) return false;
-      if (sub === "da_definire" && (r.is_staff || r.is_volontario)) return false;
     }
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
-  const SUBS = [{ v: "tutti", l: "Tutti" }, { v: "da_definire", l: "Da definire" }, { v: "staff", l: "Staff" }, { v: "volontario", l: "Volontario" }];
+  const SUBS = [{ v: "tutti", l: "Tutti" }, { v: "staff", l: "Staff" }, { v: "volontario", l: "Volontario" }];
   return (
     <div>
       <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -210,7 +209,7 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, o
   );
 }
 
-export default function Persons() {
+export default function Persons({ mode = "anagrafiche" }) {
   const { items: companies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
   const { items: teams } = useCollection("/teams");
@@ -306,35 +305,45 @@ export default function Persons() {
     { key: "area", label: "Area" }, { key: "team_id", label: "Team", render: (r) => r.team_id ? tName(r.team_id) : "—" },
   ];
 
+  const isStaff = mode === "staff";
+  const peopleProps = {
+    rows, loading, onOpen: (r) => setDetailId(r.id),
+    onEdit: (r) => { setEditing(r); setFormOpen(true); }, onInvite: (r) => setInvite(r),
+    onDelete: delPerson, onRoleClick: (r) => setRolesFor(r),
+  };
+
   return (
     <div className="animate-fade-up">
-      <PageHeader title="Anagrafiche" subtitle="Anagrafica unica: referenti, staff, volontari, team e turni"
+      <PageHeader
+        title={isStaff ? "Staff / Volontari" : "Anagrafiche"}
+        subtitle={isStaff ? "Persone operative degli eventi: staff, volontari, team e turni" : "Referenti e contatti delle aziende"}
         action={<PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi persona</PrimaryButton>} />
-      <Tabs defaultValue="tutte">
-        <TabsList className="mb-4 flex-wrap h-auto">
-          <TabsTrigger value="tutte" data-testid="tab-tutte">Tutte</TabsTrigger>
-          <TabsTrigger value="referenti_aziende" data-testid="tab-referenti-aziende">Referenti aziende</TabsTrigger>
-          <TabsTrigger value="staff_volontari" data-testid="tab-staff-volontari">Staff &amp; Volontari</TabsTrigger>
-          <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare</TabsTrigger>
-          <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
-          <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
-        </TabsList>
-        {["tutte", "referenti_aziende", "staff_volontari", "da_classificare"].map((t) => (
-          <TabsContent key={t} value={t}>
-            <PeopleTable rows={rows} loading={loading} tab={t} onOpen={(r) => setDetailId(r.id)}
-              onEdit={(r) => { setEditing(r); setFormOpen(true); }} onInvite={(r) => setInvite(r)} onDelete={delPerson} onRoleClick={(r) => setRolesFor(r)} />
+      {isStaff ? (
+        <Tabs defaultValue="staff_volontari">
+          <TabsList className="mb-4 flex-wrap h-auto">
+            <TabsTrigger value="staff_volontari" data-testid="tab-staff-volontari">Staff &amp; Volontari</TabsTrigger>
+            <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare</TabsTrigger>
+            <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
+            <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
+          </TabsList>
+          {["staff_volontari", "da_classificare"].map((t) => (
+            <TabsContent key={t} value={t}>
+              <PeopleTable tab={t} {...peopleProps} />
+            </TabsContent>
+          ))}
+          <TabsContent value="team">
+            <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
+              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" searchKeys={["nome", "area"]} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]} />
           </TabsContent>
-        ))}
-        <TabsContent value="team">
-          <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
-            fields={teamFields} columns={teamCols} entityLabel="team" testid="team" searchKeys={["nome", "area"]} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]} />
-        </TabsContent>
-        <TabsContent value="turni">
-          <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
-            fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" searchKeys={["ruolo", "area", "luogo"]}
-            filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="turni">
+            <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
+              fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" searchKeys={["ruolo", "area", "luogo"]}
+              filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <PeopleTable tab="referenti_aziende" {...peopleProps} />
+      )}
 
       <EntityDialog open={formOpen} onOpenChange={setFormOpen} title={editing ? "Modifica persona" : "Nuova persona"}
         fields={personFields} initial={editing} onSubmit={submitPerson} testid="person" />

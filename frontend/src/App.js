@@ -127,7 +127,8 @@ function Shell() {
         <Route path="/eventi/:id/pipeline" element={<Protected><AdminOnly><EventPipeline /></AdminOnly></Protected>} />
         <Route path="/pipeline/attenzione" element={<Protected><AdminOnly><PipelineAttentionPage /></AdminOnly></Protected>} />
         <Route path="/aziende" element={<Protected><AdminOnly><Companies /></AdminOnly></Protected>} />
-        <Route path="/persone" element={<Protected><AdminOnly><Persons /></AdminOnly></Protected>} />
+        <Route path="/persone" element={<Protected><AdminOnly><Persons mode="anagrafiche" /></AdminOnly></Protected>} />
+        <Route path="/staff-volontari" element={<Protected><AdminOnly><Persons mode="staff" /></AdminOnly></Protected>} />
         <Route path="/ospitalita" element={<Protected><AdminOnly><Hospitality /></AdminOnly></Protected>} />
         <Route path="/sponsor" element={<Protected><AdminOnly><SponsorsPartners /></AdminOnly></Protected>} />
         <Route path="/attivita" element={<Protected><AdminOnly><Activities /></AdminOnly></Protected>} />

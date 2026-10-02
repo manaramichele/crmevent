@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, CalendarDays, Building2, Users, Handshake,
+  LayoutDashboard, CalendarDays, Building2, Users, UserCog, Handshake,
   ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate,
 } from "lucide-react";
 import { StatusBadge } from "@/components/crm";
@@ -14,6 +14,7 @@ import { RechargeDialog } from "@/components/CreditsSection";
 const ORG_NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi" },
+  { to: "/staff-volontari", label: "Staff / Volontari", icon: UserCog, id: "staff-volontari" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende" },
   { to: "/persone", label: "Anagrafiche", icon: Users, id: "persone" },
   { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita" },
