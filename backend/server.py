@@ -10543,6 +10543,7 @@ async def pipeline_attention(limit: int = 10, user: dict = Depends(require_admin
         out.append({"event_id": t["event_id"], "event_name": ev_name.get(t["event_id"]),
                     "task_id": t["id"], "titolo": t.get("titolo"), "priorita": t.get("priorita", "normale"),
                     "scadenza": sc, "late": late, "days_to_due": days,
+                    "responsabile_id": t.get("responsabile_id") or None,
                     "responsabile": person_name.get(t.get("responsabile_id")) if t.get("responsabile_id") else None,
                     "categoria": cat_name.get(t.get("categoria_id")), "reasons": reasons,
                     "_bucket": 0 if late else (1 if critica else 2), "_sort": d.isoformat() if d else "9999-12-31"})
