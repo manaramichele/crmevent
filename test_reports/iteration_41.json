@@ -1,0 +1,23 @@
+{
+  "summary": "Validated mandatory E.164 phone across all signup/activation paths. Backend: 9/9 pytest cases pass (needs_phone flag for superadmin/admin w/wo phone, /auth/complete-profile accepts valid E.164 and persists, rejects empty/invalid/non-E164, requires auth, does not change org/role; invite /register without phone -> 400, with phone -> 200 and user has E.164). Frontend: QA admin without phone is gated to /completa-profilo, UI shows 'Completa il tuo profilo' with IT (+39) default country and complete-profile-tel/submit testids; after entering a valid number the user is redirected to /app; subsequent /app visits don't re-gate; superadmin is never gated.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_phone_mandatory.py",
+    "/app/test_reports/pytest/phone_mandatory.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CompleteProfile.jsx: data-testid='complete-profile-tel' is applied on react-phone-number-input container which does not propagate to the inner <input>. The inner tel input lacks a direct data-testid. Suggestion: pass numberInputProps={{'data-testid':'complete-profile-tel-input'}} to make the raw input directly selectable by tests. Current workaround used in tests: '.phone-input input'.",
+    "Google-on-invite flow could not be exercised end-to-end because Emergent Google OAuth is not automatable; it is covered indirectly by backend contract (needs_phone + /auth/complete-profile) and by the frontend gate verified with the QA account."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phone_mandatory.py"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (4/4 flows)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026!; QA admin qa.eventi@crmeventqa.it / QaEvents2026! (telefono reset to empty after tests).",
+  "seed_data_creation": "Transient invite+user TEST_invite_*@crmeventqa.it created and cleaned within test_invite_register_without_phone_fails. QA user telefono toggled during tests and reset to '' at end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "QA account qa.eventi@crmeventqa.it currently has telefono='' (gated to /completa-profilo on login) — this is the expected QA state. To bypass gating, set telefono to a valid E.164 value directly in Mongo (users collection). The react-phone-number-input raw input is reachable via '.phone-input input'; data-testid 'complete-profile-tel' is on the wrapper div. Google-OAuth paths (new Google signup w/o org -> /completa-organizzazione, Google-on-invite -> /completa-profilo) are only partially testable; verify via mocked session_token docs in user_sessions as described in the review request."
+}

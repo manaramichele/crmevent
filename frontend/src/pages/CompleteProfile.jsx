@@ -42,7 +42,7 @@ export default function CompleteProfile() {
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="tel">Cellulare <span className="text-red-500">*</span></Label>
-            <PhoneInput id="tel" international defaultCountry="IT" value={telefono} onChange={(v) => setTelefono(v || "")} className="phone-input" data-testid="complete-profile-tel" />
+            <PhoneInput id="tel" international defaultCountry="IT" value={telefono} onChange={(v) => setTelefono(v || "")} className="phone-input" numberInputProps={{ "data-testid": "complete-profile-tel-input" }} data-testid="complete-profile-tel" />
           </div>
           <Button type="submit" disabled={submitting} data-testid="complete-profile-submit" className="w-full h-11 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">{submitting ? "Attendere..." : "Completa la registrazione"}</Button>
         </form>
