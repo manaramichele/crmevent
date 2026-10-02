@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 47 e2e of three new changes: (A) Scheda persona: tabs reduced + inline edit + dedup; (B) Teams table 'Componenti' column + TeamMembersDialog; (C) StaffAssignSelect no-overlap in Pipeline & Checklist. TASK A fully passes. TASK B passes for display/filters/leader badge/name-link/remove but TWO issues on 'Aggiungi componente': (i) candidate list is NOT scoped to team-less people — it also includes members of OTHER teams of the same event; (ii) the 'Aggiungi componente' popover (team-add-popover) is intercepted by the team-members-dialog (z-index). TASK C passes in Checklist but FAILS in the Pipeline task-edit modal (same z-index issue — pipeline-task-dialog intercepts staff-add-new click inside StaffAssignSelect's PopoverContent).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TeamMembersDialog > PopoverContent (team-add-popover)", "issue": "Clicks on team-add-opt-* are intercepted by the parent Radix Dialog ('team-members-dialog' with z-[100]). PopoverContent has no explicit z-index so it renders behind the dialog. Items appear in DOM and are 'visible', but the dialog subtree intercepts pointer events, making +Aggiungi componente completely unusable.", "selector": "[data-testid=\"team-add-popover\"]", "priority": "HIGH"},
+      {"component": "StaffAssignSelect > PopoverContent (staff-assign-popover) inside Pipeline task edit modal", "issue": "When Responsabile is used inside the pipeline-task-dialog (Modifica attività), the PopoverContent (and its 'Aggiungi nuovo Staff' button) is intercepted by the dialog overlay — same z-index issue. Note: inside /pipeline/attenzione (no outer dialog) it works correctly.", "selector": "[data-testid=\"staff-add-new\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Team > Aggiungi componente (candidates filter)", "issue": "Spec: candidati = Staff/Volontari dell'evento NON già in alcun team. Actual: filter uses `l.team_id !== team.id`, so people in OTHER teams are included. For Team Run (1 member) the popover lists 7 candidates (Anna Bianchi, Marco Rossi, Luca Verdi, Paolo Gialli, Sara Neri from Ristori/Pacer + Giulia Viola + Davide Mora). Expected: only Giulia Viola and Davide Mora.", "affected_selectors": ["[data-testid^=\"team-add-opt-\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "TeamMembersDialog + StaffAssignSelect: add explicit z-index to PopoverContent (e.g., className include 'z-[110]' or 'z-[200]') so that when a Popover is portaled inside a Radix Dialog it stacks above the dialog overlay. Current failure path (Playwright): the <td> or dialog element intercepts pointer events for buttons that are 'visible'. Fix in /app/frontend/src/components/TeamMembersDialog.jsx line ~120 (PopoverContent) and /app/frontend/src/components/StaffAssignSelect.jsx line ~75 (PopoverContent).",
+    "TeamMembersDialog candidates filter (/app/frontend/src/components/TeamMembersDialog.jsx lines 71-83): change the filter from `l.team_id !== team.id` to `(!l.team_id || l.team_id === team.id)` so that only people with NO team assignment on this event are offered as candidates (members of other teams must be excluded). Together with the existing `!inTeam.has(persona_id)` this gives the exact spec behavior.",
+    "After the two fixes above, retest: (a) Team Run +Aggiungi componente should list exactly Giulia Viola and Davide Mora; (b) Pipeline task edit modal > Responsabile > Aggiungi nuovo Staff should open the quick-add form inside the popover without the dialog intercepting clicks."
+  ],
+  "critical_code_review_comments": [
+    "PersonDetailDialog.jsx inline edit: PhoneInput uses `numberInputProps={{ 'data-testid': 'person-edit-cellulare-input' }}` but react-phone-number-input renders the inner <input type='tel'> without forwarding the custom data-testid in a reliable way in this version. The outer wrapper's data-testid works. If tests on `person-edit-cellulare-input` are required by the spec, consider forwarding via the inputComponent prop or ref. Low priority.",
+    "PersonDetailDialog saveEdit: dedup logic runs TWO calls to /persons-match in sequence. Could be a single POST with {email, cellulare} to halve round-trips. Not a bug.",
+    "TeamMembersDialog candidates: logic selects people whose link has `team_id !== team.id`. This fails the spec requirement 'NON i membri di altri team già assegnati'. Must also exclude any member whose link has a non-empty team_id different from the current team.",
+    "TeamMembersDialog + StaffAssignSelect PopoverContent: no explicit z-index. When portaled inside a Radix Dialog (which uses z-[100]), the popover and its buttons are below the dialog subtree in stacking context, intercepting pointer events. Add z-[110]+ to PopoverContent in both files.",
+    "PUT /api/persons/{id} is called from the inline edit — the request body is well-shaped (nome/cognome/email/cellulare/data_nascita/codice_fiscale/note). Confirmed by UI that saved data is displayed in-place without closing the dialog."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (endpoints exercised via UI: /api/persons/{id} PUT, /api/persons-match POST, /api/staff/{id} PUT, /api/teams, /api/staff, /api/shifts)",
+    "frontend": "TASK A: 100% (6/6 checks). TASK B: 70% (filters/display/leader/name-link/remove OK; +Aggiungi componente candidates filter + popover z-index both broken). TASK C: 50% (Checklist OK; Pipeline modal path broken by same z-index issue)."
+  },
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! — working. Seed intact: ev_qa_1 teams/counts verified: Ristori=3 (Anna leader + Marco + Luca volontario), Pacer=2 (Sara leader + Paolo volontario), Run=1 (Elena leader). Candidates without team: Giulia Viola + Davide Mora.",
+  "seed_data_creation": "During test: updated Anna Bianchi (person_fa782807a3) cellulare to +393401119999 and note to 'Test note iter47'. No new persons/staff created. Dedup conflict blocked save for Davide Mora attempts — no data mutations from those.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes (1) PopoverContent z-index in TeamMembersDialog + StaffAssignSelect and (2) candidates filter in TeamMembersDialog, re-run: (a) click team-add-member on Team Run → verify exactly 2 options team-add-opt-person_b1202fc2c2 (Giulia Viola) and team-add-opt-person_9474681d5f (Davide Mora); click Davide → total goes 1→2 both in dialog (team-count-total) and table button (team-members-btn-team_1ffab54ca2); (b) in /eventi/ev_qa_1/pipeline open any task via pencil icon → task-responsabile → staff-add-new must open staff-quick-add-form (no overlapping dropdown). Note: Anna's cellulare is now +393401119999 — if tests depend on original +393401110001, restore it. Dedup conflict is client-side only (persons-match pre-check in saveEdit) — intended per spec.",
+  "rca of the issue": "Both popover z-index bugs share one root cause: Radix PopoverContent, when portaled by a parent Radix Dialog, inherits default z-index (~z-50) while the Dialog uses z-[100]. The Dialog's content/overlay sits above the Popover, so even if the Popover is visually rendered, its interactive descendants are pointer-event-blocked by the dialog layer. Fix: raise z-index on both PopoverContents (e.g., className='w-72 p-0 z-[110]'). The candidates filter bug is a simple logical oversight — `l.team_id !== team.id` wrongly keeps other-team members. Fix: `(!l.team_id || l.team_id === team.id) && !inTeam.has(persona_id)`."
+}

@@ -72,7 +72,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
     if (!team) return [];
     const inTeam = new Set(members.map((m) => m.id));
     const byPerson = new Map();
-    (staffLinks || []).filter((l) => l.evento_id === team.evento_id && ["staff", "collaboratore", "volontario"].includes(l.categoria) && l.team_id !== team.id && !inTeam.has(l.persona_id))
+    (staffLinks || []).filter((l) => l.evento_id === team.evento_id && ["staff", "collaboratore", "volontario"].includes(l.categoria) && (!l.team_id || l.team_id === team.id) && !inTeam.has(l.persona_id))
       .forEach((l) => { if (!byPerson.has(l.persona_id)) byPerson.set(l.persona_id, l); });
     const ql = addQuery.trim().toLowerCase();
     return [...byPerson.entries()].map(([pid, link]) => {
@@ -117,7 +117,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
             <PopoverTrigger asChild>
               <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold h-9" data-testid="team-add-member"><UserPlus className="w-4 h-4 mr-1.5" />Aggiungi componente</Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72 p-0" align="end" data-testid="team-add-popover">
+            <PopoverContent className="w-72 p-0 z-[200]" align="end" data-testid="team-add-popover">
               <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={addQuery} onChange={(e) => setAddQuery(e.target.value)} placeholder="Cerca staff/volontario..." className="h-8" data-testid="team-add-search" /></div>
               <div className="max-h-56 overflow-y-auto p-1">
                 {candidates.length === 0 ? <div className="px-2 py-3 text-xs text-slate-400 text-center" data-testid="team-add-empty">Nessuno Staff/Volontario dell'evento disponibile.</div> :

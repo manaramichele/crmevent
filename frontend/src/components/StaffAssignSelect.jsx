@@ -72,7 +72,7 @@ export function StaffAssignSelect({
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <PopoverTrigger asChild>{trigger || defaultTrigger}</PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align={align} data-testid="staff-assign-popover" onOpenAutoFocus={(e) => { if (quick) e.preventDefault(); }}>
+      <PopoverContent className="w-72 p-0 z-[200]" align={align} data-testid="staff-assign-popover" onOpenAutoFocus={(e) => { if (quick) e.preventDefault(); }}>
         {quick ? (
           <div className="p-3 space-y-3" data-testid="staff-quick-add-form">
             <button type="button" onClick={() => { setQuick(null); setExisting(null); }} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800"><ArrowLeft className="w-3.5 h-3.5" />Indietro</button>

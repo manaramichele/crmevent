@@ -52,7 +52,7 @@ export default function EventPipeline() {
   const [taskDlg, setTaskDlg] = useState(null);
   const [catName, setCatName] = useState("");
   const [filters, setFilters] = useState({ categoria: "all", stato: "all", priorita: "all" });
-  const [sort, setSort] = useState({ key: null, dir: "asc" });
+  const [sort, setSort] = useState({ key: "scadenza", dir: "asc" });
   // FASE 3
   const [templates, setTemplates] = useState([]);
   const [selectedTpl, setSelectedTpl] = useState(null);
