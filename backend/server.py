@@ -1232,6 +1232,23 @@ async def event_hospitality(event_id: str, admin: dict = Depends(require_admin))
         lod_by.setdefault(l["persona_id"], []).append(l)
     for m in meals:
         meal_by.setdefault(m["persona_id"], []).append(m)
+    # Dedup per persona: una persona può avere più record staff (più team/ruoli/turni) ma in
+    # Ospitalità & Pasti deve comparire UNA sola volta per evento. Rappresentante = link con
+    # servizio definito (badge/stato coerente) o con override esigenze, altrimenti il primo.
+    by_person = {}
+    for l in links:
+        pid = l["persona_id"]
+        cur = by_person.get(pid)
+        if cur is None:
+            by_person[pid] = l
+            continue
+        srv = l.get("servizio_ospitalita")
+        cur_srv = cur.get("servizio_ospitalita")
+        if srv and srv != "da_definire" and (not cur_srv or cur_srv == "da_definire"):
+            by_person[pid] = l
+        elif l.get("esigenze_alimentari") is not None and cur.get("esigenze_alimentari") is None:
+            by_person[pid] = l
+    links = list(by_person.values())
     persons = []
     for l in links:
         p = await db.persons.find_one({"id": l["persona_id"]}, {"_id": 0})

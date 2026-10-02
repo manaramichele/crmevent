@@ -813,3 +813,8 @@ Task 2 — Creatività manuale:
 - Il badge nel dialog persona ora riflette la scelta servizio_ospitalita (Da definire | Nessun servizio | Solo ospitalità | Solo pasti | Ospitalità + pasti) e si aggiorna all'istante (stato locale). Backend: persons.stato = servizio_ospitalita; filtro stato e righe lista usano i 5 stati.
 - Dashboard: "Servizi da definire" conta solo le persone con servizio_ospitalita = da_definire ('Nessun servizio' è uno stato definito, esclusa). "Senza sistemazione" conta solo chi ha scelto ospitalità (solo_ospitalita/ospitalita_pasti) ma non ha pernottamenti — 'Nessun servizio' e 'Solo pasti' non sono anomalie.
 - Verificato via curl (servizi_da_definire 6, senza_sistemazione 1 con A=nessun_servizio, B=solo_ospitalita senza lodging).
+
+## 2026-06 — Fix: persone duplicate in Ospitalità & Pasti
+- /api/events/{id}/hospitality: deduplica dei record staff per persona_id. Una persona con più team/ruoli/turni ora compare UNA sola volta per evento. Rappresentante = link con servizio_ospitalita definito (o override esigenze) altrimenti il primo.
+- Lista "Per persona", ricerca, filtri, conteggi dashboard e "Assegna a più persone" usano lo stesso elenco deduplicato (data.persons).
+- Verificato via curl: inserito un secondo staff link per una persona -> 0 duplicati nella vista (8 righe uniche).
