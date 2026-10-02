@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only verification of the Pipeline 'Responsabile' dropdown filtering by event-Staff. Seeded 1 operational event + 5 persons with staff links covering staff/collaboratore/volontario/team(da-classificare)/referente-only, plus 2 pipeline tasks (one with a stale responsabile = volontario). All 5 acceptance criteria verified via Playwright against the real preview URL. Seed data cleaned up at the end (demo org now empty again).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/seed_pipeline_responsabile.py"],
+  "action_items": [
+    "Minor UX (non-blocking): `respQuery` is not reset after Save in EventPipeline.jsx (saveTask calls setTaskDlg(null) directly, bypassing the Dialog's onOpenChange cleanup). As a result, if the user saves a task after typing in the 'Cerca staff...' box and then opens another task, the search box retains the previous query until Dialog is closed via X/Annulla. Consider adding setRespQuery('') inside saveTask (and after taskDlg state transitions) to always start with a clean filter."
+  ],
+  "critical_code_review_comments": [
+    "EventPipeline.jsx:217-225 eventStaffIds + staffPersons correctly scope to current event (evento_id===id) and categoria in {staff,collaboratore}; sort uses Italian locale on cognome+nome. Verified at runtime: Alberti (staff) and Bianchi (collaboratore) returned in that order; volontario, 'team' (da classificare), and referente-only were all excluded.",
+    "resp-opt-stale option (line 440) is rendered ONLY when taskDlg.responsabile_id is set and the person is not currently in eventStaffIds. Verified with a seeded task whose responsabile is a volontario: shows 'TEST_Peach Colombo · non più nello Staff' alongside the 2 staff options, and the assignment is preserved after Save (row still shows Colombo).",
+    "Search box (data-testid task-responsabile-search) correctly filters staffPersons by nome/cognome substring (case-insensitive). Verified: typing 'bia' narrows to Bianchi only.",
+    "New task save with Responsabile = Bianchi persisted to backend (POST /api/events/{id}/pipeline/tasks) and the row renders TEST_Luigi Bianchi in the Responsabile column.",
+    "Minor UX: respQuery is a parent state and not reset in saveTask; it is only reset by the Dialog onOpenChange handler (line 424). Not a functional defect but can confuse users opening a second task right after saving the first."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (5/5 acceptance criteria verified)"},
+  "test_credentials": "demo.crmevent@gmail.com / DemoCrm#2026pv (verified working via /api/auth/login and UI).",
+  "seed_data_creation": "Seeded ephemerally: 1 azienda (TEST_Azienda_SRL), 1 event (TEST_Evento_Pipeline, no credit_state -> operational), 5 persons (TEST_Mario Alberti=staff, TEST_Luigi Bianchi=collaboratore, TEST_Peach Colombo=volontario, TEST_Toad Dalla=team/da-classificare, TEST_Bowser Esposito=referente-only), 1 event_pipelines doc (active, template_key=trail), 1 pipeline_categories (Logistica), 2 pipeline_tasks (TEST_Task_NoResp, TEST_Task_StaleResp -> responsabile=Colombo). All data removed after tests; demo org now has 0 persons / 0 events / 0 staff links.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable testids for Pipeline Responsabile: task-responsabile (Select trigger), task-responsabile-search (filter input), resp-opt-<personId> (staff options), resp-opt-stale (preserved non-staff assignment). To re-run, use /app/tests/seed_pipeline_responsabile.py and then DELETE the ephemeral docs (event_pipelines, pipeline_tasks, pipeline_categories, staff, persons prefixed TEST_, companies, events). Playwright must dismiss or remove the iubenda cookie banner (#iubenda-cs-banner) before clicking the Salva button, otherwise it intercepts pointer events. Login flow works via standard /login form with email/password submit.",
+  "rca of the issue": "N/A - feature works as specified by requirements. All 5 acceptance checks (filter to staff+collaboratore of the event, alphabetical cognome/nome ordering, search filtering, stale responsabile preserved+labeled on edit, new assignment persisted) are implemented correctly in EventPipeline.jsx and verified end-to-end against the preview backend."
+}

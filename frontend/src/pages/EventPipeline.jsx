@@ -178,7 +178,7 @@ export default function EventPipeline() {
     try {
       if (t.id) await api.put(`/pipeline/tasks/${t.id}`, payload);
       else await api.post(`/events/${id}/pipeline/tasks`, payload);
-      setTaskDlg(null); await loadPipeline();
+      setTaskDlg(null); setRespQuery(""); await loadPipeline();
       toast.success("Attività salvata");
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
