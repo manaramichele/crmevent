@@ -6,12 +6,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, UserPlus, Trash2, Building2, CalendarDays, Users, Clock, ListChecks, IdCard, KeyRound, Plus } from "lucide-react";
+import { Pencil, UserPlus, Trash2, CalendarDays, Users, Clock, ListChecks, IdCard, KeyRound, Plus, X, Save, AlertTriangle } from "lucide-react";
+import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
+import "react-phone-number-input/style.css";
 import { toast } from "sonner";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
-const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
 const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
 const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Account attivo", accesso_disabilitato: "Accesso disabilitato" };
 
@@ -26,16 +28,19 @@ function Initials({ p }) {
     : <div className="w-14 h-14 rounded-full bg-tiffany-light text-tiffany-fg flex items-center justify-center font-bold text-lg">{t}</div>;
 }
 
-export default function PersonDetailDialog({ personId, open, onOpenChange, events = [], teams = [], settings, onChanged, onEdit, onInvite }) {
+export default function PersonDetailDialog({ personId, open, onOpenChange, events = [], teams = [], settings, onChanged, onInvite }) {
   const [d, setD] = useState(null);
   const [pf, setPf] = useState({ categoria: "volontario", stato: "da_contattare" });
+  const [edit, setEdit] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [conflict, setConflict] = useState(null);
 
   const load = useCallback(async () => {
     if (!personId) return;
     try { const { data } = await api.get(`/persons/${personId}/detail`); setD(data); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   }, [personId]);
-  useEffect(() => { if (open) { setD(null); load(); } }, [open, load]);
+  useEffect(() => { if (open) { setD(null); setEdit(null); setConflict(null); load(); } }, [open, load]);
 
   const addPresence = async () => {
     if (!pf.evento_id) { toast.error("Seleziona un evento"); return; }
@@ -58,9 +63,41 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
   };
 
   const p = d?.person;
+
+  const startEdit = () => {
+    setConflict(null);
+    setEdit({ nome: p.nome || "", cognome: p.cognome || "", email: p.email || "", cellulare: p.cellulare || "", data_nascita: p.data_nascita || "", codice_fiscale: p.codice_fiscale || "", note: p.note || "" });
+  };
+  const saveEdit = async () => {
+    if (!edit.nome.trim()) { toast.error("Il nome è obbligatorio"); return; }
+    if (edit.cellulare && !isValidPhoneNumber(edit.cellulare)) { toast.error("Numero di cellulare non valido"); return; }
+    setSavingEdit(true);
+    try {
+      const conflicts = [];
+      const newEmail = edit.email.trim();
+      if (newEmail && newEmail.toLowerCase() !== (p.email || "").toLowerCase()) {
+        const { data } = await api.post("/persons-match", { email: newEmail });
+        if ((data.matches || []).some((m) => m.id !== personId)) conflicts.push("Email");
+      }
+      if (edit.cellulare && edit.cellulare !== (p.cellulare || "")) {
+        const { data } = await api.post("/persons-match", { cellulare: edit.cellulare });
+        if ((data.matches || []).some((m) => m.id !== personId)) conflicts.push("Cellulare");
+      }
+      if (conflicts.length) { setConflict(conflicts); setSavingEdit(false); return; }
+      await api.put(`/persons/${personId}`, {
+        nome: edit.nome.trim(), cognome: edit.cognome.trim(), email: newEmail,
+        cellulare: edit.cellulare || "", data_nascita: edit.data_nascita || "",
+        codice_fiscale: edit.codice_fiscale.trim(), note: edit.note,
+      });
+      toast.success("Anagrafica aggiornata");
+      setEdit(null); setConflict(null);
+      await load(); onChanged && onChanged();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setSavingEdit(false); }
+  };
+
   const eName = (id) => events.find((e) => e.id === id)?.nome || "—";
-  const areaOpts = toOptions(settings?.aree_operative);
-  const ruoloOpts = toOptions(settings?.ruoli_staff);
+  const age = edit ? calcAge(edit.data_nascita) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,20 +116,52 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                   {d.events.some((x) => x.presence?.categoria === "volontario") && <StatusBadge color="green">Volontario</StatusBadge>}
                 </div>
               </div>
-              <div className="flex gap-1.5">
-                <Button variant="outline" size="sm" onClick={() => onEdit && onEdit(p)} data-testid="person-detail-edit"><Pencil className="w-4 h-4 mr-1" />Modifica</Button>
-              </div>
+              {!edit && (
+                <div className="flex gap-1.5">
+                  <Button variant="outline" size="sm" onClick={startEdit} data-testid="person-detail-edit"><Pencil className="w-4 h-4 mr-1" />Modifica</Button>
+                </div>
+              )}
             </div>
 
+            {edit ? (
+              <div className="mt-5 space-y-4" data-testid="person-edit-form">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5"><Label className="text-xs font-medium text-slate-600">Nome *</Label>
+                    <Input value={edit.nome} onChange={(e) => setEdit((s) => ({ ...s, nome: e.target.value }))} data-testid="person-edit-nome" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs font-medium text-slate-600">Cognome</Label>
+                    <Input value={edit.cognome} onChange={(e) => setEdit((s) => ({ ...s, cognome: e.target.value }))} data-testid="person-edit-cognome" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs font-medium text-slate-600">Email</Label>
+                    <Input type="email" value={edit.email} onChange={(e) => setEdit((s) => ({ ...s, email: e.target.value }))} data-testid="person-edit-email" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs font-medium text-slate-600">Cellulare</Label>
+                    <PhoneInput international defaultCountry="IT" value={edit.cellulare || undefined} onChange={(v) => setEdit((s) => ({ ...s, cellulare: v || "" }))} className="phone-input" numberInputProps={{ "data-testid": "person-edit-cellulare-input" }} data-testid="person-edit-cellulare" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs font-medium text-slate-600">Data di nascita</Label>
+                    <Input type="date" value={edit.data_nascita || ""} onChange={(e) => setEdit((s) => ({ ...s, data_nascita: e.target.value }))} data-testid="person-edit-data-nascita" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs font-medium text-slate-600">Età</Label>
+                    <Input value={age != null ? `${age} anni` : "—"} disabled readOnly data-testid="person-edit-eta" className="bg-slate-50 text-slate-500" /></div>
+                  <div className="space-y-1.5 sm:col-span-2"><Label className="text-xs font-medium text-slate-600">Codice Fiscale</Label>
+                    <Input value={edit.codice_fiscale} onChange={(e) => setEdit((s) => ({ ...s, codice_fiscale: e.target.value.toUpperCase() }))} className="font-mono" data-testid="person-edit-codice-fiscale" /></div>
+                  <div className="space-y-1.5 sm:col-span-2"><Label className="text-xs font-medium text-slate-600">Note</Label>
+                    <Textarea rows={3} value={edit.note || ""} onChange={(e) => setEdit((s) => ({ ...s, note: e.target.value }))} data-testid="person-edit-note" /></div>
+                </div>
+                {conflict && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2" data-testid="person-edit-conflict">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>{conflict.join(" e ")} {conflict.length > 1 ? "appartengono" : "appartiene"} già a un'altra anagrafica di questa organizzazione. Modifica il valore per evitare un duplicato.</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => { setEdit(null); setConflict(null); }} data-testid="person-edit-cancel"><X className="w-4 h-4 mr-1" />Annulla</Button>
+                  <Button onClick={saveEdit} disabled={savingEdit} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="person-edit-save"><Save className="w-4 h-4 mr-1" />{savingEdit ? "Salvataggio..." : "Salva"}</Button>
+                </div>
+              </div>
+            ) : (
             <Tabs defaultValue="anagrafica" className="mt-4">
               <TabsList className="flex-wrap h-auto">
                 <TabsTrigger value="anagrafica" data-testid="ptab-anagrafica"><IdCard className="w-4 h-4 mr-1" />Anagrafica</TabsTrigger>
-                <TabsTrigger value="aziende" data-testid="ptab-aziende"><Building2 className="w-4 h-4 mr-1" />Aziende</TabsTrigger>
                 <TabsTrigger value="eventi" data-testid="ptab-eventi"><CalendarDays className="w-4 h-4 mr-1" />Eventi</TabsTrigger>
                 <TabsTrigger value="ruoli" data-testid="ptab-ruoli"><ListChecks className="w-4 h-4 mr-1" />Ruoli</TabsTrigger>
                 <TabsTrigger value="team" data-testid="ptab-team"><Users className="w-4 h-4 mr-1" />Team</TabsTrigger>
                 <TabsTrigger value="turni" data-testid="ptab-turni"><Clock className="w-4 h-4 mr-1" />Turni</TabsTrigger>
-                <TabsTrigger value="attivita" data-testid="ptab-attivita">Attività</TabsTrigger>
                 <TabsTrigger value="accesso" data-testid="ptab-accesso"><KeyRound className="w-4 h-4 mr-1" />Accesso</TabsTrigger>
               </TabsList>
 
@@ -112,17 +181,6 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                     <span className="flex flex-wrap gap-1.5">{(p.esigenze_alimentari || []).map((e) => <StatusBadge key={e} color="blue">{e}</StatusBadge>)}</span>
                     {p.esigenze_note && <p className="text-sm text-slate-600 mt-1">{p.esigenze_note}</p>}</div>
                 ) : null}
-              </TabsContent>
-
-              <TabsContent value="aziende" className="pt-2 space-y-2">
-                {d.companies.length === 0 ? <p className="text-sm text-slate-400 py-4">Nessuna azienda collegata.</p> :
-                  d.companies.map((c, i) => (
-                    <div key={i} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-3">
-                      <div><div className="font-medium text-slate-800">{c.company.nome}</div>
-                        <div className="text-xs text-slate-500">{c.relation.qualifica || c.relation.ruolo || c.company.settore || "—"}</div></div>
-                      {c.relation.referente_principale && <StatusBadge color="tiffany">Referente principale</StatusBadge>}
-                    </div>
-                  ))}
               </TabsContent>
 
               <TabsContent value="eventi" className="pt-2 space-y-3">
@@ -190,19 +248,6 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                   ))}
               </TabsContent>
 
-              <TabsContent value="attivita" className="pt-2 space-y-2">
-                {(d.activities.length + d.followups.length) === 0 ? <p className="text-sm text-slate-400 py-4">Nessuna attività.</p> : <>
-                  {d.activities.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2.5">
-                      <span className="text-sm text-slate-700">{a.titolo}</span><StatusBadge color="gray">{a.tipo || "attività"}</StatusBadge></div>
-                  ))}
-                  {d.followups.map((f) => (
-                    <div key={f.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2.5">
-                      <span className="text-sm text-slate-700">{f.titolo}</span><StatusBadge color="orange">follow-up {f.scadenza || ""}</StatusBadge></div>
-                  ))}
-                </>}
-              </TabsContent>
-
               <TabsContent value="accesso" className="pt-2">
                 <div className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-4">
                   <div><div className="text-sm text-slate-500 mb-1">Stato account <strong className="font-semibold text-slate-700">CRMEvent</strong></div>
@@ -218,6 +263,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                 {!p.email && <p className="text-xs text-amber-600 mt-2">Aggiungi un'email per poter invitare questa persona.</p>}
               </TabsContent>
             </Tabs>
+            )}
           </>
         )}
       </DialogContent>

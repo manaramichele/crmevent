@@ -11,10 +11,11 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, UserPlus, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, UserPlus, Search, Users } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
+import TeamMembersDialog from "@/components/TeamMembersDialog";
 
 const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
 const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Attivo", accesso_disabilitato: "Disabilitato" };
@@ -263,7 +264,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   const { items: companies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
   const { items: teams } = useCollection("/teams");
-  const { items: staffLinks } = useCollection("/staff");
+  const { items: staffLinks, reload: reloadStaff } = useCollection("/staff");
   const settings = useSettings();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -272,6 +273,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   const [editing, setEditing] = useState(null);
   const [invite, setInvite] = useState(null);
   const [rolesFor, setRolesFor] = useState(null);
+  const [teamMembersFor, setTeamMembersFor] = useState(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -340,6 +342,10 @@ export default function Persons({ mode = "anagrafiche" }) {
     { key: "evento_id", label: "Evento", render: (r) => eName(r.evento_id) }, { key: "area", label: "Area" },
     { key: "responsabile_id", label: "Team Leader", render: (r) => r.responsabile_id ? pName(r.responsabile_id) : <StatusBadge color="orange">Da assegnare</StatusBadge> },
     { key: "luogo_operativo", label: "Luogo" },
+    { key: "componenti", label: "Componenti", sortable: false, render: (r) => {
+        const n = new Set((staffLinks || []).filter((l) => l.team_id === r.id).map((l) => l.persona_id)).size;
+        return <button onClick={() => setTeamMembersFor(r)} className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-2.5 py-1 text-xs font-semibold hover:bg-tiffany-light/70 whitespace-nowrap" data-testid={`team-members-btn-${r.id}`}><Users className="w-3.5 h-3.5" />Vedi componenti ({n})</button>;
+      } },
   ];
   const shiftFields = [
     { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts }, { name: "persona_id", label: "Persona (vuoto = scoperto)", type: "select", options: personOpts },
@@ -402,6 +408,9 @@ export default function Persons({ mode = "anagrafiche" }) {
         onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={(p) => { setDetailId(null); setInvite(p); }} />}
       {invite && <InviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
       {rolesFor && <EventRolesDialog person={rolesFor} events={events} teams={teams} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
+      {teamMembersFor && <TeamMembersDialog team={teamMembersFor} open={!!teamMembersFor} onOpenChange={(o) => !o && setTeamMembersFor(null)}
+        persons={rows} staffLinks={staffLinks} events={events} onReloadStaff={reloadStaff}
+        onOpenPerson={(pid) => { setTeamMembersFor(null); setDetailId(pid); }} />}
     </div>
   );
 }

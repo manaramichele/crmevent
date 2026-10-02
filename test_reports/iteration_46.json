@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 46 full e2e test for Checklist/Attention page changes: (1) fixed asc sort by scadenza only on /pipeline/attenzione with empties at bottom; (2) Assegna uses the same StaffAssignSelect as Pipeline Responsabile — only event staff + Cerca staff... + Aggiungi nuovo Staff; (3) Quick Add from Checklist creates Staff, associates to event, auto-assigns; (4) bidirectional consistency Checklist <-> Pipeline verified; (5) dedup via email returns Usa esistente. ALL acceptance checks PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PipelineAttention.jsx sortByScadenza: empties-at-bottom rule enforced correctly (if !sa return 1; if !sb return -1) BEFORE comparing dates — asc sort verified in UI with 99 real rows, no inversions, all '—' at the end.",
+    "PipelineAttentionPage.jsx applies sortByScadenza only here (confirmed in code); Dashboard widget keeps backend severity order (as intended per spec).",
+    "AttentionRow computes staffPersons by filtering staffLinks for l.evento_id === it.event_id and categoria in [staff, collaboratore] — matches Pipeline behavior. Verified in UI: popover showed 'Nessuno Staff trovato' (0 staff) with the add-new CTA and NO volontario/referente entries leaked.",
+    "StaffAssignSelect is shared between Checklist (AttentionRow) and EventPipeline (task-responsabile trigger). Both locations exposed data-testid=staff-assign-search and data-testid=staff-add-new, confirming the same component. Quick-add submit → onStaffAdded(loadStaff) → onChange(person.id) correctly refreshes staff list and auto-assigns the task on the same row.",
+    "Bidirectional consistency: after Quick-Add via Checklist (task 28e96e5...a4 on ev_qa_2), GET /api/pipeline/attention returns responsabile='Mario TestChecklist' with responsabile_id set, and /eventi/ev_qa_2/pipeline shows the task with 'Mario TestChecklist' as Responsabile — same responsabile_id end-to-end.",
+    "Dedup: second quick-add attempt with the same email (dedup.test.checklist@example.com) correctly flips the submit CTA to 'Usa esistente' (data-testid=qs-use-existing) with the amber 'Esiste già un'anagrafica…' notice; the dialog remained inside the popover.",
+    "Backend /api/pipeline/attention returns responsabile_id (server.py ~10546) which the row trigger uses to show the staff name instead of the Assegna button — verified in UI."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (endpoints exercised via UI: /api/pipeline/attention, /api/persons, /api/staff, /api/staff/quick-add, /api/pipeline/tasks)", "frontend": "100% of acceptance checks pass"},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! — working.",
+  "seed_data_creation": "Pre-existing seed from iter45 reused. During this test created 2 temp persons (Mario TestChecklist, DedupA TestOne) + 2 staff links on ev_qa_2 and corresponding event, plus 2 task responsabile_id assignments. All cleaned up post-test: 2 persons removed, 2 staff links removed, 2 stale task.responsabile_id references cleared via /app/backend MongoDB (verified).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "No open issues on this iteration. The Checklist page (/pipeline/attenzione) and Pipeline Responsabile now share StaffAssignSelect. If reusing: data-testids staff-assign-popover, staff-assign-search, staff-opt-empty, staff-opt-<pid>, staff-opt-none, staff-add-new, staff-quick-add-form, qs-nome/qs-cognome/qs-cellulare/qs-email/qs-submit/qs-use-existing; AttentionRow triggers attention-assign-<tid> / attention-reassign-<tid>; page container attention-page; widget dashboard-attention. The spec deliberately does NOT apply fixed sort to the Dashboard widget — do not flag that as a bug.",
+  "rca of the issue": "N/A — no bugs found."
+}
