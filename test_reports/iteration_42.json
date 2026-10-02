@@ -1,0 +1,25 @@
+{
+  "summary": "Validated the reorganization of Anagrafiche vs Staff/Volontari sections (frontend-only). Verified sidebar order on desktop & mobile, new /staff-volontari page with 4 tabs (Staff & Volontari with sub-filter Tutti/Staff/Volontario, Da classificare, Team, Turni), and /persone restricted to referenti aziende without the operational tabs. Confirmed no duplication of a person who is both referente + volontario (same id visible in both pages). Confirmed Team Leader select picks ONLY staff/volontari of the selected event, excluding referenti and 'da classificare'. 13/13 UI filtering assertions pass + Team Leader filter PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Persons.jsx: filter logic in PeopleTable (lines 140-146) is clean and relies solely on enriched flags (is_referente / is_staff / is_volontario), so no data migration is needed and dual-classification persons appear in both pages without duplication (same id).",
+    "Layout.jsx ORG_NAV order is correct: dashboard, eventi, staff-volontari, aziende, persone, ospitalita, sponsor, attivita, followup, account, impostazioni. UserCog icon used for the new entry.",
+    "Routes in App.js correctly map /persone -> mode='anagrafiche' and /staff-volontari -> mode='staff', both wrapped in Protected + AdminOnly.",
+    "EntityManager Team dialog correctly scopes Team Leader options to Staff/Volontari of the chosen event (placeholder 'Solo Staff & Volontari dell'evento'). Verified: with 5 seeded persons the leader dropdown returned exactly 3 valid entries (staff + 2 volontari including the dual-role one) and excluded the referente-only and the 'da classificare' person."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (14/14 assertions)"},
+  "test_credentials": "demo.crmevent@gmail.com / DemoCrm#2026pv (used for seeding + UI validation).",
+  "seed_data_creation": "Temporarily seeded one event (TEST_Evento, credit_state unset via Mongo to be operational), one azienda (TEST_Azienda_SRL), and five persons (TEST_Mario Ref=referente-only, TEST_Luigi Staff=staff-only, TEST_Peach Vol=volontario-only, TEST_Toad Both=referente+volontario, TEST_Bowser NoClass=staff link with categoria='team' -> da classificare). All test data (persons, staff links, company, event) was removed at the end; demo org now has 0 persons/events/companies again.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Demo org (demo.crmevent@gmail.com) was emptied during test cleanup (0 persons, 0 events, 0 companies). If next iterations need populated demo data, reseed from scratch. Sidebar/pages testids to reuse: sidebar-link-staff-volontari, sidebar-link-persone, tab-staff-volontari, tab-da-classificare, tab-team, tab-turni, sv-sub-tutti/sv-sub-staff/sv-sub-volontario, person-row-<id>, add-team-button. Note: creating staff links requires the event to be operational (credit_state unset or 'attivo'); newly created events are in 'preparazione' and need activation via /events/{id}/activate (credits) or Mongo-unset credit_state for testing.",
+  "rca of the issue": "N/A - no bugs found. All review checkpoints pass: sidebar order, tab structure, title/subtitle on both pages, enriched-flag filtering, single-id dual appearance (no duplication), and Team Leader source restricted to staff/volontari."
+}
