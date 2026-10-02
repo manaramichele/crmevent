@@ -323,14 +323,13 @@ export default function Persons({ mode = "anagrafiche" }) {
   const eventOpts = events.map((e) => ({ value: e.id, label: e.nome }));
   const teamOpts = teams.map((t) => ({ value: t.id, label: t.nome }));
   const areaOpts = toOptions(settings?.aree_operative);
-  const ruoloOpts = toOptions(settings?.ruoli_staff);
   const pName = (id) => { const p = rows.find((x) => x.id === id); return p ? `${p.nome} ${p.cognome || ""}`.trim() : "—"; };
   const eName = (id) => events.find((e) => e.id === id)?.nome || "—";
   const tName = (id) => teams.find((t) => t.id === id)?.nome || "—";
 
   const teamFields = [
     { name: "nome", label: "Nome team", required: true, full: true }, { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts },
-    { name: "area", label: "Area", type: "select", options: areaOpts }, { name: "responsabile_id", label: "Team Leader", type: "staffselect", eventFrom: "evento_id", staffPersonsFor: (form) => staffPersonsForEvent(form?.evento_id), allPersons: rows, onStaffAdded: reloadTeamData, noEventHint: "Seleziona prima l'Evento per scegliere lo Staff." },
+    { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "responsabile_id", label: "Team Leader", type: "staffselect", eventFrom: "evento_id", staffPersonsFor: (form) => staffPersonsForEvent(form?.evento_id), allPersons: rows, onStaffAdded: reloadTeamData, noEventHint: "Seleziona prima l'Evento per scegliere lo Staff." },
     { name: "luogo_operativo", label: "Luogo operativo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
   ];
@@ -347,7 +346,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   const shiftFields = [
     { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts }, { name: "persona_id", label: "Persona (vuoto = scoperto)", type: "select", options: personOpts },
     { name: "data", label: "Data", type: "date" }, { name: "ora_inizio", label: "Ora inizio", type: "time" }, { name: "ora_fine", label: "Ora fine", type: "time" },
-    { name: "area", label: "Area", type: "select", options: areaOpts }, { name: "ruolo", label: "Ruolo", type: "select", options: ruoloOpts },
+    { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "ruolo", label: "Ruolo", type: "select", settingKey: "ruoli_staff", addLabel: "Aggiungi nuovo Ruolo", options: settings?.ruoli_staff || [] },
     { name: "team_id", label: "Team", type: "select", options: teamOpts }, { name: "luogo", label: "Luogo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
