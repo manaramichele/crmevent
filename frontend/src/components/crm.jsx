@@ -15,6 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 
 export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 export const formatEUR = (n) => eurFmt.format(Number(n || 0));
@@ -381,6 +382,8 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
     (!query || searchKeys.some((k) => String(i[k] || "").toLowerCase().includes(query.toLowerCase()))) &&
     filters.every((f) => !filterVals[f.name] || filterVals[f.name] === "all" || i[f.name] === filterVals[f.name])
   );
+  const { sort, toggle } = useSort();
+  const sorted = sortRows(filtered, sort, columns);
 
   return (
     <div className="animate-fade-up">
@@ -410,7 +413,10 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/70">
                 {columns.map((c) => (
-                  <th key={c.key} className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">{c.label}</th>
+                  <th key={c.key} onClick={() => c.sortable !== false && toggle(c.key)}
+                    className={`text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap ${c.sortable !== false ? "cursor-pointer select-none group" : ""}`}>
+                    <span className="inline-flex items-center gap-1">{c.label}{c.sortable !== false && <SortIcon active={sort.key === c.key} dir={sort.dir} />}</span>
+                  </th>
                 ))}
                 <th className="px-4 py-3 text-right font-semibold text-slate-600">Azioni</th>
               </tr>
@@ -418,9 +424,9 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
             <tbody>
               {loading ? (
                 <tr><td colSpan={columns.length + 1} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : sorted.length === 0 ? (
                 <tr><td colSpan={columns.length + 1} className="px-4 py-10 text-center text-slate-400">Nessun {entityLabel} trovato.</td></tr>
-              ) : filtered.map((row) => (
+              ) : sorted.map((row) => (
                 <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors" data-testid={`${testid}-row-${row.id}`}>
                   {columns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-slate-700">{c.render ? c.render(row) : (row[c.key] || "—")}</td>

@@ -11,7 +11,8 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, UserPlus, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, Pencil, Trash2, UserPlus, Search } from "lucide-react";
+import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
 
@@ -148,17 +149,25 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, o
     return true;
   });
   const SUBS = [{ v: "tutti", l: "Tutti" }, { v: "staff", l: "Staff" }, { v: "volontario", l: "Volontario" }];
-  const [sort, setSort] = useState({ key: null, dir: "asc" });
+  const { sort, toggle } = useSort();
   const isStaffTab = tab === "staff_volontari" || tab === "da_classificare";
-  const toggleSort = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
-  const displayRows = (isStaffTab && sort.key === "team")
-    ? [...filtered].sort((a, b) => {
-        const ka = (a.teams_nomi || []).join(", ").toLowerCase();
-        const kb = (b.teams_nomi || []).join(", ").toLowerCase();
-        if (!ka && !kb) return 0; if (!ka) return 1; if (!kb) return -1;
-        return ka.localeCompare(kb, "it", { sensitivity: "base" }) * (sort.dir === "asc" ? 1 : -1);
-      })
-    : filtered;
+  const ACC = {
+    nome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
+    cellulare: (r) => r.cellulare || "",
+    ruolo_evento: (r) => (r.is_staff ? "Staff" : r.is_volontario ? "Volontario" : r.is_referente ? "Referente" : ""),
+    team: (r) => (r.teams_nomi || []).join(", "),
+    evento: (r) => (r.eventi_nomi || []).join(", "),
+    qualifica: (r) => r.ruolo || "",
+    aziende: (r) => (r.aziende_nomi || []).join(", "),
+    accesso: (r) => INV_LABEL[r.invite_status || "non_invitato"] || "",
+  };
+  const colsMeta = Object.entries(ACC).map(([key, sortAccessor]) => ({ key, sortAccessor, sortType: "string" }));
+  const displayRows = sortRows(filtered, sort, colsMeta);
+  const Th = ({ k, label, right }) => (
+    <th onClick={() => toggle(k)} data-testid={`sort-${k}`} className={`font-semibold text-slate-600 px-4 py-3 whitespace-nowrap cursor-pointer select-none group ${right ? "text-right" : "text-left"}`}>
+      <span className="inline-flex items-center gap-1">{label}<SortIcon active={sort.key === k} dir={sort.dir} /></span>
+    </th>
+  );
   const roleBadges = (r) => (
     <button type="button" onClick={() => onRoleClick(r)} title="Gestisci ruoli evento" data-testid={`role-cell-${r.id}`}
       className="flex flex-wrap items-center gap-1 rounded-md px-1.5 py-1 -ml-1.5 hover:bg-tiffany-light/60 transition-colors group">
@@ -202,20 +211,21 @@ function PeopleTable({ rows, loading, tab, onOpen, onEdit, onInvite, onDelete, o
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
-              {isStaffTab ? (
-                <>
-                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Nome e Cognome</th>
-                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Cellulare</th>
-                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Ruolo evento</th>
-                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap select-none cursor-pointer group" onClick={() => toggleSort("team")} data-testid="sort-team">
-                    <span className="inline-flex items-center gap-1">Team {sort.key === "team" ? (sort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-40" />}</span>
-                  </th>
-                  <th className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Evento</th>
-                  <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
-                </>
-              ) : (
-                ["Nome", "Qualifica", "Aziende", "Ruolo eventi", "Accesso", "Azioni"].map((h) => <th key={h} className={`text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap ${h === "Azioni" ? "text-right" : ""}`}>{h}</th>)
-              )}
+              {isStaffTab ? (<>
+                <Th k="nome" label="Nome e Cognome" />
+                <Th k="cellulare" label="Cellulare" />
+                <Th k="ruolo_evento" label="Ruolo evento" />
+                <Th k="team" label="Team" />
+                <Th k="evento" label="Evento" />
+                <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
+              </>) : (<>
+                <Th k="nome" label="Nome" />
+                <Th k="qualifica" label="Qualifica" />
+                <Th k="aziende" label="Aziende" />
+                <Th k="ruolo_evento" label="Ruolo eventi" />
+                <Th k="accesso" label="Accesso" />
+                <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
+              </>)}
             </tr></thead>
             <tbody>
               {loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>

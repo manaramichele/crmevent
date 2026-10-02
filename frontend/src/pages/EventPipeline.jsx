@@ -45,6 +45,9 @@ export default function EventPipeline() {
   const [persons, setPersons] = useState([]);
   const [staffLinks, setStaffLinks] = useState([]);
   const [respQuery, setRespQuery] = useState("");
+  const [quickStaff, setQuickStaff] = useState(null);
+  const [qsExisting, setQsExisting] = useState(null);
+  const [qsBusy, setQsBusy] = useState(false);
   const [companies, setCompanies] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [recharge, setRecharge] = useState(false);
@@ -224,6 +227,31 @@ export default function EventPipeline() {
     (persons || []).filter((p) => eventStaffIds.has(p.id))
       .sort((a, b) => `${a.cognome || ""} ${a.nome || ""}`.trim().localeCompare(`${b.cognome || ""} ${b.nome || ""}`.trim(), "it", { sensitivity: "base" }))
   ), [persons, eventStaffIds]);
+
+  const refreshStaffData = async (selectId) => {
+    const [p, s] = await Promise.all([api.get("/persons"), api.get("/staff")]);
+    setPersons(p.data); setStaffLinks(s.data);
+    if (selectId) setTaskDlg((t) => ({ ...t, responsabile_id: selectId }));
+    setQuickStaff(null); setQsExisting(null); setRespQuery("");
+  };
+  const submitQuickStaff = async () => {
+    if (!quickStaff.nome.trim() || !quickStaff.cognome.trim()) return toast.error("Nome e Cognome obbligatori");
+    setQsBusy(true);
+    try {
+      const { data } = await api.post("/staff/quick-add", { evento_id: id, nome: quickStaff.nome.trim(), cognome: quickStaff.cognome.trim(), cellulare: quickStaff.cellulare, email: quickStaff.email });
+      if (data.status === "exists") { setQsExisting(data.person); return; }
+      await refreshStaffData(data.person.id);
+      toast.success("Staff aggiunto e selezionato");
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setQsBusy(false); }
+  };
+  const useExistingStaff = async () => {
+    setQsBusy(true);
+    try {
+      const { data } = await api.post("/staff/quick-add", { evento_id: id, nome: quickStaff.nome.trim() || qsExisting.nome, cognome: (quickStaff.cognome.trim() || qsExisting.cognome || ""), use_existing_person_id: qsExisting.id });
+      await refreshStaffData(data.person.id);
+      toast.success("Anagrafica esistente associata allo Staff");
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setQsBusy(false); }
+  };
   const filtered = tasks.filter((t) =>
     (filters.categoria === "all" || t.categoria_id === filters.categoria) &&
     (filters.stato === "all" || t.stato === filters.stato) &&
@@ -438,6 +466,28 @@ export default function EventPipeline() {
         </>
       )}
 
+      {/* Aggiunta rapida Staff */}
+      <Dialog open={!!quickStaff} onOpenChange={(o) => { if (!o) { setQuickStaff(null); setQsExisting(null); } }}>
+        <DialogContent className="max-w-sm" data-testid="quick-staff-dialog">
+          <DialogHeader><DialogTitle>Aggiungi nuovo Staff</DialogTitle><DialogDescription>La persona verrà creata nell'anagrafica unica e associata come Staff a questo evento.</DialogDescription></DialogHeader>
+          {quickStaff && <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label>Nome *</Label><Input value={quickStaff.nome} onChange={(e) => setQuickStaff((s) => ({ ...s, nome: e.target.value }))} data-testid="qs-nome" /></div>
+              <div className="space-y-1"><Label>Cognome *</Label><Input value={quickStaff.cognome} onChange={(e) => setQuickStaff((s) => ({ ...s, cognome: e.target.value }))} data-testid="qs-cognome" /></div>
+            </div>
+            <div className="space-y-1"><Label>Cellulare</Label><Input value={quickStaff.cellulare} onChange={(e) => setQuickStaff((s) => ({ ...s, cellulare: e.target.value }))} data-testid="qs-cellulare" placeholder="+39..." /></div>
+            <div className="space-y-1"><Label>Email</Label><Input type="email" value={quickStaff.email} onChange={(e) => setQuickStaff((s) => ({ ...s, email: e.target.value }))} data-testid="qs-email" /></div>
+            {qsExisting && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Esiste già un'anagrafica con questi contatti: <b>{qsExisting.nome} {qsExisting.cognome}</b>. Vuoi usarla come Staff di questo evento?</div>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setQuickStaff(null); setQsExisting(null); }}>Annulla</Button>
+              {qsExisting
+                ? <Button onClick={useExistingStaff} disabled={qsBusy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="qs-use-existing">Usa esistente</Button>
+                : <Button onClick={submitQuickStaff} disabled={qsBusy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="qs-submit">Aggiungi allo Staff</Button>}
+            </DialogFooter>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
       {/* Conferma attivazione */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-sm" data-testid="pipeline-confirm-dialog">
@@ -485,9 +535,14 @@ export default function EventPipeline() {
                 <div className="space-y-1.5"><Label>Responsabile <span className="text-xs font-normal text-slate-400">(solo Staff dell'evento)</span></Label><Select value={taskDlg.responsabile_id || "none"} onValueChange={(v) => setTaskDlg((t) => ({ ...t, responsabile_id: v === "none" ? "" : v }))}><SelectTrigger data-testid="task-responsabile"><SelectValue placeholder="—" /></SelectTrigger><SelectContent>
                   <div className="p-1.5 sticky top-0 bg-white z-10 border-b border-slate-100"><Input autoFocus value={respQuery} onChange={(e) => setRespQuery(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Cerca staff..." className="h-8" data-testid="task-responsabile-search" /></div>
                   <SelectItem value="none">—</SelectItem>
-                  {staffPersons.filter((p) => { const s = `${p.nome || ""} ${p.cognome || ""}`.toLowerCase(); return !respQuery || s.includes(respQuery.toLowerCase()); }).map((p) => <SelectItem key={p.id} value={p.id} data-testid={`resp-opt-${p.id}`}>{`${p.nome || ""} ${p.cognome || ""}`.trim() || p.id}</SelectItem>)}
+                  {(() => { const f = staffPersons.filter((p) => { const s = `${p.nome || ""} ${p.cognome || ""}`.toLowerCase(); return !respQuery || s.includes(respQuery.toLowerCase()); }); return (<>
+                    {f.map((p) => <SelectItem key={p.id} value={p.id} data-testid={`resp-opt-${p.id}`}>{`${p.nome || ""} ${p.cognome || ""}`.trim() || p.id}</SelectItem>)}
+                    {f.length === 0 && <div className="px-2 py-2 text-xs text-slate-400">Nessuno Staff trovato</div>}
+                  </>); })()}
                   {taskDlg.responsabile_id && !eventStaffIds.has(taskDlg.responsabile_id) && <SelectItem value={taskDlg.responsabile_id} className="text-amber-700" data-testid="resp-opt-stale">{`${nameOf(persons, taskDlg.responsabile_id)} · non più nello Staff`}</SelectItem>}
-                  {staffPersons.length === 0 && <div className="px-2 py-3 text-xs text-slate-400">Nessuno Staff associato a questo evento.</div>}
+                  <div className="p-1 border-t border-slate-100 sticky bottom-0 bg-white">
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); setQsExisting(null); setQuickStaff({ nome: respQuery.trim(), cognome: "", cellulare: "", email: "" }); }} className="w-full text-left text-sm text-tiffany-active font-semibold px-2 py-1.5 rounded hover:bg-tiffany-light/50" data-testid="resp-add-staff">+ Aggiungi nuovo Staff</button>
+                  </div>
                 </SelectContent></Select></div>
                 <div className="space-y-1.5"><Label>Azienda/fornitore</Label><Select value={taskDlg.azienda_id || "none"} onValueChange={(v) => setTaskDlg((t) => ({ ...t, azienda_id: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="—" /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.ragione_sociale || c.nome || c.id}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1.5"><Label>Costo previsto (€)</Label><Input type="number" value={taskDlg.costo_previsto ?? ""} onChange={(e) => setTaskDlg((t) => ({ ...t, costo_previsto: e.target.value }))} /></div>

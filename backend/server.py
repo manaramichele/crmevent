@@ -1314,6 +1314,51 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
     return out
 
 
+class StaffQuickAddIn(BaseModel):
+    evento_id: str
+    nome: str
+    cognome: Optional[str] = None
+    cellulare: Optional[str] = None
+    email: Optional[str] = None
+    use_existing_person_id: Optional[str] = None
+    confirm_existing: bool = False
+
+
+@api.post("/staff/quick-add")
+async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_admin)):
+    if not body.evento_id:
+        raise HTTPException(status_code=400, detail="Evento mancante")
+    if not (body.nome or "").strip():
+        raise HTTPException(status_code=400, detail="Il nome è obbligatorio")
+    email = (body.email or "").strip().lower()
+    tel = ""
+    if (body.cellulare or "").strip():
+        try:
+            tel = _normalize_phone(body.cellulare)
+        except Exception:
+            tel = (body.cellulare or "").strip()
+    person = None
+    if body.use_existing_person_id:
+        person = await db.persons.find_one({**oq(admin), "id": body.use_existing_person_id}, {"_id": 0})
+    if not person and (email or tel):
+        conds = []
+        if email: conds.append({"email": email})
+        if tel: conds.append({"cellulare": tel})
+        existing = await db.persons.find_one({**oq(admin), "$or": conds}, {"_id": 0}) if conds else None
+        if existing and not body.confirm_existing:
+            return {"status": "exists", "person": {"id": existing["id"], "nome": existing.get("nome"), "cognome": existing.get("cognome"), "email": existing.get("email"), "cellulare": existing.get("cellulare")}}
+        person = existing
+    if not person:
+        person = {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()}
+        await db.persons.insert_one({**person})
+    link = await db.staff.find_one({**oq(admin), "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
+    if not link:
+        await db.staff.insert_one({"id": new_id(), "org_id": admin["org_id"], "persona_id": person["id"], "evento_id": body.evento_id, "categoria": "staff", "stato": "da_contattare", "created_at": now_iso()})
+    elif link.get("categoria") not in ("staff", "collaboratore"):
+        await db.staff.update_one({"id": link["id"]}, {"$set": {"categoria": "staff"}})
+    return {"status": "ok", "person": {"id": person["id"], "nome": person.get("nome"), "cognome": person.get("cognome")}}
+
+
 @api.post("/persons-match")
 async def persons_match(body: dict, admin: dict = Depends(require_admin)):
     email = (body.get("email") or "").strip()
