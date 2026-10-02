@@ -13,7 +13,8 @@ import { toast } from "sonner";
 import { EventCreditDialog } from "@/components/EventCreditDialog";
 import { Coins, Rocket } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList } from "lucide-react";
+import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import AvailabilityDialog from "@/components/AvailabilityDialog";
@@ -266,6 +267,80 @@ function eventDisplayState(r) {
   return "preparazione";
 }
 
+function EventRowActions({ row, navigate, setCreditFor, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete }) {
+  const all = [
+    { key: "event-credits", label: "Crediti", Icon: Coins, run: () => setCreditFor(row.id), title: "Crediti evento (attiva / stato)" },
+    { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
+    { key: "briefing", label: "Briefing", Icon: FileText, run: () => navigate(`/eventi/${row.id}/briefing`), title: "Briefing evento" },
+    { key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" },
+    { key: "maps", label: "Percorsi", Icon: MapIcon, run: () => setMapsFor(row.id), title: "Mappe & Percorsi" },
+    { key: "calsync", label: "Calendario", Icon: CalendarPlus, run: () => syncCal(row), title: "Aggiungi a Google Calendar" },
+  ];
+  const byKey = (k) => all.find((a) => a.key === k);
+  const primary = ["availability", "pipeline", "maps", "calsync"].map(byKey);
+  const secondary = ["event-credits", "briefing"].map(byKey);
+
+  return (
+    <>
+      {/* Desktop: pulsanti icona+testo per le azioni principali, dropdown per le secondarie, icone per Modifica/Elimina */}
+      <div className="hidden md:flex items-center justify-end gap-1.5">
+        {primary.map((a) => (
+          <Button key={a.key} variant="outline" size="sm" title={a.title} onClick={a.run} data-testid={`${a.key}-${row.id}`}
+            className="h-8 px-2.5 gap-1.5 text-slate-600 border-slate-200 hover:text-tiffany-active hover:border-tiffany-border hover:bg-tiffany-light/30">
+            <a.Icon className="w-4 h-4" /><span className="text-xs font-medium">{a.label}</span>
+          </Button>
+        ))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" title="Altre azioni" data-testid={`more-actions-${row.id}`}
+              className="h-8 px-2.5 gap-1 text-slate-600 border-slate-200 hover:text-tiffany-active hover:border-tiffany-border">
+              <MoreHorizontal className="w-4 h-4" /><span className="text-xs font-medium">Altre</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {secondary.map((a) => (
+              <DropdownMenuItem key={a.key} onClick={a.run} className="gap-2 cursor-pointer" data-testid={`menu-${a.key}-${row.id}`}>
+                <a.Icon className="w-4 h-4 text-slate-500" />{a.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <span className="mx-0.5 h-5 w-px bg-slate-200" aria-hidden />
+        <Button variant="ghost" size="icon" title="Modifica" onClick={() => openEdit(row)} data-testid={`edit-event-${row.id}`}
+          className="h-9 w-9 text-slate-500 hover:text-tiffany-active"><Pencil className="w-[18px] h-[18px]" /></Button>
+        <Button variant="ghost" size="icon" title="Elimina" onClick={() => onRequestDelete(row)} data-testid={`delete-event-${row.id}`}
+          className="h-9 w-9 text-slate-500 hover:text-red-500"><Trash2 className="w-[18px] h-[18px]" /></Button>
+      </div>
+
+      {/* Mobile: un unico pulsante "Azioni" con menu verticale icona + descrizione */}
+      <div className="flex md:hidden items-center justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" title="Azioni" data-testid={`actions-menu-${row.id}`} className="h-8 px-3 gap-1.5 text-slate-600 border-slate-200">
+              <MoreHorizontal className="w-4 h-4" /><span className="text-xs font-medium">Azioni</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            {all.map((a) => (
+              <DropdownMenuItem key={a.key} onClick={a.run} className="gap-2 cursor-pointer" data-testid={`m-${a.key}-${row.id}`}>
+                <a.Icon className="w-4 h-4 text-slate-500" />{a.label}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => openEdit(row)} className="gap-2 cursor-pointer" data-testid={`m-edit-event-${row.id}`}>
+              <Pencil className="w-4 h-4 text-slate-500" />Modifica
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onRequestDelete(row)} className="gap-2 cursor-pointer text-red-600 focus:text-red-600" data-testid={`m-delete-event-${row.id}`}>
+              <Trash2 className="w-4 h-4" />Elimina
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </>
+  );
+}
+
+
 export default function Events() {
   const settings = useSettings();
   const navigate = useNavigate();
@@ -279,6 +354,7 @@ export default function Events() {
   const [creditFor, setCreditFor] = useState(null);
   const [recharge, setRecharge] = useState(false);
   const [noCredits, setNoCredits] = useState(false);
+  const [delRow, setDelRow] = useState(null);
   const balRef = useRef({ balance: null });
   const refreshBalance = async () => {
     try { const { data } = await api.get("/credits/balance"); balRef.current = data; return data; } catch { return null; }
@@ -354,22 +430,16 @@ export default function Events() {
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
 
-  const rowActions = (row) => (
-    <>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Crediti evento (attiva / stato)" onClick={() => setCreditFor(row.id)} data-testid={`event-credits-${row.id}`}><Coins className="w-4 h-4" /></Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Raccolta disponibilità" onClick={() => setAvailFor(row.id)} data-testid={`availability-${row.id}`}><ClipboardList className="w-4 h-4" /></Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Briefing evento" onClick={() => navigate(`/eventi/${row.id}/briefing`)} data-testid={`briefing-${row.id}`}><FileText className="w-4 h-4" /></Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Pipeline evento" onClick={() => navigate(`/eventi/${row.id}/pipeline`)} data-testid={`pipeline-${row.id}`}><Rocket className="w-4 h-4" /></Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Mappe & Percorsi" onClick={() => setMapsFor(row.id)} data-testid={`maps-${row.id}`}><MapIcon className="w-4 h-4" /></Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Aggiungi a Google Calendar" onClick={() => syncCal(row)} data-testid={`calsync-${row.id}`}><CalendarPlus className="w-4 h-4" /></Button>
-    </>
-  );
-
   return (
     <>
       <EntityManager title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event"
-        searchKeys={["nome", "citta", "tipologia"]} rowActions={rowActions} guardCreate={guardCreate} />
+        searchKeys={["nome", "citta", "tipologia"]} guardCreate={guardCreate} fullActions
+        rowActions={(row, helpers) => (
+          <EventRowActions row={row} navigate={navigate}
+            setCreditFor={setCreditFor} setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal}
+            openEdit={helpers.openEdit} onRequestDelete={() => setDelRow({ row, del: helpers.onDelete })} />
+        )} />
       {mapsFor && <MapsDialog eventId={mapsFor} open={!!mapsFor} onOpenChange={(o) => !o && setMapsFor(null)} />}
       {availFor && <AvailabilityDialog eventId={availFor} open={!!availFor} onOpenChange={(o) => !o && setAvailFor(null)} />}
       {creditFor && <EventCreditDialog eventId={creditFor} open={!!creditFor} onOpenChange={(o) => { if (!o) { setCreditFor(null); refreshBalance(); } }} />}
@@ -383,6 +453,18 @@ export default function Events() {
         </DialogContent>
       </Dialog>
       <RechargeDialog open={recharge} onClose={() => { setRecharge(false); refreshBalance(); }} />
+      <AlertDialog open={!!delRow} onOpenChange={(o) => !o && setDelRow(null)}>
+        <AlertDialogContent data-testid="event-delete-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle>
+            <AlertDialogDescription>L'evento {delRow?.row?.nome ? <span className="font-medium">"{delRow.row.nome}"</span> : ""} verrà eliminato. Questa azione non può essere annullata.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => { delRow?.del?.(delRow.row); setDelRow(null); }} data-testid={`confirm-delete-event-${delRow?.row?.id}`}>Elimina</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

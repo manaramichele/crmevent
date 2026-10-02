@@ -357,7 +357,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false }) {
   const { items, loading, create, update, remove } = useCollection(endpoint);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -426,25 +426,31 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
                     <td key={c.key} className="px-4 py-3 text-slate-700">{c.render ? c.render(row) : (row[c.key] || "—")}</td>
                   ))}
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      {rowActions && rowActions(row)}
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-${testid}-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle>
-                            <AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Annulla</AlertDialogCancel>
-                            <AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(row)} data-testid={`confirm-delete-${testid}-${row.id}`}>Elimina</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                    {fullActions ? (
+                      <div className="flex items-center justify-end">
+                        {rowActions && rowActions(row, { openEdit, onDelete })}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-1">
+                        {rowActions && rowActions(row, { openEdit, onDelete })}
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-${testid}-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle>
+                              <AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Annulla</AlertDialogCancel>
+                              <AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(row)} data-testid={`confirm-delete-${testid}-${row.id}`}>Elimina</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
