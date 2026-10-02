@@ -372,12 +372,13 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
       {addField && entityCreators?.[addField.name] && entityCreators[addField.name]({
         onClose: () => setAddField(null),
         onCreated: (item) => { if (item?.id) change(addField.name, item.id); setAddField(null); },
+        form,
       })}
     </>
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, entityCreators }) {
   const { items, loading, create, update, remove } = useCollection(endpoint);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -488,7 +489,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
       <EntityDialog
         open={dialogOpen} onOpenChange={setDialogOpen}
         title={editing ? `Modifica ${entityLabel}` : `Nuovo ${entityLabel}`}
-        fields={fields} initial={editing} onSubmit={onSubmit} options={options} testid={testid}
+        fields={fields} initial={editing} onSubmit={onSubmit} options={options} testid={testid} entityCreators={entityCreators}
       />
     </div>
   );

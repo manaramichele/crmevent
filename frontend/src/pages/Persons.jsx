@@ -16,6 +16,7 @@ import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
 import TeamMembersDialog from "@/components/TeamMembersDialog";
+import TeamQuickCreate from "@/components/TeamQuickCreate";
 
 const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
 const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Attivo", accesso_disabilitato: "Disabilitato" };
@@ -263,7 +264,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
 export default function Persons({ mode = "anagrafiche" }) {
   const { items: companies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
-  const { items: teams } = useCollection("/teams");
+  const { items: teams, reload: reloadTeams } = useCollection("/teams");
   const { items: staffLinks, reload: reloadStaff } = useCollection("/staff");
   const settings = useSettings();
   const [rows, setRows] = useState([]);
@@ -347,7 +348,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts }, { name: "persona_id", label: "Persona (vuoto = scoperto)", type: "select", options: personOpts },
     { name: "data", label: "Data", type: "date" }, { name: "ora_inizio", label: "Ora inizio", type: "time" }, { name: "ora_fine", label: "Ora fine", type: "time" },
     { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "ruolo", label: "Ruolo", type: "select", settingKey: "ruoli_staff", addLabel: "Aggiungi nuovo Ruolo", options: settings?.ruoli_staff || [] },
-    { name: "team_id", label: "Team", type: "select", options: teamOpts }, { name: "luogo", label: "Luogo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
+    { name: "team_id", label: "Team", type: "select", options: teamOpts, addEntity: "Aggiungi nuovo Team" }, { name: "luogo", label: "Luogo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
   const shiftCols = [
@@ -391,6 +392,9 @@ export default function Persons({ mode = "anagrafiche" }) {
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
               fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" searchKeys={["ruolo", "area", "luogo"]}
+              entityCreators={{ team_id: ({ onClose, onCreated, form }) => (
+                <TeamQuickCreate eventoId={form?.evento_id} onClose={onClose} onCreated={async (t) => { await reloadTeams(); onCreated(t); }} />
+              ) }}
               filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
           </TabsContent>
         </Tabs>
