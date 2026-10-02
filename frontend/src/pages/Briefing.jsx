@@ -128,6 +128,9 @@ function BriefingBody({ data }) {
                   <StatusBadge color="tiffany">{t.staff_count} staff</StatusBadge>
                   <StatusBadge color="blue">{t.volontari_count} volontari</StatusBadge>
                 </div>
+                {t.descrizione && t.descrizione.trim() && (
+                  <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 whitespace-pre-wrap" data-testid={`briefing-team-desc-${t.id}`}>{t.descrizione}</div>
+                )}
                 {t.membri.filter((m) => m.categoria !== "volontario").length > 0 && (
                   <div className="mt-2 text-xs text-slate-600">{t.membri.filter((m) => m.categoria !== "volontario").map((m) => `${m.nome} ${m.cognome || ""}`.trim()).join(", ")}</div>
                 )}
@@ -356,6 +359,8 @@ const TeamsDeck = ({ teams }) => (
       <div key={t.id} className="border border-slate-200 rounded-xl p-5">
         <div className="text-lg font-semibold text-slate-800">{t.nome}</div>
         <div className="text-sm text-slate-600 mt-1">Responsabile: {t.responsabile ? `${t.responsabile.nome} ${t.responsabile.cognome || ""}` : "—"}</div>
+        {t.punto_ritrovo && <div className="text-sm text-slate-500 mt-1"><Clock className="w-3.5 h-3.5 inline mr-1" />{t.punto_ritrovo}</div>}
+        {t.descrizione && t.descrizione.trim() && <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 whitespace-pre-wrap">{t.descrizione}</div>}
         <div className="mt-2 flex gap-2"><StatusBadge color="tiffany">{t.staff_count} staff</StatusBadge><StatusBadge color="blue">{t.volontari_count} volontari</StatusBadge></div>
       </div>
     ))}

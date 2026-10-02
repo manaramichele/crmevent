@@ -818,3 +818,7 @@ Task 2 — Creatività manuale:
 - /api/events/{id}/hospitality: deduplica dei record staff per persona_id. Una persona con più team/ruoli/turni ora compare UNA sola volta per evento. Rappresentante = link con servizio_ospitalita definito (o override esigenze) altrimenti il primo.
 - Lista "Per persona", ricerca, filtri, conteggi dashboard e "Assegna a più persone" usano lo stesso elenco deduplicato (data.persons).
 - Verificato via curl: inserito un secondo staff link per una persona -> 0 duplicati nella vista (8 righe uniche).
+
+## 2026-06 — Briefing: descrizione Team
+- La "Descrizione" del Team è ora mostrata nel Briefing (web + PDF via print) e in modalità Presentazione, in un box ambra ben visibile, solo se non vuota. Ordine card: Nome → Responsabile → (luogo/punto ritrovo) → Descrizione → conteggi/staff.
+- Backend _build_briefing esponeva già descrizione in teams_out; aggiornamento automatico a ogni modifica del Team (briefing-live) e nel PDF. Verificato via curl.
