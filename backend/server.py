@@ -803,6 +803,7 @@ class Presence(BaseModel):  # collection: staff (Persona <-> Evento)
     ora_partenza: Optional[str] = None
     stato: Optional[str] = "da_contattare"
     note_operative: Optional[str] = None
+    servizio_ospitalita: Optional[str] = None
     esigenze_alimentari: Optional[List[str]] = None
     esigenze_note: Optional[str] = None
 
@@ -1202,6 +1203,7 @@ async def event_hospitality(event_id: str, admin: dict = Depends(require_admin))
             "ruolo": l.get("ruolo") or p.get("ruolo"), "categoria": l.get("categoria"),
             "team_id": l.get("team_id"), "team_nome": teams.get(l.get("team_id"), {}).get("nome"),
             "presence_id": l.get("id"),
+            "servizio_ospitalita": l.get("servizio_ospitalita") or "da_definire",
             "esigenze_alimentari": eff_esig or [], "esigenze_note": eff_note, "esigenze_override": override,
             "lodgings": plod, "meals": pmeal, "stato": stato,
         })
@@ -2760,6 +2762,16 @@ async def my_event_detail(event_id: str, user: dict = Depends(get_current_user))
     my_lodgings = await db.lodgings.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(100)
     my_meals = await db.meals.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(500)
     _normalize_meals(my_meals)
+    # Stato servizio ospitalità (per persona/evento): l'Area personale mostra SOLO le sezioni
+    # coerenti con la scelta. "da_definire"/"nessun_servizio" => nulla; "solo_ospitalita" => solo
+    # pernottamenti; "solo_pasti" => solo pasti; "ospitalita_pasti" => entrambi.
+    servizio = presence.get("servizio_ospitalita") or "da_definire"
+    if servizio in ("da_definire", "nessun_servizio"):
+        my_lodgings, my_meals = [], []
+    elif servizio == "solo_ospitalita":
+        my_meals = []
+    elif servizio == "solo_pasti":
+        my_lodgings = []
     _STAFF_HIDE = ("costo", "stato_pagamento", "note_amministrative", "a_carico_di", "codice_prenotazione")
     for x in my_lodgings + my_meals:
         for f in _STAFF_HIDE:

@@ -33,6 +33,7 @@ const PAY_STATE = { pagato: "Pagato", non_pagato: "Non pagato" };
 const STATO_COLOR = { completo: "green", parziale: "orange", da_definire: "red" };
 const STATO_LABEL = { completo: "Completo", parziale: "Parziale", da_definire: "Da definire" };
 const CAT_LABEL = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
+const SERVIZIO = { da_definire: "Da definire", nessun_servizio: "Nessun servizio", solo_ospitalita: "Solo ospitalità", solo_pasti: "Solo pasti", ospitalita_pasti: "Ospitalità + pasti" };
 
 function eachDay(start, end) {
   if (!start) return [];
@@ -154,10 +155,24 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
   const [editL, setEditL] = useState(null);
   const [editM, setEditM] = useState(null);
   const [esig, setEsig] = useState({ list: [], note: "", override: false });
+  const [servizio, setServizio] = useState("da_definire");
 
   useEffect(() => {
-    if (person) setEsig({ list: person.esigenze_alimentari || [], note: person.esigenze_note || "", override: person.esigenze_override });
+    if (person) {
+      setEsig({ list: person.esigenze_alimentari || [], note: person.esigenze_note || "", override: person.esigenze_override });
+      setServizio(person.servizio_ospitalita || "da_definire");
+    }
   }, [person]);
+
+  const showLodging = ["solo_ospitalita", "ospitalita_pasti"].includes(servizio);
+  const showMeals = ["solo_pasti", "ospitalita_pasti"].includes(servizio);
+  useEffect(() => { setTab(showLodging ? "pernottamenti" : "pasti"); }, [showLodging]);
+
+  const saveServizio = async (v) => {
+    setServizio(v);
+    try { await api.put(`/staff/${person.presence_id}`, { servizio_ospitalita: v }); toast.success("Servizio ospitalità aggiornato"); onChanged(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
 
   if (!person) return null;
   const lodgings = person.lodgings || [];
@@ -203,18 +218,38 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
         </DialogHeader>
 
         <div className="rounded-lg border border-slate-200 p-3 mb-3">
+          <div className="flex items-center justify-between mb-2"><Label className="text-xs font-semibold">Servizio ospitalità</Label></div>
+          <Select value={servizio} onValueChange={saveServizio}>
+            <SelectTrigger className="w-full sm:w-72" data-testid="servizio-select"><SelectValue /></SelectTrigger>
+            <SelectContent>{Object.entries(SERVIZIO).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+          </Select>
+          <p className="text-[11px] text-slate-400 mt-1.5">Determina le sezioni disponibili qui e ciò che la persona vede nella sua Area personale.</p>
+        </div>
+
+        {!showLodging && !showMeals ? (
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center text-sm text-slate-500" data-testid="servizio-none-hint">
+            {servizio === "nessun_servizio" ? "Nessun servizio previsto per questa persona." : "Servizio ancora da definire: scegli un'opzione per gestire ospitalità e/o pasti."}
+          </div>
+        ) : (
+        <>
+        {showMeals && (
+        <div className="rounded-lg border border-slate-200 p-3 mb-3">
           <div className="flex items-center justify-between mb-2"><Label className="text-xs font-semibold">Esigenze alimentari</Label>
             <span className="text-[11px] text-slate-400">Salvate in anagrafica</span></div>
           <EsigenzeEditor value={esig.list} onChange={(l) => setEsig((s) => ({ ...s, list: l }))} testid="person-esigenze" />
           <Input className="mt-2" placeholder="Note (allergie/intolleranze specifiche)" value={esig.note} onChange={(e) => setEsig((s) => ({ ...s, note: e.target.value }))} data-testid="person-esigenze-note" />
           <Button size="sm" className="mt-2 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={saveEsig} data-testid="save-esigenze">Salva esigenze</Button>
         </div>
+        )}
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList><TabsTrigger value="pernottamenti" data-testid="tab-pernottamenti"><BedDouble className="w-4 h-4 mr-1" />Pernottamenti</TabsTrigger>
-            <TabsTrigger value="pasti" data-testid="tab-pasti"><UtensilsCrossed className="w-4 h-4 mr-1" />Pasti</TabsTrigger></TabsList>
+          <TabsList>
+            {showLodging && <TabsTrigger value="pernottamenti" data-testid="tab-pernottamenti"><BedDouble className="w-4 h-4 mr-1" />Pernottamenti</TabsTrigger>}
+            {showMeals && <TabsTrigger value="pasti" data-testid="tab-pasti"><UtensilsCrossed className="w-4 h-4 mr-1" />Pasti</TabsTrigger>}
+          </TabsList>
 
           <TabsContent value="pernottamenti" className="space-y-2 pt-2">
+            {!showLodging ? null : <>
             {lodgings.length === 0 && !editL && <p className="text-sm text-slate-400">Nessun pernottamento.</p>}
             {lodgings.map((l) => (
               <div key={l.id} className="border border-slate-200 rounded-lg px-3 py-2.5 flex items-start justify-between" data-testid={`lodging-row-${l.id}`}>
@@ -237,9 +272,11 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
                 <div className="flex gap-2 mt-3"><Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={saveLodging} data-testid="save-lodging">Salva</Button><Button variant="outline" onClick={() => setEditL(null)}>Annulla</Button></div>
               </div>
             ) : <Button variant="outline" size="sm" onClick={() => setEditL({})} data-testid="add-lodging"><Plus className="w-4 h-4 mr-1" />Aggiungi pernottamento</Button>}
+            </>}
           </TabsContent>
 
           <TabsContent value="pasti" className="space-y-2 pt-2">
+            {!showMeals ? null : <>
             {meals.length === 0 && !editM && <p className="text-sm text-slate-400">Nessun pasto.</p>}
             {meals.map((m) => { const I = MEAL_ICON[m.tipo_pasto] || UtensilsCrossed; return (
               <div key={m.id} className="border border-slate-200 rounded-lg px-3 py-2.5 flex items-start justify-between" data-testid={`meal-row-${m.id}`}>
@@ -261,8 +298,11 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
                 <div className="flex gap-2 mt-3"><Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={saveMeal} data-testid="save-meal">Salva</Button><Button variant="outline" onClick={() => setEditM(null)}>Annulla</Button></div>
               </div>
             ) : <Button variant="outline" size="sm" onClick={() => setEditM({})} data-testid="add-meal"><Plus className="w-4 h-4 mr-1" />Aggiungi pasto</Button>}
+            </>}
           </TabsContent>
         </Tabs>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );
