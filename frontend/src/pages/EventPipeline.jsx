@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RechargeDialog } from "@/components/CreditsSection";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
+import { usePeople, invalidatePeople } from "@/lib/peopleStore";
 import {
   ArrowLeft, Rocket, Coins, Wallet, CheckCircle2, Clock, AlertTriangle, Flame, Plus, Pencil,
   Copy, Trash2, RotateCcw, Check, FolderPlus, ListChecks, LayoutTemplate, CalendarClock, RefreshCw,
@@ -43,8 +44,7 @@ export default function EventPipeline() {
   const [cats, setCats] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState({ percent: 0, completate: 0, da_fare: 0, in_ritardo: 0, critiche: 0 });
-  const [persons, setPersons] = useState([]);
-  const [staffLinks, setStaffLinks] = useState([]);
+  const { persons, staff: staffLinks } = usePeople();
   const [companies, setCompanies] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [recharge, setRecharge] = useState(false);
@@ -92,8 +92,7 @@ export default function EventPipeline() {
     if (s?.active && s?.template_key && s?.task_count) {
       await loadPipeline();
       loadCrmCounts();
-      api.get("/persons").then(({ data }) => setPersons(data)).catch(() => {});
-      api.get("/staff").then(({ data }) => setStaffLinks(data)).catch(() => {});
+      invalidatePeople();
       api.get("/companies").then(({ data }) => setCompanies(data)).catch(() => {});
       if (s.date_changed) setDateDlg(true);
     } else if (s?.active && s?.needs_template) {
@@ -225,10 +224,7 @@ export default function EventPipeline() {
       .sort((a, b) => `${a.cognome || ""} ${a.nome || ""}`.trim().localeCompare(`${b.cognome || ""} ${b.nome || ""}`.trim(), "it", { sensitivity: "base" }))
   ), [persons, eventStaffIds]);
 
-  const reloadStaffData = async () => {
-    const [p, s] = await Promise.all([api.get("/persons"), api.get("/staff")]);
-    setPersons(p.data); setStaffLinks(s.data);
-  };
+  const reloadStaffData = () => invalidatePeople();
   const filtered = tasks.filter((t) =>
     (filters.categoria === "all" || t.categoria_id === filters.categoria) &&
     (filters.stato === "all" || t.stato === filters.stato) &&

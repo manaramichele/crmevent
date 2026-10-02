@@ -18,6 +18,7 @@ import PersonDetailDialog from "@/components/PersonDetailDialog";
 import TeamMembersDialog from "@/components/TeamMembersDialog";
 import TeamSelect from "@/components/TeamSelect";
 import { useTeams, invalidateTeams } from "@/lib/teamsStore";
+import { usePeople } from "@/lib/peopleStore";
 
 const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
 const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Attivo", accesso_disabilitato: "Disabilitato" };
@@ -262,25 +263,15 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
 export default function Persons({ mode = "anagrafiche" }) {
   const { items: companies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
-  const { items: staffLinks, reload: reloadStaff } = useCollection("/staff");
+  const { staff: staffLinks, persons: rows, loading, reload } = usePeople();
   const { teams } = useTeams();
   const settings = useSettings();
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [detailId, setDetailId] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [invite, setInvite] = useState(null);
   const [rolesFor, setRolesFor] = useState(null);
   const [teamMembersFor, setTeamMembersFor] = useState(null);
-
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try { const { data } = await api.get("/persons-enriched"); setRows(data); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-    finally { setLoading(false); }
-  }, []);
-  useEffect(() => { reload(); }, [reload]);
 
   const companyOpts = companies.map((c) => ({ value: c.id, label: c.nome }));
   const personFields = [
@@ -318,7 +309,6 @@ export default function Persons({ mode = "anagrafiche" }) {
     const set = staffByEvent[eid] || new Set();
     return rows.filter((p) => set.has(p.id));
   }, [rows, staffByEvent]);
-  const reloadTeamData = useCallback(async () => { await Promise.all([reloadStaff(), reload()]); }, [reloadStaff, reload]);
   const eventOpts = events.map((e) => ({ value: e.id, label: e.nome }));
   const teamOpts = teams.map((t) => ({ value: t.id, label: t.nome }));
   const areaOpts = toOptions(settings?.aree_operative);
@@ -328,7 +318,7 @@ export default function Persons({ mode = "anagrafiche" }) {
 
   const teamFields = [
     { name: "nome", label: "Nome team", required: true, full: true }, { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts },
-    { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "responsabile_id", label: "Team Leader", type: "staffselect", eventFrom: "evento_id", staffPersonsFor: (form) => staffPersonsForEvent(form?.evento_id), allPersons: rows, onStaffAdded: reloadTeamData, noEventHint: "Seleziona prima l'Evento per scegliere lo Staff." },
+    { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "responsabile_id", label: "Team Leader", type: "staffselect", eventFrom: "evento_id", staffPersonsFor: (form) => staffPersonsForEvent(form?.evento_id), allPersons: rows, onStaffAdded: reload, noEventHint: "Seleziona prima l'Evento per scegliere lo Staff." },
     { name: "luogo_operativo", label: "Luogo operativo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
   ];
@@ -405,7 +395,7 @@ export default function Persons({ mode = "anagrafiche" }) {
       {invite && <InviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
       {rolesFor && <EventRolesDialog person={rolesFor} events={events} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
       {teamMembersFor && <TeamMembersDialog team={teamMembersFor} open={!!teamMembersFor} onOpenChange={(o) => !o && setTeamMembersFor(null)}
-        persons={rows} staffLinks={staffLinks} events={events} onReloadStaff={reloadTeamData}
+        persons={rows} staffLinks={staffLinks} events={events} onReloadStaff={reload}
         onOpenPerson={(pid) => { setTeamMembersFor(null); setDetailId(pid); }} />}
     </div>
   );

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
+import { usePeople, invalidatePeople } from "@/lib/peopleStore";
 import { AlertTriangle, Flame, Clock, UserX, CheckCircle2, ChevronRight, CalendarClock, Check, UserPlus } from "lucide-react";
 
 const dmy = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
@@ -37,20 +38,15 @@ export function sortByScadenza(items) {
 // Stato + azioni condivisi da widget Dashboard e pagina /pipeline/attenzione.
 export function useAttention(limit) {
   const [data, setData] = useState(null);
-  const [persons, setPersons] = useState([]);
-  const [staffLinks, setStaffLinks] = useState([]);
+  const { persons, staff: staffLinks } = usePeople();
   const [confirmItem, setConfirmItem] = useState(null);
 
   const load = useCallback(async () => {
     try { const { data } = await api.get("/pipeline/attention", { params: { limit } }); setData(data); }
     catch { setData({ items: [], total: 0 }); }
   }, [limit]);
-  const loadStaff = useCallback(async () => {
-    try { const [p, s] = await Promise.all([api.get("/persons"), api.get("/staff")]); setPersons(p.data); setStaffLinks(s.data); }
-    catch { /* noop */ }
-  }, []);
+  const loadStaff = useCallback(() => invalidatePeople(), []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadStaff(); }, [loadStaff]);
 
   const removeLocal = (taskId) => setData((d) => d ? { items: d.items.filter((i) => i.task_id !== taskId), total: Math.max(0, d.total - 1) } : d);
   const updateLocal = (taskId, patch) => setData((d) => d ? { ...d, items: d.items.map((i) => i.task_id === taskId ? { ...i, ...patch } : i) } : d);
