@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only verification of 2 new features: (A) Clickable sortable column headers on the Pipeline tasks table (/eventi/:id/pipeline) and (B) Responsive AvailabilityDialog with sticky thead on desktop and mobile. 14/14 Pipeline sort acceptance checks PASS. 7/7 AvailabilityDialog acceptance checks PASS. Seeded 1 operational event + 4 staff/collaboratore persons + 6 varied pipeline tasks + 3 categories + 45 availabilities; all data cleaned up after the run (demo org returned to 0 persons / 0 events).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/seed_sort_availability.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "EventPipeline.jsx:232-269 sort useMemo correctly handles all 6 keys. 'scadenza' empties-at-end rule enforced for BOTH directions via early returns (if (!sa) return 1; if (!sb) return -1;) BEFORE applying dir multiplier - verified at runtime (last 2 rows '—' in both asc and desc). Priorità uses PRIO_RANK {critica:0, importante:1, normale:2} and (ra - rb) * dir -> correct logical order (Critica→Importante→Normale) and inverse on 2nd click, NOT alphabetical. Responsabile sort builds `${cognome} ${nome}` with Italian locale.",
+    "EventPipeline.jsx:395-401 headers use data-testid sort-<key> with cursor-pointer + ArrowUp/ArrowDown/ArrowUpDown icons (hidden until hover for inactive cols; shown for active). Active column highlighted via text-slate-700. Verified via DOM introspection.",
+    "Sort state is CLIENT-ONLY (useState) so page reload restores natural DB order. Verified: after reload, task order matches initial fetch exactly.",
+    "Sorting respects filters because 'sorted' useMemo depends on 'filtered'. Verified end-to-end: filter Categoria=Alfa (6→2 rows), then sort-titolo asc → correctly reordered the 2 Alfa tasks only.",
+    "AvailabilityDialog.jsx:96 DialogContent class 'w-[95vw] max-w-[1200px] max-h-[90vh] flex flex-col overflow-hidden' is correct: at 1920×1080 dialog resolves to 1200×972 (90vh), at 390×844 mobile 370.5×759.6 (both inside viewport). overflow-hidden on root prevents outer scroll - verified scrollHeight==clientHeight (single inner scroll only).",
+    "AvailabilityDialog.jsx:242 wrapper 'flex-1 min-h-0 overflow-auto' + thead 'sticky top-0 z-10' verified: scrolling the inner container 500px keeps thead.y unchanged on both desktop and mobile.",
+    "KPI/filters/stats blocks use shrink-0, Tabs uses 'flex-1 min-h-0 flex flex-col', ricevute TabsContent uses 'flex flex-col min-h-0 flex-1 data-[state=inactive]:hidden' → proportional layout confirmed: with only 3 filtered rows the dialog shrinks to ~51vh (not pinned to 90vh); with 45 rows it grows to 90vh exactly.",
+    "Gap between dialog top and KPI block = 153px (header + event date line + tabs). No 'big whitespace' issue above the first KPI.",
+    "Mobile (390×844): dialog is 370.5×759.6 within viewport, Nome column visible, thead stays sticky while scrolling the table body."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (21/21 acceptance checks PASS)"},
+  "test_credentials": "demo.crmevent@gmail.com / DemoCrm#2026pv (verified working).",
+  "seed_data_creation": "Seeded ephemerally: TEST_SortEvent (operational, with allestimento/disallestimento dates), 4 staff persons (Zara Ancona=staff, Marco Bellini=staff, Giulia Carrara=collaboratore, Davide Del Monte=staff), event_pipelines (active, template_key=trail), 3 pipeline_categories (Alfa/Beta/Gamma), 6 pipeline_tasks with varied titolo/categoria/scadenza (incl. some empty)/stato/priorita (critica/importante/normale)/responsabile (incl. some empty), 45 availabilities with varied ruolo_evento and stato. All seed records removed after the run (verified: 0 persons / 0 events left on the demo org).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable testids: sort-titolo, sort-categoria, sort-responsabile, sort-scadenza, sort-stato, sort-priorita (Pipeline columns); filter-categoria/stato/priorita (Pipeline filters); availability-<eventId> (open AvailabilityDialog from /eventi row); availability-dialog (DialogContent); avtab-link / avtab-ricevute; avail-filter-ruolo / avail-filter-stato; avail-kpi; avail-row-<id>, avail-person-<id>, avail-select-<id>. Seed script: /app/tests/seed_sort_availability.py (updates EV_ID & PERSON_IDS in stdout). Login goes to /app (not /eventi); navigate explicitly to /eventi or /eventi/:id/pipeline after login. iubenda banner removal recommended before clicking. Nothing to retest unless main agent changes sort logic or dialog classes.",
+  "rca of the issue": "N/A - both features implemented correctly per spec. Pipeline sort: all 6 columns asc/desc, logical Priorità, empty-scadenza always-at-bottom, filter+sort composition, client-only (refresh restores). AvailabilityDialog: w-[95vw] max-w-[1200px] max-h-[90vh], sticky thead, single inner scroll, proportional with few rows, mobile usable."
+}
