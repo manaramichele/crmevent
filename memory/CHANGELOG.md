@@ -764,3 +764,12 @@ Task 2 — Creatività manuale:
 - Categorie: 12 default seminate all'attivazione; aggiungi/rinomina/elimina (409 se contiene attività → conferma esplicita).
 - Attività: CRUD completo + completa/riapri/duplica. Campi: titolo, descrizione, categoria, stato (da_fare/in_corso/in_attesa/completata), priorità (normale/importante/critica), scadenza, responsabile (persona), azienda, persona, costo previsto/effettivo, note, allegati(campo). Filtri per categoria/stato/priorità. "In ritardo" = condizione calcolata (scadenza<oggi e non completata), non persistita.
 - Backend: endpoint /events/{id}/pipeline/categories (CRUD) e /pipeline/tasks (CRUD + duplicate), stats server-side, multi-tenant via oq(). Verificato e2e + UI screenshot. FASE 3 (modelli Running/generico + scadenze relative) e FASE 4 (integrazioni + duplicazione edizioni) ancora da fare.
+
+## 2026-06 — FIX Composizione Team (Staff + Volontari)
+- TeamMembersDialog: selettore "Aggiungi componente" mostra Staff+Volontari dell'evento con badge Tipo, dedup per persona.
+- Ordinamento Cognome→Nome A-Z (case-insensitive) su elenco e ricerca candidati.
+- "+ Aggiungi nuova persona" fisso in fondo al dropdown (visibile durante lo scroll) → form rapido (Nome*, Cognome*, Cellulare intl E.164, Email, Tipo* Staff/Volontario) con dedup, creazione/riuso anagrafica, associazione evento, assegnazione ruolo e aggiunta al Team senza reload.
+- Filtro anti-"— Staff": persone senza nominativo non vengono mai proposte né mostrate (hasName()). DB QA: 0 record orfani attuali.
+- Backend /api/staff/quick-add esteso con categoria (staff|volontario) + team_id.
+- Fix wiring Persons.jsx: onReloadStaff={reloadTeamData} (ricarica /staff + /persons-enriched) così la nuova persona compare subito.
+- Team Leader resta SOLO Staff (StaffAssignSelect). Testing agent: 11/11 flussi verdi (iteration_51).

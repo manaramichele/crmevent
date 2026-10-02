@@ -410,7 +410,7 @@ export default function Persons({ mode = "anagrafiche" }) {
       {invite && <InviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
       {rolesFor && <EventRolesDialog person={rolesFor} events={events} teams={teams} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
       {teamMembersFor && <TeamMembersDialog team={teamMembersFor} open={!!teamMembersFor} onOpenChange={(o) => !o && setTeamMembersFor(null)}
-        persons={rows} staffLinks={staffLinks} events={events} onReloadStaff={reloadStaff}
+        persons={rows} staffLinks={staffLinks} events={events} onReloadStaff={reloadTeamData}
         onOpenPerson={(pid) => { setTeamMembersFor(null); setDetailId(pid); }} />}
     </div>
   );
