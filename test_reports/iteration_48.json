@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 48 retest of iter47 fixes + two new sort/order features. ALL 4 spec items PASS after a minor fix to a dead reference (setRespQuery) in EventPipeline.jsx. (1) TeamMembersDialog + StaffAssignSelect popovers now stack above Radix Dialog thanks to z-[200] — Aggiungi componente and Aggiungi nuovo Staff are fully clickable inside dialogs. (2) Candidates filter is correctly scoped: Team Run shows ONLY Davide Mora + Giulia Viola (people with no team on event). Add Davide → team-count-total 1→2 live and table button updates to 'Vedi componenti (2)'. (3) Pipeline default sort is scadenza ASC with blanks last; sort-scadenza header shows ArrowUp on open and after reload; clicking sort-responsabile/sort-titolo re-sorts correctly. (4) Responsabile list is sorted by Cognome→Nome in both Pipeline modal and Checklist (Bianchi, Blu, Mora, Neri, Rossi), '—' first, '+ Aggiungi nuovo Staff' last; search 'o' preserves cognome order (Mora, Rossi, Zzztest); after quick-add the new staff appears in correct alphabetical position (last for Zzztest).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Minor cleanup done by testing agent: removed two references to the undefined setter `setRespQuery` in /app/frontend/src/pages/EventPipeline.jsx (lines ~182 and ~478). These were leftovers from a prior refactor (the Responsabile search state now lives inside StaffAssignSelect's internal `q`). The references caused a Runtime error ('setRespQuery is not defined') the moment the task-edit Dialog's onOpenChange fired (e.g., when focus moved to the StaffAssignSelect popover for Aggiungi nuovo Staff). Main agent: please review the fix and keep the single state ownership inside StaffAssignSelect."
+  ],
+  "critical_code_review_comments": [
+    "EventPipeline.jsx had a stale reference `setRespQuery` with no corresponding useState. It was never caught because the Dialog's onOpenChange handler is only invoked on explicit open-state changes; the first user interaction that triggered it blew up the whole page. Recommend adding a linter rule or quick smoke-test for the task-edit dialog save/close path.",
+    "StaffAssignSelect.jsx: '+ Aggiungi nuovo Staff' lives in a separate footer section under the staff list — DOM-wise this is already 'last' in reading order and under the search results, matching the spec. No change needed.",
+    "TeamMembersDialog.jsx candidates sort uses `label.localeCompare` where label = `${nome} ${cognome}` (pname). For the current fixtures this gives Davide Mora, Giulia Viola which looks OK, but if you want the same Cognome→Nome order used in StaffAssignSelect, consider sorting by `${cognome} ${nome}` for consistency. Not a spec blocker."
+  ],
+  "updated_files": ["/app/frontend/src/pages/EventPipeline.jsx"],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% (4/4 spec items pass end-to-end)"},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! — working. Seed intact: Team Run id=team_1ffab54ca2.",
+  "seed_data_creation": "Test added one Staff person: Zenobia Zzztest (via Pipeline Aggiungi nuovo Staff) on event ev_qa_1 — not cleaned up. It appears last in alphabetical order of Responsabile selector. Anna Bianchi cellulare remained +393401119999 from iter47. No other mutations.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All four iter48 asks are green. If main agent wants to clean up the seed, delete Staff link for Zenobia Zzztest (person id visible in /staff-volontari). The dead setRespQuery references were removed by testing agent — if main agent prefers an alternative implementation (e.g., actually hoisting a search state), remove StaffAssignSelect's internal q and plumb one in from EventPipeline. Pipeline default sort stayed stable across reload and across filter interactions.",
+  "rca of the issue": "Root cause of the 'quick-add never appears' finding during first run: `setRespQuery is not defined` ReferenceError thrown inside Dialog onOpenChange and the submit path, which replaced the whole app subtree with Emergent's Runtime-error overlay — making qs-nome never render. Fix: remove the two orphan references. After the fix all specified flows work."
+}

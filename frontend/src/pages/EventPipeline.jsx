@@ -179,7 +179,7 @@ export default function EventPipeline() {
     try {
       if (t.id) await api.put(`/pipeline/tasks/${t.id}`, payload);
       else await api.post(`/events/${id}/pipeline/tasks`, payload);
-      setTaskDlg(null); setRespQuery(""); await loadPipeline();
+      setTaskDlg(null); await loadPipeline();
       toast.success("Attività salvata");
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
@@ -475,7 +475,7 @@ export default function EventPipeline() {
       </Dialog>
 
       {/* Dialog attività */}
-      <Dialog open={!!taskDlg} onOpenChange={(o) => { if (!o) { setTaskDlg(null); setRespQuery(""); } }}>
+      <Dialog open={!!taskDlg} onOpenChange={(o) => { if (!o) { setTaskDlg(null); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="pipeline-task-dialog">
           <DialogHeader><DialogTitle>{taskDlg?.id ? "Modifica attività" : "Nuova attività"}</DialogTitle></DialogHeader>
           {taskDlg && (
