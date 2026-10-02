@@ -90,7 +90,7 @@ function EventRolesDialog({ person, events, teams, settings, open, onOpenChange,
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="event-roles-dialog">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="event-roles-dialog">
         <DialogHeader><DialogTitle className="font-display">Ruoli evento — {person?.nome} {person?.cognome}</DialogTitle>
           <DialogDescription>Assegna, modifica o rimuovi il ruolo di questa persona per ciascun evento. Una persona può avere ruoli diversi in eventi diversi.</DialogDescription></DialogHeader>
 

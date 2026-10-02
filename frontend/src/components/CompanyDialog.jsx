@@ -62,7 +62,7 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="company-dialog">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="company-dialog">
         <DialogHeader><DialogTitle className="font-display">{editing ? "Modifica azienda" : "Nuova azienda"}</DialogTitle>
           <DialogDescription className="sr-only">Anagrafica azienda e referenti</DialogDescription></DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">

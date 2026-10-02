@@ -101,7 +101,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="person-detail-dialog">
+      <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="person-detail-dialog">
         <DialogHeader><DialogTitle className="sr-only">Scheda persona</DialogTitle><DialogDescription className="sr-only">Dettaglio anagrafica persona</DialogDescription></DialogHeader>
         {!p ? <div className="py-10 text-center text-slate-400">Caricamento...</div> : (
           <>

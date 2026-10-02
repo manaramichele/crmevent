@@ -476,7 +476,7 @@ export default function EventPipeline() {
 
       {/* Dialog attività */}
       <Dialog open={!!taskDlg} onOpenChange={(o) => { if (!o) { setTaskDlg(null); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="pipeline-task-dialog">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="pipeline-task-dialog">
           <DialogHeader><DialogTitle>{taskDlg?.id ? "Modifica attività" : "Nuova attività"}</DialogTitle></DialogHeader>
           {taskDlg && (
             <div className="space-y-3">
@@ -507,7 +507,7 @@ export default function EventPipeline() {
       </Dialog>
 
       <Dialog open={dupOpen} onOpenChange={setDupOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="pipeline-dup-dialog">
+        <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="pipeline-dup-dialog">
           <DialogHeader><DialogTitle>Crea da edizione precedente</DialogTitle><DialogDescription>Copia categorie e attività da una Pipeline di un altro evento della tua organizzazione. Le scadenze verranno ricalcolate sulla data di questo evento.</DialogDescription></DialogHeader>
           {dupSources.length === 0 ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500" data-testid="pipeline-dup-empty">Nessuna Pipeline disponibile da copiare. Attiva e configura prima la Pipeline di un altro evento.</div>

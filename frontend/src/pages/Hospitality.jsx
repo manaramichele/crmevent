@@ -195,7 +195,7 @@ function PersonPlanDialog({ person, eventId, canCosts, open, onOpenChange, onCha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto" data-testid="person-plan-dialog">
+      <DialogContent className="w-[95vw] max-w-4xl max-h-[92vh] overflow-y-auto" data-testid="person-plan-dialog">
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2">{fullName(person)}
             <StatusBadge color={STATO_COLOR[person.stato]}>{STATO_LABEL[person.stato]}</StatusBadge></DialogTitle>
@@ -300,7 +300,7 @@ function BulkAssignDialog({ eventId, persons, teams, canCosts, open, onOpenChang
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto" data-testid="bulk-assign-dialog">
+      <DialogContent className="w-[95vw] max-w-4xl max-h-[92vh] overflow-y-auto" data-testid="bulk-assign-dialog">
         <DialogHeader><DialogTitle className="font-display">Assegnazione multipla</DialogTitle>
           <DialogDescription>Crea un servizio e assegnalo a più persone. La configurazione individuale potrà essere modificata dopo.</DialogDescription></DialogHeader>
         <Tabs value={type} onValueChange={setType}>
@@ -380,7 +380,7 @@ function StructuresManager({ open, onOpenChange }) {
   const del = async (id) => { if (!window.confirm("Eliminare la struttura?")) return; try { await api.delete(`/structures/${id}`); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto" data-testid="structures-manager">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[92vh] overflow-y-auto" data-testid="structures-manager">
         <DialogHeader><DialogTitle className="font-display">Strutture</DialogTitle>
           <DialogDescription>Anagrafica riutilizzabile di hotel, ristoranti, catering ecc. per tutti gli eventi dell'organizzazione.</DialogDescription></DialogHeader>
         {ed ? (

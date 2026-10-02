@@ -59,7 +59,7 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="company-detail-dialog">
+      <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="company-detail-dialog">
         <DialogHeader><DialogTitle className="sr-only">Scheda azienda</DialogTitle><DialogDescription className="sr-only">Dettaglio anagrafica azienda</DialogDescription></DialogHeader>
         {!c ? <div className="py-10 text-center text-slate-400">Caricamento...</div> : (
           <>

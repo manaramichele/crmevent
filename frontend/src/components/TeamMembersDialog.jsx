@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
+import { MODAL, MODAL_TABLE_LAYOUT } from "@/lib/modal";
 import { Users, UserPlus, X, Search, Crown } from "lucide-react";
 
 const pname = (p) => `${p?.nome || ""} ${p?.cognome || ""}`.trim() || p?.email || "—";
@@ -97,13 +98,13 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="team-members-dialog">
-        <DialogHeader>
+      <DialogContent className={`${MODAL.table} ${MODAL_TABLE_LAYOUT}`} data-testid="team-members-dialog">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="font-display flex items-center gap-2"><Users className="w-5 h-5 text-tiffany-active" />{team.nome}</DialogTitle>
           <DialogDescription>{eventName}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-2 mt-1">
+        <div className="flex flex-wrap items-center gap-2 mt-1 shrink-0">
           <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
             {[["all", "Tutti"], ["staff", "Staff"], ["volontari", "Volontari"]].map(([v, l]) => (
               <button key={v} onClick={() => setTipoFilter(v)} className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tipoFilter === v ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`} data-testid={`team-filter-${v}`}>{l}</button>
@@ -131,17 +132,17 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
           </Popover>
         </div>
 
-        <div className="mt-3 bg-white border border-slate-200 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="mt-3 bg-white border border-slate-200 rounded-xl flex flex-col min-h-0 flex-1 overflow-hidden">
+          <div className="overflow-auto flex-1 min-h-0">
             <table className="w-full text-sm" data-testid="team-members-table">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/70">
+                <tr className="border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
                   {columns.map((c) => (
                     <th key={c.key} onClick={() => toggle(c.key)} className="text-left font-semibold text-slate-600 px-4 py-2.5 whitespace-nowrap cursor-pointer select-none group">
                       <span className="inline-flex items-center gap-1">{c.label}<SortIcon active={sort.key === c.key} dir={sort.dir} /></span>
                     </th>
                   ))}
-                  <th className="px-4 py-2.5 text-right font-semibold text-slate-600">Azioni</th>
+                  <th className="px-4 py-2.5 text-right font-semibold text-slate-600 bg-slate-50">Azioni</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,7 +166,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-50/70 border-t border-slate-200 text-sm font-semibold text-slate-700" data-testid="team-members-summary">
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-50/70 border-t border-slate-200 text-sm font-semibold text-slate-700 shrink-0" data-testid="team-members-summary">
             {isFiltering ? <span>Visualizzati: <span data-testid="team-count-visible">{sorted.length}</span> · Totale Team: <span data-testid="team-count-total">{totalTeam}</span></span>
               : <span>Totale componenti Team: <span data-testid="team-count-total">{totalTeam}</span></span>}
           </div>

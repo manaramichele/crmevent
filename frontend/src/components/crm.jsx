@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
+import { MODAL, MODAL_SCROLL } from "@/lib/modal";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
 
 export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -319,7 +320,7 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
   );
 }
 
-export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity", entityCreators }) {
+export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity", entityCreators, size = "medium" }) {
   const [form, setForm] = useState(initial || {});
   const [saving, setSaving] = useState(false);
   const [addField, setAddField] = useState(null);
@@ -345,7 +346,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid={`${testid}-dialog`}
+        <DialogContent className={`${MODAL[size] || MODAL.medium} ${MODAL_SCROLL}`} data-testid={`${testid}-dialog`}
           onInteractOutside={(e) => { const t = e.detail?.originalEvent?.target; if (t && t.closest && t.closest("[data-radix-popper-content-wrapper]")) e.preventDefault(); }}>
           <DialogHeader><DialogTitle className="font-display">{title}</DialogTitle><DialogDescription className="sr-only">Compila i campi e salva.</DialogDescription></DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
