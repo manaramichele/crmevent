@@ -779,3 +779,11 @@ Task 2 — Creatività manuale:
 - Card Team: i nominativi sotto al Team mostrano SOLO lo Staff (categoria != volontario); i volontari restano conteggiati ("N staff · N volontari") ma non elencati.
 - Sezione generale rinominata "Staff & volontari non assegnati a un Team": mostra solo le persone senza team_id, eliminando la duplicazione con i Team.
 - Diagnosi errore Cloudflare 520 in produzione (deployer RCA): era transitorio durante il rollout (probe 503 mentre l'immagine 776MB veniva scaricata); codice f7d17c5 sano, nessuna fix di codice necessaria.
+
+## 2026-06 — Selettore Team condiviso (TeamSelect) real-time
+- Nuovo componente condiviso /app/frontend/src/components/TeamSelect.jsx usato in Ruoli evento, Turni, scheda Anagrafica (tab Eventi): "— Nessun team —" in cima, Team A→Z, "+ Aggiungi nuovo Team" footer sticky.
+- Nuovo store globale /app/frontend/src/lib/teamsStore.js (useSyncExternalStore + invalidateTeams): unica sorgente /teams, nessuna copia locale/stale. Creazione/modifica/eliminazione Team aggiorna in tempo reale TUTTI i selettori senza reload.
+- "+ Aggiungi nuovo Team": chiude il dropdown, apre TeamQuickCreate precompilato con l'evento corrente, conserva le modifiche non salvate, al salvataggio seleziona automaticamente il nuovo Team.
+- crm.jsx: nuovo field type "teamselect"; EntityManager accetta onMutate (chiamata dopo create/update/delete) -> Team manager usa onMutate=invalidateTeams.
+- Backend: DELETE /teams/{id} ora esegue cascade (scoped org) azzerando team_id sui record staff e shifts referenzianti (niente riferimenti orfani). Verificato via curl.
+- Testing agent: 7/7 flussi verdi (iteration_52), inclusa propagazione cross-dialog e eliminazione.

@@ -1039,6 +1039,10 @@ def crud_routes(path, coll, model, org_scoped=True):
     async def _d(item_id: str, user: dict = Depends(require_admin)):
         await _assert_org_operational(user["org_id"])
         await db[coll].delete_one(oq(user, id=item_id))
+        if coll == "teams":
+            # Cascade: nessun riferimento orfano al Team eliminato (scoped all'org).
+            await db.staff.update_many(oq(user, team_id=item_id), {"$set": {"team_id": ""}})
+            await db.shifts.update_many(oq(user, team_id=item_id), {"$set": {"team_id": ""}})
         return {"ok": True}
 
 
