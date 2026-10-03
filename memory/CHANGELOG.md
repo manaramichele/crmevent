@@ -829,3 +829,16 @@ Task 2 — Creatività manuale:
 - Template Brevo disponibilità/conferma (IT+EN): saluto con fallback condizionale {% if params.NOME %}Ciao {{params.NOME}},{% else %}Ciao,{% endif %} (niente "Ciao ," con nome vuoto). Mittente/provider/liste/funnel/automazioni invariati.
 - Audit dati: la registrazione via invito non salva più l'email-prefix come nome (se assente resta vuoto -> "Ciao,"). Nome non reso obbligatorio nei flussi legacy.
 - Verificato a livello unitario: Nome presente -> "Ciao Michele,"; assente -> "Ciao,"; email -> "Ciao," (mai "Ciao michele@...").
+
+---
+
+## 2026-06 · Brevo · Sync completa "CRMEvent · Utenti registrati"
+- Esteso `sync_registered_user` (server.py): ora upsert per email con attributi calcolati da TUTTE le membership attive dell'utente (multiutenza). ORGANIZZAZIONE = elenco org separate da virgola (dedup, nessun duplicato contatto), RUOLO_UTENTE = ruolo più alto (Admin Organizzazione > Utente), crediti/eventi aggregati. Aggiunto filtro: salta staff/volontari/superadmin e chi non ha membership attiva (un invito pending NON sincronizza).
+- Nuovo helper `_brevo_registered_attrs(u)`.
+- Trigger di sync aggiunti a TUTTI i punti di associazione utente↔org: `_accept_invite` (invito accettato/registrato), `add_org_member` (Account→Utenti), `assign_lead_org` (Super Admin), `update_org_member` (cambio ruolo/accesso). Già presenti: registrazione, complete-organization, complete-profile, modifica profilo.
+- Nessun contatto viene mai eliminato (disabilitazione/rimozione da una singola org non rimuove il contatto).
+- Nuovo endpoint `POST /api/platform/brevo/sync-registered-users` (superadmin): riallineamento idempotente di tutti gli utenti con membership attiva → ritorna `Analizzati · Inseriti · Aggiornati · Errori`.
+- Frontend `RegisteredUsersPanel.jsx`: pulsante "Sincronizza utenti registrati" con esito.
+- Attributi: NOME, COGNOME, CELLULARE (E.164), DATA_REGISTRAZIONE, ULTIMO_ACCESSO, RUOLO_UTENTE, ORGANIZZAZIONE + metriche. ULTIMO_ACCESSO aggiornato su eventi di sync + riallineamento (non ad ogni login).
+- NON toccati: funnel, automazioni, template, lista Lead, trigger commerciali.
+- Test logica (tests/test_registered_sync.py): multi-org dedup, ruolo più alto, E.164, idempotenza, skip pending/staff → PASS. Brevo non configurato in preview: verifica live in produzione.

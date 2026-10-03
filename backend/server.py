@@ -3207,6 +3207,10 @@ async def add_org_member(org_id: str, body: MemberAddIn, user: dict = Depends(ge
         await _ensure_membership(target["user_id"], org_id, role, user["user_id"])
     await record_audit(user, "member_added", org_id=org_id, org_name=org.get("nome"),
                        target_email=email, target_name=target.get("name"), detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
+    try:
+        await sync_registered_user(target["user_id"], org_id, source="member_added")
+    except Exception as e:
+        logger.error(f"registered-user sync error: {e}")
     return {"ok": True}
 
 
@@ -3235,6 +3239,11 @@ async def update_org_member(org_id: str, target_id: str, body: MemberUpdateIn, u
         await record_audit(user, action, org_id=org_id, org_name=org.get("nome"),
                            target_email=(tgt or {}).get("email"), target_name=(tgt or {}).get("name"),
                            detail="; ".join(changes))
+        # Cambio ruolo/accesso → aggiorna gli attributi Brevo (il contatto non viene mai rimosso).
+        try:
+            await sync_registered_user(target_id, org_id, source="member_updated")
+        except Exception as e:
+            logger.error(f"registered-user sync error: {e}")
     return {"ok": True}
 
 
@@ -3638,34 +3647,60 @@ async def _registered_list_id(create: bool = True):
     return None
 
 
-async def sync_registered_user(user_id: str, org_id: str, *, nome=None, cognome=None, source="registration"):
-    """Sincronizza un utente REGISTRATO nella lista Brevo 'CRMEvent · Utenti registrati' (best-effort,
-    nessuna email). CRMEvent resta la fonte di verità: a Brevo vanno solo gli attributi utili ai funnel.
-    Non rimuove il contatto dalla lista Lead (origine/storico preservati)."""
-    if not brevo_funnel.is_configured():
-        return {"ok": False, "skipped": True}
-    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    org = await db.organizations.find_one({"id": org_id}, {"_id": 0})
-    if not u or not org or not u.get("email"):
-        return {"ok": False, "error": "utente/organizzazione non trovati"}
-    created = await db.events.count_documents({"org_id": org_id})
-    activated = await db.events.count_documents({"org_id": org_id, "credit_state": {"$in": ["attivo", "sospeso", "concluso"]}})
-    credits = (org.get("credits") or {}).get("balance", 0)
-    mem = await db.memberships.find_one({"user_id": user_id, "org_id": org_id}, {"_id": 0, "role": 1})
-    role_label = {"admin_org": "Admin Organizzazione", "user": "Utente"}.get((mem or {}).get("role"), "Admin Organizzazione")
+async def _brevo_registered_attrs(u: dict) -> dict:
+    """Attributi Brevo per un utente registrato, calcolati da TUTTE le sue membership attive.
+    Multiutenza: ORGANIZZAZIONE elenca ogni org (separate da virgola, nessun duplicato),
+    RUOLO_UTENTE usa il ruolo più alto; crediti/eventi sono aggregati. CRMEvent resta la fonte di verità."""
+    mems = await db.memberships.find({"user_id": u["user_id"], "active": True}, {"_id": 0}).to_list(500)
+    org_names, roles = [], []
+    credits = created = activated = 0
+    for m in mems:
+        org = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0})
+        if not org:
+            continue
+        if org.get("nome"):
+            org_names.append(org["nome"])
+        roles.append(m.get("role"))
+        created += await db.events.count_documents({"org_id": m["org_id"]})
+        activated += await db.events.count_documents({"org_id": m["org_id"], "credit_state": {"$in": ["attivo", "sospeso", "concluso"]}})
+        credits += (org.get("credits") or {}).get("balance", 0)
+    role_label = "Admin Organizzazione" if "admin_org" in roles else ("Utente" if roles else "Admin Organizzazione")
     name = u.get("name") or ""
-    attrs = {
-        "NOME": nome or u.get("nome") or (name.split(" ")[0] if name else None),
-        "COGNOME": cognome or u.get("cognome") or (" ".join(name.split(" ")[1:]) or None),
-        "ORGANIZZAZIONE": org.get("nome"),
+    return {
+        "NOME": u.get("nome") or (name.split(" ")[0] if name else None),
+        "COGNOME": u.get("cognome") or (" ".join(name.split(" ")[1:]) or None),
+        "ORGANIZZAZIONE": ", ".join(dict.fromkeys(org_names)) or None,
         "DATA_REGISTRAZIONE": (u.get("registered_at") or u.get("created_at") or now_iso())[:10],
         "CREDITI_DISPONIBILI": credits,
         "EVENTI_CREATI": created,
         "EVENTI_ATTIVATI": activated,
-        "ULTIMO_ACCESSO": now_iso()[:10],
+        "ULTIMO_ACCESSO": (u.get("last_login_at") or now_iso())[:10],
         "CELLULARE": u.get("telefono") or u.get("cellulare"),
         "RUOLO_UTENTE": role_label,
     }
+
+
+async def sync_registered_user(user_id: str, org_id: str = None, *, nome=None, cognome=None, source="registration"):
+    """Upsert (per email, nessun duplicato) di un utente REGISTRATO nella lista Brevo
+    'CRMEvent · Utenti registrati'. Best-effort, nessuna email inviata. Gli attributi sono calcolati
+    da TUTTE le membership attive (multiutenza). Non rimuove MAI il contatto da altre liste (es. Lead).
+    `org_id` è solo informativo: gli attributi derivano comunque da tutte le org attive dell'utente."""
+    if not brevo_funnel.is_configured():
+        return {"ok": False, "skipped": True}
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not u or not u.get("email"):
+        return {"ok": False, "error": "utente non trovato"}
+    # Non sincronizzare account staff/volontari (solo area personale) né il Super Admin.
+    if u.get("role") in ("volunteer", "staff", "superadmin"):
+        return {"ok": False, "skipped": True}
+    # Deve esistere almeno una membership attiva: un invito pending non rende "registrato" l'utente.
+    if not await db.memberships.find_one({"user_id": user_id, "active": True}):
+        return {"ok": False, "skipped": True}
+    attrs = await _brevo_registered_attrs(u)
+    if nome:
+        attrs["NOME"] = nome
+    if cognome:
+        attrs["COGNOME"] = cognome
     try:
         await brevo_funnel.ensure_user_attributes()
     except Exception:
@@ -3678,7 +3713,6 @@ async def sync_registered_user(user_id: str, org_id: str, *, nome=None, cognome=
         return {"ok": False, "error": str(e)}
     if res.get("ok"):
         await _set_setting("brevo_registered_last_sync", now_iso())
-        await db.organizations.update_one({"id": org_id}, {"$set": {"brevo_registered_synced_at": now_iso()}})
     return res
 
 
@@ -3699,6 +3733,52 @@ async def platform_registered_users(admin: dict = Depends(require_superadmin)):
             "name": await _get_setting("brevo_registered_list_name") or brevo_funnel.REGISTERED_LIST_NAME,
             "contacts": count, "last_sync": await _get_setting("brevo_registered_last_sync"),
             "attributes": brevo_funnel.USER_ATTRIBUTES}
+
+
+@api.post("/platform/brevo/sync-registered-users")
+async def platform_sync_registered_users(admin: dict = Depends(require_superadmin)):
+    """Riallineamento massivo e idempotente: fa l'upsert su Brevo di tutti gli utenti CRMEvent
+    con almeno una membership attiva (un solo contatto per email, nessun duplicato).
+    Non invia email, non tocca funnel/automazioni/template/lista Lead. Ritorna il conteggio
+    'Analizzati · Inseriti · Aggiornati · Errori'."""
+    if not brevo_funnel.is_configured():
+        raise HTTPException(status_code=400, detail="BREVO_API_KEY non configurata nei Secrets")
+    try:
+        await brevo_funnel.ensure_user_attributes()
+    except Exception:
+        pass
+    lid = await _registered_list_id(create=True)
+    analyzed = inserted = updated = errors = 0
+    seen = set()
+    user_ids = await db.memberships.distinct("user_id", {"active": True})
+    for uid in user_ids:
+        u = await db.users.find_one({"user_id": uid}, {"_id": 0})
+        if not u or not u.get("email"):
+            continue
+        if u.get("role") in ("volunteer", "staff", "superadmin"):
+            continue
+        email = u["email"].lower()
+        if email in seen:
+            continue
+        seen.add(email)
+        analyzed += 1
+        attrs = await _brevo_registered_attrs(u)
+        try:
+            res = await brevo_funnel.upsert_registered_contact(
+                email=u["email"], attributes=attrs, list_ids=([lid] if lid else None))
+        except Exception as e:
+            logger.error(f"brevo backfill sync failed for {email}: {e}")
+            errors += 1
+            continue
+        if not res.get("ok"):
+            errors += 1
+        elif res.get("status") == 201:
+            inserted += 1
+        else:
+            updated += 1
+    await _set_setting("brevo_registered_last_sync", now_iso())
+    return {"analyzed": analyzed, "inserted": inserted, "updated": updated, "errors": errors,
+            "message": f"Analizzati {analyzed} · Inseriti {inserted} · Aggiornati {updated} · Errori {errors}"}
 
 
 async def _sync_brevo_funnel_status(email: str, funnel_status: str):
@@ -4335,6 +4415,11 @@ async def _accept_invite(inv: dict, target_user: dict) -> None:
     await record_audit(target_user, "invite_accepted", org_id=inv["org_id"], org_name=(org or {}).get("nome"),
                        target_email=target_user.get("email"), target_name=target_user.get("name"),
                        detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
+    # Invito accettato → l'utente diventa "registrato": upsert nella lista Brevo Utenti registrati.
+    try:
+        await sync_registered_user(target_user["user_id"], inv["org_id"], source="invite_accepted")
+    except Exception as e:
+        logger.error(f"registered-user sync error: {e}")
 
 
 @api.get("/invites/{token}")
@@ -4476,6 +4561,10 @@ async def assign_lead_org(lead_id: str, body: LeadAssignIn, admin: dict = Depend
     await record_audit(admin, "member_added", org_id=body.org_id, org_name=org.get("nome"),
                        target_email=u["email"], target_name=u.get("name"),
                        detail=f"Assegnato da Lead · Ruolo: {ORG_ROLE_LABELS[role]}")
+    try:
+        await sync_registered_user(u["user_id"], body.org_id, source="assigned_by_superadmin")
+    except Exception as e:
+        logger.error(f"registered-user sync error: {e}")
     return {"ok": True}
 
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
-import { Users, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Users, RefreshCw, CheckCircle2, AlertTriangle, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const fmt = (s) => (s ? new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
@@ -9,6 +9,8 @@ const fmt = (s) => (s ? new Date(s).toLocaleString("it-IT", { day: "2-digit", mo
 export function RegisteredUsersPanel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState(null);
   const load = async () => {
     setLoading(true);
     try { const { data } = await api.get("/platform/brevo/registered-users"); setData(data); }
@@ -17,13 +19,24 @@ export function RegisteredUsersPanel() {
   };
   useEffect(() => { load(); }, []);
 
+  const sync = async () => {
+    setSyncing(true); setResult(null);
+    try {
+      const { data: r } = await api.post("/platform/brevo/sync-registered-users");
+      setResult(r);
+      toast.success(r.message || "Sincronizzazione completata");
+      load();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    setSyncing(false);
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-6" data-testid="brevo-registered-panel">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2"><Users className="w-5 h-5 text-tiffany-active" /><h2 className="font-semibold text-slate-800">CRMEvent · Utenti registrati</h2></div>
         <Button size="sm" variant="outline" onClick={load} disabled={loading} data-testid="brevo-registered-refresh"><RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />Aggiorna</Button>
       </div>
-      <p className="text-sm text-slate-500 mb-4">Lista Brevo dedicata agli utenti che hanno completato la registrazione a CRMEvent. Separata dai Lead e dalle email di disponibilità. CRMEvent resta la fonte di verità per crediti, eventi e attivazioni.</p>
+      <p className="text-sm text-slate-500 mb-4">Lista Brevo dedicata agli utenti che hanno completato la registrazione a CRMEvent (un solo contatto per email, anche con più organizzazioni). Separata dai Lead e dalle email di disponibilità. CRMEvent resta la fonte di verità per crediti, eventi e attivazioni.</p>
       {!data ? <p className="text-sm text-slate-400">Caricamento…</p> : !data.configured ? (
         <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" data-testid="brevo-registered-unconfigured"><AlertTriangle className="w-4 h-4" />BREVO_API_KEY non configurata nei Secrets.</div>
       ) : (
@@ -35,6 +48,18 @@ export function RegisteredUsersPanel() {
           </div>
           <div className="flex items-center gap-2 text-sm text-emerald-700"><CheckCircle2 className="w-4 h-4" />{data.name}</div>
           <div className="text-xs text-slate-500">Attributi sincronizzati: {(data.attributes || []).join(", ")}</div>
+          <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+            <Button size="sm" onClick={sync} disabled={syncing} className="w-fit" data-testid="brevo-registered-sync-btn">
+              <UploadCloud className={`w-4 h-4 mr-1.5 ${syncing ? "animate-pulse" : ""}`} />
+              {syncing ? "Sincronizzazione…" : "Sincronizza utenti registrati"}
+            </Button>
+            <p className="text-xs text-slate-400">Riallinea su Brevo tutti gli utenti già associati a un'organizzazione. Idempotente: puoi eseguirla più volte senza creare duplicati.</p>
+            {result && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" data-testid="brevo-registered-sync-result">
+                Analizzati {result.analyzed} · Inseriti {result.inserted} · Aggiornati {result.updated} · Errori {result.errors}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
