@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import api from "@/lib/platformApi";
 import { useSearchParams } from "react-router-dom";
 import { formatApiError } from "@/lib/api";
@@ -145,6 +145,20 @@ export default function LeadFinder() {
   });
   const toReview = orgs.filter((o) => o.status === "da_verificare" || o.socials_status === "da_verificare");
 
+  // --- Selezione massiva Brevo: un contatto è "già sincronizzato" (escluso dal massivo) se
+  // sincronizzato o già presente in Brevo. Select-all rispetta i filtri correnti (tutto `filtered`).
+  const SYNCED_STATES = ["sincronizzato", "gia_presente"];
+  const isSynced = (o) => SYNCED_STATES.includes(o.brevo_status);
+  const selectableIds = filtered.filter((o) => !isSynced(o)).map((o) => o.id);
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => mergeSel.includes(id));
+  const someSelected = selectableIds.some((id) => mergeSel.includes(id)) && !allSelected;
+  const selectAllRef = useRef(null);
+  useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected; }, [someSelected]);
+  const toggleSelectAll = () => {
+    if (allSelected) setMergeSel((s) => s.filter((id) => !selectableIds.includes(id)));
+    else setMergeSel((s) => [...new Set([...s, ...selectableIds])]);
+  };
+
   const doMerge = async () => {
     if (mergeSel.length < 2) { toast.error("Seleziona almeno 2 organizzatori"); return; }
     try { await api.post("/leadfinder/organizers/merge", { primary_id: mergeSel[0], duplicate_ids: mergeSel.slice(1) }); toast.success("Duplicati uniti nel primo selezionato"); setMergeSel([]); load(); }
@@ -218,7 +232,8 @@ export default function LeadFinder() {
   };
   const approveBrevo = async () => {
     if (!mergeSel.length) return;
-    try { const { data } = await api.post("/leadfinder/organizers/approve-brevo", { ids: mergeSel }); toast.success(`Approvati per Brevo: ${data.approved}${data.skipped ? ` · ${data.skipped} saltati (bloccati)` : ""}`); setMergeSel([]); load(); }
+    // Mantieni la selezione attiva dopo l'approvazione: così si può premere subito "Sincronizza selezionati".
+    try { const { data } = await api.post("/leadfinder/organizers/approve-brevo", { ids: mergeSel }); toast.success(`Approvati per Brevo: ${data.approved}${data.skipped ? ` · ${data.skipped} saltati (bloccati)` : ""}`); load(); }
     catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
   const askSync = () => {
@@ -228,8 +243,14 @@ export default function LeadFinder() {
   };
   const doSync = async () => {
     const ids = syncConfirm; setSyncConfirm(null);
-    try { const { data } = await api.post("/leadfinder/organizers/sync-brevo", { ids }); toast.success(`Sincronizzati ${data.synced} · bloccati ${data.blocked} · errori ${data.errors}${data.skipped_not_approved ? ` · ${data.skipped_not_approved} non approvati` : ""}`); setMergeSel([]); load(); }
-    catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
+    try {
+      const { data } = await api.post("/leadfinder/organizers/sync-brevo", { ids });
+      toast.success(`Sincronizzati ${data.synced} · bloccati ${data.blocked} · errori ${data.errors}${data.skipped_not_approved ? ` · ${data.skipped_not_approved} non approvati` : ""}`);
+      // Rimuovi dalla selezione SOLO i contatti effettivamente sincronizzati (restano i bloccati/errore per un retry).
+      const syncedIds = (data.results || []).filter((r) => SYNCED_STATES.includes(r.status)).map((r) => r.id);
+      setMergeSel((s) => s.filter((id) => !syncedIds.includes(id)));
+      load();
+    } catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
   const syncOne = async (o) => {
     if (o.brevo_status !== "approvato") { toast.error('Prima "Approva per Brevo"'); return; }
@@ -297,10 +318,11 @@ export default function LeadFinder() {
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fEmail} onChange={(e) => setFEmail(e.target.checked)} data-testid="lf-filter-email" />Email</label>
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fIg} onChange={(e) => setFIg(e.target.checked)} />Instagram</label>
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fLi} onChange={(e) => setFLi(e.target.checked)} />LinkedIn</label>
+              {mergeSel.length >= 1 && <span className="text-sm font-semibold text-slate-700 px-1" data-testid="lf-selected-count">{mergeSel.length} selezionati</span>}
               {mergeSel.length >= 2 && <Button size="sm" onClick={doMerge} data-testid="lf-merge-btn" className="bg-amber-500 hover:bg-amber-600 text-white"><GitMerge className="w-4 h-4 mr-1" />Unisci {mergeSel.length}</Button>}
               {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={enrichSelected} data-testid="lf-enrich-btn"><Sparkles className="w-4 h-4 mr-1" />Arricchisci selezionati</Button>}
-              {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={approveBrevo} data-testid="lf-approve-brevo-btn"><ShieldCheck className="w-4 h-4 mr-1" />Approva per Brevo</Button>}
-              {mergeSel.length >= 1 && <Button size="sm" onClick={askSync} data-testid="lf-sync-brevo-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Send className="w-4 h-4 mr-1" />Sincronizza con Brevo</Button>}
+              {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={approveBrevo} data-testid="lf-approve-brevo-btn"><ShieldCheck className="w-4 h-4 mr-1" />Approva selezionati</Button>}
+              {mergeSel.length >= 1 && <Button size="sm" onClick={askSync} data-testid="lf-sync-brevo-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Send className="w-4 h-4 mr-1" />Sincronizza selezionati con Brevo</Button>}
               {mergeSel.length >= 1 && <Button size="sm" variant="outline" onClick={() => setBulkDel(true)} data-testid="lf-bulk-delete-btn" className="text-red-600 border-red-200 hover:bg-red-50"><Trash2 className="w-4 h-4 mr-1" />Elimina {mergeSel.length}</Button>}
               <div className="flex-1" />
               <Button size="sm" onClick={() => setShowAdd(true)} data-testid="lf-add-btn" className="bg-tiffany hover:bg-tiffany/90 text-slate-900"><Plus className="w-4 h-4 mr-1" />Aggiungi organizzatore</Button>
@@ -310,7 +332,7 @@ export default function LeadFinder() {
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr>
-                {tab === "organizers" && <th className="p-2"></th>}
+                {tab === "organizers" && <th className="p-2 text-center"><input ref={selectAllRef} type="checkbox" checked={allSelected} onChange={toggleSelectAll} title="Seleziona tutti i contatti non sincronizzati del filtro corrente" data-testid="lf-select-all" /></th>}
                 <th className="p-2 text-left">Organizzazione</th><th className="p-2">Eventi</th><th className="p-2">Email</th><th className="p-2">Instagram</th><th className="p-2">LinkedIn</th><th className="p-2">Regione</th><th className="p-2">Fonte</th><th className="p-2">Stato</th><th className="p-2">Brevo</th><th className="p-2">Ultima verifica</th>{tab === "organizers" && <th className="p-2">Azioni</th>}
               </tr></thead>
               <tbody>
