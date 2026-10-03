@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only test of bulk Brevo selection on /marketing/organizzatori. Core UI logic verified end-to-end and works correctly: select-all excludes already-synced rows (sincronizzato, gia_presente), toggles on 2nd click, single row uncheck sets indeterminate state and decrements counter, 'Approva selezionati' keeps selection active, 'Sincronizza selezionati' opens confirmation dialog and handles the expected 400 (BREVO_API_KEY not configured) without crashing. Legacy buttons (Unisci, Arricchisci, Elimina) still render when rows are selected. BLOCKER: with the credentials provided in the request (org-admin qa.eventi@crmeventqa.it) the UI shows 'Nessun organizzatore' because LeadFinder.jsx imports api from @/lib/platformApi which forces ?scope=platform. That scope is restricted to role=superadmin (backend returns 403 for org admins). The 6 seeded 'QA Org *' records live in org_qa_eventi, but the UI reads only the PLATFORM_ORG_ID bucket (which has 15 unrelated records, all non_approvato). To actually exercise the feature I had to login as the super-admin (manara.michele.pro@gmail.com) and temporarily patch 3 platform orgs to brevo_status=sincronizzato/gia_presente/approvato; those were reset to non_approvato at the end of the run.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Login org-admin → /marketing/organizzatori (as per review_request credentials)",
+        "issue": "LeadFinder.jsx uses platformApi (scope=platform) → backend 403 for org admins → table always empty for qa.eventi@crmeventqa.it. The seeded QA Org data in org_qa_eventi is never reachable from this page.",
+        "affected_selectors": ["[data-testid='lf-tab-organizers']", "[data-testid='lf-select-all']", "[data-testid='lf-selected-count']"]
+      },
+      {
+        "flow": "Sincronizza selezionati con Brevo (confirm → 400 BREVO_API_KEY)",
+        "issue": "Backend returns 400 as expected, UI does not crash, but no visible error toast was captured after the confirm click (previous success toast from Approva was still the only visible toast). doSync does call toast.error on catch; may be a timing/suppression issue, worth a quick manual check.",
+        "affected_selectors": ["[data-testid='lf-sync-brevo-btn']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Decide the intended scope of /marketing/organizzatori: either (a) remove platformApi from LeadFinder.jsx so org admins see their own org data (would also require routing it under the org sidebar and re-seeding or exposing QA data without ?scope=platform), or (b) keep it as a platform-only page and update the review_request/test seed so the 'QA Org *' records live under PLATFORM_ORG_ID and tests use the super-admin credentials.",
+    "Verify that the error toast on sync failure (400 BREVO_API_KEY non configurata) is actually surfaced to the user; in the automated run only the 'Approvati per Brevo: 12' toast was still visible after confirming sync."
+  ],
+  "critical_code_review_comments": [
+    "LeadFinder.jsx imports api from '@/lib/platformApi' which globally injects scope=platform; combined with the <AdminOnly> route guard this means org admins can navigate to the page (AdminOnly passes) but every API call returns 403. Either the route should be super-admin only, or the page should use the regular org-scoped api client.",
+    "File LeadFinder.jsx is ~700 lines; approaching the split-threshold. The massive-selection helpers and the detail/edit modals could be extracted into sub-components.",
+    "doSync swallows the error silently in some cases: ensure formatApiError(e?.response?.data?.detail) produces a non-empty string when backend returns {detail:'BREVO_API_KEY non configurata'} (string detail vs array detail)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend only)", "frontend": "90% (all bulk-selection UI assertions pass with super-admin+patched data; original credential/seed combo cannot exercise the UI)" },
+  "test_credentials": "Review-request creds qa.eventi@crmeventqa.it / QaEvents2026! login OK but see empty table due to scope=platform. Used super-admin manara.michele.pro@gmail.com / CrmEvent2026! to actually exercise the feature.",
+  "seed_data_creation": "Temporarily set 3 PLATFORM_ORG_ID organizers (Adriatic Series→sincronizzato, Coppa Bernocchi→gia_presente, Deejay Ten Milano→approvato) via PUT /api/leadfinder/organizers/{id}?scope=platform to simulate the required mix. All 15 platform organizers were reset to brevo_status=non_approvato at the end of the test run. The 6 'QA Org *' records in org_qa_eventi were not touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bulk-selection UI logic (select-all excludes synced, indeterminate, approve keeps selection, sync removes only synced ids, confirm dialog with 400 handling) works. The next tester should first confirm with main agent which scope the page is supposed to use. If it stays platform-only, re-seed QA Org data under PLATFORM_ORG_ID and switch required_credentials to super-admin. If it should be org-scoped, remove platformApi from LeadFinder.jsx and retest with qa.eventi@crmeventqa.it.",
+  "rca of the issue": "RCA (empty table for org admin): /app/frontend/src/pages/LeadFinder.jsx line 2 → `import api from '@/lib/platformApi'`. platformApi injects config.params.scope = 'platform'. Backend get_admin / get_current_admin (server.py ~164-177) returns 403 when scope=platform is requested by a non-superadmin. The AdminOnly route guard still lets org admins open the page, so they land on a UI that cannot load any data. Fix options listed in action_items."
+}

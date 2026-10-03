@@ -842,3 +842,15 @@ Task 2 — Creatività manuale:
 - Attributi: NOME, COGNOME, CELLULARE (E.164), DATA_REGISTRAZIONE, ULTIMO_ACCESSO, RUOLO_UTENTE, ORGANIZZAZIONE + metriche. ULTIMO_ACCESSO aggiornato su eventi di sync + riallineamento (non ad ogni login).
 - NON toccati: funnel, automazioni, template, lista Lead, trigger commerciali.
 - Test logica (tests/test_registered_sync.py): multi-org dedup, ruolo più alto, E.164, idempotenza, skip pending/staff → PASS. Brevo non configurato in preview: verifica live in produzione.
+
+---
+
+## 2026-06 · Organizzatori (Lead Finder) · Selezione multipla massiva per Approva/Sincronizza Brevo
+- Frontend LeadFinder.jsx (tab Organizzatori): aggiunta gestione massiva SOPRA l'esistente (invariata approvazione/sync singola).
+  - Checkbox header "Seleziona tutti" (data-testid lf-select-all): seleziona solo i contatti NON sincronizzati del risultato FILTRATO corrente (esclude sincronizzato/gia_presente). Stato indeterminato se selezione parziale.
+  - Barra azioni: conteggio "N selezionati" (lf-selected-count), "Approva selezionati", "Sincronizza selezionati con Brevo".
+  - Dopo "Approva selezionati" la selezione RESTA attiva (flusso rapido Filtro→Seleziona tutti→Approva→Sincronizza).
+  - Dopo la sincronizzazione vengono rimossi dalla selezione SOLO i contatti effettivamente sincronizzati (restano bloccati/errore per retry); tabella e conteggi aggiornati senza reload.
+- Backend invariato: approve-brevo salta i bloccati; sync-brevo processa solo brevo_status=='approvato' (no re-send dei già sincronizzati, email validata server-side). Lista Brevo/funnel/automazioni/dedup NON modificati.
+- Test (testing_agent iteration_56): logica UI massiva verificata (select-all esclude synced, indeterminate, approve mantiene selezione, sync rimuove solo synced, dialog conferma + 400 gestito senza crash, pulsanti legacy intatti). Brevo non configurato in preview → sync reale verificabile solo in produzione.
+- Nota: la pagina /marketing/organizzatori usa platformApi (scope platform) — comportamento PRE-ESISTENTE non modificato.
