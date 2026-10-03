@@ -230,10 +230,29 @@ def _shell(content_html: str) -> str:
     )
 
 
+def _first_name(name: str) -> str:
+    """Solo il Nome per il saluto: mai l'email, mai Nome+Cognome. Vuoto se non disponibile."""
+    n = (name or "").strip()
+    if not n or "@" in n:
+        return ""
+    return n.split()[0]
+
+
+def greeting_html(name: str) -> str:
+    first = _first_name(name)
+    saluto = f"Ciao {escape(first)}," if first else "Ciao,"
+    return f'<p style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 12px">{saluto}</p>'
+
+
+def greeting_text(name: str) -> str:
+    first = _first_name(name)
+    return f"Ciao {first}," if first else "Ciao,"
+
+
 def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: str) -> str:
     safe_url = escape(url)
     content = (
-        f'<p style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 12px">Ciao {escape(name)},</p>'
+        greeting_html(name) +
         f'<p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 22px">{escape(intro)}</p>'
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:8px auto 22px">'
         '<tr><td align="center" bgcolor="#81D8D0" style="border-radius:8px">'

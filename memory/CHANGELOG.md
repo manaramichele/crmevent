@@ -822,3 +822,10 @@ Task 2 — Creatività manuale:
 ## 2026-06 — Briefing: descrizione Team
 - La "Descrizione" del Team è ora mostrata nel Briefing (web + PDF via print) e in modalità Presentazione, in un box ambra ben visibile, solo se non vuota. Ordine card: Nome → Responsabile → (luogo/punto ritrovo) → Descrizione → conteggi/staff.
 - Backend _build_briefing esponeva già descrizione in teams_out; aggiornamento automatico a ogni modifica del Team (briefing-live) e nel PDF. Verificato via curl.
+
+## 2026-06 — Email: saluto personalizzato con Nome (regola generale)
+- Centralizzato il saluto in email_utils: nuove funzioni _first_name/greeting_html/greeting_text. Regola unica: "Ciao [Nome]," se il Nome è disponibile, altrimenti "Ciao,". Mai l'email come nome; solo il Nome (no Nome+Cognome).
+- link_email (usato da invito, reset password, attivazione/accesso, demo) ora costruisce il saluto centralmente. Fix: l'email di invito non usa più email.split('@')[0] come nome (passa il Nome dell'invito quando disponibile).
+- Template Brevo disponibilità/conferma (IT+EN): saluto con fallback condizionale {% if params.NOME %}Ciao {{params.NOME}},{% else %}Ciao,{% endif %} (niente "Ciao ," con nome vuoto). Mittente/provider/liste/funnel/automazioni invariati.
+- Audit dati: la registrazione via invito non salva più l'email-prefix come nome (se assente resta vuoto -> "Ciao,"). Nome non reso obbligatorio nei flussi legacy.
+- Verificato a livello unitario: Nome presente -> "Ciao Michele,"; assente -> "Ciao,"; email -> "Ciao," (mai "Ciao michele@...").

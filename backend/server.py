@@ -4166,12 +4166,12 @@ def _invite_view(inv: dict) -> dict:
             "status": _invite_status(inv), "created_at": inv.get("created_at"), "expires_at": inv.get("expires_at")}
 
 
-async def _send_invite_email(email: str, org_name: str, token: str, role: str) -> None:
+async def _send_invite_email(email: str, org_name: str, token: str, role: str, nome: Optional[str] = None) -> None:
     link = f"{APP_URL}/invito?token={token}"
     await email_utils.send_email(
         to=email, subject=f"Invito ad accedere a {org_name} su CRMEvent",
         html=email_utils.link_email(
-            name=email.split("@")[0],
+            name=nome or "",
             intro=f"Sei stato invitato ad accedere all'organizzazione «{org_name}» su CRMEvent con il ruolo {ORG_ROLE_LABELS.get(role, role)}. Clicca per accettare l'invito e accedere.",
             cta_label="Accetta l'invito", url=link,
             footer_note="L'invito scade tra 7 giorni ed è utilizzabile una sola volta."))
@@ -4212,7 +4212,7 @@ async def create_org_invite(org_id: str, body: InviteCreateIn, user: dict = Depe
                                nome=body.nome, cognome=body.cognome, telefono=telefono)
     sent = True
     try:
-        await _send_invite_email(email, org.get("nome"), inv["token"], role)
+        await _send_invite_email(email, org.get("nome"), inv["token"], role, nome=body.nome)
     except Exception as e:
         logger.error(f"invite email failed: {e}"); sent = False
     await record_audit(user, "invite_sent", org_id=org_id, org_name=org.get("nome"),
@@ -4232,7 +4232,7 @@ async def resend_org_invite(invite_id: str, user: dict = Depends(get_current_use
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(), "updated_at": now_iso()}})
     sent = True
     try:
-        await _send_invite_email(inv["email"], org.get("nome"), token, inv["role"])
+        await _send_invite_email(inv["email"], org.get("nome"), token, inv["role"], nome=inv.get("nome"))
     except Exception as e:
         logger.error(f"invite resend failed: {e}"); sent = False
     await record_audit(user, "invite_resent", org_id=inv["org_id"], org_name=org.get("nome"), target_email=inv["email"])
@@ -4359,7 +4359,7 @@ async def register_via_invite(token: str, body: InviteRegisterIn, response: Resp
         raise HTTPException(status_code=400, detail="La password deve avere almeno 8 caratteri")
     uid = f"user_{uuid.uuid4().hex[:12]}"
     inv_name = f"{(inv.get('nome') or '').strip()} {(inv.get('cognome') or '').strip()}".strip()
-    full_name = (body.name or inv_name or email.split("@")[0]).strip()
+    full_name = (body.name or inv_name or "").strip()
     phone = _normalize_phone(body.telefono or inv.get("telefono"))
     await db.users.insert_one({"user_id": uid, "email": email, "name": full_name,
         "password_hash": hash_password(body.password), "role": "member", "auth_provider": "password",
@@ -4495,7 +4495,7 @@ async def invite_lead(lead_id: str, body: LeadAssignIn, admin: dict = Depends(re
     inv = await _create_invite(org, email, role, admin["user_id"], lead_id=lead_id)
     sent = True
     try:
-        await _send_invite_email(email, org.get("nome"), inv["token"], role)
+        await _send_invite_email(email, org.get("nome"), inv["token"], role, nome=inv.get("nome"))
     except Exception as e:
         logger.error(f"lead invite failed: {e}"); sent = False
     await record_audit(admin, "invite_sent", org_id=body.org_id, org_name=org.get("nome"), target_email=email,
@@ -7965,14 +7965,14 @@ def _avail_email_html(kind: str, lang: str = "it") -> str:
     en = str(lang).lower().startswith("en")
     if kind == "conferma":
         if en:
-            intro = ("<p>Hi {{params.NOME}},</p>"
+            intro = ("<p>{% if params.NOME %}Hi {{params.NOME}},{% else %}Hi,{% endif %}</p>"
                      "<p>we're glad to confirm your participation in <strong>{{params.NOME_EVENTO}}</strong>. "
                      "Thank you for choosing to be part of the team that will help make this event happen.</p>")
             outro = ("<p>Over the next few days you'll receive the operational details about your activity, schedule, "
                      "meeting point and briefing. There's nothing else you need to do for now.</p>"
                      "<p>See you soon!<br/>The {{params.NOME_EVENTO}} team</p>")
         else:
-            intro = ("<p>Ciao {{params.NOME}},</p>"
+            intro = ("<p>{% if params.NOME %}Ciao {{params.NOME}},{% else %}Ciao,{% endif %}</p>"
                      "<p>ci fa piacere confermarti la partecipazione a <strong>{{params.NOME_EVENTO}}</strong>. "
                      "Grazie per aver scelto di far parte della squadra che contribuirà alla realizzazione dell'evento.</p>")
             outro = ("<p>Nei prossimi giorni riceverai le informazioni operative relative alla tua attività, agli orari, "
@@ -7980,7 +7980,7 @@ def _avail_email_html(kind: str, lang: str = "it") -> str:
                      "<p>A presto!<br/>Lo staff di {{params.NOME_EVENTO}}</p>")
     else:
         if en:
-            intro = ("<p>Hi {{params.NOME}},</p>"
+            intro = ("<p>{% if params.NOME %}Hi {{params.NOME}},{% else %}Hi,{% endif %}</p>"
                      "<p>thank you for sharing your availability for <strong>{{params.NOME_EVENTO}}</strong>. "
                      "We've correctly received your details and the days you indicated you're available.</p>"
                      "<p>The organizer is collecting all availabilities and will contact you later to confirm and "
@@ -7988,7 +7988,7 @@ def _avail_email_html(kind: str, lang: str = "it") -> str:
             outro = ("<p>Thank you for your availability and for the time you've decided to dedicate to us.<br/>"
                      "The {{params.NOME_EVENTO}} team</p>")
         else:
-            intro = ("<p>Ciao {{params.NOME}},</p>"
+            intro = ("<p>{% if params.NOME %}Ciao {{params.NOME}},{% else %}Ciao,{% endif %}</p>"
                      "<p>grazie per aver dato la tua disponibilità per <strong>{{params.NOME_EVENTO}}</strong>. "
                      "Abbiamo ricevuto correttamente i tuoi dati e le giornate in cui hai indicato di essere disponibile.</p>"
                      "<p>L'organizzazione sta raccogliendo tutte le disponibilità e ti contatterà successivamente per "
