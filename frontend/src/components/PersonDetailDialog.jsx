@@ -110,14 +110,14 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
     try {
       const conflicts = [];
       const newEmail = edit.email.trim();
-      if (newEmail && newEmail.toLowerCase() !== (p.email || "").toLowerCase()) {
-        const { data } = await api.post("/persons-match", { email: newEmail });
-        if ((data.matches || []).some((m) => m.id !== personId)) conflicts.push("Email");
-      }
-      if (edit.cellulare && edit.cellulare !== (p.cellulare || "")) {
-        const { data } = await api.post("/persons-match", { cellulare: edit.cellulare });
-        if ((data.matches || []).some((m) => m.id !== personId)) conflicts.push("Cellulare");
-      }
+      const emailChanged = newEmail && newEmail.toLowerCase() !== (p.email || "").toLowerCase();
+      const phoneChanged = edit.cellulare && edit.cellulare !== (p.cellulare || "");
+      const [emailRes, phoneRes] = await Promise.all([
+        emailChanged ? api.post("/persons-match", { email: newEmail }) : Promise.resolve(null),
+        phoneChanged ? api.post("/persons-match", { cellulare: edit.cellulare }) : Promise.resolve(null),
+      ]);
+      if (emailRes && (emailRes.data.matches || []).some((m) => m.id !== personId)) conflicts.push("Email");
+      if (phoneRes && (phoneRes.data.matches || []).some((m) => m.id !== personId)) conflicts.push("Cellulare");
       if (conflicts.length) { setConflict(conflicts); setSavingEdit(false); return; }
       await api.put(`/persons/${personId}`, {
         nome: edit.nome.trim(), cognome: edit.cognome.trim(), email: newEmail,

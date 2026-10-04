@@ -854,3 +854,13 @@ Task 2 — Creatività manuale:
 - Backend invariato: approve-brevo salta i bloccati; sync-brevo processa solo brevo_status=='approvato' (no re-send dei già sincronizzati, email validata server-side). Lista Brevo/funnel/automazioni/dedup NON modificati.
 - Test (testing_agent iteration_56): logica UI massiva verificata (select-all esclude synced, indeterminate, approve mantiene selezione, sync rimuove solo synced, dialog conferma + 400 gestito senza crash, pulsanti legacy intatti). Brevo non configurato in preview → sync reale verificabile solo in produzione.
 - Nota: la pagina /marketing/organizzatori usa platformApi (scope platform) — comportamento PRE-ESISTENTE non modificato.
+
+---
+
+## 2026-06 · Scheda persona (Staff/Volontari) · "Modifica" = gestione completa unificata
+- PersonDetailDialog.jsx riscritto: il pulsante "Modifica" ora entra in una modalità modifica UNIFICATA nella stessa finestra grande, mantenendo i tab Anagrafica | Eventi | Ruoli | Team | Turni | Accesso sempre visibili. In alto a destra "Modifica" → "Annulla | Salva" + badge "Modalità modifica".
+- Editabili in modifica: Anagrafica (nome, cognome, email, cellulare E.164, data di nascita, CF, note; Età calcolata e non modificabile); Eventi (associa/rimuovi, no duplicati); Ruoli (Staff/Volontario + mansione per evento); Team (assegna/cambia/rimuovi per evento via TeamSelect A-Z con "+ Aggiungi nuovo Team"); Turni (aggiungi/modifica/rimuovi via endpoint /shifts esistente).
+- Le mutazioni relazionali usano gli endpoint esistenti (/staff, /shifts) e si applicano subito; i dati anagrafici si salvano con "Salva". Il cambio tab non perde le modifiche anagrafiche non salvate (stato di componente).
+- Sync real-time via peopleStore (onChanged=reload): Staff/Volontari/Team/Turni/dropdown e Briefing si aggiornano senza refresh manuale. Anagrafica unica condivisa, nessun endpoint/collezione parallela.
+- Permessi/isolamento multi-tenant invariati (require_admin + oq scope).
+- Test (testing_agent iteration_57): 100% — tutti i flussi (modifica, persistenza tra tab, ruoli, team A-Z, turni CRUD, salva, accesso, anti-duplicato eventi) passati.

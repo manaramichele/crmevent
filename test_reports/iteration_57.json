@@ -1,0 +1,45 @@
+{
+  "summary": "Frontend-only testing of unified edit mode in PersonDetailDialog (Staff/Volontari). Logged in as QA admin, opened Anna Bianchi's detail dialog, and verified all 6 tabs remain visible in edit mode with proper edit UI. All functional requirements from the review request passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results_pass": [
+    "View mode shows only 'Modifica' button (data-testid='person-detail-edit')",
+    "Clicking Modifica switches to edit mode with 'Annulla' + 'Salva' buttons and 'Modalità modifica' badge",
+    "All 6 tabs (Anagrafica/Eventi/Ruoli/Team/Turni/Accesso) remain visible in edit mode",
+    "Anagrafica editable fields present (nome, cognome, email, cellulare PhoneInput, data_nascita, codice_fiscale, note); Età disabled/readonly",
+    "Age auto-recalculates on data_nascita change (e.g., 1990-05-10 -> '36 anni')",
+    "Modifica Nome persists across tab switch (Anagrafica -> Eventi -> Anagrafica)",
+    "Ruoli: Select cambio Staff<->Volontario per Maratona QA genera toast 'Dati evento aggiornati'",
+    "Ruoli: campo mansione 'Capo turno QA' su blur genera toast di aggiornamento",
+    "Team dropdown contiene 4 opzioni corrette: '— Nessun team —', 'Team Pacer', 'Team Ristori', 'Team Run' in ordine A-Z, con '+ Aggiungi nuovo Team' in footer",
+    "Team: cambio verso Team Pacer e rimozione (Nessun team) generano toast di conferma",
+    "Turni: shift-add-btn apre form; aggiunta turno crea nuova riga shift-row-<id>; edit e delete funzionano (shift è stato creato/modificato/eliminato con successo)",
+    "Click Salva in alto genera toast 'Anagrafica aggiornata'",
+    "Accesso tab mostra 'Gestisci accesso' (data-testid='person-detail-invite') funzionante",
+    "Eventi: tentativo di associare 'Maratona QA' già associata viene rifiutato con toast 'già associata' (nessun duplicato)",
+    "Isolamento multi-tenant preservato (login via org QA, dati visibili coerenti)"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PersonDetailDialog.jsx è 384 righe: pulito ma vicino al limite; se la logica continua a crescere, considerare l'estrazione di sotto-componenti per Ruoli/Team/Turni (ciascuno è un sotto-flusso autonomo con mutazioni).",
+    "In saveEdit, le due chiamate a /persons-match per email+cellulare sono eseguite sequenzialmente: possono essere parallelizzate con Promise.all per ridurre la latenza del Salva.",
+    "Il text input 'mansione' usa defaultValue + onBlur: funziona ma dopo savePresence->load() il componente non viene ri-mounted, quindi se il backend normalizza il valore (trim, lowercasing) l'UI non lo mostrerà fino a reopen. Considerare key={presence.ruolo} o controlled value.",
+    "Shift form salva stringhe vuote per campi non compilati; verificare che il backend non le interpreti come valori validi (es. ora_inizio='') invece di null."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (all 12 flows passed)"},
+  "test_credentials": "qa.eventi@crmeventqa.it / QaEvents2026! (QA org admin)",
+  "seed_data_creation": "Nessuna seed persistente creata. Durante i test è stato creato e immediatamente eliminato uno shift (shift_ea95c7bdb7 da prima run; nuovo shift creato/modificato/eliminato nel ciclo); ruolo di Anna toggled e ripristinato; team riportato a Team Ristori. Mansione 'Capo turno QA' impostata nel secondo run (minor residuo).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature 'unified edit mode' in PersonDetailDialog è pienamente funzionante. Selectors chiave: tab (ptab-*), person-detail-edit/cancel/save, person-edit-* fields, presence-* (Eventi), role-cat-<pid>/role-text-<pid>, team-assign-<pid> (Popover custom, non radix Select: le opzioni usano button[data-testid='team-assign-<pid>-opt-none'] e '-opt-<teamid>' e '-add'). TeamSelect ritorna opzioni ordinate A-Z. Duplicati evento gestiti client-side con toast 'già associata'. L'input PhoneInput ha data-testid='person-edit-cellulare' sul wrapper e 'person-edit-cellulare-input' sul native input ma richiede formato internazionale valido.",
+  "rca of the issue": "N/A - nessun bug riscontrato. Minor flake nel primo run (locator role='option' usato per TeamSelect che è un Popover custom con button); corretto nel secondo run usando i data-testid specifici di TeamSelect, tutti i check sono passati."
+}
