@@ -120,6 +120,8 @@ export default function Account() {
               <div><span className="text-slate-500">Numero simulato:</span> {sim.numero_simulato}</div>
               <div><span className="text-slate-500">Data simulata:</span> {sim.data_simulata}</div>
               <div><span className="text-slate-500">Descrizione:</span> {sim.descrizione || sim.piano || "—"}</div>
+              <div><span className="text-slate-500">Piano / ciclo:</span> {sim.piano_label || sim.piano || "—"}</div>
+              <div><span className="text-slate-500">Modalità di pagamento:</span> {sim.modalita_pagamento || "—"}</div>
               <div><span className="text-slate-500">Imponibile:</span> {Number(sim.imponibile ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
               <div><span className="text-slate-500">Aliquota IVA:</span> {Number(sim.aliquota_iva ?? 0).toFixed(0)}%</div>
               <div><span className="text-slate-500">Importo IVA:</span> {Number(sim.importo_iva ?? sim.iva ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>

@@ -5817,13 +5817,20 @@ def _derive_amounts(inv: dict) -> dict:
 # ---- FIC SIMULATION (TEST): builds the payload internally, makes NO FIC call, NO SDI. ----
 def _fic_build_payload(org: dict, amounts: dict, line_name: Optional[str] = None) -> dict:
     """Build the exact FIC issued_document payload that WOULD be sent — without sending it.
-    Uses the reconciled net price and REAL VAT rate; contains only the org's own billing data."""
+    Uses the reconciled net price and REAL VAT rate; contains only the org's own billing data.
+    Include anche metodo di pagamento e incasso (pagato via Stripe) così l'anteprima è completa."""
     net = amounts["imponibile"] if amounts["imponibile"] is not None else 0
     line = {"name": line_name or f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1,
             "net_price": net, "vat": {"value": amounts["aliquota_iva"]}}
+    today = datetime.now(timezone.utc).date().isoformat()
+    pay = {"amount": amounts.get("totale") or net, "due_date": today, "paid_date": today, "status": "paid"}
+    if FIC_PAYMENT_ACCOUNT_ID.isdigit():
+        pay["payment_account"] = {"id": int(FIC_PAYMENT_ACCOUNT_ID)}
     return {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
                      "items_list": [line], "currency": {"id": (amounts.get("valuta") or "eur").upper()},
-                     "language": {"code": "it"}}}
+                     "language": {"code": "it"},
+                     "payment_method": {"name": FIC_PAYMENT_METHOD_NAME},
+                     "payments_list": [pay]}}
 
 
 async def _fic_simulate(inv: dict) -> dict:
@@ -5834,6 +5841,12 @@ async def _fic_simulate(inv: dict) -> dict:
     payload = _fic_build_payload(org, a, _invoice_line_name(inv, org))
     numero = f"SIM/{datetime.now(timezone.utc).year}/{str(inv.get('id', ''))[:6].upper()}"
     data_doc = datetime.now(timezone.utc).date().isoformat()
+    # Piano / ciclo di fatturazione (coerente con il tipo di pagamento Stripe).
+    if inv.get("kind") == "credit_recharge":
+        ciclo, piano_label = "una_tantum", f"Ricarica crediti CRMEvent ({inv.get('credits_total')} crediti · una tantum)"
+    else:
+        ciclo = (org.get("subscription") or {}).get("billing_cycle")
+        piano_label = {"monthly": "Abbonamento CRMEvent · Mensile", "yearly": "Abbonamento CRMEvent · Annuale"}.get(ciclo, "Abbonamento CRMEvent")
     # Persist the reconciled fiscal fields so the stored test invoice is repaired in place.
     upd = {"fic_document_id": None, "fic_numero": numero, "fic_data": data_doc,
            "fic_stato_documento": "simulato_test", "fic_stato_sdi": "simulato_test",
@@ -5853,6 +5866,8 @@ async def _fic_simulate(inv: dict) -> dict:
             "importo_iva": a["importo_iva"], "iva": a["importo_iva"],
             "totale": a["totale"], "valuta": a["valuta"], "coerente": a["coerente"],
             "piano": inv.get("piano") or (org.get("subscription") or {}).get("plan"),
+            "piano_label": piano_label, "ciclo_fatturazione": ciclo,
+            "modalita_pagamento": FIC_PAYMENT_METHOD_NAME,
             "descrizione": inv.get("descrizione") or _invoice_line_name(inv, org),
             "riferimento_stripe": inv.get("riferimento_stripe") or {
                 "stripe_invoice_id": inv.get("stripe_invoice_id"),
