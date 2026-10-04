@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { X, Info, Sparkles, AlertTriangle, Wrench, CheckCircle2 } from "lucide-react";
+import { X, Info, Sparkles, AlertTriangle, Wrench, CheckCircle2, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 const TYPE = {
@@ -12,12 +13,20 @@ const TYPE = {
 };
 
 export default function OrgMessagesBanner() {
+  const { actingOrgId } = useAuth();
   const [msgs, setMsgs] = useState([]);
+  const [preview, setPreview] = useState(false);
+  const [orgName, setOrgName] = useState(null);
   const load = async () => {
-    try { const { data } = await api.get("/my/messages"); setMsgs(data); }
-    catch { /* banner silenzioso in caso di errore */ }
+    try {
+      const { data } = await api.get("/my/messages");
+      const list = Array.isArray(data) ? data : (data.messages || []);
+      setMsgs(list);
+      setPreview(!Array.isArray(data) && !!data.preview);
+      setOrgName(!Array.isArray(data) ? data.org_name : null);
+    } catch { /* banner silenzioso in caso di errore */ }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [actingOrgId]);
   if (!msgs.length) return null;
 
   const markRead = async (m) => {
@@ -35,6 +44,11 @@ export default function OrgMessagesBanner() {
 
   return (
     <div className="space-y-2" data-testid="org-messages-banner">
+      {preview && (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 w-fit" data-testid="org-messages-preview-badge">
+          <Eye className="w-3.5 h-3.5" />Anteprima come {orgName || "Organizzazione"}
+        </div>
+      )}
       {msgs.map((m) => {
         const t = TYPE[m.tipologia] || TYPE.informazione; const Icon = t.icon;
         return (

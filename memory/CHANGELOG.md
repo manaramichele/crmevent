@@ -875,3 +875,12 @@ Task 2 — Creatività manuale:
 - Dashboard org (OrgMessagesBanner.jsx, sopra i KPI): mostra Tipologia·Titolo·Testo·Data; stato Letto/Non letto PER UTENTE (non per org); "Segna come letto", "Nascondi" (stato personale); per Importante con conferma solo "Ho letto" (non si può nascondere). Evidenza "Nuovo" sui non letti.
 - Multi-tenant: un'org riceve solo i messaggi a lei destinati o "Tutte"; API dirette bloccate (403) per org non destinatarie. Solo Super Admin gestisce. Prima versione solo in-app (nessuna email Brevo/WhatsApp).
 - Test: backend 100% via curl (targeting, bozza, read/hide/ack, require_ack blocca hide, isolamento, stats) + UI 100% (testing_agent iteration_58).
+
+---
+
+## 2026-06 · Messaggi Dashboard · Anteprima Super Admin (org attiva)
+- GET /my/messages ora ritorna un oggetto {preview, org_name, messages} (stesso componente OrgMessagesBanner per utenti e Super Admin).
+- Quando il Super Admin opera su un'org attiva (X-Org-Id), vede in Dashboard gli stessi messaggi pubblicati/validi destinati a quell'org o a "Tutte", nella stessa posizione/grafica, con badge "Anteprima come <Org>".
+- Anteprima = sola lettura: read/hide/ack per Super Admin NON scrivono nulla (ritornano {preview:true}); nessun incremento letture, nessuna statistica/notifica/email modificata. Verificato via curl (stats restano 0).
+- Real-time: il banner si ricarica al cambio org attiva (actingOrgId) e ad ogni apertura Dashboard; il reload del selettore org garantisce lo stato aggiornato dopo creazione/modifica/disattivazione.
+- Isolamento multi-tenant preservato (org non destinataria non compare in anteprima). Nessun componente duplicato.

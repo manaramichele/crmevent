@@ -5017,23 +5017,30 @@ async def platform_message_stats(mid: str, admin: dict = Depends(require_superad
 # -------- Org-facing: messaggi visibili nella Dashboard dell'organizzazione --------
 @api.get("/my/messages")
 async def my_messages(user: dict = Depends(require_admin)):
-    if user.get("role") == "superadmin":
-        return []
     org_id = user["org_id"]
+    preview = user.get("role") == "superadmin"   # Super Admin che opera su un'org attiva = ANTEPRIMA
     q = {"status": "attivo", "$or": [{"recipients_mode": "all"}, {"org_ids": org_id}]}
     msgs = await db.org_messages.find(q, {"_id": 0}).sort("publish_at", -1).to_list(500)
     out = []
     for m in msgs:
         if _msg_effective_status(m) != "pubblicato":
             continue
+        base = {"id": m["id"], "titolo": m["titolo"], "messaggio": m["messaggio"],
+                "tipologia": m["tipologia"], "require_ack": bool(m.get("require_ack")),
+                "publish_at": m.get("publish_at")}
+        if preview:
+            # Anteprima: nessuno stato personale, nessun filtro 'nascosto', nessuna scrittura.
+            out.append({**base, "read": False, "ack": False})
+            continue
         r = await db.org_message_reads.find_one({"message_id": m["id"], "user_id": user["user_id"]}, {"_id": 0})
         if r and r.get("hidden_at"):
             continue
-        out.append({"id": m["id"], "titolo": m["titolo"], "messaggio": m["messaggio"],
-                    "tipologia": m["tipologia"], "require_ack": bool(m.get("require_ack")),
-                    "publish_at": m.get("publish_at"),
-                    "read": bool(r and r.get("read_at")), "ack": bool(r and r.get("ack_at"))})
-    return out
+        out.append({**base, "read": bool(r and r.get("read_at")), "ack": bool(r and r.get("ack_at"))})
+    org_name = None
+    if preview:
+        o = await db.organizations.find_one({"id": org_id}, {"_id": 0, "nome": 1})
+        org_name = (o or {}).get("nome")
+    return {"preview": preview, "org_name": org_name, "messages": out}
 
 
 async def _msg_assert_target(user: dict, m: dict):
@@ -5064,11 +5071,15 @@ async def _msg_mark(user: dict, mid: str, *, hidden=False, ack=False):
 
 @api.post("/my/messages/{mid}/read")
 async def my_message_read(mid: str, user: dict = Depends(require_admin)):
+    if user.get("role") == "superadmin":
+        return {"ok": True, "preview": True}
     return await _msg_mark(user, mid)
 
 
 @api.post("/my/messages/{mid}/hide")
 async def my_message_hide(mid: str, user: dict = Depends(require_admin)):
+    if user.get("role") == "superadmin":
+        return {"ok": True, "preview": True}
     m = await db.org_messages.find_one({"id": mid}, {"_id": 0})
     if not m:
         raise HTTPException(status_code=404, detail="Messaggio non trovato")
@@ -5081,6 +5092,8 @@ async def my_message_hide(mid: str, user: dict = Depends(require_admin)):
 
 @api.post("/my/messages/{mid}/ack")
 async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
+    if user.get("role") == "superadmin":
+        return {"ok": True, "preview": True}
     return await _msg_mark(user, mid, ack=True, hidden=True)
 
 
