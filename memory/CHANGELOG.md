@@ -864,3 +864,14 @@ Task 2 — Creatività manuale:
 - Sync real-time via peopleStore (onChanged=reload): Staff/Volontari/Team/Turni/dropdown e Briefing si aggiornano senza refresh manuale. Anagrafica unica condivisa, nessun endpoint/collezione parallela.
 - Permessi/isolamento multi-tenant invariati (require_admin + oq scope).
 - Test (testing_agent iteration_57): 100% — tutti i flussi (modifica, persistenza tra tab, ruoli, team A-Z, turni CRUD, salva, accesso, anti-duplicato eventi) passati.
+
+---
+
+## 2026-06 · Super Admin · Messaggi alle Organizzazioni (comunicazioni in Dashboard)
+- Nuova sezione Super Admin "Messaggi" (/piattaforma/messaggi, voce sidebar id=messaggi). Pagina PlatformMessages.jsx: tabella (Titolo|Tipologia|Destinatari|Pubblicazione|Scadenza|Stato|Letture|Azioni), dialog crea/modifica, statistiche per messaggio, elimina.
+- Backend server.py: collezioni org_messages + org_message_reads. Endpoint /platform/messages (GET/POST/PUT/DELETE, /status, /{id}/stats, require_superadmin) e org-facing /my/messages (GET) + /my/messages/{id}/read|hide|ack (require_admin).
+- Campi messaggio: Titolo, Messaggio, Tipologia (Informazione/Novità/Importante/Manutenzione), Destinatari (Tutte / Organizzazioni selezionate con elenco ricercabile multiselezione), Data pubblicazione (subito o programmata), Data fine facoltativa, "Richiedi conferma di lettura" per Importante.
+- Stati derivati: Bozza/Programmato/Pubblicato/Scaduto/Disattivato (bozza mai visibile agli utenti).
+- Dashboard org (OrgMessagesBanner.jsx, sopra i KPI): mostra Tipologia·Titolo·Testo·Data; stato Letto/Non letto PER UTENTE (non per org); "Segna come letto", "Nascondi" (stato personale); per Importante con conferma solo "Ho letto" (non si può nascondere). Evidenza "Nuovo" sui non letti.
+- Multi-tenant: un'org riceve solo i messaggi a lei destinati o "Tutte"; API dirette bloccate (403) per org non destinatarie. Solo Super Admin gestisce. Prima versione solo in-app (nessuna email Brevo/WhatsApp).
+- Test: backend 100% via curl (targeting, bozza, read/hide/ack, require_ack blocca hide, isolamento, stats) + UI 100% (testing_agent iteration_58).

@@ -1,0 +1,39 @@
+{
+  "summary": "Full end-to-end UI testing of the new Super Admin 'Messaggi' feature + Dashboard banner for Organizations. All critical flows pass: SA list/create/edit/toggle/delete, stats dialog, draft vs published visibility, targeted org isolation, per-user read/hide/ack buttons, hidden state persistence after reload, and SA stats update after user actions. Backend-only tests were skipped per request (already validated via curl).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard banner (/app)", "issues": ["Minor: 'Nuovo' indicator uses low-contrast gray text (text-slate-500) on tinted card backgrounds; could be bolder/darker for better accessibility."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Only observation: during account switch via Playwright, context.clear_cookies() alone wasn't enough — leftover localStorage from the previous session caused brief 403 bursts on /api/dashboard, /api/events, etc., until a hard reload. Not a real-user issue (users log out via proper flow), but worth confirming logout endpoint also clears any localStorage auth tokens if used."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped", "frontend": "100%"},
+  "test_credentials": "Super Admin: manara.michele.pro@gmail.com / CrmEvent2026! ; QA org admin: qa.eventi@crmeventqa.it / QaEvents2026! (org_id=org_qa_eventi, visible name 'QA Modello Eventi'). NOTE: a second org 'QA Post-Trial' (org_qa_expired) also matches a 'QA' search in the recipient picker — tests must disambiguate by full org name.",
+  "seed_data_creation": "Created and then deleted 3 test messages (TEST QA Novità, TEST QA Importante with require_ack=true, TEST QA Bozza). Final state: cleaned up, no residual test data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Dashboard is routed at /app (not '/' which is the public LandingPage). OrgMessagesBanner is rendered inside Dashboard.jsx above PipelineAttention. The recipient org picker returns two orgs for query 'QA' (QA Modello Eventi + QA Post-Trial) — select by full label to target the user's actual org (org_qa_eventi).",
+  "verified_flows": [
+    "SA sidebar 'Messaggi' -> /piattaforma/messaggi (platform-messages-page) OK",
+    "Create Novità published to selected org -> row appears with status 'Pubblicato' OK",
+    "Save draft -> status 'Bozza' OK",
+    "Create Importante with require_ack OK",
+    "Letture column (msg-stats-<id>) + stats dialog (msg-stats-dialog) with Organizzazioni/Destinatari/Letti/Non letti + per-org breakdown OK",
+    "Toggle power (msg-toggle-<id>): Pubblicato <-> Disattivato OK",
+    "Edit (msg-edit-<id>) opens prefilled dialog and persists changes OK",
+    "Delete (msg-delete-<id> + msg-delete-confirm) OK",
+    "QA Dashboard /app shows org-messages-banner with targeted published messages, badge Tipologia + Titolo + Testo + Data OK",
+    "'Nuovo' indicator shown on unread messages (org-message-new-<id>) OK",
+    "Novità (non-ack): has 'Segna come letto' + 'Nascondi'; mark-as-read removes 'Nuovo' but keeps card; Nascondi removes card and persists after reload OK",
+    "Importante with require_ack: shows 'Ho letto' and NO 'Nascondi' button; ack removes the card OK",
+    "Bozza is NEVER visible to the org user OK",
+    "After QA actions, SA stats 'letti' increments correctly (0/6 -> 1/6) OK"
+  ]
+}

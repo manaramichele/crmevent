@@ -44,7 +44,7 @@ export default function OrgMessagesBanner() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
-                  {!m.read && <span className="text-[11px] font-semibold text-slate-500" data-testid={`org-message-new-${m.id}`}>• Nuovo</span>}
+                  {!m.read && <span className="text-[11px] font-bold uppercase tracking-wide text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded-full" data-testid={`org-message-new-${m.id}`}>Nuovo</span>}
                   <span className="text-xs text-slate-400">{m.publish_at ? new Date(m.publish_at).toLocaleDateString("it-IT") : ""}</span>
                 </div>
                 <h3 className="font-semibold text-slate-900 mt-1" data-testid={`org-message-title-${m.id}`}>{m.titolo}</h3>
