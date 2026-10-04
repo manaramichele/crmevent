@@ -5549,7 +5549,7 @@ async def sync_subscription_now(user: dict = Depends(require_admin)):
 
 @api.get("/account/invoices")
 async def account_invoices(user: dict = Depends(require_admin)):
-    return await db.invoices.find(oq(user), {"_id": 0}).sort("data", -1).to_list(500)
+    return await db.invoices.find(oq(user, is_test={"$ne": True}), {"_id": 0}).sort("data", -1).to_list(500)
 
 
 @api.get("/platform/subscriptions")
@@ -5712,6 +5712,8 @@ def _invoice_line_name(inv: dict, org: dict) -> str:
 
 async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
     """Create an issued invoice in FIC from a CRMEvent invoice record (TEST: no real SDI transmission)."""
+    if inv.get("is_test"):
+        raise HTTPException(status_code=400, detail="Transazione TEST: emissione reale su Fatture in Cloud non consentita. Usa 'Simula fattura (TEST)'.")
     org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
     if not org:
         raise HTTPException(status_code=404, detail="Organizzazione non trovata")
@@ -9647,6 +9649,8 @@ async def _emit_credit_invoice(inv_id: str):
     inv = await db.invoices.find_one({"id": inv_id}, {"_id": 0})
     if not inv:
         return
+    if inv.get("is_test"):
+        return  # Le transazioni TEST non emettono MAI documenti reali su Fatture in Cloud.
     # Anti-duplicato: se un documento esiste già non ricrearlo.
     if inv.get("fic_document_id"):
         await db.invoices.update_one({"id": inv_id}, {"$set": {
@@ -9729,7 +9733,7 @@ async def credits_checkout_confirmation(session_id: str, user: dict = Depends(re
 @api.get("/credits/purchases")
 async def credits_purchases(user: dict = Depends(require_admin)):
     await _ensure_credit_purchases_setup()
-    rows = await db.credit_purchases.find({"org_id": user["org_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    rows = await db.credit_purchases.find({"org_id": user["org_id"], "is_test": {"$ne": True}}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return {"purchases": rows}
 
 
@@ -9896,8 +9900,82 @@ async def platform_credit_invoices(admin: dict = Depends(require_superadmin)):
             "fic_numero": (inv or {}).get("fic_numero"), "fic_error": (inv or {}).get("fic_error"),
             "fic_attempts": (inv or {}).get("fic_attempts") or 0,
             "stripe_payment_intent": p.get("stripe_payment_intent"),
+            "is_test": bool(p.get("is_test")),
         })
     return {"invoices": out}
+
+
+@api.post("/platform/invoices/{invoice_id}/simulate")
+async def platform_invoice_simulate(invoice_id: str, admin: dict = Depends(require_superadmin)):
+    """Simulazione FIC (TEST) da Super Admin su QUALSIASI fattura. Nessuna chiamata a Fatture in Cloud,
+    nessun invio SDI, nessun documento reale. Riusa la logica interna condivisa con l'Area Account."""
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Fattura non trovata")
+    return await _fic_simulate(inv)
+
+
+@api.post("/platform/credit-invoices/test")
+async def platform_create_test_recharge(body: dict = None, admin: dict = Depends(require_superadmin)):
+    """Genera una RICARICA DI TEST (solo DB): nessuna chiamata a Stripe, nessuna a Fatture in Cloud,
+    nessun credito reale accreditato, esclusa da fatturato/KPI/report. Serve solo per provare
+    la simulazione fattura. Eliminabile dal Super Admin."""
+    body = body or {}
+    org_id = body.get("org_id")
+    org = None
+    if org_id:
+        org = await db.organizations.find_one({"id": org_id}, {"_id": 0})
+    if not org:
+        org = await db.organizations.find_one({"billing.ragione_sociale": {"$nin": [None, ""]}}, {"_id": 0}) \
+            or await db.organizations.find_one({}, {"_id": 0})
+    if not org:
+        raise HTTPException(status_code=400, detail="Nessuna organizzazione disponibile per la transazione di test")
+    net = round(float(body.get("amount_net") or 20.0), 2)
+    total_credits = int(body.get("credits_total") or 100)
+    vat = round(net * PRICING_VAT_RATE / 100.0, 2)
+    gross = round(net + vat, 2)
+    pid = new_id()
+    marker = f"TEST-{pid[:10]}"
+    inv_doc = {"id": new_id(), "org_id": org["id"], "kind": "credit_recharge", "is_test": True,
+               "descrizione": f"Ricarica {total_credits} crediti CRMEvent (TRANSAZIONE TEST)",
+               "credits_base": total_credits, "credits_bonus": 0, "credits_total": total_credits,
+               "stripe_session_id": marker, "stripe_payment_intent": marker, "stripe_invoice_id": None,
+               "numero_stripe": None, "data": now_iso(),
+               "imponibile": net, "aliquota_iva": PRICING_VAT_RATE, "importo_iva": vat, "iva": vat,
+               "totale": gross, "valuta": "eur",
+               "dati_fiscali_cliente": _credit_billing_snapshot(org),
+               "riferimento_stripe": {"stripe_session_id": marker, "payment_intent": marker, "test": True},
+               "payment_status": "paid", "created_at": now_iso(), "updated_at": now_iso(),
+               "fic_document_id": None, "fic_numero": None, "fic_data": None,
+               "fic_stato_documento": "da_emettere", "fic_stato_sdi": "non_inviato", "fic_pdf_url": None}
+    await db.invoices.insert_one(inv_doc)
+    purchase = {"id": pid, "org_id": org["id"], "user_id": admin.get("user_id"), "is_test": True,
+                "package_id": None, "package_snapshot": {"price": net, "credits_total": total_credits},
+                "credits_base": total_credits, "credits_bonus": 0, "credits_total": total_credits,
+                "amount_net": net, "amount_vat": vat, "amount_gross": gross, "aliquota_iva": PRICING_VAT_RATE,
+                "currency": "eur", "stripe_session_id": marker, "stripe_payment_intent": marker,
+                "status": "paid", "invoice_id": inv_doc["id"], "ledger_id": None,
+                "billing_snapshot": _credit_billing_snapshot(org),
+                "created_at": now_iso(), "paid_at": now_iso(), "updated_at": now_iso()}
+    await db.credit_purchases.insert_one(purchase)
+    await record_audit(admin, "test_recharge_created", org_id=org["id"], org_name=org.get("nome"),
+                       detail=f"Transazione TEST {total_credits} crediti · {gross}€ (nessun Stripe/FIC/credito reale)")
+    return {"ok": True, "purchase_id": pid, "invoice_id": inv_doc["id"], "org_name": org.get("nome")}
+
+
+@api.delete("/platform/credit-invoices/test/{purchase_id}")
+async def platform_delete_test_recharge(purchase_id: str, admin: dict = Depends(require_superadmin)):
+    p = await db.credit_purchases.find_one({"id": purchase_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Transazione non trovata")
+    if not p.get("is_test"):
+        raise HTTPException(status_code=400, detail="Solo le transazioni TEST possono essere eliminate")
+    if p.get("invoice_id"):
+        await db.invoices.delete_one({"id": p["invoice_id"], "is_test": True})
+    await db.credit_purchases.delete_one({"id": purchase_id})
+    await record_audit(admin, "test_recharge_deleted", org_id=p.get("org_id"),
+                       detail="Transazione TEST eliminata")
+    return {"ok": True}
 
 
 @api.post("/platform/invoices/{invoice_id}/retry-emit")
@@ -9906,6 +9984,8 @@ async def retry_emit_invoice(invoice_id: str, admin: dict = Depends(require_supe
     inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not inv:
         raise HTTPException(status_code=404, detail="Fattura non trovata")
+    if inv.get("is_test"):
+        raise HTTPException(status_code=400, detail="Transazione TEST: emissione reale non consentita.")
     await _emit_credit_invoice(invoice_id)
     upd = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     await record_audit(admin, "fic_retry_emit", org_id=inv.get("org_id"),

@@ -442,6 +442,9 @@ function InvoicesTab() {
   const [st, setSt] = useState(null);
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(null);
+  const [sim, setSim] = useState(null);
+  const [simBusy, setSimBusy] = useState(null);
+  const [genBusy, setGenBusy] = useState(false);
   const load = useCallback(async () => {
     try {
       const [s, i] = await Promise.all([api.get("/platform/integrations/status"), api.get("/platform/credit-invoices")]);
@@ -454,6 +457,21 @@ function InvoicesTab() {
     setBusy(id);
     try { const { data } = await api.post(`/platform/invoices/${id}/retry-emit`); toast[data.fic_error ? "warning" : "success"](data.fic_error ? `Errore: ${data.fic_error}` : `Fattura ${data.fic_stato_documento}`); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(null); }
+  };
+  const simulate = async (invId) => {
+    if (!invId) return;
+    setSimBusy(invId); setSim(null);
+    try { const { data } = await api.post(`/platform/invoices/${invId}/simulate`); setSim(data); toast.success("Fattura simulata (TEST) — nessun documento reale su Fatture in Cloud"); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setSimBusy(null); }
+  };
+  const genTest = async () => {
+    setGenBusy(true);
+    try { const { data } = await api.post("/platform/credit-invoices/test", {}); toast.success(`Transazione TEST creata (${data.org_name || "org"})`); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setGenBusy(false); }
+  };
+  const delTest = async (pid) => {
+    try { await api.delete(`/platform/credit-invoices/test/${pid}`); toast.success("Transazione TEST eliminata"); setSim(null); load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const eur = (n) => `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return (
@@ -470,7 +488,10 @@ function InvoicesTab() {
           {st ? <IntegrationBadge ok={st.fic.connected} mode={st.fic.mode} /> : <span className="text-xs text-slate-400">…</span>}
         </div>
       </div>
-      <div className="text-sm font-semibold text-slate-700 mb-2">Ricariche crediti</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold text-slate-700">Ricariche crediti</div>
+        <Button size="sm" variant="outline" onClick={genTest} disabled={genBusy} data-testid="gen-test-recharge">{genBusy ? "Creo…" : "Genera transazione TEST"}</Button>
+      </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-sm min-w-[820px]" data-testid="credit-invoices-table">
           <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase">
@@ -481,19 +502,52 @@ function InvoicesTab() {
             {rows.map((r) => {
               const fs = FIC_STATO[r.fic_stato] || ["gray", r.fic_stato];
               return (
-                <tr key={r.purchase_id} className="border-t border-slate-100" data-testid={`ci-row-${r.purchase_id}`}>
-                  <td className="px-3 py-2.5 font-medium text-slate-800">{r.org_name || "—"}</td>
+                <tr key={r.purchase_id} className={`border-t border-slate-100 ${r.is_test ? "bg-amber-50/40" : ""}`} data-testid={`ci-row-${r.purchase_id}`}>
+                  <td className="px-3 py-2.5 font-medium text-slate-800">
+                    <span className="inline-flex items-center gap-1.5">{r.org_name || "—"}{r.is_test && <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded" data-testid={`ci-test-badge-${r.purchase_id}`}>TEST</span>}</span>
+                  </td>
                   <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{eur(r.amount_gross)} <span className="text-xs text-slate-400">({r.credits_total} cr)</span></td>
-                  <td className="px-3 py-2.5"><StatusBadge color={r.payment_status === "paid" ? "green" : "amber"}>{r.payment_status === "paid" ? "Pagato" : r.payment_status}</StatusBadge></td>
-                  <td className="px-3 py-2.5"><StatusBadge color={r.credits_granted ? "green" : "gray"}>{r.credits_granted ? "Accreditati" : "No"}</StatusBadge></td>
+                  <td className="px-3 py-2.5"><StatusBadge color={r.is_test ? "gray" : (r.payment_status === "paid" ? "green" : "amber")}>{r.is_test ? "TEST (no Stripe)" : (r.payment_status === "paid" ? "Pagato" : r.payment_status)}</StatusBadge></td>
+                  <td className="px-3 py-2.5"><StatusBadge color={r.is_test ? "gray" : (r.credits_granted ? "green" : "gray")}>{r.is_test ? "No (test)" : (r.credits_granted ? "Accreditati" : "No")}</StatusBadge></td>
                   <td className="px-3 py-2.5"><StatusBadge color={fs[0]}>{fs[1]}</StatusBadge>{r.fic_error && <div className="text-[11px] text-red-500 mt-0.5 max-w-[220px] truncate" title={r.fic_error}>{r.fic_error}</div>}</td>
-                  <td className="px-3 py-2.5 text-right">{(r.fic_stato === "errore_emissione" || r.fic_stato === "da_emettere") && r.invoice_id ? <Button size="sm" variant="outline" disabled={busy === r.invoice_id} onClick={() => retry(r.invoice_id)} data-testid={`ci-retry-${r.purchase_id}`}>{busy === r.invoice_id ? "…" : "Riprova emissione"}</Button> : <span className="text-xs text-slate-300">—</span>}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="inline-flex items-center gap-1.5 justify-end">
+                      {r.invoice_id && <Button size="sm" variant="outline" disabled={simBusy === r.invoice_id} onClick={() => simulate(r.invoice_id)} data-testid={`ci-simulate-${r.purchase_id}`}>{simBusy === r.invoice_id ? "Simulo…" : "Simula fattura (TEST)"}</Button>}
+                      {r.is_test
+                        ? <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => delTest(r.purchase_id)} data-testid={`ci-del-${r.purchase_id}`}>Elimina</Button>
+                        : ((r.fic_stato === "errore_emissione" || r.fic_stato === "da_emettere") && r.invoice_id
+                            ? <Button size="sm" variant="outline" disabled={busy === r.invoice_id} onClick={() => retry(r.invoice_id)} data-testid={`ci-retry-${r.purchase_id}`}>{busy === r.invoice_id ? "…" : "Riprova emissione"}</Button>
+                            : null)}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      {sim && (
+        <div className="mt-4 rounded-lg border border-tiffany-border bg-tiffany-light/40 p-4 text-sm" data-testid="platform-sim-result">
+          <div className="font-semibold text-slate-800 mb-2">SIMULAZIONE TEST · nessun documento FIC / nessun SDI</div>
+          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-slate-700">
+            <div><span className="text-slate-500">Intestazione:</span> {sim.intestazione || "—"}</div>
+            <div className="sm:col-span-2"><span className="text-slate-500">Dati cliente:</span> {[sim.cliente?.vat_number && `P.IVA ${sim.cliente.vat_number}`, sim.cliente?.tax_code && `CF ${sim.cliente.tax_code}`, [sim.cliente?.address_street, sim.cliente?.address_postal_code, sim.cliente?.address_city, sim.cliente?.address_province].filter(Boolean).join(" "), sim.cliente?.ei_code && `SDI ${sim.cliente.ei_code}`, sim.cliente?.certified_email && `PEC ${sim.cliente.certified_email}`].filter(Boolean).join(" · ") || "—"}</div>
+            <div><span className="text-slate-500">Descrizione:</span> {sim.descrizione || "—"}</div>
+            <div><span className="text-slate-500">Piano / servizio:</span> {sim.piano_label || sim.piano || "—"}</div>
+            <div><span className="text-slate-500">Ciclo:</span> {({ una_tantum: "Una tantum", monthly: "Mensile", yearly: "Annuale" })[sim.ciclo_fatturazione] || "—"}</div>
+            <div><span className="text-slate-500">Modalità di pagamento:</span> {sim.modalita_pagamento || "—"}</div>
+            <div><span className="text-slate-500">Imponibile:</span> {Number(sim.imponibile ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
+            <div><span className="text-slate-500">Aliquota IVA:</span> {Number(sim.aliquota_iva ?? 0).toFixed(0)}%</div>
+            <div><span className="text-slate-500">Importo IVA:</span> {Number(sim.importo_iva ?? sim.iva ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
+            <div><span className="text-slate-500">Totale:</span> {Number(sim.totale ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
+            <div><span className="text-slate-500">Coerenza:</span> {sim.coerente ? <span className="text-green-700 font-medium" data-testid="platform-sim-coherent">OK ✓</span> : <span className="text-red-700 font-medium">INCOERENTE</span>}</div>
+          </div>
+          <details className="mt-2">
+            <summary className="text-xs text-tiffany-active cursor-pointer">Payload completo Fatture in Cloud che sarebbe stato inviato</summary>
+            <pre className="mt-2 text-[11px] bg-white border border-slate-200 rounded p-2 overflow-x-auto" data-testid="platform-sim-payload">{JSON.stringify(sim.fic_payload_preview, null, 2)}</pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 }

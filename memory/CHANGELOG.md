@@ -888,3 +888,10 @@ Task 2 — Creatività manuale:
 ## 2026-06 · Fatture in Cloud · Arricchimento "Simula fattura (TEST)"
 - Anteprima simulazione FIC (Account → Fatture, pulsante "Simula fattura (TEST)") ora mostra: intestazione + dati cliente completi (P.IVA/CF/indirizzo/SDI/PEC), descrizione riga, imponibile, IVA 22%, totale, piano/ciclo (una tantum/mensile/annuale), modalità di pagamento (Stripe), e payload FIC completo che verrebbe inviato.
 - Backend: _fic_build_payload ora include payment_method + payments_list (incasso Stripe, paid) nel preview; _fic_simulate aggiunge piano_label, ciclo_fatturazione, modalita_pagamento. NESSUNA chiamata a FIC, NESSUN SDI, nessuna fattura reale. Stripe/IVA/prezzi invariati.
+
+## 2026-06 · Super Admin · Simulazione fattura + Transazioni TEST in "Fatture & Integrazioni"
+- Backend: nuovo POST /platform/invoices/{id}/simulate (require_superadmin) → riusa _fic_simulate su qualsiasi fattura (nessuna chiamata FIC, nessun SDI, nessun documento reale).
+- Transazione TEST (solo DB): POST /platform/credit-invoices/test crea credit_purchase+invoice con is_test=true (nessun Stripe, nessun FIC, nessun credito reale/ledger). DELETE /platform/credit-invoices/test/{pid} per eliminarla.
+- Sicurezza: emissione reale FIC BLOCCATA sulle TEST (400) in _fic_issue_document, retry-emit e fic/issue; _emit_credit_invoice salta le TEST. Escluse da /account/invoices e /credits/purchases (fuori da fatturato/KPI).
+- Frontend PlatformCredits → Fatture & Integrazioni: pulsante "Genera transazione TEST", badge TEST per riga, "Simula fattura (TEST)" con anteprima completa (cliente+P.IVA/CF/indirizzo/SDI, descrizione, piano/ciclo, modalità pagamento, imponibile, IVA 22%, totale, payload FIC completo) e "Elimina"; "Riprova emissione" nascosto sulle TEST.
+- Verificato end-to-end via curl: genera→listing is_test→simula→emissione 400→elimina. Stripe/IVA/prezzi invariati.
