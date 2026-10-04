@@ -4874,6 +4874,216 @@ async def platform_organizations(admin: dict = Depends(require_superadmin)):
     return out
 
 
+# ==================== Messaggi alle Organizzazioni (Super Admin → Dashboard org) ====================
+MSG_TIPOLOGIE = {"informazione", "novita", "importante", "manutenzione"}
+MSG_STATUSES = {"bozza", "attivo", "disattivato"}
+
+
+class OrgMessageIn(BaseModel):
+    titolo: str
+    messaggio: str
+    tipologia: str = "informazione"
+    recipients_mode: str = "all"          # all | selected
+    org_ids: Optional[List[str]] = None
+    publish_at: Optional[str] = None      # iso; vuoto = subito
+    end_at: Optional[str] = None
+    require_ack: bool = False
+    status: str = "attivo"                # bozza | attivo | disattivato
+
+
+def _parse_iso(s):
+    if not s:
+        return None
+    try:
+        d = datetime.fromisoformat(s)
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _msg_effective_status(m: dict) -> str:
+    st = m.get("status", "attivo")
+    if st in ("bozza", "disattivato"):
+        return st
+    now = datetime.now(timezone.utc)
+    pub = _parse_iso(m.get("publish_at"))
+    end = _parse_iso(m.get("end_at"))
+    if pub and now < pub:
+        return "programmato"
+    if end and now > end:
+        return "scaduto"
+    return "pubblicato"
+
+
+async def _msg_target_org_ids(m: dict, all_orgs=None):
+    if m.get("recipients_mode") == "selected":
+        return list(m.get("org_ids") or [])
+    if all_orgs is None:
+        all_orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "status": 1}).to_list(5000)
+    return [o["id"] for o in all_orgs if o.get("status") != "disabled"]
+
+
+def _msg_clean(m: dict) -> dict:
+    return {k: m.get(k) for k in ("id", "titolo", "messaggio", "tipologia", "recipients_mode",
+            "org_ids", "publish_at", "end_at", "require_ack", "status", "created_at", "updated_at")}
+
+
+@api.get("/platform/messages")
+async def platform_list_messages(admin: dict = Depends(require_superadmin)):
+    msgs = await db.org_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    all_orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "status": 1}).to_list(5000)
+    out = []
+    for m in msgs:
+        target = await _msg_target_org_ids(m, all_orgs)
+        recipients = len(await db.memberships.distinct("user_id", {"org_id": {"$in": target}, "active": True})) if target else 0
+        reads = await db.org_message_reads.count_documents({"message_id": m["id"], "read_at": {"$ne": None}})
+        out.append({**_msg_clean(m), "effective_status": _msg_effective_status(m),
+                    "orgs_reached": len(target), "recipients": recipients,
+                    "read": reads, "unread": max(recipients - reads, 0)})
+    return out
+
+
+def _msg_doc_from_body(body: OrgMessageIn, existing: dict = None):
+    tip = body.tipologia if body.tipologia in MSG_TIPOLOGIE else "informazione"
+    status = body.status if body.status in MSG_STATUSES else ((existing or {}).get("status") or "attivo")
+    mode = "selected" if body.recipients_mode == "selected" else "all"
+    org_ids = [x for x in (body.org_ids or [])] if mode == "selected" else []
+    if mode == "selected" and not org_ids:
+        raise HTTPException(status_code=400, detail="Seleziona almeno un'organizzazione destinataria")
+    if not body.titolo.strip() or not body.messaggio.strip():
+        raise HTTPException(status_code=400, detail="Titolo e messaggio sono obbligatori")
+    return {"titolo": body.titolo.strip(), "messaggio": body.messaggio.strip(), "tipologia": tip,
+            "recipients_mode": mode, "org_ids": org_ids,
+            "publish_at": body.publish_at or (existing or {}).get("publish_at") or now_iso(),
+            "end_at": body.end_at or None, "require_ack": bool(body.require_ack) and tip == "importante",
+            "status": status, "updated_at": now_iso()}
+
+
+@api.post("/platform/messages")
+async def platform_create_message(body: OrgMessageIn, admin: dict = Depends(require_superadmin)):
+    doc = {"id": new_id(), **_msg_doc_from_body(body), "created_at": now_iso(), "created_by": admin["user_id"]}
+    await db.org_messages.insert_one(doc)
+    return _msg_clean(doc)
+
+
+@api.put("/platform/messages/{mid}")
+async def platform_update_message(mid: str, body: OrgMessageIn, admin: dict = Depends(require_superadmin)):
+    m = await db.org_messages.find_one({"id": mid}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Messaggio non trovato")
+    upd = _msg_doc_from_body(body, existing=m)
+    await db.org_messages.update_one({"id": mid}, {"$set": upd})
+    return _msg_clean({**m, **upd})
+
+
+@api.post("/platform/messages/{mid}/status")
+async def platform_message_status(mid: str, body: dict, admin: dict = Depends(require_superadmin)):
+    st = {"disattiva": "disattivato", "ripubblica": "attivo", "bozza": "bozza"}.get(body.get("action"))
+    if not st:
+        raise HTTPException(status_code=400, detail="Azione non valida")
+    r = await db.org_messages.update_one({"id": mid}, {"$set": {"status": st, "updated_at": now_iso()}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Messaggio non trovato")
+    return {"ok": True, "status": st}
+
+
+@api.delete("/platform/messages/{mid}")
+async def platform_delete_message(mid: str, admin: dict = Depends(require_superadmin)):
+    await db.org_messages.delete_one({"id": mid})
+    await db.org_message_reads.delete_many({"message_id": mid})
+    return {"ok": True}
+
+
+@api.get("/platform/messages/{mid}/stats")
+async def platform_message_stats(mid: str, admin: dict = Depends(require_superadmin)):
+    m = await db.org_messages.find_one({"id": mid}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Messaggio non trovato")
+    target = await _msg_target_org_ids(m)
+    orgs = []
+    for oid in target:
+        o = await db.organizations.find_one({"id": oid}, {"_id": 0, "nome": 1})
+        users = await db.memberships.distinct("user_id", {"org_id": oid, "active": True})
+        reads = await db.org_message_reads.count_documents({"message_id": mid, "org_id": oid, "read_at": {"$ne": None}})
+        orgs.append({"org_id": oid, "nome": (o or {}).get("nome"), "recipients": len(users),
+                     "read": reads, "unread": max(len(users) - reads, 0)})
+    total_recipients = sum(o["recipients"] for o in orgs)
+    total_read = sum(o["read"] for o in orgs)
+    return {"message": _msg_clean(m), "effective_status": _msg_effective_status(m),
+            "orgs_reached": len(target), "recipients": total_recipients, "read": total_read,
+            "unread": max(total_recipients - total_read, 0), "orgs": orgs}
+
+
+# -------- Org-facing: messaggi visibili nella Dashboard dell'organizzazione --------
+@api.get("/my/messages")
+async def my_messages(user: dict = Depends(require_admin)):
+    if user.get("role") == "superadmin":
+        return []
+    org_id = user["org_id"]
+    q = {"status": "attivo", "$or": [{"recipients_mode": "all"}, {"org_ids": org_id}]}
+    msgs = await db.org_messages.find(q, {"_id": 0}).sort("publish_at", -1).to_list(500)
+    out = []
+    for m in msgs:
+        if _msg_effective_status(m) != "pubblicato":
+            continue
+        r = await db.org_message_reads.find_one({"message_id": m["id"], "user_id": user["user_id"]}, {"_id": 0})
+        if r and r.get("hidden_at"):
+            continue
+        out.append({"id": m["id"], "titolo": m["titolo"], "messaggio": m["messaggio"],
+                    "tipologia": m["tipologia"], "require_ack": bool(m.get("require_ack")),
+                    "publish_at": m.get("publish_at"),
+                    "read": bool(r and r.get("read_at")), "ack": bool(r and r.get("ack_at"))})
+    return out
+
+
+async def _msg_assert_target(user: dict, m: dict):
+    """Multi-tenant: la persona può interagire col messaggio solo se destinato alla sua org."""
+    if m.get("recipients_mode") == "selected" and user["org_id"] not in (m.get("org_ids") or []):
+        raise HTTPException(status_code=403, detail="Messaggio non destinato a questa organizzazione")
+
+
+async def _msg_mark(user: dict, mid: str, *, hidden=False, ack=False):
+    m = await db.org_messages.find_one({"id": mid}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Messaggio non trovato")
+    await _msg_assert_target(user, m)
+    existing = await db.org_message_reads.find_one({"message_id": mid, "user_id": user["user_id"]}, {"_id": 0})
+    patch = {"message_id": mid, "user_id": user["user_id"], "org_id": user["org_id"], "updated_at": now_iso(),
+             "read_at": (existing or {}).get("read_at") or now_iso()}
+    if hidden or ack:
+        patch["hidden_at"] = now_iso()
+    if ack:
+        patch["ack_at"] = now_iso()
+    if existing:
+        await db.org_message_reads.update_one({"id": existing["id"]}, {"$set": patch})
+    else:
+        patch["id"] = new_id(); patch["created_at"] = now_iso()
+        await db.org_message_reads.insert_one(patch)
+    return {"ok": True}
+
+
+@api.post("/my/messages/{mid}/read")
+async def my_message_read(mid: str, user: dict = Depends(require_admin)):
+    return await _msg_mark(user, mid)
+
+
+@api.post("/my/messages/{mid}/hide")
+async def my_message_hide(mid: str, user: dict = Depends(require_admin)):
+    m = await db.org_messages.find_one({"id": mid}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Messaggio non trovato")
+    if m.get("require_ack"):
+        ex = await db.org_message_reads.find_one({"message_id": mid, "user_id": user["user_id"]}, {"_id": 0})
+        if not (ex and ex.get("ack_at")):
+            raise HTTPException(status_code=400, detail="Questo messaggio richiede la conferma di lettura")
+    return await _msg_mark(user, mid, hidden=True)
+
+
+@api.post("/my/messages/{mid}/ack")
+async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
+    return await _msg_mark(user, mid, ack=True, hidden=True)
+
+
 # ---------------- platform audit log (extensible) ----------------
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
