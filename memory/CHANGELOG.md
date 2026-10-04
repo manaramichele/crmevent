@@ -884,3 +884,7 @@ Task 2 — Creatività manuale:
 - Anteprima = sola lettura: read/hide/ack per Super Admin NON scrivono nulla (ritornano {preview:true}); nessun incremento letture, nessuna statistica/notifica/email modificata. Verificato via curl (stats restano 0).
 - Real-time: il banner si ricarica al cambio org attiva (actingOrgId) e ad ogni apertura Dashboard; il reload del selettore org garantisce lo stato aggiornato dopo creazione/modifica/disattivazione.
 - Isolamento multi-tenant preservato (org non destinataria non compare in anteprima). Nessun componente duplicato.
+
+## 2026-06 · Fatture in Cloud · Arricchimento "Simula fattura (TEST)"
+- Anteprima simulazione FIC (Account → Fatture, pulsante "Simula fattura (TEST)") ora mostra: intestazione + dati cliente completi (P.IVA/CF/indirizzo/SDI/PEC), descrizione riga, imponibile, IVA 22%, totale, piano/ciclo (una tantum/mensile/annuale), modalità di pagamento (Stripe), e payload FIC completo che verrebbe inviato.
+- Backend: _fic_build_payload ora include payment_method + payments_list (incasso Stripe, paid) nel preview; _fic_simulate aggiunge piano_label, ciclo_fatturazione, modalita_pagamento. NESSUNA chiamata a FIC, NESSUN SDI, nessuna fattura reale. Stripe/IVA/prezzi invariati.

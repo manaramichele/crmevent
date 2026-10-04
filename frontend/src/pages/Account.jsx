@@ -117,10 +117,12 @@ export default function Account() {
             <div className="font-semibold text-slate-800 mb-2">SIMULAZIONE TEST · nessun documento FIC / nessun SDI</div>
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-slate-700">
               <div><span className="text-slate-500">Intestazione:</span> {sim.intestazione || "—"}</div>
+              <div className="sm:col-span-2"><span className="text-slate-500">Dati cliente:</span> {[sim.cliente?.vat_number && `P.IVA ${sim.cliente.vat_number}`, sim.cliente?.tax_code && `CF ${sim.cliente.tax_code}`, [sim.cliente?.address_street, sim.cliente?.address_postal_code, sim.cliente?.address_city, sim.cliente?.address_province].filter(Boolean).join(" "), sim.cliente?.ei_code && `SDI ${sim.cliente.ei_code}`, sim.cliente?.certified_email && `PEC ${sim.cliente.certified_email}`].filter(Boolean).join(" · ") || "—"}</div>
               <div><span className="text-slate-500">Numero simulato:</span> {sim.numero_simulato}</div>
               <div><span className="text-slate-500">Data simulata:</span> {sim.data_simulata}</div>
               <div><span className="text-slate-500">Descrizione:</span> {sim.descrizione || sim.piano || "—"}</div>
               <div><span className="text-slate-500">Piano / ciclo:</span> {sim.piano_label || sim.piano || "—"}</div>
+              <div><span className="text-slate-500">Ciclo:</span> {({ una_tantum: "Una tantum", monthly: "Mensile", yearly: "Annuale" })[sim.ciclo_fatturazione] || "—"}</div>
               <div><span className="text-slate-500">Modalità di pagamento:</span> {sim.modalita_pagamento || "—"}</div>
               <div><span className="text-slate-500">Imponibile:</span> {Number(sim.imponibile ?? 0).toFixed(2)} {(sim.valuta || "eur").toUpperCase()}</div>
               <div><span className="text-slate-500">Aliquota IVA:</span> {Number(sim.aliquota_iva ?? 0).toFixed(0)}%</div>
