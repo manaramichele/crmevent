@@ -1,0 +1,30 @@
+{
+  "summary": "E2E regression on Super Admin → Messaggi letture tracking. Backend pytest suite (5/5 PASSED) covers list recipients/read, stats shape, read-flow increment, idempotency and superadmin-preview non-counting + delete purge. UI Playwright test confirms the whole flow: superadmin login → create message (recipients_mode=all) → initial '0/N' in Letture column → open stats dialog (summary 'N destinatari · 0 letti · N non letto', per-user rows with Organizzazione/Utente/Email/Stato/Data lettura) → brand-new org admin reads via Dashboard banner ('Segna come letto') → polling+focus refetch bumps column to '1/N' → stats dialog shows '1 letti · (N-1) non letto' with that user flagged 'Letto'. Idempotency and superadmin-preview (X-Org-Id) non-counting also verified via API. Behaviour fully matches the spec.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_platform_messages_reads.py",
+    "/app/test_reports/pytest/iter59.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlatformMessages.jsx uses the same data-testid pattern 'msg-stats-state-<user_id>' for both 'Letto' and 'Non letto' badges. Since 'Letto' is a substring of 'Non letto', text-based selectors must use exact-match. Consider using distinct test-ids (e.g., msg-stats-state-letto-<uid> / -nonletto-<uid>) or a data-state attribute to make automated selection unambiguous.",
+    "Recipients count for recipients_mode='all' is computed at read-time from current memberships, so creating a new org after publishing a message increases the denominator. This is the correct product behaviour (future orgs are included), but worth documenting; the test harness pre-registered the org before publishing to keep denominators stable.",
+    "GET /api/platform/messages performs an N×2 Mongo distinct per message (recipients + reads) inside a Python loop — fine for current volumes but a candidate for aggregation if the list grows (>500 msgs or >100 orgs).",
+    "Frontend polling (45s list + 20s stats) + window focus listener works as expected; no WebSocket introduced, aligned with the request."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_platform_messages_reads.py"
+  ],
+  "success_rate": {"backend": "100% (5/5 pytest)", "frontend": "100% functional (one assertion was a selector-substring issue in the test, not a UI defect; verified via summary text)"},
+  "test_credentials": "Super Admin: manara.michele.pro@gmail.com / CrmEvent2026! ; Org admin for read flow: new TEST_ui_<rand>@crmeventtest.it registered via /api/auth/register-organization (telefono must include country prefix, e.g. +39...).",
+  "seed_data_creation": "Each UI/backend test creates and then deletes its own message and (for UI flow) registers a fresh organization. Leftover 'TEST UI *' orgs/users may remain in DB (register-organization has no corresponding cleanup endpoint).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_platform_messages_reads.py — run with REACT_APP_BACKEND_URL set and `-o addopts=` to bypass pytest-xdist. Note: register-organization requires telefono with international prefix (+39...). Superadmin's /my/messages/* endpoints require X-Org-Id header (otherwise 428). The 'msg-stats-state-<uid>' selector collides with 'Non letto' text; use exact=True or distinct ids when writing new Playwright tests.",
+  "rca of the issue": "N/A — the fix in this iteration (dedup read docs per (message_id,user_id), scope reads/recipients to target orgs via distinct('user_id'), per-user rows in stats, polling+focus refetch, preview short-circuit in /my/messages/{mid}/read when user.role=='superadmin') is working correctly end-to-end."
+}

@@ -5,6 +5,10 @@ CRMEvent (crmevent.it) — piattaforma operativa multi-evento per organizzatori,
 
 > **Stato 2026-06 (ultima sessione)**: Completati e testati in preview — (1) Dashboard membro non mostra più `da contattare` (solo stati operativi), (2) mittente invito `hello@crmevent.it` (fix override in backend/.env), (3) occhio password su `/invito` e `/attiva`, (4) Persone con tab "Referenti aziende" / "Staff & Volontari" (+sotto-filtri) / "Da classificare" (classificazione non distruttiva via flag `is_evento`). ⚠️ PRODUZIONE: il secret `EMAIL_FROM_ADDRESS` è ancora ≠ hello@crmevent.it (confermato dal deployer) → l'utente deve aggiornarlo nel pannello Secrets PRIMA/insieme al redeploy, altrimenti resta noreply.
 
+### Changelog 2026-06 (sessione corrente)
+- **Fix UG · Letture messaggi Dashboard non aggiornate nel Super Admin** (backend `server.py`: `GET /api/platform/messages`, `GET /api/platform/messages/{mid}/stats`; frontend `PlatformMessages.jsx`): la colonna "Letture" (X/Y) ora deriva da dati reali e si aggiorna. Lo stats endpoint è stato riscritto per restituire il **dettaglio per-utente** (Organizzazione | Utente | Email | Stato | Data/ora lettura) con header totali "N destinatari · N letti · N non letto", deduplicato per **utente distinto** (coerente col modello: 1 doc lettura per `message_id`+`user_id`, idempotente). Il list endpoint conta le letture per utente distinto limitate alle org destinatarie → lista e dettaglio coerenti. Frontend: refetch al mount + **refetch on window-focus** + **polling leggero** (lista 45s, modale dettaglio 20s), nessun WebSocket. L'anteprima Super Admin (operare su org attiva) **non** incrementa il contatore (`/my/messages/{mid}/read|ack|hide` short-circuit per superadmin). Test: backend pytest 5/5, UI E2E (iteration_59) 100%. Deploy in produzione avviato.
+
+
 
 ## Architecture
 - Backend: FastAPI + MongoDB. Route sotto /api. Auth unificata JWT email/password + Emergent Google login. RBAC: admin/member → CRM; staff/volunteer → solo /me/*. `require_admin` gate su tutte le CRUD admin, dashboard, search, settings. Object-check per area volontario.

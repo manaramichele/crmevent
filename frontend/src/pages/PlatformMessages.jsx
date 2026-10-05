@@ -226,8 +226,8 @@ export default function PlatformMessages() {
                         <td className="p-2 text-slate-800 font-medium">{u.name}</td>
                         <td className="p-2 text-slate-500">{u.email}</td>
                         <td className="p-2 text-center">{u.read
-                          ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700" data-testid={`msg-stats-state-${u.user_id}`}>Letto</span>
-                          : <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500" data-testid={`msg-stats-state-${u.user_id}`}>Non letto</span>}</td>
+                          ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700" data-state="letto" data-testid={`msg-stats-state-letto-${u.user_id}`}>Letto</span>
+                          : <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500" data-state="nonletto" data-testid={`msg-stats-state-nonletto-${u.user_id}`}>Non letto</span>}</td>
                         <td className="p-2 text-slate-500">{u.read_at ? fmt(u.read_at) : "—"}</td>
                       </tr>
                     ))}
