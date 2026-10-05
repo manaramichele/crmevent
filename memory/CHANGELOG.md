@@ -895,3 +895,13 @@ Task 2 — Creatività manuale:
 - Sicurezza: emissione reale FIC BLOCCATA sulle TEST (400) in _fic_issue_document, retry-emit e fic/issue; _emit_credit_invoice salta le TEST. Escluse da /account/invoices e /credits/purchases (fuori da fatturato/KPI).
 - Frontend PlatformCredits → Fatture & Integrazioni: pulsante "Genera transazione TEST", badge TEST per riga, "Simula fattura (TEST)" con anteprima completa (cliente+P.IVA/CF/indirizzo/SDI, descrizione, piano/ciclo, modalità pagamento, imponibile, IVA 22%, totale, payload FIC completo) e "Elimina"; "Riprova emissione" nascosto sulle TEST.
 - Verificato end-to-end via curl: genera→listing is_test→simula→emissione 400→elimina. Stripe/IVA/prezzi invariati.
+
+### 2026-06 · Pagine legali pubbliche definitive (Privacy, Termini, Cookie)
+- **Legal.jsx riscritto** con testi definitivi, coerenti alla configurazione reale verificata nel codice (nessun placeholder [DA COMPLETARE]):
+  - Titolare: Michele Manara, P. IVA 02671780340, Strada Due Castagne 39 – 43124 Parma (PR); email support@crmevent.it ovunque.
+  - Privacy: sezione dedicata Google OAuth (auth) vs Google Calendar (integrazione opzionale, scope calendar, list/insert/update eventi, revocabile). Sezione AI: Assistente AI (OpenAI, testo) + modulo Social (OpenAI testo, Google Gemini immagini) con avviso di non inserire dati non necessari/sensibili. Fornitori: Google, OpenAI, Gemini, Brevo, Stripe, Fatture in Cloud, Meta/Instagram, Google Analytics 4, Iubenda, object storage, MongoDB su Aruba, frontend Emergent. RIMOSSO Resend (non usato in prod). Conservazione con testo richiesto; art.28 disponibile su richiesta.
+  - Termini: 17 sezioni (oggetto, account, uso consentito, responsabilità dati, staff/volontari, integrazioni terze parti, crediti e funzioni a pagamento, pagamenti Stripe, fatturazione FIC, disponibilità, IP, responsabilità utente, limitazioni, sospensione/chiusura, modifiche, privacy, legge italiana+contatti). Nessun prezzo fisso: rinvio a pagina Prezzi/piattaforma.
+  - Cookie: compilati i placeholder (GA4 + Iubenda Consent Mode v2).
+- **App.js**: /privacy serve direttamente la Privacy Policy; /privacy-policy → redirect 301 a /privacy (retrocompatibilità).
+- **Footer.jsx**: link Privacy → /privacy (Cookie /cookie e Termini /termini invariati).
+- Verificato: build prod OK, nessun [DA COMPLETARE], hardcoding api.crmevent.it intatto, /privacy /termini /cookie pubblici, redirect /privacy-policy→/privacy. Re-publish in produzione avviato.

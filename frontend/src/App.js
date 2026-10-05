@@ -105,8 +105,8 @@ function Shell() {
         <Route path="/registrati" element={<Register />} />
         <Route path="/completa-organizzazione" element={<CompleteOrg />} />
         <Route path="/completa-profilo" element={<CompleteProfile />} />
-        <Route path="/privacy-policy" element={<Legal type="privacy" />} />
-        <Route path="/privacy" element={<Navigate to="/privacy-policy" replace />} />
+        <Route path="/privacy" element={<Legal type="privacy" />} />
+        <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
         <Route path="/cookie" element={<Legal type="cookie" />} />
         <Route path="/termini" element={<Legal type="termini" />} />
         <Route path="/login" element={<Login />} />
