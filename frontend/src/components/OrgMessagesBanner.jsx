@@ -56,8 +56,14 @@ export default function OrgMessagesBanner() {
   return (
     <div className="space-y-2" data-testid="org-messages-banner">
       {preview && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 w-fit" data-testid="org-messages-preview-badge">
-          <Eye className="w-3.5 h-3.5" />Anteprima come {orgName || "Organizzazione"}
+        <div
+          className="flex items-center gap-2 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 w-fit"
+          title="Le visualizzazioni del Super Admin non modificano le statistiche di lettura."
+          data-testid="org-messages-preview-badge"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span className="uppercase tracking-wide bg-amber-200 text-amber-900 rounded-full px-1.5 py-0.5">Anteprima</span>
+          <span>Anteprima Super Admin come {orgName || "Organizzazione"} — questo accesso non viene conteggiato come lettura</span>
         </div>
       )}
       {msgs.map((m) => {

@@ -216,14 +216,14 @@ export default function PlatformMessages() {
               <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr>
-                    <th className="p-2 text-left">Organizzazione</th><th className="p-2 text-left">Utente</th>
-                    <th className="p-2 text-left">Email</th><th className="p-2 text-center">Stato</th><th className="p-2 text-left">Data/ora lettura</th>
+                    <th className="p-2 text-left">Utente</th><th className="p-2 text-left">Organizzazione</th>
+                    <th className="p-2 text-left">Email</th><th className="p-2 text-center">Stato</th><th className="p-2 text-left">Letto il</th>
                   </tr></thead>
                   <tbody>
                     {(stats.users || []).map((u) => (
                       <tr key={`${u.org_id}-${u.user_id}`} className="border-t border-slate-100" data-testid={`msg-stats-user-${u.user_id}`}>
-                        <td className="p-2 text-slate-700">{u.org_name || "—"}</td>
                         <td className="p-2 text-slate-800 font-medium">{u.name}</td>
+                        <td className="p-2 text-slate-700">{u.org_name || "—"}</td>
                         <td className="p-2 text-slate-500">{u.email}</td>
                         <td className="p-2 text-center">{u.read
                           ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700" data-state="letto" data-testid={`msg-stats-state-letto-${u.user_id}`}>Letto</span>
