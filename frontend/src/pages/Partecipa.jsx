@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2, CalendarDays, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const BACKEND = process.env.REACT_APP_BACKEND_URL;
+const BACKEND = "https://api.crmevent.it";
 const CRM_LOGO = "/logo-crmevent.png?v=2";
 
 const PHONE_CCS = [

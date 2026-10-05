@@ -24,7 +24,7 @@ import CalendarSyncField from "@/components/CalendarSyncField";
 export const eurFmt = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 export const formatEUR = (n) => eurFmt.format(Number(n || 0));
 
-export const BACKEND = process.env.REACT_APP_BACKEND_URL;
+export const BACKEND = "https://api.crmevent.it";
 export const fileUrl = (u) => (u ? (u.startsWith("http") ? u : `${BACKEND}${u}`) : "");
 export const toOptions = (arr) => (arr || []).map((v) => ({ value: v, label: v }));
 
