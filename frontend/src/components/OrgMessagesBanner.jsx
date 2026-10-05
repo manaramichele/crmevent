@@ -21,9 +21,20 @@ export default function OrgMessagesBanner() {
     try {
       const { data } = await api.get("/my/messages");
       const list = Array.isArray(data) ? data : (data.messages || []);
+      const isPreview = !Array.isArray(data) && !!data.preview;
       setMsgs(list);
-      setPreview(!Array.isArray(data) && !!data.preview);
+      setPreview(isPreview);
       setOrgName(!Array.isArray(data) ? data.org_name : null);
+      // "Letto" = visualizzato: registra automaticamente la lettura dei messaggi SENZA conferma
+      // obbligatoria appena compaiono nella Dashboard. I messaggi "importante" con require_ack
+      // restano da confermare col pulsante "Ho letto". In anteprima Super Admin NON si registra nulla.
+      if (!isPreview) {
+        const toMark = list.filter((m) => !m.read && !m.require_ack);
+        if (toMark.length) {
+          await Promise.all(toMark.map((m) => api.post(`/my/messages/${m.id}/read`).catch(() => {})));
+          setMsgs((s) => s.map((x) => (!x.require_ack && !x.read ? { ...x, read: true } : x)));
+        }
+      }
     } catch { /* banner silenzioso in caso di errore */ }
   };
   useEffect(() => { load(); }, [actingOrgId]);
