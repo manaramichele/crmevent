@@ -4936,7 +4936,7 @@ async def platform_list_messages(admin: dict = Depends(require_superadmin)):
     for m in msgs:
         target = await _msg_target_org_ids(m, all_orgs)
         recipients = len(await db.memberships.distinct("user_id", {"org_id": {"$in": target}, "active": True})) if target else 0
-        reads = await db.org_message_reads.count_documents({"message_id": m["id"], "read_at": {"$ne": None}})
+        reads = len(await db.org_message_reads.distinct("user_id", {"message_id": m["id"], "org_id": {"$in": target}, "read_at": {"$ne": None}})) if target else 0
         out.append({**_msg_clean(m), "effective_status": _msg_effective_status(m),
                     "orgs_reached": len(target), "recipients": recipients,
                     "read": reads, "unread": max(recipients - reads, 0)})
@@ -5000,18 +5000,43 @@ async def platform_message_stats(mid: str, admin: dict = Depends(require_superad
     if not m:
         raise HTTPException(status_code=404, detail="Messaggio non trovato")
     target = await _msg_target_org_ids(m)
+    mems = await db.memberships.find(
+        {"org_id": {"$in": target}, "active": True}, {"_id": 0, "user_id": 1, "org_id": 1}
+    ).to_list(20000) if target else []
+    # Un utente è destinatario una sola volta per messaggio (la lettura è 1 doc per utente/messaggio)
+    user_org = {}
+    for mm in mems:
+        user_org.setdefault(mm["user_id"], mm["org_id"])
+    org_names = {o["id"]: o.get("nome") for o in await db.organizations.find(
+        {"id": {"$in": target}}, {"_id": 0, "id": 1, "nome": 1}).to_list(5000)} if target else {}
+    uids = list(user_org.keys())
+    users = {u["user_id"]: u for u in await db.users.find(
+        {"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1}).to_list(20000)} if uids else {}
+    read_docs = await db.org_message_reads.find(
+        {"message_id": mid, "org_id": {"$in": target}, "read_at": {"$ne": None}},
+        {"_id": 0, "user_id": 1, "org_id": 1, "read_at": 1}).to_list(20000)
+    read_map = {r["user_id"]: (r.get("read_at"), r.get("org_id")) for r in read_docs}
+    rows = []
+    for uid, oid in user_org.items():
+        rr = read_map.get(uid)
+        read_at = rr[0] if rr else None
+        disp_org = rr[1] if (rr and rr[1] in org_names) else oid
+        u = users.get(uid) or {}
+        rows.append({"org_id": disp_org, "org_name": org_names.get(disp_org),
+                     "user_id": uid, "name": u.get("name") or "—",
+                     "email": u.get("email") or "—", "read": bool(read_at), "read_at": read_at})
+    rows.sort(key=lambda x: ((x["org_name"] or "").lower(), (x["name"] or "").lower()))
+    total = len(rows)
+    total_read = sum(1 for r in rows if r["read"])
     orgs = []
     for oid in target:
-        o = await db.organizations.find_one({"id": oid}, {"_id": 0, "nome": 1})
-        users = await db.memberships.distinct("user_id", {"org_id": oid, "active": True})
-        reads = await db.org_message_reads.count_documents({"message_id": mid, "org_id": oid, "read_at": {"$ne": None}})
-        orgs.append({"org_id": oid, "nome": (o or {}).get("nome"), "recipients": len(users),
-                     "read": reads, "unread": max(len(users) - reads, 0)})
-    total_recipients = sum(o["recipients"] for o in orgs)
-    total_read = sum(o["read"] for o in orgs)
+        orows = [r for r in rows if r["org_id"] == oid]
+        orgs.append({"org_id": oid, "nome": org_names.get(oid), "recipients": len(orows),
+                     "read": sum(1 for r in orows if r["read"]),
+                     "unread": sum(1 for r in orows if not r["read"])})
     return {"message": _msg_clean(m), "effective_status": _msg_effective_status(m),
-            "orgs_reached": len(target), "recipients": total_recipients, "read": total_read,
-            "unread": max(total_recipients - total_read, 0), "orgs": orgs}
+            "orgs_reached": len(target), "recipients": total, "read": total_read,
+            "unread": max(total - total_read, 0), "users": rows, "orgs": orgs}
 
 
 # -------- Org-facing: messaggi visibili nella Dashboard dell'organizzazione --------

@@ -27,17 +27,36 @@ export default function PlatformMessages() {
   const [saving, setSaving] = useState(false);
   const [orgSearch, setOrgSearch] = useState("");
   const [stats, setStats] = useState(null);
+  const [statsId, setStatsId] = useState(null);
   const [del, setDel] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [m, o] = await Promise.all([api.get("/platform/messages"), api.get("/platform/organizations")]);
       setRows(m.data); setOrgs(o.data);
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-    setLoading(false);
+    } catch (e) { if (!silent) toast.error(formatApiError(e.response?.data?.detail)); }
+    if (!silent) setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  const refreshStats = async (id) => {
+    try { const { data } = await api.get(`/platform/messages/${id}/stats`); setStats(data); } catch { /* silent */ }
+  };
+  // Refetch al mount, quando la finestra torna in focus e con polling leggero (letture sempre reali, no WebSocket)
+  useEffect(() => {
+    load();
+    const onFocus = () => load(true);
+    window.addEventListener("focus", onFocus);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(true); }, 45000);
+    return () => { window.removeEventListener("focus", onFocus); clearInterval(iv); };
+  }, []);
+  // Aggiornamento automatico del dettaglio letture mentre la modale è aperta
+  useEffect(() => {
+    if (!statsId) return;
+    const refresh = () => refreshStats(statsId);
+    const iv = setInterval(refresh, 20000);
+    window.addEventListener("focus", refresh);
+    return () => { clearInterval(iv); window.removeEventListener("focus", refresh); };
+  }, [statsId]);
 
   const openNew = () => { setEditId(null); setForm({ ...EMPTY }); setOrgSearch(""); };
   const openEdit = (r) => {
@@ -78,6 +97,7 @@ export default function PlatformMessages() {
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const openStats = async (r) => {
+    setStatsId(r.id);
     try { const { data } = await api.get(`/platform/messages/${r.id}/stats`); setStats(data); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
@@ -185,24 +205,35 @@ export default function PlatformMessages() {
       </Dialog>
 
       {/* ---- Stats ---- */}
-      <Dialog open={!!stats} onOpenChange={(o) => !o && setStats(null)}>
-        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto" data-testid="msg-stats-dialog">
-          <DialogHeader><DialogTitle>Letture messaggio</DialogTitle><DialogDescription>{stats?.message?.titolo}</DialogDescription></DialogHeader>
+      <Dialog open={!!stats} onOpenChange={(o) => { if (!o) { setStats(null); setStatsId(null); } }}>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="msg-stats-dialog">
+          <DialogHeader><DialogTitle>Dettaglio letture</DialogTitle><DialogDescription>{stats?.message?.titolo}</DialogDescription></DialogHeader>
           {stats && (
             <div className="space-y-3">
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div className="rounded-lg border border-slate-200 p-2"><div className="text-lg font-bold text-slate-900">{stats.orgs_reached}</div><div className="text-[11px] text-slate-400">Organizzazioni</div></div>
-                <div className="rounded-lg border border-slate-200 p-2"><div className="text-lg font-bold text-slate-900">{stats.recipients}</div><div className="text-[11px] text-slate-400">Destinatari</div></div>
-                <div className="rounded-lg border border-slate-200 p-2"><div className="text-lg font-bold text-emerald-600">{stats.read}</div><div className="text-[11px] text-slate-400">Letti</div></div>
-                <div className="rounded-lg border border-slate-200 p-2"><div className="text-lg font-bold text-amber-600">{stats.unread}</div><div className="text-[11px] text-slate-400">Non letti</div></div>
+              <div className="text-sm font-semibold text-slate-700" data-testid="msg-stats-summary">
+                {stats.recipients} destinatari · <span className="text-emerald-600">{stats.read} letti</span> · <span className="text-amber-600">{stats.unread} non letto</span>
               </div>
-              <div className="space-y-1 max-h-60 overflow-y-auto">
-                {stats.orgs.map((o) => (
-                  <div key={o.org_id} className="flex items-center justify-between text-sm border border-slate-100 rounded-lg px-3 py-1.5">
-                    <span className="truncate">{o.nome}</span>
-                    <span className="text-xs text-slate-500">{o.read}/{o.recipients} letti</span>
-                  </div>
-                ))}
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr>
+                    <th className="p-2 text-left">Organizzazione</th><th className="p-2 text-left">Utente</th>
+                    <th className="p-2 text-left">Email</th><th className="p-2 text-center">Stato</th><th className="p-2 text-left">Data/ora lettura</th>
+                  </tr></thead>
+                  <tbody>
+                    {(stats.users || []).map((u) => (
+                      <tr key={`${u.org_id}-${u.user_id}`} className="border-t border-slate-100" data-testid={`msg-stats-user-${u.user_id}`}>
+                        <td className="p-2 text-slate-700">{u.org_name || "—"}</td>
+                        <td className="p-2 text-slate-800 font-medium">{u.name}</td>
+                        <td className="p-2 text-slate-500">{u.email}</td>
+                        <td className="p-2 text-center">{u.read
+                          ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700" data-testid={`msg-stats-state-${u.user_id}`}>Letto</span>
+                          : <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500" data-testid={`msg-stats-state-${u.user_id}`}>Non letto</span>}</td>
+                        <td className="p-2 text-slate-500">{u.read_at ? fmt(u.read_at) : "—"}</td>
+                      </tr>
+                    ))}
+                    {(stats.users || []).length === 0 && <tr><td colSpan={5} className="p-4 text-center text-slate-400 text-sm">Nessun destinatario</td></tr>}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
