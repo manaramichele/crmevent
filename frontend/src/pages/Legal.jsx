@@ -467,7 +467,7 @@ export default function Legal({ type }) {
   return (
     <div className="min-h-screen bg-white flex flex-col" data-testid={`legal-page-${type}`}>
       <header className="border-b border-slate-100 h-16 flex items-center px-6">
-        <Link to="/"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-7 w-auto" /></Link>
+        <Link to="/"><img src="/logo-crmevent.png?v=4" alt="CRMEvent" className="h-7 w-auto" /></Link>
       </header>
       <main className="max-w-3xl mx-auto px-6 py-14 flex-1 w-full">
         <h1 className="font-display text-3xl font-bold text-slate-900 mb-2">{title}</h1>

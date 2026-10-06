@@ -9,7 +9,7 @@ import { CheckCircle2, CalendarDays, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const BACKEND = "https://api.crmevent.it";
-const CRM_LOGO = "/logo-crmevent.png?v=2";
+const CRM_LOGO = "/logo-crmevent.png?v=4";
 
 const PHONE_CCS = [
   ["+39", "🇮🇹 +39"], ["+41", "🇨🇭 +41"], ["+33", "🇫🇷 +33"], ["+49", "🇩🇪 +49"],

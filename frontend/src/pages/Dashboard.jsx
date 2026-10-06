@@ -50,8 +50,8 @@ export default function Dashboard() {
   if (!data) return <div className="text-slate-400">Caricamento dashboard...</div>;
 
   const pipeline = data.pipeline_chart.map((p) => ({ ...p, name: FASE_LABEL[p.fase] || p.fase }));
-  const FASE_COLORS = { prospect: "#94A3B8", contattato: "#0EA5E9", proposta_inviata: "#F59E0B", in_trattativa: "#81D8D0", confermato: "#10B981", perso: "#EF4444" };
-  const PIE_COLORS = ["#81D8D0", "#0EA5E9", "#F59E0B", "#10B981", "#94A3B8"];
+  const FASE_COLORS = { prospect: "#94A3B8", contattato: "#0EA5E9", proposta_inviata: "#F59E0B", in_trattativa: "#0ABAB5", confermato: "#10B981", perso: "#EF4444" };
+  const PIE_COLORS = ["#0ABAB5", "#0EA5E9", "#F59E0B", "#10B981", "#94A3B8"];
 
   return (
     <div className="animate-fade-up space-y-6">
@@ -115,7 +115,7 @@ export default function Dashboard() {
               <YAxis tick={{ fontSize: 11, fill: "#64748B" }} axisLine={false} tickLine={false} />
               <Tooltip cursor={{ fill: "#F8FAFC" }} contentStyle={{ borderRadius: 10, border: "1px solid #E2E8F0", fontSize: 12 }} />
               <Bar dataKey="count" radius={[6, 6, 0, 0]} name="Trattative">
-                {pipeline.map((p) => <Cell key={p.fase} fill={FASE_COLORS[p.fase] || "#81D8D0"} />)}
+                {pipeline.map((p) => <Cell key={p.fase} fill={FASE_COLORS[p.fase] || "#0ABAB5"} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

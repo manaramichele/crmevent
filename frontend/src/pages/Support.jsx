@@ -157,7 +157,7 @@ function Insights() {
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <h3 className="font-semibold text-slate-800 mb-3">Categorie più richieste</h3>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={d.categorie_piu_richieste.slice(0, 8)}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="categoria" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="count" fill="#81D8D0" radius={[4, 4, 0, 0]} /></BarChart>
+            <BarChart data={d.categorie_piu_richieste.slice(0, 8)}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="categoria" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="count" fill="#0ABAB5" radius={[4, 4, 0, 0]} /></BarChart>
           </ResponsiveContainer>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4">

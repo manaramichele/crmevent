@@ -255,12 +255,12 @@ def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: 
         greeting_html(name) +
         f'<p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 22px">{escape(intro)}</p>'
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:8px auto 22px">'
-        '<tr><td align="center" bgcolor="#81D8D0" style="border-radius:8px">'
+        '<tr><td align="center" bgcolor="#0ABAB5" style="border-radius:8px">'
         f'<a href="{safe_url}" style="display:inline-block;padding:13px 28px;font-family:Arial,Helvetica,sans-serif;'
         f'font-size:15px;font-weight:700;color:#0f172a;text-decoration:none;border-radius:8px">{escape(cta_label)}</a>'
         '</td></tr></table>'
         '<p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0 0 4px">Se il pulsante non funziona, copia e incolla questo link nel browser:</p>'
-        f'<p style="margin:0 0 18px;word-break:break-all"><span style="color:#59C1B7;font-size:12px">{safe_url}</span></p>'
+        f'<p style="margin:0 0 18px;word-break:break-all"><span style="color:#088F8A;font-size:12px">{safe_url}</span></p>'
         f'<p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0">{escape(footer_note)}</p>'
     )
     return _shell(content)

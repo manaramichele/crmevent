@@ -4190,7 +4190,7 @@ async def brevo_unsubscribe(token: str):
             "margin:0;padding:48px 16px;text-align:center'>"
             "<div style='max-width:460px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;"
             "border-radius:16px;padding:32px'>"
-            "<div style='height:4px;width:60px;background:#81D8D0;margin:0 auto 20px;border-radius:2px'></div>"
+            "<div style='height:4px;width:60px;background:#0ABAB5;margin:0 auto 20px;border-radius:2px'></div>"
             "<h1 style='font-size:20px;color:#0f172a;margin:0 0 12px'>{title}</h1>"
             "<p style='color:#475569;font-size:14px;line-height:1.6;margin:0'>{msg}</p></div></body></html>")
     lead = await db.leads.find_one({"unsub_token": token}, {"_id": 0}) if token else None
@@ -6926,13 +6926,13 @@ def _prospect_email_html(domain: str) -> str:
 <p style="margin:0 0 12px 0;">Staff e volontari su WhatsApp.<br/>Sponsor nelle email.<br/>Turni su Excel.<br/>Hotel e pasti su un altro file.<br/>Briefing e documenti sparsi nelle cartelle.</p>
 <p style="margin:0 0 12px 0;">È proprio da questa situazione che nasce <strong>CRMEvent</strong>.</p>
 <p style="margin:0 0 8px 0;">Un unico spazio pensato per chi organizza eventi sportivi, dove gestire:</p>
-<p style="margin:0 0 16px 0;color:#147D74;font-weight:600;">Eventi · Staff · Volontari · Team e turni · Sponsor e partner · Ospitalità · Attività · Documenti e briefing</p>
+<p style="margin:0 0 16px 0;color:#088F8A;font-weight:600;">Eventi · Staff · Volontari · Team e turni · Sponsor e partner · Ospitalità · Attività · Documenti e briefing</p>
 <p style="margin:0 0 20px 0;">L'obiettivo è semplice: avere le informazioni dell'evento organizzate e accessibili quando servono.</p>
 <p style="margin:0 0 20px 0;font-weight:600;">Vuoi vedere come funziona?</p></td></tr>
-<tr><td align="center" style="padding:4px 32px 8px 32px;"><a href="{cta}" style="display:inline-block;background:#147D74;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:999px;">GUARDA LA DEMO</a></td></tr>
+<tr><td align="center" style="padding:4px 32px 8px 32px;"><a href="{cta}" style="display:inline-block;background:#088F8A;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:999px;">GUARDA LA DEMO</a></td></tr>
 <tr><td align="center" style="padding:0 32px 20px 32px;font-size:13px;line-height:1.5;color:#6b7280;">Una panoramica concreta di CRMEvent e di come può aiutarti nell'organizzazione del prossimo evento.</td></tr>
 <tr><td style="padding:0 32px 28px 32px;font-size:15px;color:#374151;"><p style="margin:0;">A presto,<br/><strong>CRMEvent</strong></p></td></tr>
-<tr><td style="padding:18px 32px;background:#0f172a;color:#cbd5e1;font-size:12px;line-height:1.6;"><strong style="color:#ffffff;">CRMEvent</strong><br/><a href="{domain}" style="color:#5eead4;text-decoration:none;">{domain}</a><br/>Ricevi questa email come organizzatore di eventi sportivi. Se non desideri più ricevere le nostre comunicazioni puoi <a href="{{{{ unsubscribe }}}}" style="color:#5eead4;">disiscriverti qui</a>.<br/>{{{{ contact.EMAIL }}}}</td></tr>
+<tr><td style="padding:18px 32px;background:#0f172a;color:#cbd5e1;font-size:12px;line-height:1.6;"><strong style="color:#ffffff;">CRMEvent</strong><br/><a href="{domain}" style="color:#0ABAB5;text-decoration:none;">{domain}</a><br/>Ricevi questa email come organizzatore di eventi sportivi. Se non desideri più ricevere le nostre comunicazioni puoi <a href="{{{{ unsubscribe }}}}" style="color:#0ABAB5;">disiscriverti qui</a>.<br/>{{{{ contact.EMAIL }}}}</td></tr>
 </table></td></tr></table></body></html>"""
 
 
@@ -8372,7 +8372,7 @@ def _event_logo_url(event: dict, base: str = None) -> str:
     base = (base or PUBLIC_SITE_URL).rstrip("/")
     if event.get("logo_url"):
         return f"{base}/api/public/event-logo/{event.get('id')}"
-    return f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=2"
+    return f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=4"
 
 
 def _avail_email_params(av: dict, event: dict, org: dict, logo_url: str) -> dict:
@@ -8768,7 +8768,7 @@ async def brevo_avail_template_preview(event_id: str, kind: str = "disponibilita
 @api.get("/public/event-logo/{event_id}")
 async def pub_event_logo(event_id: str):
     """Logo pubblico dell'Evento (immagine soltanto) per le email Brevo. Fallback: logo CRMEvent."""
-    fallback = RedirectResponse(f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=2")
+    fallback = RedirectResponse(f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=4")
     event = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not event or not event.get("logo_url"):
         return fallback

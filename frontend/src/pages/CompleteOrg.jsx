@@ -39,7 +39,7 @@ export default function CompleteOrg() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
       <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8">
-        <Link to="/"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-12 w-auto mb-6" /></Link>
+        <Link to="/"><img src="/logo-crmevent.png?v=4" alt="CRMEvent" className="h-12 w-auto mb-6" /></Link>
         <div className="inline-flex items-center gap-2 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1 text-xs font-semibold mb-4"><Sparkles className="w-3.5 h-3.5" />Ultimo passaggio</div>
         <h1 className="font-display text-2xl font-bold text-slate-900">Crea la tua organizzazione</h1>
         <p className="text-sm text-slate-500 mt-1 mb-6">Ciao {user.name}, dai un nome alla tua organizzazione per iniziare la prova gratuita di 14 giorni.</p>

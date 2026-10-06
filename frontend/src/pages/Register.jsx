@@ -63,7 +63,7 @@ export default function Register() {
 
       <div className="hidden lg:flex flex-col justify-between w-1/2 bg-black p-12 relative overflow-hidden">
         <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-tiffany/20 blur-3xl" />
-        <Link to="/" className="relative flex items-center gap-3"><img src="/logo-crmevent-dark.png?v=2" alt="CRMEvent" className="h-20 w-auto" /></Link>
+        <Link to="/" className="relative flex items-center gap-3"><img src="/logo-crmevent-dark.png?v=4" alt="CRMEvent" className="h-20 w-auto" /></Link>
         <div className="relative">
           <h1 className="font-display text-4xl font-bold text-white leading-tight">Crea la tua organizzazione su CRMEvent.</h1>
           <div className="mt-6 space-y-3 text-slate-200">
@@ -76,7 +76,7 @@ export default function Register() {
 
       <div className="flex-1 flex items-center justify-center p-6 bg-white overflow-y-auto">
         <div className="w-full max-w-md py-8">
-          <div className="lg:hidden flex items-center justify-center mb-8"><Link to="/"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-14 w-auto" /></Link></div>
+          <div className="lg:hidden flex items-center justify-center mb-8"><Link to="/"><img src="/logo-crmevent.png?v=4" alt="CRMEvent" className="h-14 w-auto" /></Link></div>
           <h2 className="font-display text-2xl font-bold text-slate-900">Inizia gratuitamente</h2>
           <p className="text-sm text-slate-500 mb-6">Crea il tuo account organizzatore e ricevi 100 crediti CRMEvent.</p>
 

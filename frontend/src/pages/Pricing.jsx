@@ -98,7 +98,7 @@ export default function Pricing() {
     <div className="bg-white text-slate-900" data-testid="pricing-page">
       <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" data-testid="pricing-logo"><img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-14 sm:h-16 w-auto" /></Link>
+          <Link to="/" data-testid="pricing-logo"><img src="/logo-crmevent.png?v=4" alt="CRMEvent" className="h-14 sm:h-16 w-auto" /></Link>
           <nav className="hidden lg:flex items-center gap-7">
             <Link to="/#funzionalita" className="text-sm font-medium text-slate-600 hover:text-slate-900">Funzionalità</Link>
             <Link to="/prezzi" className="text-sm font-semibold text-slate-900">Crediti</Link>

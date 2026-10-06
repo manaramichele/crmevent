@@ -19,7 +19,7 @@ IMAGE_PROVIDER = os.environ.get("SOCIAL_IMAGE_PROVIDER", "gemini")
 IMAGE_MODEL = os.environ.get("SOCIAL_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
 
 FONT_DIR = "/usr/share/fonts/truetype/liberation/"
-TIFFANY = (129, 216, 208)      # #81D8D0 brand accent
+TIFFANY = (10, 186, 181)      # #0ABAB5 brand accent
 DARK = (15, 23, 42)            # slate-900
 
 DIMS = {"4:5": (1080, 1350), "1:1": (1080, 1080), "9:16": (1080, 1920)}

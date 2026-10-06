@@ -104,7 +104,7 @@ export default function Invite() {
 
   return (
     <Card>
-      <img src="/logo-crmevent.png?v=2" alt="CRMEvent" className="h-9 w-auto mb-4" />
+      <img src="/logo-crmevent.png?v=4" alt="CRMEvent" className="h-9 w-auto mb-4" />
       <h1 className="text-2xl font-bold text-slate-900">Invito a {invite.org_name}</h1>
       <p className="text-sm text-slate-500 mt-1">Sei stato invitato con il ruolo <span className="font-semibold text-slate-700">{invite.role_label}</span> per l'indirizzo <span className="font-semibold text-slate-700">{invite.email}</span>.</p>
 

@@ -16,12 +16,12 @@ module.exports = {
       },
       colors: {
         tiffany: {
-          DEFAULT: '#81D8D0',
-          hover: '#6ECDC4',
-          active: '#59C1B7',
-          light: '#E8F8F6',
-          border: '#B2E7E1',
-          fg: '#0F4C45',
+          DEFAULT: '#0ABAB5',
+          hover: '#09A6A1',
+          active: '#088F8A',
+          light: '#E6F8F7',
+          border: '#B5EAE8',
+          fg: '#0A4A47',
         },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',

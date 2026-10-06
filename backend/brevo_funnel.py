@@ -10,8 +10,8 @@ import httpx
 logger = logging.getLogger("crmevent.brevo_funnel")
 
 BREVO_BASE = "https://api.brevo.com"
-TIFFANY = "#81D8D0"
-TIFFANY_DARK = "#59C1B7"
+TIFFANY = "#0ABAB5"
+TIFFANY_DARK = "#088F8A"
 INK = "#0f172a"
 MUTED = "#475569"
 FAINT = "#94a3b8"
