@@ -5,187 +5,171 @@ import { useAuth } from "@/context/AuthContext";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { HelpCircle, CheckCircle2, Circle, ArrowRight, X, Rocket, MinusCircle } from "lucide-react";
+import { HelpCircle, ArrowRight, ArrowLeft, X, ChevronRight, ListTree } from "lucide-react";
 
-const STEP_TEXT = {
-  event: { title: "Crea il tuo primo evento", desc: "Partiamo dalle informazioni principali: nome, data, luogo e dettagli dell'evento.", cta: "Crea evento" },
-  people: { title: "Aggiungi staff e volontari", desc: "Inserisci le persone coinvolte: potrai assegnare ruoli, qualifiche e informazioni utili.", cta: "Vai a Persone" },
-  team: { title: "Crea il tuo primo team", desc: "Raggruppa le persone per area operativa e assegna i responsabili (Partenza, Ristori, Segreteria…).", cta: "Vai a Team" },
-  shifts: { title: "Organizza i turni", desc: "Definisci quando servono le persone e assegna lo staff. CRMEvent evidenzia i turni scoperti.", cta: "Vai ai Turni" },
-  activities: { title: "Inserisci le attività", desc: "Crea le cose da fare, assegna i responsabili e tieni sotto controllo le scadenze.", cta: "Vai alle Attività" },
-  briefing: { title: "Prepara il briefing", desc: "Raccogli le informazioni operative e genera il briefing da condividere con il team.", cta: "Vai al Briefing" },
-  sponsor: { title: "Gestisci Sponsor e Partner", desc: "Gestisci aziende, contatti, trattative e attività commerciali collegate all'evento.", cta: "Vai a Sponsor & Partner" },
-  hospitality: { title: "Devi gestire ospitalità o pasti?", desc: "Organizza strutture, camere, pernottamenti e pasti delle persone coinvolte.", cta: "Configura ospitalità e pasti" },
-};
+// Guida informativa (NON una checklist): spiega le funzioni di CRMEvent.
+// Ogni sezione ha micro-passaggi testuali; nessuna verifica dati, nessuna mutazione.
+// Rotte e nomi = quelli reali dell'interfaccia. Le funzioni interne all'evento puntano a /eventi.
+const SECTIONS = [
+  { key: "dashboard", label: "Dashboard", route: "/app", steps: [
+    { t: "La tua Dashboard", b: "È il punto di partenza: da qui tieni sotto controllo l'evento selezionato con riepiloghi, scadenze e ciò che richiede attenzione." },
+    { t: "Seleziona l'evento", b: "Usa il selettore evento in alto per cambiare il contesto: tutti i riepiloghi si aggiornano sull'evento scelto." },
+  ]},
+  { key: "eventi", label: "Eventi", route: "/eventi", steps: [
+    { t: "Crea e gestisci gli eventi", b: "Qui crei un nuovo evento (nome, tipologia, date, logo) e gestisci quelli esistenti: in preparazione, attivo, sospeso o concluso." },
+    { t: "Attivazione evento", b: "L'attivazione sblocca le funzioni operative dell'evento. Alcune attivazioni possono utilizzare crediti." },
+    { t: "Duplica da edizione precedente", b: "Se disponibile, puoi partire dai dati di un'edizione precedente per risparmiare tempo." },
+  ]},
+  { key: "checklist", label: "Checklist Evento", route: "/eventi", steps: [
+    { t: "Checklist Evento", b: "È lo strumento operativo per pianificare e controllare le attività dell'evento: la apri dalla gestione dell'evento selezionato." },
+    { t: "Attività, scadenze e priorità", b: "Le voci hanno stati, scadenze e priorità; CRMEvent evidenzia ciò che è in ritardo o richiede attenzione." },
+    { t: "Diversa dal Tutorial", b: "La Checklist misura il lavoro reale dell'evento; questo Tutorial invece spiega soltanto come usare la piattaforma." },
+  ]},
+  { key: "staff", label: "Staff / Volontari", route: "/staff-volontari", steps: [
+    { t: "Aggiungi Staff e Volontari", b: "Da qui inserisci le persone che collaborano all'organizzazione dell'evento." },
+    { t: "Ruolo e qualifica", b: "Indica il ruolo nell'evento e la qualifica quando serve, insieme ai recapiti." },
+    { t: "Disponibilità", b: "Consulta giorni, orari e preferenze; se disponibile, puoi usare un link pubblico per raccogliere le disponibilità." },
+  ]},
+  { key: "aziende", label: "Aziende", route: "/aziende", steps: [
+    { t: "Aziende", b: "Gestisci le aziende collegate all'evento e i relativi referenti, utili anche per Sponsor & Partner." },
+  ]},
+  { key: "anagrafiche", label: "Anagrafiche", route: "/persone", steps: [
+    { t: "Anagrafiche", b: "L'archivio dei contatti della tua organizzazione: dati anagrafici e recapiti riutilizzabili nei vari moduli." },
+  ]},
+  { key: "team", label: "Team", route: "/eventi", steps: [
+    { t: "Organizza i Team", b: "Dalla gestione dell'evento raggruppi le persone per area operativa (es. Partenza, Ristori, Segreteria)." },
+    { t: "Referenti e composizione", b: "Assegni Staff e Volontari a ogni Team e indichi i responsabili." },
+  ]},
+  { key: "turni", label: "Turni", route: "/eventi", steps: [
+    { t: "Organizza i Turni", b: "Definisci giorni e orari e assegni Staff, Volontari o Team ai turni dell'evento." },
+    { t: "Turni scoperti", b: "CRMEvent ti aiuta a individuare i turni ancora scoperti, così da completare la copertura." },
+  ]},
+  { key: "attivita", label: "Attività", route: "/attivita", steps: [
+    { t: "Attività", b: "Crea le cose da fare, assegna i responsabili e tieni sotto controllo scadenze, priorità e stati." },
+    { t: "In ritardo e sotto controllo", b: "Le attività in ritardo vengono evidenziate e si collegano a Dashboard e Checklist Evento." },
+  ]},
+  { key: "sponsor", label: "Sponsor & Partner", route: "/sponsor", steps: [
+    { t: "Sponsor & Partner", b: "Gestisci aziende, referenti e opportunità commerciali collegate all'evento." },
+    { t: "Pipeline commerciale", b: "Segui le trattative in stile Kanban con stato, importi e follow-up." },
+  ]},
+  { key: "ospitalita", label: "Ospitalità & Pasti", route: "/ospitalita", steps: [
+    { t: "Ospitalità", b: "Organizza strutture, pernottamenti e camere delle persone coinvolte; i dati confluiscono nel briefing." },
+    { t: "Pasti", b: "Gestisci i pasti e i relativi servizi per le persone dell'evento, con le informazioni operative utili." },
+  ]},
+  { key: "briefing", label: "Briefing", route: "/eventi", steps: [
+    { t: "Briefing operativo", b: "Dalla gestione dell'evento raccogli dati evento, Staff, Team, Turni, attività, ospitalità e pasti in un unico documento." },
+    { t: "Generazione e versioni", b: "Puoi generare il briefing e gestirne le versioni/PDF da condividere con il team." },
+    { t: "Crediti", b: "Alcune funzioni avanzate del briefing (es. AI) possono utilizzare crediti." },
+  ]},
+  { key: "mappe", label: "Mappe / GPX", route: "/eventi", steps: [
+    { t: "Mappe e tracciati GPX", b: "Se attiva, puoi caricare tracciati GPX e associarli all'evento per la gestione del percorso." },
+  ]},
+  { key: "file", label: "File / Documenti", route: "/eventi", steps: [
+    { t: "File e documenti", b: "Carichi e organizzi i documenti dell'evento per averli sempre a portata di mano e condivisibili." },
+  ]},
+  { key: "pipeline", label: "Pipeline Evento Pro", route: "/eventi", steps: [
+    { t: "Pipeline Evento Pro", b: "Genera automaticamente un modello di attività con scadenze relative alla data dell'evento e priorità." },
+    { t: "Collegamento con la Checklist", b: "Le attività generate alimentano la Checklist Evento e la sezione «Cosa richiede attenzione»." },
+    { t: "Attivazione a crediti", b: "È una funzione attivabile che può utilizzare crediti; se non attiva per l'evento corrente, puoi comunque attivarla quando vuoi." },
+  ]},
+];
+const SECTION_MAP = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
 
-// ---- shared lightweight store ----
 const refreshAll = () => window.dispatchEvent(new Event("onboarding:refresh"));
+const openIndex = () => window.dispatchEvent(new Event("tutorial:open-index"));
 
-export function useOnboarding(eventId) {
+function useTutorial() {
   const { user } = useAuth();
-  const [data, setData] = useState(null);
+  const [info, setInfo] = useState(null);
   const isSuper = user?.role === "superadmin";
   const load = useCallback(async () => {
-    if (isSuper) { setData({ superadmin: true, show: false }); return; }
-    try {
-      const params = (eventId && eventId !== "all") ? { event_id: eventId } : {};
-      const { data } = await api.get("/onboarding/status", { params });
-      setData(data);
-    } catch {}
-  }, [isSuper, eventId]);
+    if (isSuper) { setInfo({ superadmin: true }); return; }
+    try { const { data } = await api.get("/onboarding/status"); setInfo(data); } catch {}
+  }, [isSuper]);
   useEffect(() => {
     load();
     const h = () => load();
     window.addEventListener("onboarding:refresh", h);
-    window.addEventListener("focus", h);
-    return () => { window.removeEventListener("onboarding:refresh", h); window.removeEventListener("focus", h); };
+    return () => window.removeEventListener("onboarding:refresh", h);
   }, [load]);
   const patch = useCallback(async (body) => {
     try { await api.post("/onboarding/state", body); } catch {}
     refreshAll();
   }, []);
-  return { data, reload: load, patch };
+  return { info, patch, isSuper };
 }
 
-function ProgressBar({ done, total }) {
-  const pct = total ? Math.round((done / total) * 100) : 0;
-  return (
-    <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden" data-testid="onboarding-progress">
-      <div className="h-full rounded-full bg-tiffany transition-all duration-500" style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
-
-function StepRow({ s, onGo, onSkip }) {
-  const t = STEP_TEXT[s.key] || { title: s.label };
-  return (
-    <div className="flex items-start gap-3 py-2.5" data-testid={`onboarding-step-${s.key}`}>
-      {s.completed
-        ? <CheckCircle2 className="w-5 h-5 text-tiffany-active shrink-0 mt-0.5" />
-        : s.skipped
-          ? <MinusCircle className="w-5 h-5 text-slate-300 shrink-0 mt-0.5" />
-          : <Circle className="w-5 h-5 text-slate-300 shrink-0 mt-0.5" />}
-      <div className="min-w-0 flex-1">
-        <div className={`text-sm font-medium ${s.completed ? "text-slate-400 line-through" : "text-slate-800"}`}>{t.title}</div>
-        {!s.completed && !s.skipped && (
-          <div className="mt-1 flex items-center gap-3">
-            <button onClick={() => onGo(s)} data-testid={`onboarding-go-${s.key}`}
-              className="text-xs font-semibold text-tiffany-active hover:underline inline-flex items-center gap-1">
-              {t.cta} <ArrowRight className="w-3 h-3" />
-            </button>
-            {s.optional && (
-              <button onClick={() => onSkip(s)} data-testid={`onboarding-skip-${s.key}`}
-                className="text-xs text-slate-400 hover:text-slate-600">Non mi serve</button>
-            )}
-          </div>
-        )}
-        {s.skipped && <span className="text-xs text-slate-400">Saltato</span>}
-      </div>
-    </div>
-  );
-}
-
-// ---- side panel (desktop right / mobile full) ----
-export function TutorialPanel({ open, onClose }) {
-  const { data, patch } = useOnboarding();
-  const navigate = useNavigate();
-  if (!open || !data || data.superadmin) return null;
-  const go = (s) => { onClose(); navigate(`${s.route}?tutorial=${s.key}`); };
-  const skip = (s) => patch({ skip: s.key });
-
-  return (
-    <div className="fixed inset-0 z-[60]" data-testid="tutorial-panel">
-      <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={onClose} data-testid="tutorial-panel-overlay" />
-      <aside className="absolute right-0 top-0 h-[100dvh] w-full sm:w-[400px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-        <div className="h-16 flex items-center justify-between px-5 border-b border-slate-100">
-          <div className="font-display font-bold text-slate-900">Configura il tuo evento</div>
-          <button onClick={onClose} data-testid="tutorial-panel-close" className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-5 overflow-y-auto flex-1">
-          {data.returning_user && (
-            <div className="mb-4 text-xs text-slate-500 bg-slate-50 rounded-lg p-3" data-testid="tutorial-returning-note">
-              Checklist dell'evento attivo{data.event_name ? `: ${data.event_name}` : ""}.
-            </div>
-          )}
-          <div className="text-sm text-slate-500 mb-1">{data.main_done} di {data.main_total} passaggi completati</div>
-          <ProgressBar done={data.main_done} total={data.main_total} />
-          <div className="mt-4 divide-y divide-slate-100">
-            {(data.steps || []).map((s) => <StepRow key={s.key} s={s} onGo={go} onSkip={skip} />)}
-          </div>
-          {(data.optional || []).length > 0 && (
-            <>
-              <div className="mt-5 mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Funzioni opzionali</div>
-              <div className="divide-y divide-slate-100">
-                {data.optional.map((s) => <StepRow key={s.key} s={s} onGo={go} onSkip={skip} />)}
-              </div>
-            </>
-          )}
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-// ---- header button + welcome + completion, self-contained ----
+// ---- Header button + welcome + index drawer ----
 export function TutorialLauncher() {
-  const { data, patch } = useOnboarding();
+  const { info, patch, isSuper } = useTutorial();
   const [open, setOpen] = useState(false);
   const [welcome, setWelcome] = useState(false);
-  const [done, setDone] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (!data || data.superadmin) return;
-    const st = data.state || {};
-    if (!st.seen && !data.returning_user && !data.all_main_completed) setWelcome(true);
-    // mark 'seen' once auto-welcome has had a chance to show (returning users too)
-    if (!st.seen) patch({ seen: true });
-    if (data.all_main_completed && !st.completed) { setDone(true); patch({ completed: true }); }
+    const h = () => setOpen(true);
+    window.addEventListener("tutorial:open-index", h);
+    return () => window.removeEventListener("tutorial:open-index", h);
+  }, []);
+  useEffect(() => {
+    if (!info || info.superadmin) return;
+    const st = info.state || {};
+    if (!st.seen) { setWelcome(true); patch({ seen: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.state?.seen, data?.all_main_completed, data?.superadmin, data?.returning_user]);
+  }, [info?.state?.seen, info?.superadmin]);
 
-  if (!data || data.superadmin) return null;
+  if (!info || info.superadmin || isSuper) return null;
+
+  const goSection = (s) => {
+    setOpen(false);
+    navigate(`${s.route}?tutorial=${s.key}&tstep=0`);
+  };
 
   return (
     <>
       <button data-testid="tutorial-button" onClick={() => setOpen(true)} title="Tutorial"
-        className="relative h-10 px-3 rounded-lg hover:bg-tiffany-light text-slate-600 hover:text-tiffany-fg flex items-center gap-1.5 transition-colors">
+        className="h-10 px-3 rounded-lg hover:bg-tiffany-light text-slate-600 hover:text-tiffany-fg flex items-center gap-1.5 transition-colors">
         <HelpCircle className="w-5 h-5" />
         <span className="hidden md:block text-sm font-medium">Tutorial</span>
-        {!data.all_main_completed && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-tiffany ring-2 ring-white" />}
       </button>
 
-      <TutorialPanel open={open} onClose={() => setOpen(false)} />
+      {open && (
+        <div className="fixed inset-0 z-[60]" data-testid="tutorial-index">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <aside className="absolute right-0 top-0 h-[100dvh] w-full sm:w-[400px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="px-5 pt-5 pb-4 border-b border-slate-100 flex items-start justify-between">
+              <div>
+                <div className="font-display text-lg font-bold text-slate-900">Scopri CRMEvent</div>
+                <div className="text-sm text-slate-500 mt-0.5">Scopri come utilizzare CRMEvent e tutte le funzioni disponibili per organizzare e gestire i tuoi eventi.</div>
+              </div>
+              <button onClick={() => setOpen(false)} data-testid="tutorial-index-close" className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center shrink-0"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-3 overflow-y-auto flex-1">
+              {SECTIONS.map((s) => (
+                <button key={s.key} onClick={() => goSection(s)} data-testid={`tutorial-section-${s.key}`}
+                  className="w-full text-left px-3 py-3 rounded-lg hover:bg-tiffany-light flex items-center justify-between group">
+                  <span className="text-sm font-medium text-slate-800">{s.label}</span>
+                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-tiffany-active" />
+                </button>
+              ))}
+            </div>
+          </aside>
+        </div>
+      )}
 
       <Dialog open={welcome} onOpenChange={(o) => { if (!o) setWelcome(false); }}>
         <DialogContent data-testid="onboarding-welcome">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl">Benvenuto in CRMEvent 👋</DialogTitle>
             <DialogDescription className="text-base text-slate-600 pt-1">
-              CRMEvent ti aiuta a organizzare persone, attività e informazioni del tuo evento in un unico posto.
-              Ti guidiamo nella configurazione del tuo primo evento, passo dopo passo.
+              Vuoi scoprire come organizzare il tuo evento con CRMEvent? Ti mostriamo rapidamente le principali funzioni della piattaforma.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
-            <button onClick={() => { setWelcome(false); }} data-testid="onboarding-later"
+            <button onClick={() => { patch({ later: true }); setWelcome(false); }} data-testid="onboarding-later"
               className="px-4 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">Lo farò più tardi</button>
-            <button onClick={() => { patch({ started: true }); setWelcome(false); setOpen(true); }} data-testid="onboarding-start"
+            <button onClick={() => { setWelcome(false); setOpen(true); }} data-testid="onboarding-start"
               className="px-4 py-2.5 rounded-lg text-sm font-semibold bg-tiffany text-white hover:bg-tiffany-hover">Inizia il tutorial</button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={done} onOpenChange={(o) => { if (!o) setDone(false); }}>
-        <DialogContent data-testid="onboarding-complete">
-          <DialogHeader>
-            <div className="mx-auto w-14 h-14 rounded-2xl bg-tiffany-light flex items-center justify-center mb-2"><Rocket className="w-7 h-7 text-tiffany-active" /></div>
-            <DialogTitle className="font-display text-2xl text-center">Il tuo evento è pronto 🚀</DialogTitle>
-            <DialogDescription className="text-base text-slate-600 text-center pt-1">
-              Hai configurato le funzioni principali di CRMEvent. Ora puoi continuare a organizzare il tuo evento e aggiungere tutti i dettagli che ti servono.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <button onClick={() => setDone(false)} data-testid="onboarding-complete-cta"
-              className="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-tiffany text-white hover:bg-tiffany-hover">Vai alla Dashboard</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -193,56 +177,58 @@ export function TutorialLauncher() {
   );
 }
 
-// ---- dashboard card ----
-export function OnboardingCard({ eventId }) {
-  const { data, patch } = useOnboarding(eventId);
-  const navigate = useNavigate();
-  if (!data || data.superadmin || data.all_main_completed) return null;
-  if (data.state?.card_hidden) return null;
-  const next = data.next_step;
-  return (
-    <div className="bg-white border border-tiffany-border rounded-xl shadow-sm p-5 mb-6" data-testid="onboarding-card">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-display font-bold text-slate-900">Configura il tuo evento</div>
-          <div className="text-sm text-slate-500 mt-0.5">{data.main_done} di {data.main_total} passaggi completati</div>
-        </div>
-        <button onClick={() => patch({ card_hidden: true })} data-testid="onboarding-card-hide"
-          className="text-xs text-slate-400 hover:text-slate-600 shrink-0">Nascondi dalla Dashboard</button>
-      </div>
-      <div className="mt-3"><ProgressBar done={data.main_done} total={data.main_total} /></div>
-      {next && <div className="mt-3 text-sm text-slate-600">Prossimo passaggio: <span className="font-semibold text-slate-800">{(STEP_TEXT[next.key] || {}).title || next.label}</span></div>}
-      {next && (
-        <button onClick={() => navigate(`${next.route}?tutorial=${next.key}`)} data-testid="onboarding-card-continue"
-          className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-tiffany text-white hover:bg-tiffany-hover">
-          Continua configurazione <ArrowRight className="w-4 h-4" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ---- contextual hint (non invasive top banner when arriving via tutorial) ----
+// ---- Contextual guide card (reads ?tutorial=key&tstep=n). Non-blocking. ----
 export function TutorialHint() {
   const { user } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
+  const location = useLocation();
   const params = new URLSearchParams(location.search);
-  const step = params.get("tutorial");
-  const [closed, setClosed] = useState(false);
-  useEffect(() => { setClosed(false); }, [step]);
-  if (!step || closed || user?.role === "superadmin") return null;
-  const t = STEP_TEXT[step];
-  if (!t) return null;
+  const key = params.get("tutorial");
+  const tstep = parseInt(params.get("tstep") || "0", 10);
+  const section = key ? SECTION_MAP[key] : null;
+
+  const setStep = (n) => {
+    const p = new URLSearchParams(location.search);
+    p.set("tutorial", key); p.set("tstep", String(n));
+    navigate(`${location.pathname}?${p}`, { replace: true });
+  };
+  const close = () => {
+    const p = new URLSearchParams(location.search);
+    p.delete("tutorial"); p.delete("tstep");
+    navigate(`${location.pathname}${p.toString() ? `?${p}` : ""}`, { replace: true });
+  };
+
+  if (!section || user?.role === "superadmin") return null;
+  const steps = section.steps;
+  const idx = Math.min(Math.max(tstep, 0), steps.length - 1);
+  const step = steps[idx];
+  const isFirst = idx === 0;
+  const isLast = idx === steps.length - 1;
+
   return (
-    <div className="mx-4 lg:mx-8 mt-4 rounded-lg bg-tiffany-light border border-tiffany-border px-4 py-3 flex items-start gap-3" data-testid="tutorial-hint">
-      <span className="mt-0.5 shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-tiffany text-white text-xs font-bold">1</span>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-tiffany-fg">Inizia da qui</div>
-        <div className="text-sm text-slate-600">{t.cta} per completare: <span className="font-medium">{t.title}</span></div>
+    <div className="fixed z-[55] left-1/2 -translate-x-1/2 bottom-4 w-[calc(100%-2rem)] max-w-md" data-testid="tutorial-hint">
+      <div className="rounded-xl bg-white border border-tiffany-border shadow-2xl p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-tiffany-active">{section.label} · {idx + 1}/{steps.length}</div>
+            <div className="text-sm font-bold text-slate-900 mt-0.5">{step.t}</div>
+          </div>
+          <button onClick={close} data-testid="tutorial-hint-close" className="shrink-0 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{step.b}</p>
+        <div className="mt-3 flex items-center justify-between">
+          <button onClick={openIndex} data-testid="tutorial-hint-index" className="text-xs text-slate-500 hover:text-slate-700 inline-flex items-center gap-1">
+            <ListTree className="w-3.5 h-3.5" /> Torna all'indice
+          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setStep(idx - 1)} disabled={isFirst} data-testid="tutorial-hint-prev"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 inline-flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" /> Indietro</button>
+            {isLast
+              ? <button onClick={close} data-testid="tutorial-hint-finish" className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-tiffany text-white hover:bg-tiffany-hover">Ho capito</button>
+              : <button onClick={() => setStep(idx + 1)} data-testid="tutorial-hint-next" className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-tiffany text-white hover:bg-tiffany-hover inline-flex items-center gap-1">Avanti <ArrowRight className="w-3.5 h-3.5" /></button>}
+          </div>
+        </div>
       </div>
-      <button onClick={() => { setClosed(true); const p = new URLSearchParams(location.search); p.delete("tutorial"); navigate(`${location.pathname}${p.toString() ? `?${p}` : ""}`, { replace: true }); }}
-        data-testid="tutorial-hint-close" className="shrink-0 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
     </div>
   );
 }

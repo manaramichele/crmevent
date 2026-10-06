@@ -934,3 +934,10 @@ Task 2 — Creatività manuale:
 ### 2026-06 · Onboarding — fix event_id + verifica E2E
 - FIX: la card Dashboard ora passa all'hook l'event_id selezionato nel filtro (useOnboarding(eventId)); con 'Tutti gli eventi' usa fallback = evento più recente; il pannello '? Tutorial' (header, senza selettore) usa lo stesso fallback. Cambio evento → checklist ricalcolata immediatamente (ricarica su cambio eventId + evento 'onboarding:refresh' + focus).
 - E2E (testing agent, iteration_60): backend 9/9 pytest PASS, frontend 9/9 PASS. Verificati: multi-evento A/B isolato, nuovo org senza eventi (welcome+step evento), sequenza completa 6 step da dati reali, completamento totale (dialog una volta, card sparisce, ? Tutorial resta), 'Lo farò più tardi', nascondi card, sponsor/ospitalità opzionali (skip/complete, non contano nei 6), secondo evento (no welcome), Super Admin (no welcome/card/button, no mutazioni), hint contestuale, mobile 390x844, nessuna regressione moduli. Nessun deploy.
+
+### 2026-06 · Tutorial ridisegnato: da checklist a GUIDA INFORMATIVA
+- RIMOSSA la card Dashboard "Configura il tuo evento – X di 6" e la logica di avanzamento basata sui dati reali. La Checklist Evento operativa NON è toccata.
+- components/Onboarding.jsx riscritto: indice "Scopri CRMEvent" (drawer destro/mobile full) con le sezioni reali; guida contestuale non bloccante (card in basso) con ?tutorial=key&tstep=n, controlli Indietro/Avanti/Torna all'indice/Chiudi; welcome leggero (Inizia il tutorial / Lo farò più tardi). Nessuna verifica dati, nessuna mutazione, read-only.
+- Nomi UI reali usati: Dashboard, Eventi, Checklist Evento, Staff / Volontari, Aziende, Anagrafiche, Team, Turni, Attività, Sponsor & Partner, Ospitalità & Pasti, Briefing, Mappe / GPX, File / Documenti, Pipeline Evento Pro. ("Persone" eliminato → "Staff / Volontari").
+- Backend: endpoint onboarding INVARIATI; status usato solo per superadmin/event_id/state, state per persistenza seen/later. Super Admin: tutorial assente.
+- Smoke test OK (indice + guida + mobile), build OK. E2E completo da eseguire. Nessun deploy.

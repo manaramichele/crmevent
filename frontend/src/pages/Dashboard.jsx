@@ -3,7 +3,6 @@ import api from "@/lib/api";
 import { useCollection, SectionCard, formatEUR } from "@/components/crm";
 import PipelineAttention from "@/components/PipelineAttention";
 import OrgMessagesBanner from "@/components/OrgMessagesBanner";
-import { OnboardingCard } from "@/components/Onboarding";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -73,8 +72,6 @@ export default function Dashboard() {
       </div>
 
       <OrgMessagesBanner />
-
-      <OnboardingCard eventId={eventoId} />
 
       <PipelineAttention />
 
