@@ -1,0 +1,34 @@
+{
+  "summary": "Full E2E verification of the admin onboarding/tutorial feature. Backend pytest 9/9 PASSED (/app/backend/tests/test_iter60_onboarding.py): superadmin no-op, new-org first_step=event+welcome eligibility, state transitions (seen/later/card_hidden), full sequential completion of all 6 main steps via REAL endpoints (event -> staff -> team -> shifts -> activities -> briefing-versions) with per-step progression of main_done/next_step, event_id-scoped multi-event isolation (A vs B — selecting B does not surface A's completions and default picks most-recent event), optional sponsor skip->unskip->real deal->completed, optional hospitality skip->unskip->real lodging->completed, both optional flows DO NOT alter main_total (stays 6), returning_user flag flipping, regression check on existing QA admin status shape. UI Playwright flow on a brand-new org admin registered on-the-fly: welcome dialog 'Benvenuto in CRMEvent' auto-opens, 'Lo farò più tardi' dismisses it and it does NOT reappear after reload, '? Tutorial' header button opens the TutorialPanel (8 step rows: 6 main + 2 optional, progress bar '0 di 6', skip-sponsor/skip-hospitality present and clicking skip flips the row to 'Saltato'), tutorial-panel-close closes the drawer, dashboard OnboardingCard with Nascondi dalla Dashboard hides the card while keeping ? Tutorial available, TutorialHint appears with ?tutorial=event and is absent on plain navigation, and the mobile 390x844 viewport renders tutorial-button + full-width drawer. Super Admin login shows NO tutorial-button, NO welcome, NO onboarding-card (and GET /onboarding/status returns {superadmin:true}; POST /onboarding/state is a no-op). Feature works end-to-end and matches the spec.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard (new org, dev build)", "issues": ["In the Emergent preview build an unrelated transient 403 from a background request may trigger the dev-mode 'Unhandled rejection' overlay on first dashboard load; the Onboarding components themselves render correctly beneath it. Not a product bug (reproducible only under certain cookie races), but worth catching the rejection to avoid the overlay in dev."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter60_onboarding.py",
+    "/app/test_reports/pytest/iter60.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "/api/onboarding/status: 'returning_user' is true only when events exist AND !seen AND !started. If the user never clicks Welcome's buttons (closes the dialog via overlay/ESC), the seen flag is still set in TutorialLauncher.useEffect via patch({seen:true}) regardless of returning_user — correct, but note that this means returning_user will almost always be False in practice after the first mount. Behaviour is fine; just a nuance to keep in mind.",
+    "Onboarding.jsx useOnboarding(eventId) correctly re-fetches on eventId change and listens to a global 'onboarding:refresh' event + window focus. The hook is called twice when a page has both OnboardingCard and TutorialLauncher mounted (Dashboard + Layout) -> two independent GET /onboarding/status per render cycle. Low impact but a candidate for a shared context if usage grows.",
+    "TutorialHint only reads the 'tutorial' query param, never clears it on in-app navigation other than when the user clicks the close button. If the user navigates away via sidebar without closing, the next page without ?tutorial won't show it — correct per spec (verified).",
+    "Backend GET /onboarding/status recomputes 8 counts per call (one count_documents per collection). Fine for current volumes; a single $facet aggregation would reduce round-trips if this endpoint ends up polled frequently.",
+    "Onboarding is intentionally admin-only; staff/volunteer users land on VolunteerDashboard and never see the tutorial. The request's 'other_misc_info' flags this — product-wise it is consistent (tutorial is for organizers), but if the requirement 'Utente organizzazione' is interpreted broadly, a short note for staff/volunteer first login could be added. Not a bug.",
+    "The 'sponsor' and 'hospitality' optional steps are counted outside main_done/main_total (verified: creating a real deal or lodging flips the optional step to completed but main_done stays unchanged) — matches the spec."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter60_onboarding.py"
+  ],
+  "success_rate": {"backend": "100% (9/9 pytest)", "frontend": "100% (all 9 UI assertions pass)"},
+  "test_credentials": "Super Admin: manara.michele.pro@gmail.com / CrmEvent2026!. Existing QA org admin: qa.eventi@crmeventqa.it / QaEvents2026!. Each test registers its own fresh TEST_* org via POST /api/auth/register-organization (telefono needs +39 prefix).",
+  "seed_data_creation": "Each pytest/UI run registers a fresh TEST_* organization + admin via /api/auth/register-organization and creates its own event/staff/team/shifts/activities/briefing/sponsor/lodging. Residual TEST_* orgs/users remain in the DB (no cleanup endpoint exists for register-organization).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests at /app/backend/tests/test_iter60_onboarding.py — run with `REACT_APP_BACKEND_URL=... pytest -o addopts='' backend/tests/test_iter60_onboarding.py`. IMPORTANT: operational endpoints (staff/teams/shifts/activities/deals/lodgings/meals) require the event to be activated via POST /api/events/{id}/activate (-30 credits) because of the per-event guard _assert_event_operational. The test helper _create_event auto-activates. New orgs come with a signup bonus large enough to cover activation in the preview env. The onboarding 'event' step itself only requires an event to exist (no activation needed). On the UI side, do NOT reuse the Playwright session that was logged in as superadmin before registering a new org via page.request.post — stale cookies caused org-scoped reads to 403 earlier; always context.clear_cookies() or open a fresh context before the new-org login flow.",
+  "rca of the issue": "No product bug found. The one spurious failure during Playwright test (Dashboard 403s + Emergent 'Unhandled rejection' overlay on first attempt) was reproduced only when the Playwright session had leftover superadmin cookies from a prior test; after clear_cookies the new-org dashboard rendered cleanly and all onboarding UI (welcome, card, tutorial button, panel, hint) worked end-to-end."
+}
