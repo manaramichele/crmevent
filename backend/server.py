@@ -1761,90 +1761,21 @@ async def file_public(token: str):
 
 
 # ---------------- onboarding / tutorial ----------------
-_OB_MAIN = ["event", "people", "team", "shifts", "activities", "briefing"]
-_OB_OPT = ["sponsor", "hospitality"]
-_OB_LABELS = {
-    "event": "Crea il tuo evento", "people": "Aggiungi le prime persone",
-    "team": "Crea il primo team", "shifts": "Organizza i turni",
-    "activities": "Inserisci le attività", "briefing": "Crea il briefing",
-    "sponsor": "Sponsor e Partner", "hospitality": "Ospitalità e Pasti",
-}
-
-
-def _ob_route(step: str, event_id):
-    if step == "people":
-        return "/staff-volontari"
-    if step == "activities":
-        return "/attivita"
-    if step == "sponsor":
-        return "/sponsor"
-    if step == "hospitality":
-        return "/ospitalita"
-    if step == "briefing" and event_id:
-        return f"/eventi/{event_id}/briefing"
-    return "/eventi"
-
-
 @api.get("/onboarding/status")
-async def onboarding_status(request: Request, event_id: Optional[str] = None,
-                            user: dict = Depends(get_current_user)):
+async def onboarding_status(request: Request, user: dict = Depends(get_current_user)):
     # Super Admin navigation must never trigger/alter organizers' onboarding.
     if user.get("role") == "superadmin":
-        return {"superadmin": True, "show": False, "steps": [], "optional": [], "state": {}}
+        return {"superadmin": True, "show": False, "events": [], "state": {}}
+    # Guida informativa: sola lettura, nessun conteggio/avanzamento basato sui dati.
     org_id, _role = await _resolve_active_org(request, user)
     events = await db.events.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1, "created_at": 1}) \
         .sort("created_at", -1).to_list(2000)
-    chosen = None
-    if event_id:
-        chosen = next((e for e in events if e["id"] == event_id), None)
-    if not chosen and events:
-        chosen = events[0]
-    eid = chosen["id"] if chosen else None
-
-    async def cnt(coll, **extra):
-        q = {"org_id": org_id}
-        q.update(extra)
-        return await coll.count_documents(q)
-
-    completed = {
-        "event": len(events) > 0,
-        "people": (await cnt(db.staff, evento_id=eid)) > 0 if eid else False,
-        "team": (await cnt(db.teams, evento_id=eid)) > 0 if eid else False,
-        "shifts": (await cnt(db.shifts, evento_id=eid)) > 0 if eid else False,
-        "activities": (await cnt(db.activities, evento_id=eid)) > 0 if eid else False,
-        "briefing": (await cnt(db.briefing_versions, evento_id=eid)) > 0 if eid else False,
-        "sponsor": (await cnt(db.deals, evento_id=eid)) > 0 if eid else False,
-        "hospitality": (((await cnt(db.lodgings, evento_id=eid)) + (await cnt(db.meals, evento_id=eid))) > 0) if eid else False,
-    }
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "onboarding": 1}) or {}
     ob = u.get("onboarding") or {}
-    skipped = ob.get("skipped") or {}
-
-    def mkstep(k, optional):
-        return {"key": k, "label": _OB_LABELS[k], "completed": completed[k],
-                "optional": optional, "skipped": bool(skipped.get(k)),
-                "route": _ob_route(k, eid)}
-
-    steps_main = [mkstep(k, False) for k in _OB_MAIN]
-    steps_opt = [mkstep(k, True) for k in _OB_OPT]
-    main_done = sum(1 for s in steps_main if s["completed"])
-    all_main = main_done == len(_OB_MAIN)
-    nxt = next((s for s in steps_main if not s["completed"]), None)
-    returning = (len(events) > 0) and not ob.get("started") and not ob.get("seen")
     return {
         "superadmin": False, "show": True,
-        "event_id": eid, "event_name": chosen["nome"] if chosen else None,
-        "steps": steps_main, "optional": steps_opt,
-        "main_done": main_done, "main_total": len(_OB_MAIN),
-        "all_main_completed": all_main,
-        "next_step": ({"key": nxt["key"], "label": nxt["label"], "route": nxt["route"]} if nxt else None),
-        "returning_user": returning,
-        "state": {
-            "seen": bool(ob.get("seen")), "started": bool(ob.get("started")),
-            "completed": bool(ob.get("completed")) or all_main,
-            "card_hidden": bool(ob.get("card_hidden")), "later": bool(ob.get("later")),
-            "skipped": skipped, "started_at": ob.get("started_at"), "completed_at": ob.get("completed_at"),
-        },
+        "events": [{"id": e["id"], "nome": e.get("nome")} for e in events],
+        "state": {"seen": bool(ob.get("seen")), "later": bool(ob.get("later"))},
     }
 
 

@@ -194,7 +194,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
       <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input className="pl-9" placeholder="Cerca persone..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-person-input" />
+          <Input className="pl-9" placeholder="Cerca per nome..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-person-input" />
         </div>
         {isStaffTab && (
           <div className="w-full sm:w-56" data-testid="people-event-filter">
@@ -358,8 +358,8 @@ export default function Persons({ mode = "anagrafiche" }) {
     <div className="animate-fade-up">
       <PageHeader
         title={isStaff ? "Staff / Volontari" : "Anagrafiche"}
-        subtitle={isStaff ? "Persone operative degli eventi: staff, volontari, team e turni" : "Referenti e contatti delle aziende"}
-        action={<PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi persona</PrimaryButton>} />
+        subtitle={isStaff ? "Staff e Volontari degli eventi: ruoli, team e turni" : "Referenti e contatti delle aziende"}
+        action={<PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />{isStaff ? "Aggiungi Staff / Volontario" : "Aggiungi persona"}</PrimaryButton>} />
       {isStaff ? (
         <Tabs defaultValue="staff">
           <TabsList className="mb-4 flex-wrap h-auto">
@@ -388,7 +388,7 @@ export default function Persons({ mode = "anagrafiche" }) {
         <PeopleTable tab="referenti_aziende" {...peopleProps} />
       )}
 
-      <EntityDialog open={formOpen} onOpenChange={setFormOpen} title={editing ? "Modifica persona" : "Nuova persona"}
+      <EntityDialog open={formOpen} onOpenChange={setFormOpen} title={isStaff ? (editing ? "Modifica Staff / Volontario" : "Nuovo Staff / Volontario") : (editing ? "Modifica persona" : "Nuova persona")}
         fields={personFields} initial={editing} onSubmit={submitPerson} testid="person" />
       {detailId && <PersonDetailDialog personId={detailId} open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}
         events={events} settings={settings} onChanged={reload}
