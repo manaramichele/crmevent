@@ -19,17 +19,20 @@ const STEP_TEXT = {
 };
 
 // ---- shared lightweight store ----
-let _cache = null;
 const refreshAll = () => window.dispatchEvent(new Event("onboarding:refresh"));
 
-export function useOnboarding() {
+export function useOnboarding(eventId) {
   const { user } = useAuth();
-  const [data, setData] = useState(_cache);
+  const [data, setData] = useState(null);
   const isSuper = user?.role === "superadmin";
   const load = useCallback(async () => {
     if (isSuper) { setData({ superadmin: true, show: false }); return; }
-    try { const { data } = await api.get("/onboarding/status"); _cache = data; setData(data); } catch {}
-  }, [isSuper]);
+    try {
+      const params = (eventId && eventId !== "all") ? { event_id: eventId } : {};
+      const { data } = await api.get("/onboarding/status", { params });
+      setData(data);
+    } catch {}
+  }, [isSuper, eventId]);
   useEffect(() => {
     load();
     const h = () => load();
@@ -191,8 +194,8 @@ export function TutorialLauncher() {
 }
 
 // ---- dashboard card ----
-export function OnboardingCard() {
-  const { data, patch } = useOnboarding();
+export function OnboardingCard({ eventId }) {
+  const { data, patch } = useOnboarding(eventId);
   const navigate = useNavigate();
   if (!data || data.superadmin || data.all_main_completed) return null;
   if (data.state?.card_hidden) return null;

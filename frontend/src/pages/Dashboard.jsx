@@ -74,7 +74,7 @@ export default function Dashboard() {
 
       <OrgMessagesBanner />
 
-      <OnboardingCard />
+      <OnboardingCard eventId={eventoId} />
 
       <PipelineAttention />
 
