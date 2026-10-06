@@ -914,3 +914,6 @@ Task 2 — Creatività manuale:
 - **IMMAGINI SOCIAL (PDF-like generate)**: `social_creative.py` TIFFANY RGB (129,216,208)→(10,186,181); `_LOGO_PATH` usa il nuovo logo-crmevent.png.
 - Verifica: ZERO residui del vecchio brand (#81D8D0/#59C1B7/#6ECDC4/#147D74/#5eead4/#4fd1c5). Build prod OK. Verifica visiva pubblica (Landing/Login/Register/Prezzi) + favicon OK. Pagine autenticate non verificabili dal preview per setup cross-domain (preview→api.crmevent.it) ma i token sono globali.
 - ⚠️ Le modifiche al BACKEND (colori email, social_creative, fallback logo) sono su infrastruttura Aruba: avranno effetto in produzione solo dopo redeploy del backend su Aruba. Il deploy Emergent pubblica il FRONTEND (colori + loghi + favicon).
+
+### 2026-06 · Rebrand loghi/favicon — asset definitivi (v5)
+- Sostituiti con i 3 asset ufficiali forniti dall'utente: Favicon.png (icona circolare teal con calendario) → favicon.ico + favicon-16/32/48/192/512 + apple-touch-icon + icon-crmevent; Logo fondo bianco → logo-crmevent.png + logo-footer-light.png; Logo fondo nero → logo-crmevent-dark.png + logo-footer-dark.png. Cache-busting bumpato a ?v=5 (src + index.html + backend fallback). Verificato: favicon, header chiaro (login), footer scuro (landing). Build OK. Redeploy avviato.

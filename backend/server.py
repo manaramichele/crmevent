@@ -8372,7 +8372,7 @@ def _event_logo_url(event: dict, base: str = None) -> str:
     base = (base or PUBLIC_SITE_URL).rstrip("/")
     if event.get("logo_url"):
         return f"{base}/api/public/event-logo/{event.get('id')}"
-    return f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=4"
+    return f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=5"
 
 
 def _avail_email_params(av: dict, event: dict, org: dict, logo_url: str) -> dict:
@@ -8768,7 +8768,7 @@ async def brevo_avail_template_preview(event_id: str, kind: str = "disponibilita
 @api.get("/public/event-logo/{event_id}")
 async def pub_event_logo(event_id: str):
     """Logo pubblico dell'Evento (immagine soltanto) per le email Brevo. Fallback: logo CRMEvent."""
-    fallback = RedirectResponse(f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=4")
+    fallback = RedirectResponse(f"{PUBLIC_SITE_URL}/logo-crmevent-dark.png?v=5")
     event = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not event or not event.get("logo_url"):
         return fallback

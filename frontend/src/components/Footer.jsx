@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="bg-slate-900 text-slate-300" data-testid="site-footer">
       <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
         <div className="col-span-2 md:col-span-1">
-          <img src="/logo-footer-dark.png?v=4" alt="CRMEvent" className="h-10 sm:h-12 w-auto" />
+          <img src="/logo-footer-dark.png?v=5" alt="CRMEvent" className="h-10 sm:h-12 w-auto" />
           <p className="text-sm text-slate-400 mt-4 max-w-xs">Il CRM per organizzare eventi: contatti, sponsor, staff, volontari, team, turni e attività.</p>
         </div>
         <div>
