@@ -9,6 +9,7 @@ import {
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 import ActivationGate from "@/components/ActivationGate";
+import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
 
 const ORG_NAV = [
@@ -314,6 +315,7 @@ export default function Layout({ children }) {
           <button className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} />}
           <div className="flex-1"><GlobalSearch /></div>
+          {!isSuper && <TutorialLauncher />}
           <Notifications />
           <div className="relative">
             <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} className="flex items-center gap-2 h-10 px-2 rounded-lg hover:bg-slate-100 transition-colors">
@@ -344,6 +346,7 @@ export default function Layout({ children }) {
             <span className="font-semibold">Stai operando come Super Admin in: {activeOrgName || "…"}</span>
           </div>
         )}
+        {!isSuper && <TutorialHint />}
         <main className="flex-1 p-4 lg:p-8 bg-slate-50/40">
           {gateForOrg ? (
             <div className="text-center text-slate-500 py-24" data-testid="no-org-selected">

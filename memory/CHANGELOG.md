@@ -924,3 +924,9 @@ Task 2 — Creatività manuale:
 - frontend Social.jsx: miniature + Anteprima Instagram usano l'URL pubblico (toUrl) invece dell'endpoint autenticato.
 - backend/.env (dev): STORAGE_BACKEND=local, STORAGE_ROOT=/app/backend/storage_data, MAX_UPLOAD_*_MB.
 - Test locali OK: upload→URL pubblico, GET pubblico senza cookie 200, token errato 404, doc autenticato (401 senza auth / 200 con), validazione tipo+size 400, upload non auth 401, file su disco organizzati per tipo/org, nessuna chiamata objstore Emergent per i nuovi upload. NON ancora deployato.
+
+### 2026-06 · Onboarding/tutorial guidato per organizzazioni
+- Backend server.py: nuovi endpoint GET /api/onboarding/status (calcola i 6 step principali + 2 opzionali dai dati reali, org+event scoped) e POST /api/onboarding/state (persistenza per-utente in users.onboarding: seen/started/completed/card_hidden/later/skipped/started_at/completed_at). Super Admin: ritorna superadmin:true e non persiste nulla.
+- Step completati calcolati da: events (org), staff(evento_id), teams, shifts, activities, briefing_versions, deals(sponsor), lodgings+meals(ospitalità). Evento attivo = più recente dell'org (o event_id passato).
+- Frontend: nuovo components/Onboarding.jsx (useOnboarding, TutorialLauncher = bottone header + welcome + completamento, TutorialPanel drawer destro/mobile full, OnboardingCard dashboard, TutorialHint banner contestuale ?tutorial=). Wiring in Layout.jsx (bottone "? Tutorial" + hint, nascosti per superadmin) e Dashboard.jsx (card). Colore brand #0ABAB5.
+- Nessuna modifica a crediti/ruoli/permessi/moduli. Testato via curl (status+state, skip, card_hidden, returning user) e screenshot (dashboard card + panel).
