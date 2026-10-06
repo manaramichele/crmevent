@@ -88,7 +88,7 @@ export default function Pricing() {
 
   useEffect(() => {
     trackEvent("pricing_view");
-    fetch(`https://api.crmevent.it/api/credits/packages-public`)
+    fetch(`${process.env.REACT_APP_BACKEND_URL}/api/credits/packages-public`)
       .then((r) => r.json())
       .then((d) => { if (d && Array.isArray(d.packages)) setPacks(d.packages); })
       .catch(() => {});

@@ -277,7 +277,7 @@ export default function Social() {
     catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
 
-  const backendUrl = "https://api.crmevent.it";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL;
 
   return (
     <div className="max-w-6xl space-y-6" data-testid="social-page">
