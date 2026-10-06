@@ -277,7 +277,7 @@ export default function Social() {
     catch (e) { toast.error(formatApiError(e?.response?.data?.detail)); }
   };
 
-  const backendUrl = process.env.REACT_APP_BACKEND_URL;
+  const toUrl = (u) => (u && u.startsWith("http") ? u : `${process.env.REACT_APP_BACKEND_URL}${u || ""}`);
 
   return (
     <div className="max-w-6xl space-y-6" data-testid="social-page">
@@ -384,7 +384,7 @@ export default function Social() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="media-grid">
               {media.map((m) => (
                 <div key={m.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden" data-testid={`media-item-${m.id}`}>
-                  <div className="aspect-square bg-slate-50 overflow-hidden"><img src={`${backendUrl}${m.url}`} alt={m.name} className="w-full h-full object-cover" /></div>
+                  <div className="aspect-square bg-slate-50 overflow-hidden"><img src={toUrl(m.url)} alt={m.name} className="w-full h-full object-cover" /></div>
                   <div className="p-2">
                     <div className="text-xs font-medium text-slate-700 truncate">{m.name}</div>
                     <div className="text-[11px] text-slate-400 capitalize">{m.category}</div>
@@ -512,7 +512,7 @@ export default function Social() {
                 </div>
                 {creative
                   ? <div className="space-y-1">
-                      <img src={`${backendUrl}${creative.url}`} alt="creatività" className="w-full max-w-[280px] rounded-lg border border-slate-200" data-testid="creative-preview" />
+                      <img src={toUrl(creative.url)} alt="creatività" className="w-full max-w-[280px] rounded-lg border border-slate-200" data-testid="creative-preview" />
                       <div className="text-[11px] text-green-700">✓ Immagine caricata{editing.creative_meta?.format ? ` · ${editing.creative_meta.format}` : ""}</div>
                     </div>
                   : <div className="text-sm text-slate-400 flex items-center gap-2" data-testid="creative-empty"><ImagePlus className="w-4 h-4" />Nessuna immagine caricata</div>}
@@ -522,7 +522,7 @@ export default function Social() {
                   <Button onClick={() => creativeInputRef.current?.click()} disabled={creativeBusy} data-testid="creative-upload-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">
                     {creativeBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}{creative ? "Sostituisci immagine" : "Carica immagine"}
                   </Button>
-                  {creative && <a href={`${backendUrl}${creative.url}`} download target="_blank" rel="noreferrer" data-testid="creative-download" className="inline-flex items-center px-3 h-10 rounded-lg border border-slate-200 text-sm hover:bg-slate-50">Anteprima</a>}
+                  {creative && <a href={toUrl(creative.url)} download target="_blank" rel="noreferrer" data-testid="creative-download" className="inline-flex items-center px-3 h-10 rounded-lg border border-slate-200 text-sm hover:bg-slate-50">Anteprima</a>}
                   {creative && <Button variant="outline" className="text-red-600" onClick={removeCreative} data-testid="creative-remove-btn"><Trash2 className="w-4 h-4 mr-1" />Elimina immagine</Button>}
                 </div>
                 <div className="text-[11px] text-slate-400">Formato richiesto: 1:1 (quadrato) o 4:5 (verticale) · JPG, PNG o WEBP.</div>
@@ -565,7 +565,7 @@ export default function Social() {
                 <div className="text-sm font-semibold text-slate-800" data-testid="ig-brand">{dash.brand_name || "CRMEvent"}</div>
               </div>
               {creative
-                ? <img src={`${backendUrl}${creative.url}`} alt="post" className="w-full" data-testid="ig-image" />
+                ? <img src={toUrl(creative.url)} alt="post" className="w-full" data-testid="ig-image" />
                 : <div className="aspect-square bg-slate-100 flex items-center justify-center text-slate-400 text-sm" data-testid="ig-no-image">Carica prima la creatività</div>}
               <div className="px-3 py-3 space-y-2 text-sm">
                 <div className="text-slate-800 whitespace-pre-wrap" data-testid="ig-caption"><span className="font-semibold">{dash.brand_name || "CRMEvent"}</span> {editing.caption}</div>

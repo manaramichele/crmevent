@@ -917,3 +917,10 @@ Task 2 — Creatività manuale:
 
 ### 2026-06 · Rebrand loghi/favicon — asset definitivi (v5)
 - Sostituiti con i 3 asset ufficiali forniti dall'utente: Favicon.png (icona circolare teal con calendario) → favicon.ico + favicon-16/32/48/192/512 + apple-touch-icon + icon-crmevent; Logo fondo bianco → logo-crmevent.png + logo-footer-light.png; Logo fondo nero → logo-crmevent-dark.png + logo-footer-dark.png. Cache-busting bumpato a ?v=5 (src + index.html + backend fallback). Verificato: favicon, header chiaro (login), footer scuro (landing). Build OK. Redeploy avviato.
+
+### 2026-06 · Phase 1 — Migrazione storage file su Aruba (fine dipendenza Emergent per i nuovi upload)
+- storage_utils.py: aggiunto backend locale filesystem (save_local/read_local, validazione MIME/estensione/size, anti path-traversal, token helper, API unificata save()/read()). Selettore STORAGE_BACKEND=local|emergent, STORAGE_ROOT. Funzioni Emergent mantenute solo per lettura legacy.
+- server.py: /api/upload, /api/social/media, /api/social/posts/{id}/creative/upload ora scrivono su storage locale + validazione + public_token (solo immagini). Nuovo endpoint pubblico GET /api/files/public/{token}. Letture (/api/files/{id}, public creative, _ensure_public_jpeg, publish, pub_event_logo, pub_avail_logo) con dispatch local/emergent. pub_event_logo/pub_avail_logo risolvono per id O public_token. Lista /social/media arricchisce i doc immagine con URL pubblico (backfill token lazy sui legacy). Indice files.public_token (unique sparse). init_storage saltato in modalità local.
+- frontend Social.jsx: miniature + Anteprima Instagram usano l'URL pubblico (toUrl) invece dell'endpoint autenticato.
+- backend/.env (dev): STORAGE_BACKEND=local, STORAGE_ROOT=/app/backend/storage_data, MAX_UPLOAD_*_MB.
+- Test locali OK: upload→URL pubblico, GET pubblico senza cookie 200, token errato 404, doc autenticato (401 senza auth / 200 con), validazione tipo+size 400, upload non auth 401, file su disco organizzati per tipo/org, nessuna chiamata objstore Emergent per i nuovi upload. NON ancora deployato.

@@ -1690,17 +1690,52 @@ MIME = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "i
         "webp": "image/webp", "pdf": "application/pdf", "csv": "text/csv", "txt": "text/plain"}
 
 
+async def _read_file_rec(rec: dict):
+    """Legge i byte di un file dal backend corretto (local per i nuovi, Emergent per i legacy)."""
+    return await asyncio.to_thread(storage_utils.read, rec["storage_path"],
+                                   rec.get("storage_backend"), rec.get("content_type"))
+
+
+def _public_file_url(token: str) -> str:
+    return f"{BACKEND_PUBLIC_URL}/api/files/public/{token}"
+
+
+async def _ensure_public_token(file_rec: dict) -> str:
+    """Garantisce (creandolo se assente) un public_token per un file immagine. Idempotente."""
+    tok = file_rec.get("public_token")
+    if tok:
+        return tok
+    tok = storage_utils.make_token()
+    await db.files.update_one({"id": file_rec["id"]}, {"$set": {"public_token": tok}})
+    file_rec["public_token"] = tok
+    return tok
+
+
+def _upload_error(e: ValueError) -> HTTPException:
+    return HTTPException(status_code=400,
+                         detail="File troppo grande" if str(e).startswith("too_large")
+                         else "Tipo di file non supportato")
+
+
 @api.post("/upload")
 async def upload(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
-    fid = new_id()
-    path = f"{storage_utils.APP_NAME}/uploads/{admin['user_id']}/{fid}.{ext}"
     data = await file.read()
+    try:
+        kind, ext = storage_utils.classify_and_validate(file.filename, file.content_type, len(data))
+    except ValueError as e:
+        raise _upload_error(e)
+    fid = new_id()
+    rel = f"uploads/{admin['org_id']}/{fid}.{ext}"
     ctype = file.content_type or MIME.get(ext, "application/octet-stream")
-    result = await asyncio.to_thread(storage_utils.put_object, path, data, ctype)
-    await db.files.insert_one({"id": fid, "org_id": admin["org_id"], "storage_path": result["path"], "original_filename": file.filename,
-                               "content_type": ctype, "size": result.get("size"), "is_deleted": False, "created_at": now_iso()})
-    return {"id": fid, "url": f"/api/files/{fid}", "filename": file.filename}
+    result = await asyncio.to_thread(storage_utils.save, rel, data, ctype)
+    doc = {"id": fid, "org_id": admin["org_id"], "storage_path": result["path"],
+           "storage_backend": result.get("backend"), "original_filename": file.filename,
+           "content_type": ctype, "size": result.get("size"), "is_deleted": False, "created_at": now_iso()}
+    if kind in storage_utils.PUBLIC_KINDS:
+        doc["public_token"] = storage_utils.make_token()
+    await db.files.insert_one(doc)
+    url = _public_file_url(doc["public_token"]) if doc.get("public_token") else f"/api/files/{fid}"
+    return {"id": fid, "url": url, "filename": file.filename}
 
 
 @api.get("/files/{file_id}")
@@ -1710,8 +1745,19 @@ async def download(file_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="File non trovato")
     if user.get("role") != "superadmin" and rec.get("org_id") not in (None, user.get("org_id")):
         raise HTTPException(status_code=404, detail="File non trovato")
-    data, ctype = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
+    data, ctype = await _read_file_rec(rec)
     return Response(content=data, media_type=rec.get("content_type", ctype))
+
+
+@api.get("/files/public/{token}")
+async def file_public(token: str):
+    """Serve pubblicamente (senza cookie) un file tramite token imprevedibile. Solo file con public_token."""
+    rec = await db.files.find_one({"public_token": token, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Not found")
+    data, ctype = await _read_file_rec(rec)
+    return Response(content=data, media_type=rec.get("content_type") or ctype,
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 # ---------------- dashboard / search / notifications ----------------
@@ -6253,12 +6299,13 @@ async def _ensure_public_jpeg(org_id: str, media: dict):
     f = await db.files.find_one({"id": media.get("file_id"), "org_id": org_id}, {"_id": 0})
     if not f:
         raise HTTPException(status_code=400, detail="File creatività non trovato")
-    data, _ct = await asyncio.to_thread(storage_utils.get_object, f["storage_path"])
+    data, _ct = await _read_file_rec(f)
     jpeg = social_creative.to_jpeg(data)
     token = new_id() + new_id()
-    path = f"{storage_utils.APP_NAME}/social/{org_id}/pub_{token}.jpg"
-    res = await asyncio.to_thread(storage_utils.put_object, path, jpeg, "image/jpeg")
+    path = f"social/{org_id}/pub_{token}.jpg"
+    res = await asyncio.to_thread(storage_utils.save, path, jpeg, "image/jpeg")
     await db.ig_public_media.insert_one({"token": token, "org_id": org_id, "storage_path": res["path"],
+                                         "storage_backend": res.get("backend"),
                                          "created_at": now_iso()})
     return f"{instagram_utils.BACKEND_PUBLIC_URL}/api/social/public/creative/{token}"
 
@@ -6269,7 +6316,7 @@ async def social_public_creative(token: str):
     rec = await db.ig_public_media.find_one({"token": token}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Not found")
-    data, _ct = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
+    data, _ct = await _read_file_rec(rec)
     return Response(content=data, media_type="image/jpeg")
 
 
@@ -7440,7 +7487,18 @@ async def social_media_list(category: Optional[str] = None, event_id: Optional[s
         q["category"] = category
     if event_id:
         q["event_id"] = event_id
-    return await db.social_media.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    docs = await db.social_media.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    for d in docs:
+        if (d.get("url") or "").startswith("http"):
+            continue
+        fid = d.get("file_id")
+        if not fid:
+            continue
+        frec = await db.files.find_one({"id": fid}, {"_id": 0})
+        if frec and (frec.get("content_type") or "").startswith("image/"):
+            tok = await _ensure_public_token(frec)
+            d["url"] = _public_file_url(tok)
+    return docs
 
 
 @api.post("/social/media")
@@ -7450,19 +7508,28 @@ async def social_media_upload(file: UploadFile = File(...), name: str = Form(Non
                               user: dict = Depends(require_admin)):
     if event_id:
         await _assert_event_operational(user["org_id"], event_id)
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
-    fid = new_id()
-    path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/{fid}.{ext}"
     data = await file.read()
-    ctype = file.content_type or MIME.get(ext, "application/octet-stream")
-    result = await asyncio.to_thread(storage_utils.put_object, path, data, ctype)
+    try:
+        kind, ext = storage_utils.classify_and_validate(file.filename, file.content_type, len(data))
+    except ValueError as e:
+        raise HTTPException(status_code=400,
+                            detail="File troppo grande" if str(e).startswith("too_large")
+                            else "Carica un'immagine valida (JPG, PNG, WEBP, GIF)")
+    if kind != "image":
+        raise HTTPException(status_code=400, detail="Sono ammesse solo immagini")
+    fid = new_id()
+    path = f"social/{user['org_id']}/{fid}.{ext}"
+    ctype = file.content_type or MIME.get(ext, "image/jpeg")
+    result = await asyncio.to_thread(storage_utils.save, path, data, ctype)
+    token = storage_utils.make_token()
     # Register in files collection so the existing /api/files/{id} download works (org-checked).
     await db.files.insert_one({"id": fid, "org_id": user["org_id"], "storage_path": result["path"],
+                               "storage_backend": result.get("backend"), "public_token": token,
                                "original_filename": file.filename, "content_type": ctype,
                                "size": result.get("size"), "is_deleted": False, "created_at": now_iso()})
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
     doc = await _create("social_media", {
-        "org_id": user["org_id"], "file_id": fid, "url": f"/api/files/{fid}",
+        "org_id": user["org_id"], "file_id": fid, "url": _public_file_url(token),
         "name": name or file.filename, "category": category or "photo", "event_id": event_id or None,
         "description": description or None, "tags": tag_list, "content_type": ctype,
         "size": result.get("size"), "uploaded_by": user.get("user_id")})
@@ -7693,7 +7760,7 @@ async def _load_media_bytes(org_id: str, media_id: str):
     if not f:
         return None, None
     try:
-        data, _ct = await asyncio.to_thread(storage_utils.get_object, f["storage_path"])
+        data, _ct = await _read_file_rec(f)
         return data, m
     except Exception:
         return None, None
@@ -7760,15 +7827,17 @@ async def social_post_creative_upload(post_id: str, file: UploadFile = File(...)
     old_id = post.get("creative_media_id")
     fid = new_id()
     ext = {"image/png": "png", "image/webp": "webp", "image/jpeg": "jpg"}.get(ctype) or (fname.rsplit(".", 1)[-1] if "." in fname else "jpg")
-    path = f"{storage_utils.APP_NAME}/social/{user['org_id']}/creative_{fid}.{ext}"
-    result = await asyncio.to_thread(storage_utils.put_object, path, data, ctype or "image/jpeg")
+    path = f"social/{user['org_id']}/creative_{fid}.{ext}"
+    result = await asyncio.to_thread(storage_utils.save, path, data, ctype or "image/jpeg")
+    token = storage_utils.make_token()
     await db.files.insert_one({"id": fid, "org_id": user["org_id"], "storage_path": result["path"],
+                               "storage_backend": result.get("backend"), "public_token": token,
                                "original_filename": file.filename or f"creative_{post_id}.{ext}",
                                "content_type": ctype or "image/jpeg", "size": result.get("size"),
                                "is_deleted": False, "created_at": now_iso()})
     meta = {"mode": "manual", "format": fmt, "width": w, "height": h}
     media_doc = await _create("social_media", {
-        "org_id": user["org_id"], "file_id": fid, "url": f"/api/files/{fid}",
+        "org_id": user["org_id"], "file_id": fid, "url": _public_file_url(token),
         "name": f"Creatività (manuale) · {fmt}", "category": "creative",
         "event_id": post.get("event_id"), "post_id": post_id, "tags": ["creativity", "manual"],
         "content_type": ctype or "image/jpeg", "size": result.get("size"), "meta": meta,
@@ -8012,13 +8081,15 @@ async def startup():
         await db.social_accounts.create_index([("platform", 1), ("ig_user_id", 1)])
         await db.ig_data_deletions.create_index("confirmation_code")
         await db.ig_public_media.create_index("token")
+        await db.files.create_index("public_token", unique=True, sparse=True)
     except Exception:
         pass
-    try:
-        storage_utils.init_storage()
-        logger.info("Storage initialized")
-    except Exception as e:
-        logger.error(f"Storage init failed: {e}")
+    if storage_utils.STORAGE_BACKEND != "local":
+        try:
+            storage_utils.init_storage()
+            logger.info("Storage initialized")
+        except Exception as e:
+            logger.error(f"Storage init failed: {e}")
     await seed_admin()
     await migrate_person_companies()
     await migrate_memberships()
@@ -8773,11 +8844,11 @@ async def pub_event_logo(event_id: str):
     if not event or not event.get("logo_url"):
         return fallback
     fid = (event["logo_url"] or "").rstrip("/").split("/")[-1]
-    rec = await db.files.find_one({"id": fid, "is_deleted": False}, {"_id": 0})
+    rec = await db.files.find_one({"$or": [{"id": fid}, {"public_token": fid}], "is_deleted": False}, {"_id": 0})
     if not rec:
         return fallback
     try:
-        data, ctype = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
+        data, ctype = await _read_file_rec(rec)
         return Response(content=data, media_type=rec.get("content_type", ctype))
     except Exception:
         return fallback
@@ -8816,10 +8887,10 @@ async def pub_avail_logo(code: str):
     if not event or not event.get("logo_url"):
         raise HTTPException(status_code=404, detail="Logo non disponibile")
     fid = (event["logo_url"] or "").rstrip("/").split("/")[-1]
-    rec = await db.files.find_one({"id": fid, "is_deleted": False}, {"_id": 0})
+    rec = await db.files.find_one({"$or": [{"id": fid}, {"public_token": fid}], "is_deleted": False}, {"_id": 0})
     if not rec or rec.get("org_id") not in (None, link["org_id"]):
         raise HTTPException(status_code=404, detail="Logo non disponibile")
-    data, ctype = await asyncio.to_thread(storage_utils.get_object, rec["storage_path"])
+    data, ctype = await _read_file_rec(rec)
     return Response(content=data, media_type=rec.get("content_type", ctype))
 
 
