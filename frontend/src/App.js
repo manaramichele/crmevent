@@ -48,7 +48,6 @@ import EventPipeline from "@/pages/EventPipeline";
 import LeadFinder from "@/pages/LeadFinder";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
-import Permissions from "@/pages/Permissions";
 import { can, isOrgAdmin } from "@/lib/perms";
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
@@ -135,7 +134,7 @@ function Shell() {
         <Route path="/app" element={<Protected><HomeRoute /></Protected>} />
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
         <Route path="/account" element={<Protected><Perm s="admin"><Account /></Perm></Protected>} />
-        <Route path="/permessi" element={<Protected><Perm s="admin"><Permissions /></Perm></Protected>} />
+        <Route path="/permessi" element={<Navigate to="/profilo" replace />} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />

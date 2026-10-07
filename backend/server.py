@@ -185,7 +185,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     if org_role in ("admin_org", "superadmin"):
         return {"admin": True, "event_ids": None}
     mem = await db.memberships.find_one({"user_id": user["user_id"], "org_id": org_id, "active": True},
-                                        {"_id": 0, "role": 1, "permissions": 1}) or {"role": org_role}
+                                        {"_id": 0, "role": 1, "permissions": 1, "persona_id": 1}) or {"role": org_role}
     eff = P.effective(mem)
     if eff.get("admin"):
         return {"admin": True, "event_ids": None}
@@ -198,8 +198,9 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     if not P.allows(eff, secs, action):
         raise HTTPException(status_code=403, detail="Non hai i permessi per questa operazione")
     ids = None if eff["events"] == "all" else list(eff["events"])
-    team_ids = await _allowed_team_ids(user, org_id, eff.get("teams") or {})
-    perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids}
+    team_ids = await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"))
+    perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
+            "teams": eff.get("teams") or {}}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
     seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
@@ -237,13 +238,15 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     return perm
 
 
-async def _allowed_team_ids(user: dict, org_id: str, tp: dict):
-    """None = tutti i Team; altrimenti Team di cui è Team Leader (email utente = email persona) + selezionati."""
+async def _allowed_team_ids(user: dict, org_id: str, tp: dict, persona_id: Optional[str] = None):
+    """None = tutti i Team; altrimenti Team di cui è Team Leader (persona collegata o stessa email) + selezionati."""
     scope = tp.get("scope") or "all"
     if scope == "all":
         return None
     em = (user.get("email") or "").strip()
     pids = await db.persons.distinct("id", {"org_id": org_id, "email": {"$regex": f"^{re.escape(em)}$", "$options": "i"}}) if em else []
+    if persona_id:
+        pids = list(set(pids) | {persona_id})
     led = await db.teams.distinct("id", {"org_id": org_id, "responsabile_id": {"$in": pids}}) if pids else []
     sel = tp.get("ids") or [] if scope == "selected" else []
     return sorted(set(led) | set(sel))
@@ -1276,6 +1279,12 @@ def crud_routes(path, coll, model, org_scoped=True):
         _assert_ev_allowed(user, clean.get("evento_id"))
         if coll in ("staff", "shifts"):
             _assert_team_allowed(user, clean.get("team_id"))
+        if coll == "staff" and "team_id" in clean and not (user.get("perm") or {"admin": True}).get("admin"):
+            cur = await db.staff.find_one({"org_id": user["org_id"], "id": item_id}, {"_id": 0, "categoria": 1, "team_id": 1}) or {}
+            if cur.get("team_id") != clean["team_id"]:
+                flag = "manage_volunteers" if (clean.get("categoria") or cur.get("categoria")) == "volontario" else "manage_staff"
+                if (user["perm"].get("teams") or {}).get(flag, True) is False:
+                    raise HTTPException(status_code=403, detail="Non hai il permesso di gestire " + ("i volontari" if flag == "manage_volunteers" else "lo staff") + " dei Team")
         if coll != "events":
             if clean.get("evento_id"):
                 await _assert_event_operational(user["org_id"], clean["evento_id"])
@@ -3469,6 +3478,7 @@ class PermUpdateIn(BaseModel):
     sections: Optional[dict] = None
     events: Optional[Any] = None
     teams: Optional[dict] = None
+    persona_id: Optional[str] = None  # "" = scollega
     reset: bool = False
 
 
@@ -3499,13 +3509,15 @@ async def org_permissions(admin: dict = Depends(require_org_admin)):
         members.append({"user_id": m["user_id"], "name": u.get("name"), "email": u.get("email"),
                         "role": m["role"], "role_label": P.ROLES.get(m["role"], m["role"]),
                         "active": m.get("active", True), "is_self": m["user_id"] == admin["user_id"],
-                        "custom": bool(m.get("permissions")), "permissions": eff})
+                        "custom": bool(m.get("permissions")), "permissions": eff, "persona_id": m.get("persona_id")})
     members.sort(key=lambda x: ((x["name"] or x["email"] or "").lower()))
     events = await db.events.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).sort("data_inizio", -1).to_list(2000)
-    teams = await db.teams.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "evento_id": 1}).sort("nome", 1).to_list(5000)
+    teams = await db.teams.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "evento_id": 1, "responsabile_id": 1}).sort("nome", 1).to_list(5000)
+    persons = await db.persons.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1}).to_list(20000)
+    persons.sort(key=lambda p: (f"{p.get('cognome') or ''} {p.get('nome') or ''}").strip().lower())
     return {"sections": [{"key": k, "label": l} for k, l in P.SECTIONS], "actions": P.ACTION_LABELS,
             "roles": P.ROLES, "defaults": {r: P.default_permissions(r) for r in ("user", "collaboratore")},
-            "members": members, "events": events, "teams": teams}
+            "members": members, "events": events, "teams": teams, "persons": persons}
 
 
 @api.put("/org/permissions/{target_id}")
@@ -3541,13 +3553,18 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
             new_perm["events"] = [e for e in new_perm["events"] if e in valid]
     else:
         new_perm = {} if new_role != m["role"] else (m.get("permissions") or {})
-    before = {"role": m["role"], "permissions": P.effective(m)}
+    new_pid = m.get("persona_id")
+    if body.persona_id is not None:
+        new_pid = body.persona_id or None
+        if new_pid and not await db.persons.find_one({"org_id": oid, "id": new_pid}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Persona non trovata nell'organizzazione")
+    before = {"role": m["role"], "permissions": P.effective(m), "persona_id": m.get("persona_id")}
     after_m = {**m, "role": new_role, "permissions": new_perm}
-    after = {"role": new_role, "permissions": P.effective(after_m)}
+    after = {"role": new_role, "permissions": P.effective(after_m), "persona_id": new_pid}
     if before == after and (m.get("permissions") or {}) == new_perm:
         return {"ok": True, "changed": False}
     await db.memberships.update_one({"org_id": oid, "user_id": target_id},
-                                    {"$set": {"role": new_role, "permissions": new_perm, "updated_at": now_iso()}})
+                                    {"$set": {"role": new_role, "permissions": new_perm, "persona_id": new_pid, "updated_at": now_iso()}})
     detail = f"Prima: {_perm_summary(before['role'], before['permissions'])} → Dopo: {_perm_summary(after['role'], after['permissions'])}"
     await record_audit(admin, "permissions_changed", org_id=oid, org_name=org.get("nome"),
                        target_email=tgt.get("email"), target_name=tgt.get("name"), detail=detail,
@@ -3627,6 +3644,8 @@ class InviteCreateIn(BaseModel):
     nome: Optional[str] = None
     cognome: Optional[str] = None
     telefono: Optional[str] = None
+    permissions: Optional[dict] = None  # configurati alla creazione, applicati all'accettazione
+    persona_id: Optional[str] = None
 
 
 @api.post("/platform/organizations")
@@ -4781,6 +4800,13 @@ async def create_org_invite(org_id: str, body: InviteCreateIn, user: dict = Depe
         raise HTTPException(status_code=400, detail="Questo utente è già associato all'organizzazione")
     inv = await _create_invite(org, email, role, user["user_id"],
                                nome=body.nome, cognome=body.cognome, telefono=telefono)
+    pre = {}
+    if body.permissions and role != "admin_org":
+        pre["permissions"] = P.normalize_permissions(body.permissions, role)
+    if body.persona_id and await db.persons.find_one({"org_id": org_id, "id": body.persona_id}, {"_id": 1}):
+        pre["persona_id"] = body.persona_id
+    if pre:
+        await db.org_invites.update_one({"id": inv["id"]}, {"$set": pre})
     sent = True
     try:
         await _send_invite_email(email, org.get("nome"), inv["token"], role, nome=body.nome)
@@ -4887,6 +4913,9 @@ async def _accept_invite(inv: dict, target_user: dict) -> None:
         await db.memberships.update_one({"id": m["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
     else:
         await _ensure_membership(target_user["user_id"], inv["org_id"], role, inv.get("invited_by"))
+    pre = {k: inv[k] for k in ("permissions", "persona_id") if inv.get(k)}
+    if pre:  # permessi/collegamento Staff configurati dall'Admin al momento dell'invito
+        await db.memberships.update_one({"user_id": target_user["user_id"], "org_id": inv["org_id"]}, {"$set": pre})
     await db.org_invites.update_one({"id": inv["id"]}, {"$set": {"status": "accepted", "accepted_at": now_iso(),
         "accepted_user_id": target_user["user_id"], "updated_at": now_iso()}})
     # Dedupe: once accepted, remove any other invite rows for the same email in this org so the

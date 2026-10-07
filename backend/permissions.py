@@ -18,7 +18,8 @@ TEAM_SCOPES = ("all", "leader", "selected")
 
 
 def default_teams(role: str) -> dict:
-    return {"scope": "leader" if role == "collaboratore" else "all", "ids": []}
+    return {"scope": "leader" if role == "collaboratore" else "all", "ids": [],
+            "manage_staff": True, "manage_volunteers": True}
 
 METHOD_ACTION = {"GET": "view", "HEAD": "view", "POST": "create", "PUT": "edit", "PATCH": "edit", "DELETE": "delete"}
 
@@ -85,7 +86,9 @@ def normalize_teams(raw, role: str) -> dict:
     if not isinstance(raw, dict) or raw.get("scope") not in TEAM_SCOPES:
         return default_teams(role)
     ids = sorted({str(x) for x in (raw.get("ids") or []) if x}) if raw["scope"] == "selected" else []
-    return {"scope": raw["scope"], "ids": ids}
+    return {"scope": raw["scope"], "ids": ids,
+            "manage_staff": raw.get("manage_staff", True) is not False,
+            "manage_volunteers": raw.get("manage_volunteers", True) is not False}
 
 
 def normalize_permissions(raw: Optional[dict], role: str) -> dict:

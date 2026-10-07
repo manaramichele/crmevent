@@ -52,7 +52,7 @@ export default function Profile() {
       </SectionCard>
 
       {canManageUsers && (
-        <SectionCard title="Utenti e accessi">
+        <SectionCard title="Utenti e Permessi">
           {manageOrgId ? (
             <OrgUsers orgId={manageOrgId} />
           ) : (

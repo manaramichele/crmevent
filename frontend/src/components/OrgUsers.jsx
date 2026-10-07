@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { UserPlus, RefreshCw, XCircle, Pencil } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
+import { usePermMeta, PermFields, PermissionsDialog, PermAudit, initialPerm, teamAccessLabel, permSummary } from "@/pages/Permissions";
 
 const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }, { value: "collaboratore", label: "Collaboratore" }];
 const fmt = (iso) => { if (!iso) return "—"; try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
@@ -27,6 +28,12 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
   const [edit, setEdit] = useState(null);
   const [ef, setEf] = useState({ nome: "", cognome: "", email: "", telefono: "" });
   const [ebusy, setEbusy] = useState(false);
+  const { meta, reload: reloadMeta } = usePermMeta(orgId);
+  const [permFor, setPermFor] = useState(null);
+  const [auditKey, setAuditKey] = useState(0);
+  const [ip, setIp] = useState(null);
+  const [ipPersona, setIpPersona] = useState("");
+  const pm = (uid) => meta?.members?.find((x) => x.user_id === uid);
 
   const load = useCallback(async () => {
     try {
@@ -41,7 +48,6 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
 
   const pendingInvites = invites.filter((iv) => iv.status === "pending" || iv.status === "expired");
 
-  const changeRole = async (uid, role) => { try { await api.patch(`/platform/organizations/${orgId}/members/${uid}`, { role }); toast.success("Ruolo aggiornato"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const toggleActive = async (uid, active) => { try { await api.patch(`/platform/organizations/${orgId}/members/${uid}`, { active }); toast.success(active ? "Accesso riattivato" : "Accesso disattivato"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const resend = async (id) => { try { const { data } = await api.post(`/platform/invites/${id}/resend`); toast[data.email_sent ? "success" : "warning"](data.email_sent ? "Invito reinviato" : "Invito aggiornato (email non inviata)"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const revoke = async (id) => { if (!window.confirm("Revocare questo invito?")) return; try { await api.delete(`/platform/invites/${id}`); toast.success("Invito revocato"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
@@ -65,9 +71,10 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
     if (!f.telefono || !isValidPhoneNumber(f.telefono)) return toast.error("Inserisci un cellulare valido");
     setBusy(true);
     try {
-      const { data } = await api.post(`/platform/organizations/${orgId}/invites`, { nome: f.nome.trim(), cognome: f.cognome.trim(), email: f.email.trim(), telefono: f.telefono, role: f.role });
+      const { data } = await api.post(`/platform/organizations/${orgId}/invites`, { nome: f.nome.trim(), cognome: f.cognome.trim(), email: f.email.trim(), telefono: f.telefono, role: f.role,
+        ...(ip && f.role !== "admin_org" ? { permissions: ip } : {}), ...(ipPersona ? { persona_id: ipPersona } : {}) });
       toast[data.email_sent ? "success" : "warning"](data.email_sent ? "Invito inviato" : "Invito creato (email non inviata)");
-      setOpen(false); setF(emptyForm); load();
+      setOpen(false); setF(emptyForm); setIp(null); setIpPersona(""); load(); reloadMeta();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
 
@@ -80,7 +87,7 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[920px] text-sm" data-testid="org-users-table">
           <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-            <th className="text-left px-3 py-2.5">Nome</th><th className="text-left px-3 py-2.5">Email</th><th className="text-left px-3 py-2.5">Cellulare</th><th className="text-left px-3 py-2.5">Ruolo</th><th className="text-left px-3 py-2.5">Stato</th><th className="text-left px-3 py-2.5">Ultimo accesso</th><th className="text-right px-3 py-2.5">Azioni</th>
+            <th className="text-left px-3 py-2.5">Utente</th><th className="text-left px-3 py-2.5">Email</th><th className="text-left px-3 py-2.5">Ruolo</th><th className="text-left px-3 py-2.5">Accesso Team</th><th className="text-left px-3 py-2.5">Permessi</th><th className="text-left px-3 py-2.5">Stato</th><th className="text-right px-3 py-2.5">Azioni</th>
           </tr></thead>
           <tbody>
             {members.length === 0 && pendingInvites.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">Nessun utente.</td></tr>}
@@ -90,11 +97,11 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
                 <tr key={m.user_id} className="border-t border-slate-100" data-testid={`user-row-${m.user_id}`}>
                   <td className="px-3 py-2.5 font-medium text-slate-800">{m.name || "—"}{m.is_superadmin && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-tiffany/20 text-tiffany-fg">Super Admin</span>}</td>
                   <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{m.email}</td>
-                  <td className="px-3 py-2.5 text-slate-500">{m.telefono || "—"}</td>
-                  <td className="px-3 py-2.5">{m.is_superadmin ? <StatusBadge color="tiffany">{m.role_label}</StatusBadge> : <select className="h-9 px-2 rounded-lg border border-slate-200 text-sm" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`user-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</td>
+                  <td className="px-3 py-2.5"><StatusBadge color={m.is_superadmin ? "tiffany" : m.role === "admin_org" ? "tiffany" : m.role === "collaboratore" ? "orange" : "blue"}>{m.role_label}</StatusBadge></td>
+                  <td className="px-3 py-2.5 text-slate-600 text-xs max-w-[200px]" data-testid={`user-teams-${m.user_id}`}>{m.is_superadmin ? "—" : teamAccessLabel(pm(m.user_id)?.permissions, meta)}</td>
+                  <td className="px-3 py-2.5 text-slate-600 text-xs max-w-[220px]" data-testid={`user-perms-${m.user_id}`}>{m.is_superadmin ? "Super Admin" : permSummary(pm(m.user_id)?.permissions, meta)}{pm(m.user_id)?.custom && <span className="ml-1 text-[10px] text-tiffany-fg">personalizzati</span>}</td>
                   <td className="px-3 py-2.5"><StatusBadge color={st[0]}>{st[1]}</StatusBadge></td>
-                  <td className="px-3 py-2.5 text-slate-500">{fmt(m.last_login_at)}</td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap">{m.is_superadmin ? <span className="text-xs text-slate-400">—</span> : <>{allowProfileEdit && <Button variant="outline" size="sm" className="mr-1" onClick={() => openEdit(m)} data-testid={`user-edit-${m.user_id}`} title="Modifica anagrafica"><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>}<Button variant="outline" size="sm" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`user-toggle-${m.user_id}`}>{m.active ? "Disattiva accesso" : "Riattiva accesso"}</Button></>}</td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">{m.is_superadmin ? <span className="text-xs text-slate-400">—</span> : <>{allowProfileEdit && <Button variant="outline" size="sm" className="mr-1" onClick={() => openEdit(m)} data-testid={`user-edit-${m.user_id}`} title="Modifica anagrafica"><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>}{pm(m.user_id) && !pm(m.user_id).is_self && <Button variant="outline" size="sm" className="mr-1" onClick={() => setPermFor(pm(m.user_id))} data-testid={`user-perms-btn-${m.user_id}`}>Permessi</Button>}<Button variant="outline" size="sm" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`user-toggle-${m.user_id}`}>{m.active ? "Disattiva" : "Riattiva"}</Button></>}</td>
                 </tr>
               );
             })}
@@ -105,10 +112,10 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
                 <tr key={iv.id} className="border-t border-slate-100 bg-amber-50/30" data-testid={`invite-row-${iv.id}`}>
                   <td className="px-3 py-2.5 font-medium text-slate-700">{nm || "—"}</td>
                   <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{iv.email}</td>
-                  <td className="px-3 py-2.5 text-slate-500">{iv.telefono || "—"}</td>
                   <td className="px-3 py-2.5 text-slate-500">{iv.role_label}</td>
+                  <td className="px-3 py-2.5 text-slate-400 text-xs">—</td>
+                  <td className="px-3 py-2.5 text-slate-400 text-xs">Applicati all'accettazione</td>
                   <td className="px-3 py-2.5"><StatusBadge color={st[0]}>{st[1]}</StatusBadge></td>
-                  <td className="px-3 py-2.5 text-slate-400">—</td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap">
                     <Button variant="outline" size="sm" className="mr-1" onClick={() => resend(iv.id)} data-testid={`invite-resend-${iv.id}`} title="Reinvia invito"><RefreshCw className="w-4 h-4" /></Button>
                     <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => revoke(iv.id)} data-testid={`invite-revoke-${iv.id}`} title="Revoca invito"><XCircle className="w-4 h-4" /></Button>
@@ -121,7 +128,7 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md" data-testid="org-invite-dialog">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="org-invite-dialog">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5 text-tiffany-active" />Invita utente</DialogTitle><DialogDescription>Riceverà un'email con un link per accedere all'organizzazione (valido 7 giorni).</DialogDescription></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -131,8 +138,16 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
             <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={f.email} onChange={(e) => setF((s) => ({ ...s, email: e.target.value }))} data-testid="invite-email" /></div>
             <div className="space-y-1.5"><Label>Cellulare *</Label><PhoneInput international defaultCountry="IT" value={f.telefono} onChange={(v) => setF((s) => ({ ...s, telefono: v || "" }))} className="phone-input" data-testid="invite-telefono" /></div>
             <div className="space-y-1.5"><Label>Ruolo *</Label>
-              <select className="h-10 w-full px-3 rounded-lg border border-slate-200 text-sm bg-white" value={f.role} onChange={(e) => setF((s) => ({ ...s, role: e.target.value }))} data-testid="invite-role">{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
+              <select className="h-10 w-full px-3 rounded-lg border border-slate-200 text-sm bg-white" value={f.role} onChange={(e) => { const r = e.target.value; setF((s) => ({ ...s, role: r })); if (meta && r !== "admin_org") setIp(initialPerm(meta, meta.defaults[r])); }} data-testid="invite-role">{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
             </div>
+            {meta && (
+              <div className="rounded-xl border border-slate-200 p-3 space-y-2" data-testid="invite-perms">
+                <div className="text-sm font-semibold text-slate-800">Permessi</div>
+                <PermFields meta={meta} role={f.role} perm={ip || initialPerm(meta, meta.defaults[f.role === "collaboratore" ? "collaboratore" : "user"])}
+                  setPerm={(u) => setIp((cur) => (typeof u === "function" ? u(cur || initialPerm(meta, meta.defaults[f.role === "collaboratore" ? "collaboratore" : "user"])) : u))}
+                  personaId={ipPersona} setPersonaId={setIpPersona} />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
@@ -158,6 +173,9 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {permFor && meta && <PermissionsDialog orgId={orgId} meta={meta} member={permFor} onClose={() => setPermFor(null)}
+        onSaved={() => { setPermFor(null); reloadMeta(); load(); setAuditKey((k) => k + 1); }} />}
+      {meta && <div className="mt-6"><PermAudit orgId={orgId} refreshKey={auditKey} /></div>}
     </div>
   );
 }
