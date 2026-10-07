@@ -9280,6 +9280,7 @@ async def platform_pricing_history(admin: dict = Depends(require_superadmin)):
 # catalogo servizi configurabile dal Super Admin, no saldo negativo, idempotenza.
 # ======================================================================
 SIGNUP_BONUS_CREDITS = 100
+CREDIT_UNIT_EUR = 0.50  # valore economico di 1 credito
 DEFAULT_LOW_BALANCE_THRESHOLD = 20
 
 # key, name, category, pricing_mode (flat|per_unit|None), unit_label
@@ -9702,21 +9703,21 @@ async def credits_packages_public_open():
     """Catalogo pubblico dei tagli attivi per la pagina /prezzi (nessuna autenticazione)."""
     await _ensure_credit_packages_seeded()
     rows = await db.credit_packages.find({"active": True}, {"_id": 0}).sort("sort", 1).to_list(100)
-    return {"packages": rows, "credit_unit_eur": 0.50}
+    return {"packages": rows, "credit_unit_eur": CREDIT_UNIT_EUR}
 
 
 @api.get("/credits/packages")
 async def credits_packages_public(user: dict = Depends(require_admin)):
     await _ensure_credit_packages_seeded()
     rows = await db.credit_packages.find({"active": True}, {"_id": 0}).sort("sort", 1).to_list(100)
-    return {"packages": rows, "credit_unit_eur": 0.50}
+    return {"packages": rows, "credit_unit_eur": CREDIT_UNIT_EUR}
 
 
 @api.get("/platform/credit-packages")
 async def platform_credit_packages(admin: dict = Depends(require_superadmin)):
     await _ensure_credit_packages_seeded()
     rows = await db.credit_packages.find({}, {"_id": 0}).sort("sort", 1).to_list(100)
-    return {"packages": rows}
+    return {"packages": rows, "credit_unit_eur": CREDIT_UNIT_EUR}
 
 
 class CreditPackageIn(BaseModel):

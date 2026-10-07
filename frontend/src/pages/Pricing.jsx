@@ -83,6 +83,7 @@ function UsageColumn({ title, subtitle, items, tone }) {
 export default function Pricing() {
   const [open, setOpen] = useState(false);
   const [packs, setPacks] = useState([]);
+  const [unit, setUnit] = useState(null);
   const { user } = useAuth();
   const authed = !!(user && user.org_id);
 
@@ -90,7 +91,7 @@ export default function Pricing() {
     trackEvent("pricing_view");
     fetch(`${process.env.REACT_APP_BACKEND_URL}/api/credits/packages-public`)
       .then((r) => r.json())
-      .then((d) => { if (d && Array.isArray(d.packages)) setPacks(d.packages); })
+      .then((d) => { if (d && Array.isArray(d.packages)) setPacks(d.packages); if (d?.credit_unit_eur != null) setUnit(d.credit_unit_eur); })
       .catch(() => {});
   }, []);
 
@@ -167,7 +168,7 @@ export default function Pricing() {
           </div>
         )}
         <p className="text-xs text-slate-400 mt-8 text-center max-w-2xl mx-auto">
-          1 credito = € 0,50. Prezzi IVA esclusa; l'IVA del 22% è aggiunta al momento del pagamento. Il pagamento avviene in modo sicuro tramite Stripe.
+          {unit != null && <span data-testid="pricing-credit-unit">1 credito = € {Number(unit).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. </span>}Prezzi IVA esclusa; l'IVA del 22% è aggiunta al momento del pagamento. Il pagamento avviene in modo sicuro tramite Stripe.
         </p>
       </section>
 

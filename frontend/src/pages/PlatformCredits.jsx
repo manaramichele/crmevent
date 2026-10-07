@@ -63,10 +63,13 @@ function ServicesTab() {
   );
 }
 
+const fmtEur = (v) => Number(v).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function PackagesTab() {
   const [rows, setRows] = useState([]);
   const [edits, setEdits] = useState({});
-  const load = () => api.get("/platform/credit-packages").then(({ data }) => setRows(data.packages || [])).catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
+  const [unit, setUnit] = useState(null);
+  const load = () => api.get("/platform/credit-packages").then(({ data }) => { setRows(data.packages || []); setUnit(data.credit_unit_eur ?? null); }).catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
   useEffect(() => { load(); }, []);
   const set = (id, f, val) => setEdits((s) => ({ ...s, [id]: { ...s[id], [f]: val } }));
   const save = async (p) => {
@@ -98,7 +101,7 @@ function PackagesTab() {
         })}
       </tbody>
     </table>
-    <p className="text-xs text-slate-400 mt-3">1 credito = € 0,50. Acquista crediti da utilizzare per i servizi di CRMEvent.</p>
+    {unit != null && <p className="text-xs text-slate-400 mt-3" data-testid="pkg-credit-unit">1 credito = € {fmtEur(unit)}. Acquista crediti da utilizzare per i servizi di CRMEvent.</p>}
     </div>
   );
 }
