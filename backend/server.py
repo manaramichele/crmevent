@@ -6083,6 +6083,8 @@ FIC_SCOPES = "issued_documents.invoices:r issued_documents.invoices:a settings:r
 FIC_MODE = (os.environ.get("FIC_MODE") or "test").strip().strip('"').strip("'").lower()
 FIC_PAYMENT_ACCOUNT_ID = (os.environ.get("FIC_PAYMENT_ACCOUNT_ID") or "").strip()
 FIC_PAYMENT_METHOD_NAME = (os.environ.get("FIC_PAYMENT_METHOD_NAME") or "Carta di credito (Stripe)").strip()
+# Codice FatturaPA ModalitaPagamento per ei_data.payment_method (obbligatorio se e_invoice): MP08 = carta di pagamento.
+FIC_EI_PAYMENT_METHOD = (os.environ.get("FIC_EI_PAYMENT_METHOD") or "MP08").strip()
 
 
 def fic_configured() -> bool:
@@ -6240,6 +6242,7 @@ async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
         line["vat"] = {"value": a["aliquota_iva"]}
     body = {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
                      "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"},
+                     "ei_data": {"payment_method": FIC_EI_PAYMENT_METHOD},
                      **FIC_NO_WITHHOLDING_DOC}}
     # Metodo di pagamento (solo emissione reale): pagamento già incassato via Stripe/carta.
     # L'account di pagamento FIC NON viene hardcodato: usato solo se FIC_PAYMENT_ACCOUNT_ID è configurato.
@@ -6341,6 +6344,7 @@ def _fic_build_payload(org: dict, amounts: dict, line_name: Optional[str] = None
     return {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
                      "items_list": [line], "currency": {"id": (amounts.get("valuta") or "eur").upper()},
                      "language": {"code": "it"}, **FIC_NO_WITHHOLDING_DOC,
+                     "ei_data": {"payment_method": FIC_EI_PAYMENT_METHOD},
                      "payment_method": {"name": FIC_PAYMENT_METHOD_NAME},
                      "payments_list": [pay]}}
 
