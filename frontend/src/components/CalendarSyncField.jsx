@@ -59,7 +59,7 @@ export default function CalendarSyncField({ kind, form, value, onChange }) {
         <div className="text-xs text-slate-600 pl-6 space-y-2" data-testid="gcal-unlock-prompt">
           <div className="flex items-start gap-1.5"><Lock className="w-3.5 h-3.5 mt-0.5 text-amber-600" /><span>Funzione premium. Costo attivazione: <b>{feat.cost} crediti</b> (una tantum per organizzazione). Saldo: {feat.balance}.</span></div>
           {(feat.balance || 0) < feat.cost
-            ? <div className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-3.5 h-3.5" />Crediti insufficienti. <a href="/account" className="underline font-semibold">Acquista crediti</a></div>
+            ? <div className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-3.5 h-3.5" />Crediti insufficienti. <a href="/profilo?tab=crediti" className="underline font-semibold">Acquista crediti</a></div>
             : <Button type="button" size="sm" onClick={unlock} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="gcal-unlock-btn">Attiva con {feat.cost} crediti</Button>}
         </div>
       )}

@@ -131,14 +131,14 @@ export const initialPerm = (meta, p) => {
 export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId }) {
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
+      {setPersonaId && <div className="space-y-1.5">
         <div className={SECTION_LBL}>Persona Staff collegata</div>
         <select className="h-10 w-full px-3 rounded-lg border border-slate-200 text-sm bg-white" value={personaId || ""} onChange={(e) => setPersonaId(e.target.value)} data-testid="perm-persona-select">
           <option value="">Nessuna (riconoscimento per email)</option>
           {(meta.persons || []).map((p) => <option key={p.id} value={p.id}>{`${p.cognome || ""} ${p.nome || ""}`.trim() || p.email}{p.email ? ` · ${p.email}` : ""}</option>)}
         </select>
         <p className="text-xs text-slate-400">Collega l'account all'anagrafica esistente senza duplicarla. Essere Team Leader non concede permessi amministrativi.</p>
-      </div>
+      </div>}
       {role === "admin_org" ? (
         <p className="text-sm text-slate-600">L'Admin Organizzatore vede e gestisce tutto, compresi account, crediti, impostazioni e utenti.</p>
       ) : (<>

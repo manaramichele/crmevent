@@ -46,12 +46,11 @@ const ORG_NAV = [
   { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor", perm: "sponsor" },
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita", perm: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
-  { to: "/account", label: "Account e abbonamento", icon: CreditCard, id: "account", perm: "admin" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
 ];
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
-const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account");
+const SUPER_ORG_NAV = ORG_NAV;
 const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
 
 // Extra platform-administration group, only for Super Admin.
@@ -365,7 +364,7 @@ export default function Layout({ children }) {
             )}
           </div>
         </header>
-        {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/account")} />}
+        {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
         {user?.role !== "superadmin" && <CreditGuardBanner />}
         {isSuper && actingOrgId && !isPlatformRoute && (
           <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-amber-100 text-amber-900 border-b border-amber-300" data-testid="super-acting-banner">

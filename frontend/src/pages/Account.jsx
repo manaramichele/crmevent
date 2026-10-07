@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Save, ReceiptText } from "lucide-react";
+import { Building2, Save, ReceiptText, Coins } from "lucide-react";
 
 const PAESI = ["IT", "SM", "VA", "FR", "DE", "ES", "CH", "AT", "GB", "US", "Altro"];
 
@@ -16,7 +16,29 @@ const BFIELDS = [
   ["pec", "PEC", false], ["email_fatturazione", "Email fatturazione", false],
 ];
 
-export default function Account() {
+export function ServiceCosts() {
+  const [rows, setRows] = useState(null);
+  useEffect(() => { api.get("/credits/service-costs").then(({ data }) => setRows(data.services || [])).catch(() => setRows([])); }, []);
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 mb-4" data-testid="service-costs">
+      <div className="flex items-center gap-2 mb-1"><Coins className="w-4 h-4 text-tiffany-active" /><h2 className="font-semibold text-slate-800">Costi dei servizi</h2></div>
+      <p className="text-xs text-slate-400 mb-4">Quanti crediti scala ogni servizio e quando. Costi sempre aggiornati.</p>
+      {rows === null ? <p className="text-sm text-slate-400">Caricamento...</p> : (
+        <div className="divide-y divide-slate-100">
+          {rows.map((s) => (
+            <div key={s.key} className="py-3" data-testid={`service-cost-${s.key}`}>
+              <div className="flex items-start justify-between gap-3"><span className="font-semibold text-slate-900">{s.name}</span>
+                <span className="shrink-0 rounded-full bg-tiffany-light text-tiffany-fg px-2.5 py-0.5 text-sm font-bold" data-testid={`service-cost-value-${s.key}`}>{s.unit_cost ?? 0} crediti</span></div>
+              {s.description && <p className="mt-1 text-sm text-slate-600 leading-relaxed">{s.description}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Account({ embedded = false }) {
   const [data, setData] = useState(null);
   const [billing, setBilling] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -56,17 +78,18 @@ export default function Account() {
   };
 
   return (
-    <div className="max-w-3xl animate-fade-up" data-testid="account-page">
-      <h1 className="font-display text-3xl font-bold text-slate-900">Account e crediti</h1>
-      <p className="text-slate-500 mt-1 mb-6">Gestisci i tuoi crediti CRMEvent e i dati di fatturazione.</p>
+    <div className={embedded ? "" : "max-w-3xl animate-fade-up"} data-testid="account-page">
+      {!embedded && <><h1 className="font-display text-3xl font-bold text-slate-900">Account e crediti</h1>
+      <p className="text-slate-500 mt-1 mb-6">Gestisci i tuoi crediti CRMEvent e i dati di fatturazione.</p></>}
 
-      <div className="bg-white border border-slate-200 rounded-xl p-6 mb-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 mb-4">
         <div className="flex items-center gap-2 text-slate-500 text-sm"><Building2 className="w-4 h-4" />Organizzazione</div>
         <div className="text-xl font-semibold text-slate-900 mt-1" data-testid="account-org-name">{data.organization.nome}</div>
       </div>
 
       {/* Crediti CRMEvent */}
       <CreditsSection />
+      <ServiceCosts />
 
       {/* Billing details */}
       <div className="bg-white border border-slate-200 rounded-xl p-6 mb-4" data-testid="billing-form">

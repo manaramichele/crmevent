@@ -3637,6 +3637,7 @@ class OrgUpdateIn(BaseModel):
 class MemberAddIn(BaseModel):
     email: EmailStr
     role: str = "user"
+    persona_id: Optional[str] = None
 
 
 class MemberUpdateIn(BaseModel):
@@ -3707,6 +3708,8 @@ async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
 async def add_org_member(org_id: str, body: MemberAddIn, user: dict = Depends(get_current_user)):
     await _require_manage(user, org_id)
     org = await _org_or_404(org_id)
+    if not body.persona_id or not await db.staff.find_one({"org_id": org_id, "persona_id": body.persona_id, "categoria": {"$in": ["staff", "collaboratore"]}}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail="Ogni account deve partire da una persona dello Staff dell'organizzazione: usa «Invita utente»")
     email = body.email.lower()
     target = await db.users.find_one({"email": email}, {"_id": 0, "password_hash": 0})
     if not target:
@@ -3721,6 +3724,7 @@ async def add_org_member(org_id: str, body: MemberAddIn, user: dict = Depends(ge
         await db.memberships.update_one({"id": existing["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
     else:
         await _ensure_membership(target["user_id"], org_id, role, user["user_id"])
+    await db.memberships.update_one({"user_id": target["user_id"], "org_id": org_id}, {"$set": {"persona_id": body.persona_id}})
     await record_audit(user, "member_added", org_id=org_id, org_name=org.get("nome"),
                        target_email=email, target_name=target.get("name"), detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
     try:
@@ -4803,29 +4807,120 @@ async def list_org_invites(org_id: str, user: dict = Depends(get_current_user)):
     return [_invite_view(i) for i in invs]
 
 
+STAFF_CATS = ["staff", "collaboratore"]
+
+
+async def _staff_person_account(org_id: str, p: dict) -> Optional[dict]:
+    """Account CRMEvent già collegato alla persona Staff (per ID o, in subordine, per email)."""
+    m = await db.memberships.find_one({"org_id": org_id, "persona_id": p["id"]}, {"_id": 0})
+    if not m and p.get("email"):
+        u = await db.users.find_one({"email": p["email"].lower()}, {"_id": 0, "user_id": 1})
+        if u:
+            m = await db.memberships.find_one({"org_id": org_id, "user_id": u["user_id"]}, {"_id": 0})
+    if not m:
+        return None
+    return {"user_id": m["user_id"], "role": m["role"], "role_label": ORG_ROLE_LABELS.get(m["role"], m["role"]),
+            "active": m.get("active", True), "linked_by_id": m.get("persona_id") == p["id"]}
+
+
+@api.get("/platform/organizations/{org_id}/staff-candidates")
+async def staff_candidates(org_id: str, q: str = "", user: dict = Depends(get_current_user)):
+    """Persone dell'org con almeno una presenza Staff/Collaboratore: base obbligatoria per gli inviti."""
+    await _require_manage(user, org_id)
+    links = await db.staff.find({"org_id": org_id, "categoria": {"$in": STAFF_CATS}}, {"_id": 0}).to_list(50000)
+    pids = list({l["persona_id"] for l in links if l.get("persona_id")})
+    query = {"org_id": org_id, "id": {"$in": pids}}
+    if q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        query["$or"] = [{"nome": rx}, {"cognome": rx}, {"email": rx}, {"cellulare": rx}, {"telefono": rx}]
+    persons = await db.persons.find(query, {"_id": 0}).to_list(5000)
+    persons.sort(key=lambda p: ((p.get("cognome") or "").lower(), (p.get("nome") or "").lower()))
+    persons = persons[:60]
+    events = {e["id"]: e for e in await db.events.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).to_list(5000)}
+    teams = {t["id"]: t for t in await db.teams.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1, "evento_id": 1, "responsabile_id": 1}).to_list(10000)}
+    all_links = await db.staff.find({"org_id": org_id, "persona_id": {"$in": [p["id"] for p in persons]}}, {"_id": 0}).to_list(50000)
+    out = []
+    for p in persons:
+        mine = [l for l in all_links if l["persona_id"] == p["id"]]
+        tnames = sorted({teams[l["team_id"]]["nome"] for l in mine if l.get("team_id") in teams}, key=str.lower)
+        leader = sorted({t["nome"] for t in teams.values() if t.get("responsabile_id") == p["id"]}, key=str.lower)
+        evs = sorted({events[l["evento_id"]]["nome"] for l in mine if l.get("evento_id") in events}, key=str.lower)
+        cats = sorted({l.get("categoria") for l in mine if l.get("categoria")})
+        pend = await db.org_invites.find_one({"org_id": org_id, "persona_id": p["id"], "status": "pending"}, {"_id": 0, "id": 1, "email": 1})
+        out.append({"id": p["id"], "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "email": p.get("email") or "",
+                    "cellulare": p.get("cellulare") or p.get("telefono") or "", "categorie": cats, "teams": tnames,
+                    "leader_of": leader, "events": evs, "account": await _staff_person_account(org_id, p), "pending_invite": pend})
+    ev_list = sorted(events.values(), key=lambda e: e.get("data_inizio") or "", reverse=True)
+    return {"items": out, "events": [{"id": e["id"], "nome": e.get("nome")} for e in ev_list]}
+
+
+class StaffCandidateIn(BaseModel):
+    evento_id: str
+    nome: str
+    cognome: str
+    email: Optional[str] = None
+    cellulare: Optional[str] = None
+
+
+@api.post("/platform/organizations/{org_id}/staff-candidates")
+async def add_staff_candidate(org_id: str, body: StaffCandidateIn, user: dict = Depends(get_current_user)):
+    """'Aggiungi allo Staff' dal flusso invito: anagrafica + presenza Staff sull'evento (riusa persona se già esiste)."""
+    await _require_manage(user, org_id)
+    if not await db.events.find_one({"org_id": org_id, "id": body.evento_id}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    if not body.nome.strip() or not body.cognome.strip():
+        raise HTTPException(status_code=400, detail="Nome e cognome sono obbligatori")
+    email = (body.email or "").strip().lower()
+    tel = _normalize_phone(body.cellulare) if (body.cellulare or "").strip() else ""
+    conds = ([{"email": email}] if email else []) + ([{"cellulare": tel}] if tel else [])
+    person = await db.persons.find_one({"org_id": org_id, "$or": conds}, {"_id": 0}) if conds else None
+    if not person:
+        person = {"id": new_id(), "org_id": org_id, "nome": body.nome.strip(), "cognome": body.cognome.strip(),
+                  "email": email, "cellulare": tel, "created_at": now_iso()}
+        await db.persons.insert_one({**person})
+    link = await db.staff.find_one({"org_id": org_id, "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
+    if not link:
+        await db.staff.insert_one({"id": new_id(), "org_id": org_id, "persona_id": person["id"], "evento_id": body.evento_id,
+                                   "categoria": "staff", "stato": "da_contattare", "created_at": now_iso()})
+    elif link.get("categoria") not in STAFF_CATS:
+        await db.staff.update_one({"id": link["id"]}, {"$set": {"categoria": "staff"}})
+    return {"id": person["id"]}
+
+
 @api.post("/platform/organizations/{org_id}/invites")
 async def create_org_invite(org_id: str, body: InviteCreateIn, user: dict = Depends(get_current_user)):
+    """Invito SEMPRE da una persona Staff esistente (persona_id): l'anagrafica resta il riferimento."""
     await _require_manage(user, org_id)
     org = await _org_or_404(org_id)
-    email, role = body.email.lower(), _norm_role(body.role)
-    if not (body.nome or "").strip() or not (body.cognome or "").strip():
-        raise HTTPException(status_code=400, detail="Nome e cognome sono obbligatori")
-    telefono = _normalize_phone(body.telefono, required=True)
+    role = _norm_role(body.role)
+    if not body.persona_id:
+        raise HTTPException(status_code=400, detail="Seleziona una persona dallo Staff dell'organizzazione")
+    person = await db.persons.find_one({"org_id": org_id, "id": body.persona_id}, {"_id": 0})
+    if not person or not await db.staff.find_one({"org_id": org_id, "persona_id": body.persona_id, "categoria": {"$in": STAFF_CATS}}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail="La persona selezionata non fa parte dello Staff dell'organizzazione")
+    if await _staff_person_account(org_id, person):
+        raise HTTPException(status_code=409, detail="Questo membro dello Staff dispone già di un account CRMEvent.")
+    email = (person.get("email") or "").lower()
+    if not email:  # Staff senza email: si completa la STESSA anagrafica
+        email = body.email.lower()
+        if await db.persons.find_one({"org_id": org_id, "email": email, "id": {"$ne": person["id"]}}, {"_id": 1}):
+            raise HTTPException(status_code=400, detail="Email già usata da un'altra persona dell'organizzazione")
+        await db.persons.update_one({"id": person["id"]}, {"$set": {"email": email, "updated_at": now_iso()}})
     eu = await db.users.find_one({"email": email}, {"_id": 0})
-    if eu and await db.memberships.find_one({"user_id": eu["user_id"], "org_id": org_id, "active": True}):
-        raise HTTPException(status_code=400, detail="Questo utente è già associato all'organizzazione")
+    if eu and await db.memberships.find_one({"user_id": eu["user_id"], "org_id": org_id}):
+        raise HTTPException(status_code=409, detail="Questo membro dello Staff dispone già di un account CRMEvent.")
+    telefono = _normalize_phone(person.get("cellulare") or person.get("telefono")) if (person.get("cellulare") or person.get("telefono")) else None
     inv = await _create_invite(org, email, role, user["user_id"],
-                               nome=body.nome, cognome=body.cognome, telefono=telefono)
-    pre = {}
+                               nome=person.get("nome"), cognome=person.get("cognome"), telefono=telefono)
+    pre = {"persona_id": person["id"]}
     if body.permissions and role != "admin_org":
         pre["permissions"] = P.normalize_permissions(body.permissions, role)
-    if body.persona_id and await db.persons.find_one({"org_id": org_id, "id": body.persona_id}, {"_id": 1}):
-        pre["persona_id"] = body.persona_id
-    if pre:
-        await db.org_invites.update_one({"id": inv["id"]}, {"$set": pre})
+    await db.org_invites.update_one({"id": inv["id"]}, {"$set": pre})
+    await db.persons.update_one({"id": person["id"]}, {"$set": {"invite_status": "invito_inviato", "updated_at": now_iso()}})
+    nome = person.get("nome")
     sent = True
     try:
-        await _send_invite_email(email, org.get("nome"), inv["token"], role, nome=body.nome)
+        await _send_invite_email(email, org.get("nome"), inv["token"], role, nome=nome)
     except Exception as e:
         logger.error(f"invite email failed: {e}"); sent = False
     await record_audit(user, "invite_sent", org_id=org_id, org_name=org.get("nome"),
@@ -4937,6 +5032,9 @@ async def _accept_invite(inv: dict, target_user: dict) -> None:
     # Dedupe: once accepted, remove any other invite rows for the same email in this org so the
     # same account can never show up twice in the invite list (fixes duplicate accepted rows).
     await db.org_invites.delete_many({"org_id": inv["org_id"], "email": inv["email"], "id": {"$ne": inv["id"]}})
+    if inv.get("persona_id"):  # collegamento Account -> Persona Staff tramite ID
+        await db.persons.update_one({"org_id": inv["org_id"], "id": inv["persona_id"]},
+                                    {"$set": {"invite_status": "account_attivato", "user_id": target_user["user_id"], "updated_at": now_iso()}})
     if inv.get("lead_id"):
         await db.leads.update_one({"id": inv["lead_id"]}, {"$set": {"user_id": target_user["user_id"], "updated_at": now_iso()}})
     # Person (anagrafica) collegata a org+email: rifletti l'attivazione account sul profilo,
@@ -5697,6 +5795,7 @@ AUDIT_ACTION_LABELS = {
     "news_withdrawn": "Novità ritirata",
     "news_deleted": "Novità eliminata",
     "news_simulated": "Simulazione rilascio (test)",
+    "maint_low_balance_notice": "Avviso saldo insufficiente per mantenimento",
 }
 
 
@@ -9938,6 +10037,16 @@ async def credits_services_public(user: dict = Depends(require_admin)):
     return {"services": rows}
 
 
+@api.get("/credits/service-costs")
+async def credits_service_costs(user: dict = Depends(require_admin)):
+    """Riepilogo costi per gli organizzatori: stessi servizi/descrizioni/costi del catalogo Super Admin."""
+    await _ensure_credits_setup()
+    rows = await db.credit_services.find({"key": {"$in": list(LINKED_CREDIT_SERVICES)}, "visible": {"$ne": False}},
+                                         {"_id": 0, "key": 1, "name": 1, "description": 1, "unit_cost": 1}).to_list(100)
+    rows.sort(key=lambda r: (r.get("name") or "").lower())
+    return {"services": rows}
+
+
 # ---------------- API Super Admin (catalogo + gestione org) ----------------
 @api.get("/platform/credit-services")
 async def platform_credit_services(admin: dict = Depends(require_superadmin)):
@@ -10237,8 +10346,8 @@ async def credits_checkout(body: CreditCheckoutIn, user: dict = Depends(require_
                                       "tax_code": "txcd_10103001",
                                       "description": (f"{base} crediti + {bonus} crediti bonus" if bonus else f"{base} crediti")}},
                      "quantity": 1, "tax_rates": [tax_rate_id]}],
-        success_url=f"{body.origin_url}/account?credits_checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/account?credits_checkout=cancel",
+        success_url=f"{body.origin_url}/profilo?tab=crediti&credits_checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/profilo?tab=crediti&credits_checkout=cancel",
         metadata={"kind": "credit_purchase", "org_id": org["id"], "purchase_id": purchase_id,
                   "package_id": pkg["id"], "credits_base": str(base), "credits_bonus": str(bonus),
                   "credits_total": str(total), "net": str(net), "vat": str(vat), "gross": str(gross)},
@@ -11034,6 +11143,40 @@ async def event_activate(event_id: str, user: dict = Depends(require_admin)):
     return await _event_credit_status(ev)
 
 
+MAINT_NOTICE_DAYS = 7
+
+
+async def _maint_low_balance_notice(ev: dict, due: _date) -> bool:
+    """Avviso UNA volta per scadenza agli Admin org se il saldo non copre il prossimo Mantenimento."""
+    cfg = await _event_maintenance_cfg()
+    if not cfg["active"] or not cfg["cost"]:
+        return False
+    org = await db.organizations.find_one({"id": ev["org_id"]}, {"_id": 0, "nome": 1, "credits": 1}) or {}
+    bal = int(((org.get("credits") or {}).get("balance")) or 0)
+    if bal >= cfg["cost"]:
+        return False
+    await db.events.update_one({"id": ev["id"], "org_id": ev["org_id"]}, {"$set": {"maint_notice_for": due.isoformat()}})
+    admins = await db.memberships.find({"org_id": ev["org_id"], "role": "admin_org", "active": True}, {"_id": 0, "user_id": 1}).to_list(50)
+    users = await db.users.find({"user_id": {"$in": [a["user_id"] for a in admins]}, "active": {"$ne": False}}, {"_id": 0, "email": 1, "name": 1}).to_list(50)
+    due_it = due.strftime("%d/%m/%Y")
+    for u in users:
+        try:
+            await email_utils.send_email(
+                to=u["email"], subject=f"Crediti insufficienti per il mantenimento di «{ev.get('nome')}»",
+                html=email_utils.link_email(
+                    name=u.get("name") or "",
+                    intro=(f"Il {due_it} è previsto il Mantenimento mensile dell'evento «{ev.get('nome')}» ({cfg['cost']} crediti), "
+                           f"ma il saldo attuale di «{org.get('nome')}» è di {bal} crediti. Ricarica entro quella data per evitare "
+                           f"la sospensione dell'evento."),
+                    cta_label="Ricarica crediti", url=f"{APP_URL}/profilo?tab=crediti",
+                    footer_note="Ricevi questo avviso una sola volta per ogni scadenza di mantenimento."))
+        except Exception as e:
+            logger.error(f"maint notice email failed: {e}")
+    await record_audit({"user_id": "system", "email": "system", "name": "CRMEvent"}, "maint_low_balance_notice",
+                       org_id=ev["org_id"], org_name=org.get("nome"), detail=f"{ev.get('nome')} · scadenza {due_it} · saldo {bal}/{cfg['cost']}")
+    return True
+
+
 async def run_event_renewals(now_dt: Optional[datetime] = None) -> dict:
     """Motore MANTENIMENTO (manuale, idempotente, multi-tenant). Per ogni evento 'attivo':
     conclude se la data evento è trascorsa; altrimenti, se è arrivata una scadenza di mantenimento
@@ -11063,6 +11206,9 @@ async def run_event_renewals(now_dt: Optional[datetime] = None) -> dict:
         except ValueError:
             continue
         if nm_d > today:
+            if (nm_d - today).days <= MAINT_NOTICE_DAYS and not (end_d and nm_d >= end_d) and ev.get("maint_notice_for") != nm[:10]:
+                if await _maint_low_balance_notice(ev, nm_d):
+                    out.setdefault("notified", []).append(ev["id"])
             continue
         if end_d and nm_d >= end_d:
             continue  # il periodo in corso copre fino alla data evento: nessun addebito
