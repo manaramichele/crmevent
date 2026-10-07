@@ -18,7 +18,7 @@ import MapsLink from "@/components/MapsLink";
 import {
   ArrowLeft, RefreshCw, FileDown, History, Presentation, CheckCircle2, AlertTriangle,
   Users, Map as MapIcon, CalendarClock, Utensils, Shield, UploadCloud,
-  ChevronLeft, ChevronRight, X, Trash2, Clock, MapPin, Phone, Mail,
+  ChevronLeft, ChevronRight, X, Trash2, Clock, MapPin, Phone, Mail, BedDouble,
 } from "lucide-react";
 
 const CAT_LABEL = { staff: "Staff", volontario: "Volontario", collaboratore: "Collaboratore", referente: "Referente", team: "Team" };
@@ -219,35 +219,8 @@ function BriefingBody({ data }) {
         )}
       </Section>
 
-      <Section id="hospitality" icon={Utensils} title="Ospitalità & pasti" count={sections.hospitality.length}>
-        {sections.hospitality.length === 0 ? <Empty text="Nessuna ospitalità o pasto assegnato." /> : (
-          <div className="space-y-2">
-            {sections.hospitality.map((h, i) => (
-              <div key={i} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" data-testid={`briefing-hosp-${i}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-slate-800">{h.nome} {h.cognome || ""}</span>
-                  <span className="text-xs text-slate-500">{h.lodgings.length} pernott. · {h.meals.length} pasti</span>
-                </div>
-                {h.esigenze_alimentari?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{h.esigenze_alimentari.map((e) => <StatusBadge key={e} color="orange">{e}</StatusBadge>)}</div>}
-                {h.lodgings.map((l, j) => (
-                  <div key={j} className="text-xs text-slate-600 mt-1">
-                    🏨 {l.struttura?.nome || l.struttura_nome || "Struttura"} {l.check_in ? `· ${l.check_in}→${l.check_out || ""}` : ""} {l.tipo_camera ? `· ${l.tipo_camera}` : ""}
-                    {l.struttura?.indirizzo && <span className="text-slate-400"> · {[l.struttura.indirizzo, l.struttura.citta].filter(Boolean).join(", ")}</span>}
-                    {l.struttura?.google_maps_url && <span className="ml-2"><MapsLink url={l.struttura.google_maps_url} testid={`bhosp-lod-${i}-${j}`} /></span>}
-                  </div>
-                ))}
-                {h.meals.map((m, j) => (
-                  <div key={`m${j}`} className="text-xs text-slate-600 mt-1">
-                    🍽️ {m.tipo_pasto || "Pasto"} {(m.data_inizio || m.data) ? `· ${formatDateRange(m.data_inizio || m.data, m.data_fine)}` : ""} {m.orario ? `· ${m.orario}` : ""} · {m.struttura?.nome || m.struttura_nome || "Struttura"}
-                    {(m.struttura?.indirizzo || m.indirizzo) && <span className="text-slate-400"> · {[m.struttura?.indirizzo || m.indirizzo, m.struttura?.citta].filter(Boolean).join(", ")}</span>}
-                    {m.struttura?.google_maps_url && <span className="ml-2"><MapsLink url={m.struttura.google_maps_url} testid={`bhosp-meal-${i}-${j}`} /></span>}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+      <MealsSection days={sections.meals_by_day} legacy={sections.hospitality} />
+      <LodgingSection structures={sections.lodging_structures} />
 
       <Section id="timeline" icon={CalendarClock} title="Timeline operativa" count={sections.timeline.length}>
         {sections.timeline.length === 0 ? <Empty text="Nessuna attività programmata con data." /> : (
@@ -308,7 +281,8 @@ function PresentationMode({ data, onClose }) {
     ...(unassignedStaff.length ? [{ title: "Staff & volontari non assegnati a un Team", node: <StaffDeck staff={unassignedStaff} /> }] : []),
     ...(data.sections.shifts.length ? [{ title: "Turni", node: <ShiftsDeck shifts={data.sections.shifts} /> }] : []),
     ...(data.sections.maps.length ? [{ title: "Mappe & percorsi", node: <MapsDeck maps={data.sections.maps} /> }] : []),
-    ...(data.sections.hospitality.length ? [{ title: "Ospitalità & pasti", node: <HospDeck hosp={data.sections.hospitality} /> }] : []),
+    ...(data.sections.meals_by_day?.length ? [{ title: "Pasti", node: <MealsList days={data.sections.meals_by_day} /> }] : []),
+    ...(data.sections.lodging_structures?.length ? [{ title: "Ospitalità", node: <LodgingList structures={data.sections.lodging_structures} /> }] : []),
     ...(data.sections.timeline.length ? [{ title: "Timeline", node: <TimelineDeck timeline={data.sections.timeline} /> }] : []),
   ];
   const [i, setI] = useState(0);
@@ -396,16 +370,121 @@ const MapsDeck = ({ maps }) => (
     ))}
   </div>
 );
-const HospDeck = ({ hosp }) => (
-  <div className="grid gap-2 md:grid-cols-2">
-    {hosp.map((h, i) => (
-      <div key={i} className="border border-slate-200 rounded-lg px-4 py-2">
-        <div className="font-medium text-slate-800">{h.nome} {h.cognome || ""}</div>
-        <div className="text-xs text-slate-500">{h.lodgings.length} pernott. · {h.meals.length} pasti</div>
-      </div>
-    ))}
+const MEAL_LABEL = { colazione: "Colazione", pranzo: "Pranzo", cena: "Cena" };
+const ddmm = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "—");
+const longDay = (d) => {
+  if (!d) return "Data da definire";
+  const s = new Date(`${d}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+const Line = ({ label, children }) => (children ? <div className="text-sm text-slate-600"><span className="text-slate-400">{label}:</span> {children}</div> : null);
+
+function MealsList({ days }) {
+  return (
+    <div className="space-y-5">
+      {days.map((d, di) => (
+        <div key={d.data || di} className="break-inside-avoid" data-testid={`briefing-meal-day-${d.data || "nd"}`}>
+          <div className="text-sm font-semibold text-tiffany-fg mb-2">{longDay(d.data)}</div>
+          <div className="space-y-3 border-l-2 border-tiffany-border pl-3">
+            {d.servizi.map((s) => (
+              <div key={s.tipo_pasto || "altro"} data-testid={`briefing-meal-${d.data || "nd"}-${s.tipo_pasto || "altro"}`}>
+                <div className="font-semibold text-slate-800">{MEAL_LABEL[s.tipo_pasto] || s.tipo_pasto || "Pasto"}</div>
+                {s.entries.map((e, i) => (
+                  <div key={i} className="mt-1 space-y-0.5">
+                    {e.luogo && <div className="text-sm font-medium text-slate-700">{e.luogo}{e.google_maps_url && <span className="ml-2"><MapsLink url={e.google_maps_url} testid={`bmeal-maps-${d.data}-${s.tipo_pasto}-${i}`} /></span>}</div>}
+                    <Line label="Indirizzo">{e.indirizzo}</Line>
+                    <Line label="Orario">{e.orario}</Line>
+                    <Line label="Riferimento">{[e.referente, e.telefono].filter(Boolean).join(" · ")}</Line>
+                    <Line label="Persone">{e.persone || null}</Line>
+                    <Line label="Esigenze">{Object.entries(e.esigenze || {}).map(([k, v]) => `${k} ${v}`).join(" · ")}</Line>
+                    <Line label="Note">{e.note}</Line>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const Guest = ({ o }) => (
+  <div className="text-sm text-slate-700" data-testid="briefing-guest">
+    <span className="font-medium">{`${o.nome || ""} ${o.cognome || ""}`.trim()}</span>
+    <span className="text-slate-500"> · check-in {ddmm(o.check_in)} · check-out {ddmm(o.check_out)}</span>
+    {o.esterno && <span className="text-xs text-slate-400"> (esterno)</span>}
   </div>
 );
+
+function LodgingList({ structures }) {
+  return (
+    <div className="space-y-4">
+      {structures.map((s, si) => (
+        <div key={si} className="border border-slate-200 rounded-lg p-4 break-inside-avoid" data-testid={`briefing-structure-${si}`}>
+          <div className="font-semibold text-slate-900">{s.nome}{s.google_maps_url && <span className="ml-2"><MapsLink url={s.google_maps_url} testid={`bstruct-maps-${si}`} /></span>}</div>
+          <div className="mt-1 space-y-0.5">
+            <Line label="Indirizzo">{s.indirizzo}</Line>
+            <Line label="Telefono">{s.telefono}</Line>
+            <Line label="Riferimento">{[s.referente, s.telefono_referente].filter(Boolean).join(" · ")}</Line>
+            <Line label="Note struttura">{s.note}</Line>
+          </div>
+          <div className="mt-3 space-y-3">
+            {s.camere.map((r, ri) => (
+              <div key={ri} data-testid={`briefing-room-${si}-${r.numero}`}>
+                <div className="text-sm font-semibold text-slate-800">Camera {r.numero}{r.tipo_camera ? ` · ${r.tipo_camera.charAt(0).toUpperCase()}${r.tipo_camera.slice(1)}` : ""}</div>
+                <div className="pl-3 border-l-2 border-slate-100 mt-0.5 space-y-0.5">{r.ospiti.map((o, oi) => <Guest key={oi} o={o} />)}</div>
+              </div>
+            ))}
+            {s.da_assegnare.length > 0 && (
+              <div data-testid={`briefing-room-${si}-unassigned`}>
+                <div className="text-sm font-semibold text-amber-700">Camera da assegnare</div>
+                <div className="pl-3 border-l-2 border-amber-100 mt-0.5 space-y-0.5">{s.da_assegnare.map((o, oi) => <Guest key={oi} o={o} />)}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MealsSection({ days, legacy }) {
+  if (!days && legacy) return <LegacyHosp hosp={legacy} />;
+  const list = days || [];
+  return (
+    <Section id="meals" icon={Utensils} title="Pasti" count={list.length}>
+      {list.length === 0 ? <Empty text="Nessun pasto assegnato." /> : <MealsList days={list} />}
+    </Section>
+  );
+}
+
+function LodgingSection({ structures }) {
+  if (!structures) return null;
+  return (
+    <Section id="lodging" icon={BedDouble} title="Ospitalità" count={structures.length}>
+      {structures.length === 0 ? <Empty text="Nessun pernottamento assegnato." /> : <LodgingList structures={structures} />}
+    </Section>
+  );
+}
+
+// Versioni pubblicate prima della riorganizzazione (formato per persona)
+const LegacyHosp = ({ hosp }) => (
+  <Section id="hospitality" icon={Utensils} title="Ospitalità & pasti" count={hosp.length}>
+    {hosp.length === 0 ? <Empty text="Nessuna ospitalità o pasto assegnato." /> : (
+      <div className="space-y-2">
+        {hosp.map((h, i) => (
+          <div key={i} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" data-testid={`briefing-hosp-${i}`}>
+            <span className="font-medium text-slate-800">{h.nome} {h.cognome || ""}</span>
+            {h.lodgings.map((l, j) => <div key={j} className="text-xs text-slate-600 mt-1">{l.struttura?.nome || l.struttura_nome || "Struttura"} {l.check_in ? `· ${l.check_in}→${l.check_out || ""}` : ""}</div>)}
+            {h.meals.map((m, j) => <div key={`m${j}`} className="text-xs text-slate-600 mt-1">{m.tipo_pasto || "Pasto"} {(m.data_inizio || m.data) ? `· ${formatDateRange(m.data_inizio || m.data, m.data_fine)}` : ""} {m.orario ? `· ${m.orario}` : ""}</div>)}
+          </div>
+        ))}
+      </div>
+    )}
+  </Section>
+);
+
 const TimelineDeck = ({ timeline }) => (
   <div className="space-y-4">
     {timeline.map((d) => (

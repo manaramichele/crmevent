@@ -241,6 +241,8 @@ function LodgingForm({ form, set, canCosts, people = [], excludeId }) {
       <Field label="Check-in"><Input type="date" value={form.check_in || ""} onChange={(e) => set("check_in", e.target.value)} data-testid="lodging-checkin" /></Field>
       <Field label="Check-out"><Input type="date" value={form.check_out || ""} onChange={(e) => set("check_out", e.target.value)} data-testid="lodging-checkout" /></Field>
       <SelectField label="Tipologia camera" value={form.tipo_camera} onChange={(v) => set("tipo_camera", v)} options={TIPO_CAMERA} testid="lodging-camera" />
+      <Field label="Numero camera"><Input value={form.numero_camera || ""} onChange={(e) => set("numero_camera", e.target.value)} placeholder="Es. 101" data-testid="lodging-numero-camera" /></Field>
+      <p className="sm:col-span-2 -mt-1 text-[11px] text-slate-400">Stessa struttura + stesso numero camera = stessa camera nel Briefing. Check-in e check-out restano di ogni singola persona.</p>
       <Field label="Occupanti della camera" full><OccupantiSelect people={people} excludeId={excludeId} value={form.occupanti || []} onChange={(v) => set("occupanti", v)} /></Field>
       <Field label="Codice prenotazione"><Input value={form.codice_prenotazione || ""} onChange={(e) => set("codice_prenotazione", e.target.value)} /></Field>
       <SelectField label="A carico di" value={form.a_carico_di} onChange={(v) => set("a_carico_di", v)} options={CARICO} testid="lodging-carico" />
@@ -390,7 +392,7 @@ function PersonPlanDialog({ person, eventId, canCosts, people = [], open, onOpen
               <div key={l.id} className="border border-slate-200 rounded-lg px-3 py-2.5 flex items-start justify-between" data-testid={`lodging-row-${l.id}`}>
                 <div className="text-sm">
                   <div className="font-medium text-slate-800">{l.struttura_nome || "Struttura da definire"}{l.tipo_struttura ? ` · ${TIPO_STRUTTURA[l.tipo_struttura]}` : ""}</div>
-                  <div className="text-xs text-slate-500">{[l.check_in && `in ${l.check_in}`, l.check_out && `out ${l.check_out}`, l.tipo_camera && TIPO_CAMERA[l.tipo_camera], l.compagni_camera].filter(Boolean).join(" · ") || "—"}</div>
+                  <div className="text-xs text-slate-500">{[l.check_in && `in ${l.check_in}`, l.check_out && `out ${l.check_out}`, l.numero_camera && `camera ${l.numero_camera}`, l.tipo_camera && TIPO_CAMERA[l.tipo_camera], l.compagni_camera].filter(Boolean).join(" · ") || "—"}</div>
                   {l.struttura?.indirizzo && <div className="text-xs text-slate-400">{[l.struttura.indirizzo, l.struttura.citta].filter(Boolean).join(", ")}</div>}
                   {l.struttura?.google_maps_url && <div className="text-xs mt-0.5"><MapsLink url={l.struttura.google_maps_url} testid={`lod-maps-${l.id}`} /></div>}
                   <div className="text-xs mt-0.5"><StatusBadge color={l.a_carico_di === "da_definire" || !l.a_carico_di ? "orange" : "tiffany"}>{CARICO[l.a_carico_di] || "A carico: da definire"}</StatusBadge>{canCosts && l.costo != null && <span className="ml-2 text-slate-500">€ {l.costo}{l.stato_pagamento ? ` · ${PAY_STATE[l.stato_pagamento]}` : ""}</span>}</div>

@@ -883,6 +883,7 @@ class Lodging(BaseModel):  # collection: lodgings — pernottamento (persona <->
     check_in: Optional[str] = None
     check_out: Optional[str] = None
     tipo_camera: Optional[str] = None  # singola/doppia/tripla/multipla
+    numero_camera: Optional[str] = None  # stessa struttura + stesso numero = stessa camera (date per persona)
     compagni_camera: Optional[str] = None
     occupanti: Optional[List[dict]] = None  # [{persona_id|None, nome}] — occupanti della camera (multi)
     codice_prenotazione: Optional[str] = None
@@ -941,6 +942,118 @@ def _normalize_meals(meals: list) -> None:
         m["data_fine"] = m.get("data_fine") or di
         if not m.get("data"):
             m["data"] = di
+
+
+_MEAL_ORDER = {"colazione": 0, "pranzo": 1, "cena": 2}
+
+
+def _days_between(start: str, end: str) -> list:
+    try:
+        d0 = datetime.strptime(start[:10], "%Y-%m-%d").date()
+        d1 = datetime.strptime((end or start)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return [start] if start else []
+    out = []
+    while d0 <= d1 and len(out) < 60:
+        out.append(d0.isoformat())
+        d0 += timedelta(days=1)
+    return out
+
+
+def _briefing_meals(meals: list, esig_by_person: dict) -> list:
+    """Pasti raggruppati per data -> servizio -> luogo/orario. Solo conteggi, nessun nominativo."""
+    groups = {}
+    for m in meals:
+        s = m.get("struttura") or {}
+        luogo = s.get("nome") or m.get("struttura_nome") or m.get("luogo") or ""
+        place_key = m.get("struttura_id") or luogo.strip().lower()
+        tipo = (m.get("tipo_pasto") or "").lower()
+        for day in (_days_between(m.get("data_inizio"), m.get("data_fine")) if m.get("data_inizio") else [""]):
+            k = (day, tipo, place_key, m.get("orario") or "")
+            g = groups.get(k)
+            if not g:
+                g = groups[k] = {
+                    "data": day, "tipo_pasto": tipo, "luogo": luogo or None,
+                    "tipologia_servizio": m.get("tipologia_servizio"),
+                    "indirizzo": ", ".join([x for x in [s.get("indirizzo") or m.get("indirizzo"), s.get("citta")] if x]) or None,
+                    "orario": m.get("orario") or None,
+                    "referente": m.get("referente") or s.get("referente"),
+                    "telefono": m.get("telefono") or s.get("telefono_referente") or s.get("telefono"),
+                    "google_maps_url": s.get("google_maps_url"),
+                    "_note": [], "_persone": set(), "_esig": defaultdict(int),
+                }
+            if m.get("note") and m["note"] not in g["_note"]:
+                g["_note"].append(m["note"])
+            pid = m.get("persona_id")
+            if pid and pid not in g["_persone"]:
+                g["_persone"].add(pid)
+                for e in esig_by_person.get(pid) or []:
+                    g["_esig"][e] += 1
+    by_day = defaultdict(list)
+    for g in groups.values():
+        by_day[g["data"]].append(g)
+    out = []
+    for day in sorted(by_day.keys(), key=lambda d: (d == "", d)):
+        servizi = defaultdict(list)
+        for g in by_day[day]:
+            servizi[g["tipo_pasto"]].append({
+                **{k: v for k, v in g.items() if not k.startswith("_") and k not in ("data", "tipo_pasto")},
+                "note": " · ".join(g["_note"]) or None, "persone": len(g["_persone"]),
+                "esigenze": dict(sorted(g["_esig"].items())),
+            })
+        out.append({"data": day or None, "servizi": [
+            {"tipo_pasto": t or None, "entries": sorted(servizi[t], key=lambda e: (e.get("orario") or "", (e.get("luogo") or "").lower()))}
+            for t in sorted(servizi.keys(), key=lambda t: (_MEAL_ORDER.get(t, 9), t))
+        ]})
+    return out
+
+
+def _briefing_lodgings(lodgings: list, persons: dict) -> list:
+    """Ospitalità: Struttura -> Camera -> Ospiti, ognuno con le PROPRIE date (check-in/out per persona)."""
+    structs = {}
+    for l in lodgings:
+        p = persons.get(l.get("persona_id"))
+        if not p:
+            continue
+        s = l.get("struttura") or {}
+        nome = s.get("nome") or l.get("struttura_nome") or "Struttura da definire"
+        skey = l.get("struttura_id") or nome.strip().lower()
+        st = structs.get(skey)
+        if not st:
+            st = structs[skey] = {
+                "nome": nome, "tipologia": s.get("tipologia") or l.get("tipo_struttura"),
+                "indirizzo": ", ".join([x for x in [s.get("indirizzo") or l.get("indirizzo"), s.get("citta")] if x]) or None,
+                "telefono": s.get("telefono") or l.get("telefono"),
+                "referente": s.get("referente") or l.get("referente"),
+                "telefono_referente": s.get("telefono_referente"),
+                "note": s.get("note"), "google_maps_url": s.get("google_maps_url"),
+                "_rooms": {}, "_seen": set(),
+            }
+        num = (l.get("numero_camera") or "").strip()
+        room = st["_rooms"].setdefault(num.lower(), {"numero": num or None, "tipo_camera": None, "ospiti": []})
+        room["tipo_camera"] = room["tipo_camera"] or l.get("tipo_camera")
+        room["ospiti"].append({"nome": p.get("nome"), "cognome": p.get("cognome"),
+                               "check_in": l.get("check_in"), "check_out": l.get("check_out")})
+        st["_seen"].add((num.lower(), l["persona_id"]))
+        # Ospiti esterni (non in anagrafica) indicati come occupanti: stesse date della prenotazione
+        if num:
+            for o in l.get("occupanti") or []:
+                if not o.get("persona_id") and o.get("nome") and (num.lower(), "ext:" + o["nome"].lower()) not in st["_seen"]:
+                    st["_seen"].add((num.lower(), "ext:" + o["nome"].lower()))
+                    room["ospiti"].append({"nome": o["nome"], "cognome": "", "esterno": True,
+                                           "check_in": l.get("check_in"), "check_out": l.get("check_out")})
+    out = []
+    for st in sorted(structs.values(), key=lambda x: x["nome"].lower()):
+        rooms = st.pop("_rooms")
+        st.pop("_seen")
+        for r in rooms.values():
+            r["ospiti"].sort(key=lambda o: ((o.get("cognome") or "").lower(), (o.get("nome") or "").lower()))
+        def rkey(n):
+            return (int(n), "") if n.isdigit() else (10**9, n)
+        st["camere"] = [rooms[k] for k in sorted([k for k in rooms if k], key=rkey)]
+        st["da_assegnare"] = rooms[""]["ospiti"] if "" in rooms else []
+        out.append(st)
+    return out
 
 
 def _opt(model):
@@ -1097,6 +1210,7 @@ async def _attach_structures(records: list, org_id: str) -> None:
         r["struttura"] = {"id": s["id"], "nome": s.get("nome"), "tipologia": s.get("tipologia"),
                           "indirizzo": s.get("indirizzo"), "citta": s.get("citta"), "provincia": s.get("provincia"),
                           "telefono": s.get("telefono"), "referente": s.get("referente"),
+                          "telefono_referente": s.get("telefono_referente"), "note": s.get("note"),
                           "google_maps_url": s.get("google_maps_url")}
         if not r.get("struttura_nome"):
             r["struttura_nome"] = s.get("nome")
@@ -1190,9 +1304,12 @@ def _compute_rooms(lodgings):
                 s.add(occ["persona_id"])
         members.append(s)
     sig = [(l.get("struttura_nome") or "", l.get("check_in") or "", l.get("check_out") or "") for l in lodgings]
+    room = [((l.get("struttura_id") or l.get("struttura_nome") or "").lower(), (l.get("numero_camera") or "").strip().lower()) for l in lodgings]
     for i in range(n):
         for j in range(i + 1, n):
-            if sig[i] == sig[j] and members[i] & members[j]:
+            if room[i][1] and room[i] == room[j]:
+                union(i, j)  # stesso numero camera nella stessa struttura: date per persona possono differire
+            elif not room[i][1] and not room[j][1] and sig[i] == sig[j] and members[i] & members[j]:
                 union(i, j)
     groups = {}
     for i in range(n):
@@ -4774,29 +4891,15 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
             "coperto": bool(s.get("persona_id")),
         })
 
-    lod_by, meal_by = defaultdict(list), defaultdict(list)
-    for x in lodgings:
+    for x in lodgings + meals:
         for f in COST_FIELDS:
             x.pop(f, None)
-        lod_by[x["persona_id"]].append(x)
-    for x in meals:
-        for f in COST_FIELDS:
-            x.pop(f, None)
-        meal_by[x["persona_id"]].append(x)
-    hosp_persons = []
+    esig_by_person = {}
     for l in links:
-        p = persons.get(l["persona_id"])
-        if not p:
-            continue
-        plod, pmeal = lod_by.get(l["persona_id"], []), meal_by.get(l["persona_id"], [])
-        if not plod and not pmeal:
-            continue
-        eff_esig = l.get("esigenze_alimentari") if l.get("esigenze_alimentari") is not None else p.get("esigenze_alimentari")
-        hosp_persons.append({
-            "nome": p.get("nome"), "cognome": p.get("cognome"),
-            "esigenze_alimentari": eff_esig or [], "lodgings": plod, "meals": pmeal,
-        })
-    hosp_persons.sort(key=lambda x: ((x.get("cognome") or "").lower(), (x.get("nome") or "").lower()))
+        p = persons.get(l["persona_id"]) or {}
+        esig_by_person[l["persona_id"]] = l.get("esigenze_alimentari") if l.get("esigenze_alimentari") is not None else p.get("esigenze_alimentari")
+    meals_by_day = _briefing_meals(meals, esig_by_person)
+    lodging_structures = _briefing_lodgings(lodgings, persons)
 
     sponsors_out = []
     for d in deals:
@@ -4826,7 +4929,8 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
 
     sections = {
         "teams": teams_out, "staff": staff_out, "shifts": shifts_out,
-        "hospitality": hosp_persons, "maps": maps, "sponsors": sponsors_out, "timeline": timeline,
+        "meals_by_day": meals_by_day, "lodging_structures": lodging_structures,
+        "maps": maps, "sponsors": sponsors_out, "timeline": timeline,
     }
 
     checks = []
@@ -4851,8 +4955,8 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
                    if not s.get("responsabile") and s.get("categoria") == "volontario"]
     add("referenti", "Volontari con referente", not vol_no_resp,
         (f"{len(vol_no_resp)} volontari senza referente assegnato") if vol_no_resp else "")
-    add("ospitalita", "Ospitalità / pasti gestiti", len(hosp_persons) > 0,
-        "Nessuna ospitalità o pasto assegnato" if not hosp_persons else "")
+    add("ospitalita", "Ospitalità / pasti gestiti", bool(meals_by_day or lodging_structures),
+        "" if (meals_by_day or lodging_structures) else "Nessuna ospitalità o pasto assegnato")
 
     passed = len([c for c in checks if c["status"] == "ok"])
     percent = round(passed / len(checks) * 100) if checks else 0
