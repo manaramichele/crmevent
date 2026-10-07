@@ -64,16 +64,43 @@ function EventScope({ events, value, onChange }) {
   );
 }
 
+function TeamScope({ teams, events, value, onChange }) {
+  const scope = value?.scope || "all";
+  const sel = new Set(value?.ids || []);
+  const flip = (id) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); onChange({ scope: "selected", ids: [...n] }); };
+  const evName = (id) => events.find((e) => e.id === id)?.nome || "";
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-4 text-sm">
+        {[["leader", "Solo Team di cui è Team Leader"], ["selected", "Team selezionati"], ["all", "Tutti i Team"]].map(([k, l]) => (
+          <label key={k} className="flex items-center gap-2"><input type="radio" checked={scope === k} onChange={() => onChange({ scope: k, ids: k === "selected" ? [...sel] : [] })} data-testid={`perm-teams-${k}`} />{l}</label>
+        ))}
+      </div>
+      {scope !== "all" && <p className="text-xs text-slate-400">Team Leader = persona dell'anagrafica con la stessa email dell'utente, indicata come Team Leader del Team.</p>}
+      {scope === "selected" && (
+        <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-1" data-testid="perm-teams-list">
+          {teams.length === 0 && <div className="text-xs text-slate-400">Nessun Team nell'organizzazione.</div>}
+          {teams.map((t) => (
+            <label key={t.id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="accent-tiffany" checked={sel.has(t.id)} onChange={() => flip(t.id)} data-testid={`perm-team-${t.id}`} />{t.nome}<span className="text-xs text-slate-400">{evName(t.evento_id)}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditDialog({ meta, member, onClose, onSaved }) {
   const [role, setRole] = useState(member.role);
   const base = member.permissions.admin ? meta.defaults.user : member.permissions;
-  const [perm, setPerm] = useState({ sections: base.sections, events: base.events });
+  const [perm, setPerm] = useState({ sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] } });
   const [busy, setBusy] = useState(false);
   const changeRole = (r) => { setRole(r); if (r !== "admin_org" && r !== member.role) setPerm({ ...meta.defaults[r] }); };
   const save = async (reset = false) => {
     setBusy(true);
     try {
-      const body = reset ? { role, reset: true } : role === "admin_org" ? { role } : { role, sections: perm.sections, events: perm.events };
+      const body = reset ? { role, reset: true } : role === "admin_org" ? { role } : { role, sections: perm.sections, events: perm.events, teams: perm.teams };
       await api.put(`/org/permissions/${member.user_id}`, body);
       toast.success("Permessi aggiornati"); onSaved();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
@@ -97,6 +124,7 @@ function EditDialog({ meta, member, onClose, onSaved }) {
           ) : (<>
             <div className="space-y-1.5"><div className="text-xs font-semibold uppercase text-slate-500">Sezioni</div><MatrixEditor meta={meta} value={perm} onChange={setPerm} /></div>
             <div className="space-y-1.5"><div className="text-xs font-semibold uppercase text-slate-500">Eventi</div><EventScope events={meta.events} value={perm.events} onChange={(events) => setPerm((p) => ({ ...p, events }))} /></div>
+            <div className="space-y-1.5"><div className="text-xs font-semibold uppercase text-slate-500">Accesso ai Team</div><TeamScope teams={meta.teams || []} events={meta.events} value={perm.teams} onChange={(teams) => setPerm((p) => ({ ...p, teams }))} /></div>
             <p className="text-xs text-slate-400">Account, abbonamento, crediti, fatture, impostazioni e gestione utenti restano riservati all'Admin Organizzatore.</p>
           </>)}
         </div>
@@ -123,7 +151,8 @@ export default function Permissions() {
   const summary = (p) => {
     if (p.admin) return "Accesso completo";
     const n = meta.sections.filter((s) => (p.sections[s.key] || []).length).length;
-    return `${n}/${meta.sections.length} sezioni · ${p.events === "all" ? "tutti gli eventi" : `${p.events.length} eventi`}`;
+    const tp = p.teams?.scope === "leader" ? " · Team: solo come leader" : p.teams?.scope === "selected" ? ` · ${p.teams.ids.length} Team` : "";
+    return `${n}/${meta.sections.length} sezioni · ${p.events === "all" ? "tutti gli eventi" : `${p.events.length} eventi`}${tp}`;
   };
   return (
     <div className="animate-fade-up space-y-8" data-testid="permissions-page">

@@ -386,7 +386,8 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail }) {
+  const [detailRow, setDetailRow] = useState(null);
   const { user } = useAuth();
   const allow = (a) => !section || can(user, section, a);
   const { items, loading, create, update, remove } = useCollection(endpoint);
@@ -462,7 +463,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
               ) : sorted.map((row) => (
                 <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors" data-testid={`${testid}-row-${row.id}`}>
                   {columns.map((c) => (
-                    <td key={c.key} className="px-4 py-3 text-slate-700">{c.render ? c.render(row) : (row[c.key] || "—")}</td>
+                    <td key={c.key} className="px-4 py-3 text-slate-700">{c.render ? c.render(row, { openDetail: () => setDetailRow(row) }) : (row[c.key] || "—")}</td>
                   ))}
                   <td className="px-4 py-3">
                     {fullActions ? (
@@ -502,6 +503,10 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
         title={editing ? `Modifica ${entityLabel}` : `Nuovo ${entityLabel}`}
         fields={fields} initial={editing} onSubmit={onSubmit} options={options} testid={testid} entityCreators={entityCreators}
       />
+      {detailRow && renderDetail && renderDetail(items.find((x) => x.id === detailRow.id) || detailRow, {
+        close: () => setDetailRow(null),
+        edit: allow("edit") ? (r) => { setDetailRow(null); openEdit(r); } : null,
+      })}
     </div>
   );
 }
