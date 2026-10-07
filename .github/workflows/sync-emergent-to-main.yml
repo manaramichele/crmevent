@@ -1,0 +1,30 @@
+name: Sync Emergent to Main
+
+on:
+  push:
+    branches:
+      - conflict_071026_2255
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge Emergent branch into main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          git merge --no-ff origin/conflict_071026_2255 -m "Auto merge Emergent updates into main"
+          git push origin main
