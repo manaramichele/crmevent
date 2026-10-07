@@ -98,7 +98,7 @@ function PackagesTab() {
         })}
       </tbody>
     </table>
-    <p className="text-xs text-slate-400 mt-3">1 credito = € 0,50. I pagamenti non sono ancora attivi: la modifica aggiorna solo il catalogo mostrato in Area Account.</p>
+    <p className="text-xs text-slate-400 mt-3">1 credito = € 0,50. Acquista crediti da utilizzare per i servizi di CRMEvent.</p>
     </div>
   );
 }
