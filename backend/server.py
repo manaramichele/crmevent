@@ -3113,8 +3113,9 @@ async def _gcal_unlocked(org_id: str) -> bool:
 async def calendar_feature(user: dict = Depends(require_admin)):
     oid = user["org_id"]
     c = await _ensure_org_credits(oid)
+    await _ensure_credits_setup()
     return {"configured": gcal_utils.is_configured(), "unlocked": await _gcal_unlocked(oid),
-            "cost": GCAL_UNLOCK_COST, "balance": c.get("balance", 0)}
+            "cost": (await _svc_cfg("google_calendar"))["cost"], "balance": c.get("balance", 0)}
 
 
 @api.post("/calendar/unlock")
@@ -3124,9 +3125,13 @@ async def calendar_unlock(user: dict = Depends(require_org_admin)):
         c = await _ensure_org_credits(oid)
         return {"unlocked": True, "charged": False, "balance": c.get("balance", 0)}
     await _ensure_credits_setup()
-    await _apply_credit_movement(oid, -GCAL_UNLOCK_COST, reason_code="google_calendar_unlock",
+    cost = (await _svc_cfg("google_calendar"))["cost"]
+    if cost is None:
+        raise HTTPException(status_code=400, detail="Servizio 'Google Calendar' non configurato")
+    if cost > 0:
+        await _apply_credit_movement(oid, -cost, reason_code="google_calendar_unlock",
                                  type_="spend", service_key="google_calendar", quantity=1,
-                                 unit_cost=GCAL_UNLOCK_COST, user_id=user.get("user_id"),
+                                 unit_cost=cost, user_id=user.get("user_id"),
                                  idempotency_key=f"gcal_unlock:{oid}", note="Attivazione Google Calendar")
     await db.organizations.update_one({"id": oid}, {"$set": {"features.google_calendar": True, "features.google_calendar_at": now_iso()}})
     c = await _ensure_org_credits(oid)
@@ -4723,6 +4728,16 @@ async def brevo_unsubscribe(token: str):
 
 
 # ---------------- cron ----------------
+@api.post("/cron/event-renewals")
+async def cron_event_renewals(authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    expected = f"Bearer {WEBHOOK_CRON_SECRET}"
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(run_event_renewals())  # idempotente: addebiti protetti da idempotency_key per mese
+    return {"accepted": True}
+
+
 @api.post("/cron/brevo-funnel-tick")
 async def cron_brevo_funnel_tick(request: Request, authorization: str = Header(default="")):
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
@@ -5277,6 +5292,7 @@ async def briefing_live(event_id: str, admin: dict = Depends(require_admin)):
     data["live_hash"] = live_hash
     data["latest_version"] = latest
     data["is_stale"] = bool(latest and latest.get("content_hash") != live_hash)
+    data["briefing_charge"] = await _briefing_charge_info(admin["org_id"], event_id)
     return data
 
 
@@ -5285,10 +5301,29 @@ class BriefingPublishIn(BaseModel):
     note: Optional[str] = None
 
 
+async def _briefing_charge_info(org_id: str, event_id: str) -> dict:
+    """Generazione briefing: addebito UNA TANTUM per evento (prima pubblicazione), poi gratis."""
+    await _ensure_credits_setup()
+    cfg = await _svc_cfg("ai_briefing")
+    charged = bool(await db.credit_ledger.find_one({"org_id": org_id, "idempotency_key": f"ai_briefing:{event_id}"}, {"_id": 1}))
+    applies = bool(cfg["active"] and cfg["cost"] and (cfg["svc"] or {}).get("consumo_active") and await _is_credit_model_org(org_id))
+    return {"cost": cfg["cost"] if applies and not charged else 0, "charged": charged}
+
+
+async def _charge_briefing_once(admin: dict, event_id: str):
+    info = await _briefing_charge_info(admin["org_id"], event_id)
+    if info["cost"]:
+        ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0, "nome": 1}) or {}
+        await _apply_credit_movement(admin["org_id"], -info["cost"], reason_code="ai_briefing", type_="debit",
+                                     service_key="ai_briefing", event_id=event_id, user_id=admin.get("user_id"),
+                                     idempotency_key=f"ai_briefing:{event_id}", note=f"Generazione briefing — {ev.get('nome')}")
+
+
 @api.post("/events/{event_id}/briefing-versions")
 async def publish_briefing(event_id: str, body: BriefingPublishIn, admin: dict = Depends(require_admin)):
     await _assert_event_operational(admin["org_id"], event_id)
     data = await _build_briefing(event_id, admin["org_id"])
+    await _charge_briefing_once(admin, event_id)
     last = await db.briefing_versions.find_one(oq(admin, evento_id=event_id), sort=[("versione", -1)])
     versione = (last.get("versione", 0) + 1) if last else 1
     doc = {"id": new_id(), "org_id": admin["org_id"], "evento_id": event_id, "versione": versione,
@@ -9640,6 +9675,19 @@ FASE_E_INITIAL = {
 }
 _credits_indexes_done = False
 
+# Servizi realmente collegati a un addebito nel codice (gli altri restano nascosti nel catalogo Super Admin).
+LINKED_CREDIT_SERVICES = {"ai_assistant", "ai_briefing", "event_activation", "event_maintenance",
+                          "event_pipeline_pro", "google_calendar"}
+# Descrizioni informative (verificate sul codice di addebito). Applicate una sola volta: poi modificabili dal Super Admin.
+CREDIT_SERVICE_DESCRIPTIONS = {
+    "ai_assistant": "Risponde con l'AI alle domande sull'uso di CRMEvent e sui dati della tua organizzazione. Il costo viene scalato per ogni domanda che riceve una risposta utile. Se l'assistente non sa rispondere, oppure la richiesta è un suggerimento di nuova funzione, non viene scalato nulla.",
+    "ai_briefing": "Pubblica il briefing operativo dell'evento, generato automaticamente con i dati aggiornati di staff, team, turni, ospitalità e pasti. Il costo viene scalato una sola volta per evento, alla prima pubblicazione. Dopo l'addebito il briefing dello stesso evento può essere aggiornato e ripubblicato in nuove versioni senza ulteriori addebiti.",
+    "event_activation": "Rende operativo un evento: staff, team, turni, ospitalità, briefing e tutte le funzioni operative. Il costo viene scalato una sola volta per evento, al momento dell'attivazione, e comprende il primo mese di utilizzo. Dal mese successivo si applica il Mantenimento evento.",
+    "event_maintenance": "Mantiene operativo un evento già attivato. Il costo viene scalato in automatico ogni mese di calendario a partire dalla data di attivazione, fino alla data dell'evento: il mese che arriva fino all'evento non viene addebitato di nuovo. Se i crediti non sono sufficienti l'evento viene sospeso; riattivandolo si paga un solo mese di mantenimento e il ciclo riparte.",
+    "event_pipeline_pro": "Attiva per un evento la Pipeline di preparazione: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni e tutte le attività da svolgere prima dell'evento. Il costo viene scalato una sola volta per evento, anche quando la Pipeline viene copiata da un'edizione precedente. Dopo l'attivazione modelli, attività e aggiornamenti dello stesso evento sono compresi.",
+    "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare Attività e Follow-up con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
+}
+
 
 async def _ensure_credits_setup():
     """Crea indici e semina il catalogo servizi (idempotente, lazy)."""
@@ -9685,6 +9733,22 @@ async def _ensure_credits_setup():
             upd = {"consumo_active": derived}
         upd["updated_at"] = now_iso()
         await db.credit_services.update_one({"key": svc["key"]}, {"$set": upd})
+    # Catalogo semplificato (v2, una sola volta): descrizioni complete, Google Calendar a catalogo, briefing a evento.
+    for key, text in CREDIT_SERVICE_DESCRIPTIONS.items():
+        svc = await db.credit_services.find_one({"key": key, "desc_v2": {"$ne": True}}, {"_id": 0})
+        if not svc:
+            continue
+        upd = {"description": text, "desc_v2": True, "updated_at": now_iso()}
+        if key == "ai_assistant":
+            upd["name"] = "Assistente CRMEvent"
+        if key == "google_calendar" and svc.get("unit_cost") is None:
+            upd.update({"unit_cost": GCAL_UNLOCK_COST, "pricing_mode": "flat", "unit_label": "organizzazione",
+                        "active": True, "consumo_active": True})
+        if key == "ai_briefing":
+            upd.update({"unit_label": "evento", "active": True, "consumo_active": True})
+            if svc.get("unit_cost") in (None, 3):
+                upd["unit_cost"] = 30
+        await db.credit_services.update_one({"key": key}, {"$set": upd})
 
 
 async def _ensure_org_credits(org_id: str) -> dict:
@@ -9879,7 +9943,7 @@ async def credits_services_public(user: dict = Depends(require_admin)):
 async def platform_credit_services(admin: dict = Depends(require_superadmin)):
     await _ensure_credits_setup()
     rows = await db.credit_services.find({}, {"_id": 0}).to_list(100)
-    return {"services": rows}
+    return {"services": [{**r, "linked": r["key"] in LINKED_CREDIT_SERVICES} for r in rows]}
 
 
 class CreditServiceUpdateIn(BaseModel):
@@ -9892,6 +9956,7 @@ class CreditServiceUpdateIn(BaseModel):
     unit_cost: Optional[float] = None
     min_units: Optional[int] = None
     period_days: Optional[int] = None
+    description: Optional[str] = None
 
 
 @api.put("/platform/credit-services/{key}")
@@ -9901,7 +9966,9 @@ async def update_credit_service(key: str, body: CreditServiceUpdateIn, admin: di
     if not svc:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     changes = {}
-    for f in ["name", "active", "consumo_active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units", "period_days"]:
+    if body.unit_cost is not None and (body.unit_cost < 0 or body.unit_cost != int(body.unit_cost)):
+        raise HTTPException(status_code=400, detail="Il costo deve essere un numero intero di crediti (0 o superiore)")
+    for f in ["name", "active", "consumo_active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units", "period_days", "description"]:
         v = getattr(body, f)
         if v is not None and v != svc.get(f):
             changes[f] = v
