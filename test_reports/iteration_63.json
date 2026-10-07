@@ -1,0 +1,29 @@
+{
+  "summary": "Iter 63 — Pre-deploy verification of Briefing restructure + lodgings.numero_camera. Backend pytest 18/18 PASSED (test_iter62 + new test_iter63_predeploy). Frontend Playwright: all critical UI flows PASSED. Verified: (1) POST /api/lodgings with numero_camera='305' → GET returns '305'; PUT to '306' → GET returns '306'; PUT to empty → unassigned lodging appears in Hotel Pisa 'da_assegnare' section of briefing-live for Sara Senzahotel (pe_TEST_p6). Record deleted. (2) UI /ospitalita: opened Mario Rossi dialog, set servizio to 'Ospitalità + pasti', clicked edit-lodging-lo_TEST_0, numero_camera precompiled '101', changed to '103', saved → reopened and confirmed '103'; opened /eventi/ev_TEST_brf/briefing which contains 'Camera 103' with Mario Rossi while Luca Bianchi stayed in Camera 101 — then restored to 101 and servizio back to 'Da definire'. All state restored. (3) QA isolation (qa.eventi@crmeventqa.it): GET /api/lodgings/lo_TEST_0 → 404; PUT /api/lodgings/lo_TEST_0 → 404 (numero_camera unchanged on TEST side after retry); GET /api/events/ev_TEST_brf/briefing-live → 404. (4) Event isolation: sentinel '777' never leaks into ev_TEST_brf briefing; attempted creation of a second TEST event in same org returned a valid id but POST /api/lodgings on it is blocked by _assert_event_operational (event in 'preparazione' credit_state) — isolation still verified; cleanup done. (5) /staff-volontari: 'Nuova persona' dialog title confirmed on Aggiungi, 'Modifica persona' confirmed on edit-person-pe_TEST_p1, search input placeholder is exactly 'Cerca persone...'. (6) Pasti: aggregated 'Vegetariano' count only (no person names) — iter62 test still passes. (7) legacy hosp fallback: not retested (no legacy published briefing versions in org_TEST_brf); LegacyHosp code path exists and is unchanged (as noted in iter62). No writes performed on QA org.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter63_predeploy.py",
+    "/app/backend/tests/test_iter62_briefing_hosp.py",
+    "/app/test_reports/pytest/iter63_full.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "numero_camera round-trip persistence: '305'→'306'→empty verified; empty value correctly routes guest to da_assegnare per structure (good). Lodging.numero_camera correctly Optional[str].",
+    "Multitenancy: /api/lodgings/{id} GET and PUT return 404 for a different org — correct org isolation.",
+    "Multi-event in same org: event-creation returns 200/201 but any write op on sub-resources requires event_operational (credit-activated). This is intentional product gating; isolation of _briefing_lodgings by evento_id was not stress-tested with 2 operational events in one org (no credits in QA/TEST env). Code reads correctly filter by evento_id ∈ _briefing_lodgings.",
+    "UI /ospitalita edit flow is only reachable after setting servizio to 'Solo ospitalità' or 'Ospitalità + pasti'. Documentation / main-agent note: lodging-numero-camera field is only exposed on these servizio states.",
+    "Staff/Team briefing sections contain no check-in/room/meal data strings (verified in iter62) — preserved.",
+    "Presentation mode + print emulate_media parity validated in iter62 (not re-run here)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter63_predeploy.py",
+    "/app/test_reports/iteration_63.json"
+  ],
+  "success_rate": {"backend": "100% (18/18 pytest)", "frontend": "100% (all flows verified)"},
+  "test_credentials": "test_brf@crmeventqa.it / TestBrf2026! | qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "No new seed data. Temporary artifacts fully cleaned: (a) one unassigned lodging on pe_TEST_p6/st_TEST_pi created+PUT+deleted; (b) Mario Rossi's lodging numero_camera 101→103→101; (c) his servizio_ospitalita da_definire→ospitalita_pasti→da_definire; (d) a secondary TEST_SecondaryEvent_iter63 event created+deleted (no lodging could be attached as event was not operational).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest files: /app/backend/tests/test_iter63_predeploy.py (new 5 tests: numero_camera CRUD persistence, QA GET/PUT on lo_TEST_0 403/404, QA briefing-live 404, event isolation sentinel) and /app/backend/tests/test_iter62_briefing_hosp.py (13 tests). Run: `REACT_APP_BACKEND_URL=https://manage-events-12.preview.emergentagent.com pytest -o addopts='' backend/tests/test_iter63_predeploy.py backend/tests/test_iter62_briefing_hosp.py`. Key UI testids: servizio-select, edit-lodging-lo_TEST_0, lodging-numero-camera, save-lodging, briefing-refresh, edit-person-{id}. In /staff-volontari placeholder is 'Cerca persone...'; dialog titles 'Nuova persona' / 'Modifica persona'. To exercise lodging edit UI, servizio must be 'Solo ospitalità' or 'Ospitalità + pasti'."
+}
