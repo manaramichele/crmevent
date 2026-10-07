@@ -152,7 +152,7 @@ function RoomsSummary({ rooms }) {
   return (
     <div className="mb-6" data-testid="rooms-summary">
       <div className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Riepilogo camere</div>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
         {cards.map(([l, v]) => (
           <div key={l} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm" data-testid={`rooms-${l.toLowerCase().replace(/[^a-z]/g, "-")}`}>
             <BedDouble className="w-4 h-4 mb-1 text-tiffany-active" /><div className="text-xl font-bold text-slate-900">{v}</div><div className="text-[11px] text-slate-500">{l}</div>
@@ -527,7 +527,7 @@ function Summary({ s }) {
     ["Senza sistemazione", s.senza_sistemazione, AlertTriangle, s.senza_sistemazione ? "red" : "green"],
   ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
       {cards.map(([label, val, Icon, color]) => (
         <div key={label} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm" data-testid={`summary-${label.toLowerCase().replace(/[^a-z]/g, "-")}`}>
           <Icon className={`w-4 h-4 mb-1 ${color === "red" ? "text-red-500" : color === "orange" ? "text-amber-500" : "text-tiffany-active"}`} />
@@ -678,11 +678,11 @@ export default function Hospitality() {
   return (
     <div className="animate-fade-up">
       <PageHeader title="Ospitalità & Pasti" subtitle="Pernottamenti, colazioni, pranzi e cene per ogni persona dell'evento"
-        action={<div className="flex items-center gap-2">
+        action={<div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button variant="outline" onClick={() => setStructOpen(true)} data-testid="open-structures"><Building2 className="w-4 h-4 mr-1.5" />Strutture</Button>
-          <Select value={eventId} onValueChange={setEventId}><SelectTrigger className="w-52" data-testid="hosp-event-select"><SelectValue placeholder="Seleziona evento" /></SelectTrigger>
+          <Select value={eventId} onValueChange={setEventId}><SelectTrigger className="flex-1 min-w-0 sm:flex-none sm:w-52" data-testid="hosp-event-select"><SelectValue placeholder="Seleziona evento" /></SelectTrigger>
             <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
-          <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={() => setBulkOpen(true)} disabled={!persons.length} data-testid="open-bulk-assign"><UserPlus className="w-4 h-4 mr-1.5" />Assegna a più persone</Button>
+          <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold w-full sm:w-auto" onClick={() => setBulkOpen(true)} disabled={!persons.length} data-testid="open-bulk-assign"><UserPlus className="w-4 h-4 mr-1.5" />Assegna a più persone</Button>
         </div>} />
 
       {!eventId ? <p className="text-slate-400">Crea o seleziona un evento.</p> :
@@ -705,11 +705,22 @@ export default function Hospitality() {
             <TabsContent value="persona">
               <div className="flex flex-wrap gap-2 mb-4">
                 <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input className="pl-9" placeholder="Cerca persona..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="hosp-search" /></div>
-                <Select value={fRuolo || "all"} onValueChange={(v) => setFRuolo(v === "all" ? "" : v)}><SelectTrigger className="w-40" data-testid="filter-ruolo"><SelectValue placeholder="Ruolo" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti i ruoli</SelectItem>{Object.entries(CAT_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
-                <Select value={fStato || "all"} onValueChange={(v) => setFStato(v === "all" ? "" : v)}><SelectTrigger className="w-40" data-testid="filter-stato"><SelectValue placeholder="Stato" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti gli stati</SelectItem>{Object.entries(STATO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
-                <Select value={fEsig || "all"} onValueChange={(v) => setFEsig(v === "all" ? "" : v)}><SelectTrigger className="w-40" data-testid="filter-esig"><SelectValue placeholder="Esigenze" /></SelectTrigger><SelectContent><SelectItem value="all">Tutte le esigenze</SelectItem>{ESIGENZE.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent></Select>
+                <Select value={fRuolo || "all"} onValueChange={(v) => setFRuolo(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-ruolo"><SelectValue placeholder="Ruolo" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti i ruoli</SelectItem>{Object.entries(CAT_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
+                <Select value={fStato || "all"} onValueChange={(v) => setFStato(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-stato"><SelectValue placeholder="Stato" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti gli stati</SelectItem>{Object.entries(STATO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
+                <Select value={fEsig || "all"} onValueChange={(v) => setFEsig(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-esig"><SelectValue placeholder="Esigenze" /></SelectTrigger><SelectContent><SelectItem value="all">Tutte le esigenze</SelectItem>{ESIGENZE.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent></Select>
               </div>
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+              <div className="md:hidden space-y-2" data-testid="hosp-mobile-list">
+                {filteredPersons.length === 0 ? <p className="py-8 text-center text-slate-400 text-sm">Nessuna persona.</p> :
+                  filteredPersons.map((p) => (
+                    <button key={p.persona_id} type="button" onClick={() => setOpenPerson(p.persona_id)} className="w-full text-left bg-white border border-slate-200 rounded-xl p-4" data-testid={`m-hosp-person-${p.persona_id}`}>
+                      <div className="flex items-start justify-between gap-2"><span className="font-semibold text-slate-900 break-words">{fullName(p)}</span><StatusBadge color={STATO_COLOR[p.stato]}>{STATO_LABEL[p.stato]}</StatusBadge></div>
+                      <div className="text-xs text-slate-500">{CAT_LABEL[p.categoria] || p.ruolo || "—"}</div>
+                      <div className="mt-2 text-sm text-slate-700">Pernott. {p.lodgings.length} · Col. {p.meals.filter((m) => m.tipo_pasto === "colazione").length} · Pranzi {p.meals.filter((m) => m.tipo_pasto === "pranzo").length} · Cene {p.meals.filter((m) => m.tipo_pasto === "cena").length}</div>
+                      {(p.esigenze_alimentari || []).length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{p.esigenze_alimentari.map((e) => <StatusBadge key={e} color="blue">{e}</StatusBadge>)}</div>}
+                    </button>
+                  ))}
+              </div>
+              <div className="hidden md:block bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-slate-200 bg-slate-50/70">{["Persona", "Ruolo", "Pernott.", "Col.", "Pranzi", "Cene", "Esigenze", "Stato"].map((h) => <th key={h} className="text-left font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">{h}</th>)}</tr></thead>
                   <tbody>

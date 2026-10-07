@@ -84,7 +84,37 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
         <p className="text-sm text-slate-500">Gestisci chi può accedere e operare nella tua organizzazione.</p>
         <Button onClick={() => setOpen(true)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="org-invite-btn"><UserPlus className="w-4 h-4 mr-1.5" />Invita utente</Button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="md:hidden space-y-2.5" data-testid="org-users-mobile-list">
+        {members.length === 0 && pendingInvites.length === 0 && <p className="py-8 text-center text-slate-400 text-sm">Nessun utente.</p>}
+        {members.map((m) => {
+          const st = m.active ? STATUS.member_active : STATUS.member_inactive;
+          return (
+            <div key={m.user_id} className="rounded-xl border border-slate-200 bg-white p-4" data-testid={`m-user-card-${m.user_id}`}>
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-semibold text-slate-900 break-words">{m.name || "—"}</div><div className="text-xs text-slate-500 break-all">{m.email}</div></div><StatusBadge color={st[0]}>{st[1]}</StatusBadge></div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5"><StatusBadge color={m.is_superadmin || m.role === "admin_org" ? "tiffany" : m.role === "collaboratore" ? "orange" : "blue"}>{m.is_superadmin ? "Super Admin" : m.role_label}</StatusBadge></div>
+              {!m.is_superadmin && <div className="mt-2 space-y-1 text-xs text-slate-600"><div><span className="text-slate-400">Team: </span>{teamAccessLabel(pm(m.user_id)?.permissions, meta)}</div><div><span className="text-slate-400">Permessi: </span>{permSummary(pm(m.user_id)?.permissions, meta)}</div></div>}
+              {!m.is_superadmin && <div className="mt-3 flex flex-wrap gap-2">
+                {allowProfileEdit && <Button variant="outline" size="sm" onClick={() => openEdit(m)} data-testid={`m-user-edit-${m.user_id}`}><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>}
+                {pm(m.user_id) && !pm(m.user_id).is_self && <Button variant="outline" size="sm" onClick={() => setPermFor(pm(m.user_id))} data-testid={`m-user-perms-btn-${m.user_id}`}>Permessi</Button>}
+                <Button variant="outline" size="sm" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`m-user-toggle-${m.user_id}`}>{m.active ? "Disattiva" : "Riattiva"}</Button>
+              </div>}
+            </div>
+          );
+        })}
+        {pendingInvites.map((iv) => {
+          const st = STATUS[iv.status] || STATUS.pending;
+          return (
+            <div key={iv.id} className="rounded-xl border border-amber-200 bg-amber-50/40 p-4" data-testid={`m-invite-card-${iv.id}`}>
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-semibold text-slate-800 break-words">{`${iv.nome || ""} ${iv.cognome || ""}`.trim() || "—"}</div><div className="text-xs text-slate-500 break-all">{iv.email} · {iv.role_label}</div></div><StatusBadge color={st[0]}>{st[1]}</StatusBadge></div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => resend(iv.id)} data-testid={`m-invite-resend-${iv.id}`}><RefreshCw className="w-3.5 h-3.5 mr-1" />Reinvia</Button>
+                <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => revoke(iv.id)} data-testid={`m-invite-revoke-${iv.id}`}><XCircle className="w-3.5 h-3.5 mr-1" />Revoca</Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[920px] text-sm" data-testid="org-users-table">
           <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
             <th className="text-left px-3 py-2.5">Utente</th><th className="text-left px-3 py-2.5">Email</th><th className="text-left px-3 py-2.5">Ruolo</th><th className="text-left px-3 py-2.5">Accesso Team</th><th className="text-left px-3 py-2.5">Permessi</th><th className="text-left px-3 py-2.5">Stato</th><th className="text-right px-3 py-2.5">Azioni</th>

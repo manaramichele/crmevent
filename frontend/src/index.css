@@ -61,6 +61,15 @@ h1, h2, h3, h4, .font-display {
 }
 .animate-fade-up { animation: fadeInUp 0.4s ease both; }
 
+/* Mobile-first CRMEvent: nessuna funzione dipende dall'hover, niente zoom iOS sui campi, niente scroll orizzontale di pagina */
+@media (hover: none) {
+  .group .group-hover\:opacity-100, .group-hover\:opacity-100 { opacity: 1 !important; }
+}
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
+  html, body { overflow-x: hidden; }
+}
+
 /* react-phone-number-input — allineato allo stile input CRMEvent */
 .phone-input .PhoneInputInput{height:2.5rem;border:1px solid #e2e8f0;border-radius:0.375rem;padding:0 0.75rem;font-size:0.875rem;outline:none;background:#fff;}
 .phone-input .PhoneInputInput:focus{border-color:#0ABAB5;box-shadow:0 0 0 2px rgba(10,186,181,.3);}
