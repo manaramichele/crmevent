@@ -167,7 +167,7 @@ export default function Pricing() {
           </div>
         )}
         <p className="text-xs text-slate-400 mt-8 text-center max-w-2xl mx-auto">
-          1 credito = € 0,20. Prezzi IVA esclusa; l'IVA del 22% è aggiunta al momento del pagamento. Il pagamento avviene in modo sicuro tramite Stripe.
+          1 credito = € 0,50. Prezzi IVA esclusa; l'IVA del 22% è aggiunta al momento del pagamento. Il pagamento avviene in modo sicuro tramite Stripe.
         </p>
       </section>
 

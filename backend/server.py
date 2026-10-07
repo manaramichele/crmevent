@@ -9678,8 +9678,8 @@ async def platform_orgs_overview(admin: dict = Depends(require_superadmin)):
 # ---------------- Catalogo RICARICHE (credit_packages) ----------------
 # price, credits_base, credits_bonus, bonus_pct (display)
 CREDIT_PACKAGES_SEED = [
-    (20, 100, 0, 0), (50, 250, 0, 0), (100, 500, 50, 10),
-    (200, 1000, 150, 15), (500, 2500, 500, 20), (1000, 5000, 1250, 25),
+    (20, 40, 0, 0), (50, 100, 0, 0), (100, 200, 20, 10),
+    (200, 400, 60, 15), (500, 1000, 200, 20), (1000, 2000, 500, 25),
 ]
 
 
@@ -9702,14 +9702,14 @@ async def credits_packages_public_open():
     """Catalogo pubblico dei tagli attivi per la pagina /prezzi (nessuna autenticazione)."""
     await _ensure_credit_packages_seeded()
     rows = await db.credit_packages.find({"active": True}, {"_id": 0}).sort("sort", 1).to_list(100)
-    return {"packages": rows, "credit_unit_eur": 0.20}
+    return {"packages": rows, "credit_unit_eur": 0.50}
 
 
 @api.get("/credits/packages")
 async def credits_packages_public(user: dict = Depends(require_admin)):
     await _ensure_credit_packages_seeded()
     rows = await db.credit_packages.find({"active": True}, {"_id": 0}).sort("sort", 1).to_list(100)
-    return {"packages": rows, "credit_unit_eur": 0.20}
+    return {"packages": rows, "credit_unit_eur": 0.50}
 
 
 @api.get("/platform/credit-packages")
