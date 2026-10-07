@@ -1,0 +1,27 @@
+{
+  "summary": "Iter65 — Fabbisogno volontari per Team (CRMEvent). Testing backend + frontend su org_TEST_team (seed OK). BACKEND pytest 7/7 PASSED (/app/backend/tests/test_iter65_team_coverage.py): (1) GET /api/teams?evento_id=ev_TEST_team espone volontari_richiesti 20/5/3/null per Ristori/Percorso/Expo/Senza fabbisogno; (2) conteggio assegnati via GET /api/staff rispetta regola (categoria=volontario, stato NON in {rinunciato,non_disponibile}, persona_id unique, team_id match) → Ristori 14 (staff e rinunciatario esclusi), Percorso 5, Expo 5, Senza fabbisogno 1; (3) GET /api/dashboard?evento_id=ev_TEST_team → staff.volontari_richiesti=28, assegnati=24, mancanti=6, esubero=2; (4) secondo evento ev_TEST_team_2 (senza team) → tutti 0; (5) POST /api/teams con volontari_richiesti=20 crea, PUT aggiorna a 25, POST con -1 restituisce 422; (6) assegnamento Libero TEST (sl_TEST_free) → Ristori diventa 15/5 (totali assegnati 25, mancanti 5); trasferito a Percorso → mancanti 6, esubero 3 (Percorso 6/5 +1 + Expo +2); rimosso team_id → ritorno a 24/6/2; (7) isolamento: Admin QA (org_qa_eventi) non vede team TEST (teams/evento 404 o filtrati). FRONTEND: /staff-volontari → tab Team mostra la colonna 'Volontari' con data-testid team-coverage-{teamId}: Ristori '20 richiesti · 14 assegnati · 6 mancanti' con badge team-missing-tm_TEST_ristori (rosso), Percorso 'Completo' badge team-complete, Expo 'Completo · +2 in esubero' con team-extra, Senza fabbisogno '1 assegnati · fabbisogno non indicato' (nessun badge). Dialog 'Nuovo team' contiene campo numerico 'Volontari richiesti' (placeholder 'Es. 20'). Dashboard: kpi-vol-richiesti=28, kpi-vol-assegnati=24, kpi-vol-mancanti=6 con etichetta 'Volontari mancanti (+2 esubero)'. Mobile 390x844: la lista Team resta leggibile (tabella scrollabile orizzontalmente); i badge coverage sono renderizzati. Reseed finale eseguito per ripristinare dati puliti.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter65_team_coverage.py",
+    "/app/test_reports/pytest/iter65.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py _team_coverage(): logica corretta (dedup su persona_id, esclusione stati di rinuncia, team senza volontari_richiesti esclusi dai totali). Field Team.volontari_richiesti Optional[int] con ge=0, le=100000: 422 su valori negativi verificato.",
+    "server.py: inclusione in /api/dashboard via **_team_coverage(teams, staff) coerente con scope (teams/staff già filtrati per org_id e evento_id).",
+    "Persons.jsx TeamCoverage: UX chiara, badge separati per missing/complete/extra; usa data-testid stabili. assignedVol() replica la stessa regola del backend lato client per rendering immediato post-mutazione.",
+    "Persons.jsx onMutate=invalidateTeams invalida sia teams che staff → aggiornamento immediato della colonna 'Volontari' alla modifica di una presenza (verificato lato backend; lato UI il React Query refetch segue invalidazione).",
+    "Dashboard.jsx: etichetta dinamica 'Volontari mancanti (+N esubero)' corretta anche con mancanti=0 (badge green)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter65_team_coverage.py",
+    "/app/test_reports/iteration_65.json"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100%"},
+  "test_credentials": "test_team@crmeventqa.it / TestTeam2026! (org_TEST_team) | qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "Dati seminati via /app/backend/tests/seed_team_coverage_test.py (reseed finale eseguito). Nessun record TEST_New Team creato dai test rimasto persistito (cleanup in test).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Comando: `REACT_APP_BACKEND_URL=https://manage-events-12.preview.emergentagent.com pytest -o addopts='' /app/backend/tests/test_iter65_team_coverage.py -v`. Reset dati: `python3 /app/backend/tests/seed_team_coverage_test.py` (o --clean). Testid chiave: team-coverage-{id}, team-missing-{id}, team-complete-{id}, team-extra-{id}, tab-team, kpi-vol-richiesti/assegnati/mancanti."
+}
