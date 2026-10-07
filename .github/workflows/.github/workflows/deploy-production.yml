@@ -1,0 +1,25 @@
+name: Deploy CRMEvent Production
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: crmevent-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy CRMEvent su Aruba
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.ARUBA_HOST }}
+          username: ${{ secrets.ARUBA_USER }}
+          key: ${{ secrets.ARUBA_SSH_KEY }}
+          script: |
+            set -e
+            /opt/crmevent/deploy-from-github.sh
