@@ -59,7 +59,7 @@ export default function Followups() {
     <EntityManager
       title="Follow-up" subtitle="Scadenze e promemoria commerciali"
       endpoint="/followups" fields={fields} columns={columns(events, companies)}
-      entityLabel="follow-up" testid="followup" section="followup" searchKeys={["titolo"]} onSaved={onSaved}
+      entityLabel="follow-up" testid="followup" section="followup" defaultSort={{ key: "scadenza", dir: "asc" }} searchKeys={["titolo"]} onSaved={onSaved}
     />
   );
 }

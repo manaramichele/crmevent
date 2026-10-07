@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
-import { EntityManager, EntityDialog, StatusBadge, useCollection, useSettings, toOptions, PageHeader, PrimaryButton } from "@/components/crm";
+import { EntityManager, EntityDialog, StatusBadge, useCollection, useSettings, toOptions, PageHeader, PrimaryButton, TextAction, DeleteConfirm } from "@/components/crm";
+import { TeamNoteButton } from "@/components/TeamNote";
 import { useAuth } from "@/context/AuthContext";
 import { can } from "@/lib/perms";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -13,7 +14,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, UserPlus, Search, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, UserPlus, Search, Users, Phone, Eye } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
@@ -149,7 +150,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
-  const { sort, toggle } = useSort();
+  const { sort, toggle } = useSort({ key: "nome", dir: "asc" });
   const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare";
   const ACC = {
     nome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
@@ -210,7 +211,34 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
           </div>
         )}
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="md:hidden space-y-2.5" data-testid={`people-mobile-list-${tab}`}>
+        {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
+          : displayRows.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessuna persona trovata.</div>
+          : displayRows.map((r) => (
+            <div key={r.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" data-testid={`person-card-${r.id}`}>
+              <div className="font-semibold text-slate-900 break-words">{r.nome} {r.cognome}</div>
+              {!isStaffTab && r.ruolo && <div className="text-sm text-slate-500">{r.ruolo}</div>}
+              <div className="mt-2 space-y-1.5 text-sm text-slate-700">
+                {r.cellulare && <a href={`tel:${r.cellulare}`} className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{r.cellulare}</a>}
+                <div>{roleBadges(r)}</div>
+                {isStaffTab ? (<>
+                  {r.teams_nomi?.length > 0 && <div>{teamsCell(r)}</div>}
+                  {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
+                </>) : (<>
+                  {r.aziende_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.aziende_nomi.join(", ")}</div>}
+                  <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
+                </>)}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <TextAction icon={Eye} onClick={() => onOpen(r)} data-testid={`m-open-person-${r.id}`}>Apri</TextAction>
+                <TextAction icon={Pencil} onClick={() => onEdit(r)} data-testid={`m-edit-person-${r.id}`}>Modifica</TextAction>
+                <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>Invita</TextAction>
+                <DeleteConfirm onConfirm={() => onDelete(r)} testid={`m-confirm-delete-person-${r.id}`}><TextAction icon={Trash2} danger data-testid={`m-delete-person-${r.id}`}>Elimina</TextAction></DeleteConfirm>
+              </div>
+            </div>
+          ))}
+      </div>
+      <div className="hidden md:block bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
@@ -342,14 +370,39 @@ export default function Persons({ mode = "anagrafiche" }) {
   ];
   // Conteggi da assegnazioni reali (teamCounts): stessa regola volontari del backend (_team_coverage)
   const teamCols = [
-    { key: "nome", label: "Team", render: (r, h) => (
-      <button type="button" onClick={h?.openDetail} title="Apri la scheda del Team" data-testid={`team-open-${r.id}`}
-        className="font-semibold text-tiffany-fg underline decoration-tiffany/40 underline-offset-4 hover:decoration-tiffany hover:text-tiffany-active cursor-pointer text-left">{r.nome}</button>) },
+    { key: "nome", label: "Team", render: (r) => <span className="font-medium text-slate-800" data-testid={`team-name-${r.id}`}>{r.nome}</span> },
     { key: "evento_id", label: "Evento", render: (r) => eName(r.evento_id) },
     { key: "responsabile_id", label: "Team Leader", render: (r) => r.responsabile_id ? pName(r.responsabile_id) : <StatusBadge color="orange">Da assegnare</StatusBadge> },
     { key: "staff_count", label: "Staff", sortable: false, render: (r) => <span className="text-slate-700" data-testid={`team-staff-count-${r.id}`}>{teamCounts(r, staffLinks).staff.size}</span> },
     { key: "volontari_richiesti", label: "Volontari", render: (r) => <TeamCoverage req={r.volontari_richiesti} n={teamCounts(r, staffLinks).vol.size} id={r.id} /> },
   ];
+  const canEditStaff = can(user, "staff", "edit");
+  const saveNote = (update, id) => async (text) => { await update(id, { descrizione: text }); invalidateTeams(); };
+  const teamMobileCard = (r, { openDetail, update, onDelete, allow, filterVals }) => {
+    const c = teamCounts(r, staffLinks);
+    const req = r.volontari_richiesti;
+    const miss = req == null ? null : Math.max(req - c.vol.size, 0);
+    const showEvent = !filterVals.evento_id || filterVals.evento_id === "all";
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" data-testid={`team-mobile-card-${r.id}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="font-display font-bold uppercase tracking-wide text-slate-900 break-words" data-testid={`m-team-name-${r.id}`}>{r.nome}</div>
+            {showEvent && <div className="text-xs text-slate-500 mt-0.5">{eName(r.evento_id)}</div>}
+          </div>
+          {miss > 0 ? <span className="shrink-0 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-semibold" data-testid={`m-team-missing-${r.id}`}>{miss} mancanti</span>
+            : miss === 0 ? <span className="shrink-0 rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs font-semibold">Completo</span> : null}
+        </div>
+        <div className="mt-2 text-sm text-slate-700">Team Leader: {r.responsabile_id ? <b className="font-semibold">{pName(r.responsabile_id)}</b> : <StatusBadge color="orange">Da assegnare</StatusBadge>}</div>
+        <div className="text-sm text-slate-600" data-testid={`m-team-counts-${r.id}`}>Staff {c.staff.size} · Volontari {c.vol.size}{req != null ? `/${req}` : ""}</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <TextAction icon={Pencil} onClick={openDetail} data-testid={`m-edit-team-${r.id}`}>Modifica</TextAction>
+          <TeamNoteButton team={r} canEdit={canEditStaff} onSave={saveNote(update, r.id)} />
+          {allow("delete") && <DeleteConfirm onConfirm={() => onDelete(r)} testid={`m-confirm-delete-team-${r.id}`}><TextAction icon={Trash2} danger data-testid={`m-delete-team-${r.id}`}>Elimina</TextAction></DeleteConfirm>}
+        </div>
+      </div>
+    );
+  };
   const shiftFields = [
     { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts }, { name: "persona_id", label: "Persona (vuoto = scoperto)", type: "select", options: personOpts },
     { name: "data", label: "Data", type: "date" }, { name: "ora_inizio", label: "Ora inizio", type: "time" }, { name: "ora_fine", label: "Ora fine", type: "time" },
@@ -358,7 +411,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
   const shiftCols = [
-    { key: "data", label: "Data", render: (r) => <span className="font-medium text-slate-800">{r.data}</span> },
+    { key: "data", label: "Data", sortAccessor: (r) => `${r.data || ""} ${r.ora_inizio || ""}`.trim(), sortType: "string", render: (r) => <span className="font-medium text-slate-800">{r.data}</span> },
     { key: "ora", label: "Orario", render: (r) => `${r.ora_inizio || ""}–${r.ora_fine || ""}` },
     { key: "persona_id", label: "Persona", render: (r) => r.persona_id ? pName(r.persona_id) : <StatusBadge color="red">Scoperto</StatusBadge> },
     { key: "area", label: "Area" }, { key: "team_id", label: "Team", render: (r) => r.team_id ? tName(r.team_id) : "—" },
@@ -394,9 +447,11 @@ export default function Persons({ mode = "anagrafiche" }) {
           <TabsContent value="team">
             <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
               fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="staff" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
-              renderDetail={(team, { close, edit }) => (
+              extraActions={(r, { update }) => <TeamNoteButton team={r} canEdit={canEditStaff} onSave={saveNote(update, r.id)} />}
+              mobileCard={teamMobileCard}
+              renderDetail={(team, { close, edit, update }) => (
                 <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
-                  onReloadStaff={reload} onEdit={edit} canEdit={can(user, "staff", "edit")}
+                  onReloadStaff={reload} onEdit={edit} canEdit={canEditStaff} onSaveNote={saveNote(update, team.id)}
                   onOpenPerson={(pid) => { close(); setDetailId(pid); }} />)} />
           </TabsContent>
           <TabsContent value="turni">

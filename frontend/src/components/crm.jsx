@@ -386,7 +386,34 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail }) {
+export function DeleteConfirm({ onConfirm, testid, children }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle>
+          <AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annulla</AlertDialogCancel>
+          <AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={onConfirm} data-testid={testid}>Elimina</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+// Pulsante testuale compatto (mobile-first): etichetta chiara + area touch adeguata.
+export function TextAction({ icon: Icon, children, danger, className = "", ...props }) {
+  return (
+    <Button type="button" variant="outline" size="sm" className={`h-8 px-2.5 text-xs gap-1 bg-white ${danger ? "text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" : "text-slate-700"} ${className}`} {...props}>
+      {Icon && <Icon />}{children}
+    </Button>
+  );
+}
+
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, extraActions, mobileCard, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail, defaultSort }) {
   const [detailRow, setDetailRow] = useState(null);
   const { user } = useAuth();
   const allow = (a) => !section || can(user, section, a);
@@ -416,8 +443,22 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
     (!query || searchKeys.some((k) => String(i[k] || "").toLowerCase().includes(query.toLowerCase()))) &&
     filters.every((f) => !filterVals[f.name] || filterVals[f.name] === "all" || i[f.name] === filterVals[f.name])
   );
-  const { sort, toggle } = useSort();
+  // Regola CRMEvent: elenchi in ordine alfabetico (prima colonna) salvo ordinamento funzionale esplicito (defaultSort)
+  const { sort, toggle } = useSort(defaultSort || { key: columns[0]?.key || null, dir: "asc" });
   const sorted = sortRows(filtered, sort, columns);
+  const helpers = (row) => ({ openDetail: () => setDetailRow(row), openEdit, onDelete, allow, update, filterVals });
+  const cell = (c, row) => (c.render ? c.render(row, { openDetail: () => setDetailRow(row) }) : (row[c.key] || "—"));
+  const mobileActions = (row) => (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      {rowActions && rowActions(row, { openEdit, onDelete })}
+      {!fullActions && (renderDetail
+        ? <TextAction icon={Pencil} onClick={() => setDetailRow(row)} data-testid={`m-edit-${testid}-${row.id}`}>Modifica</TextAction>
+        : allow("edit") && <TextAction icon={Pencil} onClick={() => openEdit(row)} data-testid={`m-edit-${testid}-${row.id}`}>Modifica</TextAction>)}
+      {extraActions && extraActions(row, helpers(row))}
+      {!fullActions && allow("delete") && <DeleteConfirm onConfirm={() => onDelete(row)} testid={`m-confirm-delete-${testid}-${row.id}`}>
+        <TextAction icon={Trash2} danger data-testid={`m-delete-${testid}-${row.id}`}>Elimina</TextAction></DeleteConfirm>}
+    </div>
+  );
 
   return (
     <div className="animate-fade-up">
@@ -441,7 +482,22 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
           </Select>
         ))}
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="md:hidden space-y-2.5" data-testid={`${testid}-mobile-list`}>
+        {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
+          : sorted.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessun {entityLabel} trovato.</div>
+          : sorted.map((row) => mobileCard ? <div key={row.id}>{mobileCard(row, helpers(row))}</div> : (
+            <div key={row.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" data-testid={`${testid}-card-${row.id}`}>
+              <div className="font-semibold text-slate-900 break-words">{columns[0] && cell(columns[0], row)}</div>
+              <dl className="mt-2 space-y-1.5 text-sm">
+                {columns.slice(1).map((c) => (
+                  <div key={c.key} className="flex gap-3"><dt className="w-28 shrink-0 text-xs text-slate-400 pt-0.5">{c.label}</dt><dd className="min-w-0 flex-1 break-words text-slate-700">{cell(c, row)}</dd></div>
+                ))}
+              </dl>
+              {mobileActions(row)}
+            </div>
+          ))}
+      </div>
+      <div className="hidden md:block bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -463,7 +519,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
               ) : sorted.map((row) => (
                 <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors" data-testid={`${testid}-row-${row.id}`}>
                   {columns.map((c) => (
-                    <td key={c.key} className="px-4 py-3 text-slate-700">{c.render ? c.render(row, { openDetail: () => setDetailRow(row) }) : (row[c.key] || "—")}</td>
+                    <td key={c.key} className="px-4 py-3 text-slate-700">{cell(c, row)}</td>
                   ))}
                   <td className="px-4 py-3">
                     {fullActions ? (
@@ -473,22 +529,13 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
                     ) : (
                       <div className="flex items-center justify-end gap-1">
                         {rowActions && rowActions(row, { openEdit, onDelete })}
-                        {allow("edit") && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>}
-                        {allow("delete") && <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-${testid}-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle>
-                              <AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Annulla</AlertDialogCancel>
-                              <AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(row)} data-testid={`confirm-delete-${testid}-${row.id}`}>Elimina</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>}
+                        {renderDetail
+                          ? <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Apri la scheda completa" onClick={() => setDetailRow(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>
+                          : allow("edit") && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>}
+                        {extraActions && extraActions(row, helpers(row))}
+                        {allow("delete") && <DeleteConfirm onConfirm={() => onDelete(row)} testid={`confirm-delete-${testid}-${row.id}`}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-${testid}-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
+                        </DeleteConfirm>}
                       </div>
                     )}
                   </td>
@@ -504,7 +551,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
         fields={fields} initial={editing} onSubmit={onSubmit} options={options} testid={testid} entityCreators={entityCreators}
       />
       {detailRow && renderDetail && renderDetail(items.find((x) => x.id === detailRow.id) || detailRow, {
-        close: () => setDetailRow(null),
+        close: () => setDetailRow(null), update,
         edit: allow("edit") ? (r) => { setDetailRow(null); openEdit(r); } : null,
       })}
     </div>

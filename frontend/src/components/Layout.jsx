@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, UserCog, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, KeyRound,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate,
 } from "lucide-react";
 import { can, isOrgAdmin } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
@@ -12,6 +12,29 @@ import SupportChat from "@/components/SupportChat";
 import ActivationGate from "@/components/ActivationGate";
 import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
+import { NEWS_READ_EVENT } from "@/pages/News";
+
+function NewsButton() {
+  const [count, setCount] = useState(0);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const load = () => api.get("/news/unread-count").then(({ data }) => setCount(data.count || 0)).catch(() => {});
+    load();
+    const reset = () => setCount(0);
+    window.addEventListener(NEWS_READ_EVENT, reset);
+    return () => window.removeEventListener(NEWS_READ_EVENT, reset);
+  }, [pathname]);
+  return (
+    <button type="button" onClick={() => navigate("/novita")} data-testid="header-news-button" aria-label={count ? `Novità, ${count} non lette` : "Novità"}
+      className="relative h-10 min-w-10 px-2 sm:px-3 inline-flex items-center justify-center gap-1.5 rounded-lg hover:bg-slate-100 text-sm font-medium text-slate-700 transition-colors">
+      <Sparkles className="w-5 h-5 text-tiffany-active" />
+      <span className="hidden sm:inline">Novità</span>
+      {count > 0 && <span className="hidden sm:inline text-tiffany-active font-semibold" data-testid="header-news-count">· {count}</span>}
+      {count > 0 && <span className="sm:hidden absolute top-1 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-tiffany text-slate-900 text-[10px] font-bold flex items-center justify-center" data-testid="header-news-badge-mobile">{count}</span>}
+    </button>
+  );
+}
 
 const ORG_NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard", perm: "dashboard" },
@@ -25,11 +48,10 @@ const ORG_NAV = [
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
   { to: "/account", label: "Account e abbonamento", icon: CreditCard, id: "account", perm: "admin" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
-  { to: "/permessi", label: "Permessi", icon: KeyRound, id: "permessi", perm: "admin" },
 ];
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
-const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account" && n.id !== "permessi");
+const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account");
 const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
 
 // Extra platform-administration group, only for Super Admin.
@@ -38,6 +60,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
+  { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];
@@ -319,6 +342,7 @@ export default function Layout({ children }) {
           {showSwitcher && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} />}
           <div className="flex-1"><GlobalSearch /></div>
           {!isSuper && <TutorialLauncher />}
+          {!isSuper && <NewsButton />}
           <Notifications />
           <div className="relative">
             <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} className="flex items-center gap-2 h-10 px-2 rounded-lg hover:bg-slate-100 transition-colors">

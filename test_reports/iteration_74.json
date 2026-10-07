@@ -1,0 +1,18 @@
+{
+  "summary": "Iteration 74 (CRMEvent Super Admin → Servizi semplificato + briefing one-time charge + GCal cost from catalog + cron Event Maintenance). Backend: 10/10 pytest tests passed. Frontend: Super Admin desktop (1920) and mobile (390) UI validated — Servizi tab shows exactly 6 linked services A-Z (Assistente CRMEvent, Attivazione evento, Generazione briefing, Google Calendar, Mantenimento evento, Pipeline Evento Pro) with only SERVIZIO | DESCRIZIONE COMPLETA | COSTO IN CREDITI columns; no Modalità/Unità/Disponibile/Consumo/Versione. Edit cost (30→35 on ai_briefing) persisted, toast shown, restored to 30. Mobile overflow 0px. Catalog values restored.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter74_credit_services.py", "/app/test_reports/pytest/iter74.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py >12k lines — consider modular split (credits router, briefing router, cron router).",
+    "LINKED_CREDIT_SERVICES is also hardcoded in frontend filter via API 'linked' flag only — good; keep backend as source of truth."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter74_credit_services.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com; Org admin qa.eventi@crmeventqa.it (credit model: balance 97, lifetime_granted 438).",
+  "seed_data_creation": "None — modifications made (ai_briefing cost 30→35, then 30→40 in backend test) were all restored. No briefing versions created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter74 verified: GET /api/platform/credit-services (6 linked services with linked=true, ai_briefing cost=30, google_calendar cost=20 consumo_active=true, all descriptions non-empty). PUT validates integer cost (400 on negative/float), history+audit kept, update propagates. GET /api/calendar/feature returns cost=20. POST /api/cron/event-renewals: 401 without auth / 401 bad token / 200 {accepted:true} with Bearer WEBHOOK_CRON_SECRET. Briefing: for QA org (confirmed credit-model with signup_bonus_granted) GET /api/events/{id}/briefing-live returns briefing_charge {cost,charged}. For the first event returned by /events, briefing_charge.cost was 0 and charged=False — this is expected when the event is not yet operational/active (_is_credit_model_org returns true since credits.signup_bonus_granted=True, but applies logic also requires cfg.active+cost+consumo_active which are OK; the picked event may be a draft/pre-active). Actual POST /briefing-versions was intentionally NOT executed to avoid consuming production credits — per request instructions ('Delete test briefing versions you create and restore balance via Super Admin manual adjustment if you consumed credits'). UI: /piattaforma/crediti → tab Servizi: svc-list contains svc-row-{key} only for the 6 linked services sorted A-Z with svc-name/svc-desc/svc-cost/svc-save; no legacy columns rendered; mobile viewport 390 has zero horizontal overflow. Toast confirms persistence after save+reload."
+}

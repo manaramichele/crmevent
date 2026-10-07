@@ -52,12 +52,21 @@ export default function Leads({ embedded = false, initialOrigine = "" }) {
       </>}
 
       <div className="flex flex-wrap gap-2 items-center mb-3" data-testid="leads-filters">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca nome, organizzazione, email…" className={`${inputCls} w-64`} data-testid="leads-search" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca nome, organizzazione, email…" className={`${inputCls} w-full sm:w-64`} data-testid="leads-search" />
         <select value={fOrig} onChange={(e) => setFOrig(e.target.value)} className={inputCls} data-testid="leads-filter-origine"><option value="">Tutte le origini</option><option value="demo_sito">Demo sito</option><option value="manuale">Inserimento manuale</option><option value="lead_finder">Lead Finder</option></select>
         <select value={fStato} onChange={(e) => setFStato(e.target.value)} className={inputCls} data-testid="leads-filter-stato"><option value="">Tutti gli stati</option>{Object.keys(STATO_LABEL).map((v) => <option key={v} value={v}>{STATO_LABEL[v]}</option>)}</select>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="md:hidden space-y-2.5" data-testid="leads-mobile-list">
+        {filtered.length === 0 ? <p className="py-8 text-center text-slate-400 text-sm">Nessun lead.</p> : filtered.map((l) => (
+          <button key={l.id} type="button" onClick={() => openLead(l.id)} className="w-full text-left bg-white border border-slate-200 rounded-xl p-4" data-testid={`m-lead-card-${l.id}`}>
+            <div className="flex items-start justify-between gap-2"><span className="font-semibold text-slate-900 break-words">{l.nome} {l.cognome || ""}</span><StatusBadge color={STATO[l.stato] || "gray"}>{STATO_LABEL[l.stato] || l.stato}</StatusBadge></div>
+            <div className="text-sm text-slate-600 break-all">{l.organizzazione ? `${l.organizzazione} · ` : ""}{l.email}</div>
+            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500"><StatusBadge color={(ORIGINE[l.origine] || ORIGINE.manuale).color}>{(ORIGINE[l.origine] || ORIGINE.manuale).label}</StatusBadge>{(l.created_at || "").slice(0, 10)}</div>
+          </button>
+        ))}
+      </div>
+      <div className="hidden md:block bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
             <th className="text-left px-4 py-2.5">Nome</th><th className="text-left px-4 py-2.5">Organizzazione</th><th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Origine</th><th className="text-left px-4 py-2.5">Data</th><th className="text-left px-4 py-2.5">Stato</th>

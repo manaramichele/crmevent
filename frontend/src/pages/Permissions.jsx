@@ -1,13 +1,40 @@
 import { useEffect, useState, useCallback } from "react";
 import api, { formatApiError } from "@/lib/api";
-import { PageHeader, StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { KeyRound, Pencil, RotateCcw, History } from "lucide-react";
+import { RotateCcw, History } from "lucide-react";
 
-const ROLE_COLORS = { admin_org: "tiffany", user: "blue", collaboratore: "orange" };
+// Componenti permessi riutilizzati in Profilo & Account → Utenti e Permessi (Admin Org e Super Admin, stesse API).
 const fmt = (iso) => { try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+export const orgHeaders = (orgId) => (orgId ? { headers: { "X-Org-Id": orgId } } : undefined);
+const SECTION_LBL = "text-xs font-semibold uppercase text-slate-500";
+
+export function usePermMeta(orgId) {
+  const [meta, setMeta] = useState(null);
+  const load = useCallback(async () => {
+    try { const { data } = await api.get("/org/permissions", orgHeaders(orgId)); setMeta(data); } catch { setMeta(null); }
+  }, [orgId]);
+  useEffect(() => { load(); }, [load]);
+  return { meta, reload: load };
+}
+
+export function teamAccessLabel(p, meta) {
+  if (!p || p.admin) return "Tutti i Team";
+  const t = p.teams || {};
+  if (t.scope === "all") return "Tutti i Team";
+  if (t.scope === "leader") return "Solo Team di cui è Team Leader";
+  const names = (meta?.teams || []).filter((x) => (t.ids || []).includes(x.id)).map((x) => x.nome);
+  return names.length ? `${names.join(", ")} + Team di cui è leader` : "Solo Team di cui è Team Leader";
+}
+
+export function permSummary(p, meta) {
+  if (!p || p.admin) return "Accesso completo";
+  const secs = meta?.sections || [];
+  const vis = secs.filter((s) => (p.sections?.[s.key] || []).length);
+  const edit = vis.filter((s) => (p.sections[s.key] || []).some((a) => a !== "view"));
+  return `${vis.length}/${secs.length} sezioni (${edit.length} con modifica) · ${p.events === "all" ? "tutti gli eventi" : `${(p.events || []).length} eventi`}`;
+}
 
 function MatrixEditor({ meta, value, onChange }) {
   const toggle = (sec, act) => {
@@ -46,12 +73,12 @@ function EventScope({ events, value, onChange }) {
   const flip = (id) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); onChange([...n]); };
   return (
     <div className="space-y-2">
-      <div className="flex gap-4 text-sm">
+      <div className="flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-2"><input type="radio" checked={all} onChange={() => onChange("all")} data-testid="perm-events-all" />Tutti gli eventi</label>
         <label className="flex items-center gap-2"><input type="radio" checked={!all} onChange={() => onChange([])} data-testid="perm-events-selected" />Solo eventi selezionati</label>
       </div>
       {!all && (
-        <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-1" data-testid="perm-events-list">
+        <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-1" data-testid="perm-events-list">
           {events.length === 0 && <div className="text-xs text-slate-400">Nessun evento nell'organizzazione.</div>}
           {events.map((e) => (
             <label key={e.id} className="flex items-center gap-2 text-sm">
@@ -65,20 +92,20 @@ function EventScope({ events, value, onChange }) {
 }
 
 function TeamScope({ teams, events, value, onChange }) {
-  const scope = value?.scope || "all";
-  const sel = new Set(value?.ids || []);
-  const flip = (id) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); onChange({ scope: "selected", ids: [...n] }); };
+  const v = { scope: "all", ids: [], manage_staff: true, manage_volunteers: true, ...(value || {}) };
+  const sel = new Set(v.ids || []);
+  const set = (patch) => onChange({ ...v, ...patch });
+  const flip = (id) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); set({ scope: "selected", ids: [...n] }); };
   const evName = (id) => events.find((e) => e.id === id)?.nome || "";
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-4 text-sm">
         {[["leader", "Solo Team di cui è Team Leader"], ["selected", "Team selezionati"], ["all", "Tutti i Team"]].map(([k, l]) => (
-          <label key={k} className="flex items-center gap-2"><input type="radio" checked={scope === k} onChange={() => onChange({ scope: k, ids: k === "selected" ? [...sel] : [] })} data-testid={`perm-teams-${k}`} />{l}</label>
+          <label key={k} className="flex items-center gap-2"><input type="radio" checked={v.scope === k} onChange={() => set({ scope: k, ids: k === "selected" ? [...sel] : [] })} data-testid={`perm-teams-${k}`} />{l}</label>
         ))}
       </div>
-      {scope !== "all" && <p className="text-xs text-slate-400">Team Leader = persona dell'anagrafica con la stessa email dell'utente, indicata come Team Leader del Team.</p>}
-      {scope === "selected" && (
-        <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-1" data-testid="perm-teams-list">
+      {v.scope === "selected" && (
+        <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-1" data-testid="perm-teams-list">
           {teams.length === 0 && <div className="text-xs text-slate-400">Nessun Team nell'organizzazione.</div>}
           {teams.map((t) => (
             <label key={t.id} className="flex items-center gap-2 text-sm">
@@ -87,21 +114,54 @@ function TeamScope({ teams, events, value, onChange }) {
           ))}
         </div>
       )}
+      <div className="flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2"><input type="checkbox" className="accent-tiffany" checked={v.manage_staff} onChange={(e) => set({ manage_staff: e.target.checked })} data-testid="perm-teams-manage-staff" />Gestione Staff nei Team</label>
+        <label className="flex items-center gap-2"><input type="checkbox" className="accent-tiffany" checked={v.manage_volunteers} onChange={(e) => set({ manage_volunteers: e.target.checked })} data-testid="perm-teams-manage-volunteers" />Gestione Volontari nei Team</label>
+      </div>
+      <p className="text-xs text-slate-400">Team Leader = persona Staff collegata all'account (o con la stessa email) indicata come Team Leader. Gestione Staff/Volontari richiede anche Modifica su Staff / Volontari.</p>
     </div>
   );
 }
 
-function EditDialog({ meta, member, onClose, onSaved }) {
+export const initialPerm = (meta, p) => {
+  const base = !p || p.admin ? meta.defaults.user : p;
+  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] } };
+};
+
+export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId }) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <div className={SECTION_LBL}>Persona Staff collegata</div>
+        <select className="h-10 w-full px-3 rounded-lg border border-slate-200 text-sm bg-white" value={personaId || ""} onChange={(e) => setPersonaId(e.target.value)} data-testid="perm-persona-select">
+          <option value="">Nessuna (riconoscimento per email)</option>
+          {(meta.persons || []).map((p) => <option key={p.id} value={p.id}>{`${p.cognome || ""} ${p.nome || ""}`.trim() || p.email}{p.email ? ` · ${p.email}` : ""}</option>)}
+        </select>
+        <p className="text-xs text-slate-400">Collega l'account all'anagrafica esistente senza duplicarla. Essere Team Leader non concede permessi amministrativi.</p>
+      </div>
+      {role === "admin_org" ? (
+        <p className="text-sm text-slate-600">L'Admin Organizzatore vede e gestisce tutto, compresi account, crediti, impostazioni e utenti.</p>
+      ) : (<>
+        <div className="space-y-1.5"><div className={SECTION_LBL}>Sezioni</div><MatrixEditor meta={meta} value={perm} onChange={setPerm} /></div>
+        <div className="space-y-1.5"><div className={SECTION_LBL}>Eventi</div><EventScope events={meta.events} value={perm.events} onChange={(events) => setPerm((p) => ({ ...p, events }))} /></div>
+        <div className="space-y-1.5"><div className={SECTION_LBL}>Accesso ai Team</div><TeamScope teams={meta.teams || []} events={meta.events} value={perm.teams} onChange={(teams) => setPerm((p) => ({ ...p, teams }))} /></div>
+        <p className="text-xs text-slate-400">Account, abbonamento, crediti, fatture, impostazioni e gestione utenti restano riservati all'Admin Organizzatore.</p>
+      </>)}
+    </div>
+  );
+}
+
+export function PermissionsDialog({ orgId, meta, member, onClose, onSaved }) {
   const [role, setRole] = useState(member.role);
-  const base = member.permissions.admin ? meta.defaults.user : member.permissions;
-  const [perm, setPerm] = useState({ sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] } });
+  const [perm, setPerm] = useState(initialPerm(meta, member.permissions));
+  const [personaId, setPersonaId] = useState(member.persona_id || "");
   const [busy, setBusy] = useState(false);
-  const changeRole = (r) => { setRole(r); if (r !== "admin_org" && r !== member.role) setPerm({ ...meta.defaults[r] }); };
+  const changeRole = (r) => { setRole(r); if (r !== "admin_org" && r !== member.role) setPerm(initialPerm(meta, meta.defaults[r])); };
   const save = async (reset = false) => {
     setBusy(true);
     try {
-      const body = reset ? { role, reset: true } : role === "admin_org" ? { role } : { role, sections: perm.sections, events: perm.events, teams: perm.teams };
-      await api.put(`/org/permissions/${member.user_id}`, body);
+      const body = reset ? { role, reset: true, persona_id: personaId } : role === "admin_org" ? { role, persona_id: personaId } : { role, persona_id: personaId, ...perm };
+      await api.put(`/org/permissions/${member.user_id}`, body, orgHeaders(orgId));
       toast.success("Permessi aggiornati"); onSaved();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
@@ -110,88 +170,39 @@ function EditDialog({ meta, member, onClose, onSaved }) {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="perm-dialog">
         <DialogHeader>
           <DialogTitle>Permessi di {member.name || member.email}</DialogTitle>
-          <DialogDescription>I permessi valgono solo per questa organizzazione e sono verificati dal server.</DialogDescription>
+          <DialogDescription>Valgono solo per questa organizzazione e sono verificati dal server.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <div className="text-xs font-semibold uppercase text-slate-500">Ruolo</div>
-            <select className="h-10 w-full px-3 rounded-lg border border-slate-200 text-sm bg-white" value={role} onChange={(e) => changeRole(e.target.value)} data-testid="perm-role-select">
-              {Object.entries(meta.roles).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-          </div>
-          {role === "admin_org" ? (
-            <p className="text-sm text-slate-600">L'Admin Organizzatore vede e gestisce tutto, compresi account, crediti, impostazioni e permessi.</p>
-          ) : (<>
-            <div className="space-y-1.5"><div className="text-xs font-semibold uppercase text-slate-500">Sezioni</div><MatrixEditor meta={meta} value={perm} onChange={setPerm} /></div>
-            <div className="space-y-1.5"><div className="text-xs font-semibold uppercase text-slate-500">Eventi</div><EventScope events={meta.events} value={perm.events} onChange={(events) => setPerm((p) => ({ ...p, events }))} /></div>
-            <div className="space-y-1.5"><div className="text-xs font-semibold uppercase text-slate-500">Accesso ai Team</div><TeamScope teams={meta.teams || []} events={meta.events} value={perm.teams} onChange={(teams) => setPerm((p) => ({ ...p, teams }))} /></div>
-            <p className="text-xs text-slate-400">Account, abbonamento, crediti, fatture, impostazioni e gestione utenti restano riservati all'Admin Organizzatore.</p>
-          </>)}
+        <div className="space-y-1.5 mb-3">
+          <div className={SECTION_LBL}>Ruolo</div>
+          <select className="h-10 w-full px-3 rounded-lg border border-slate-200 text-sm bg-white" value={role} onChange={(e) => changeRole(e.target.value)} data-testid="perm-role-select">
+            {Object.entries(meta.roles).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
         </div>
+        <PermFields meta={meta} role={role} perm={perm} setPerm={setPerm} personaId={personaId} setPersonaId={setPersonaId} />
         <DialogFooter className="gap-2">
-          {role !== "admin_org" && <Button variant="outline" disabled={busy} onClick={() => save(true)} data-testid="perm-reset"><RotateCcw className="w-4 h-4 mr-1" />Predefiniti del ruolo</Button>}
-          <Button disabled={busy} onClick={() => save(false)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="perm-save">Salva</Button>
+          {role !== "admin_org" && <Button variant="outline" size="sm" disabled={busy} onClick={() => save(true)} data-testid="perm-reset"><RotateCcw className="w-4 h-4 mr-1" />Predefiniti del ruolo</Button>}
+          <Button size="sm" disabled={busy} onClick={() => save(false)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="perm-save">Salva</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-export default function Permissions() {
-  const [meta, setMeta] = useState(null);
-  const [audit, setAudit] = useState([]);
-  const [edit, setEdit] = useState(null);
-  const load = useCallback(async () => {
-    try {
-      const [m, a] = await Promise.all([api.get("/org/permissions"), api.get("/org/permissions/audit")]);
-      setMeta(m.data); setAudit(a.data.items || []);
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  const summary = (p) => {
-    if (p.admin) return "Accesso completo";
-    const n = meta.sections.filter((s) => (p.sections[s.key] || []).length).length;
-    const tp = p.teams?.scope === "leader" ? " · Team: solo come leader" : p.teams?.scope === "selected" ? ` · ${p.teams.ids.length} Team` : "";
-    return `${n}/${meta.sections.length} sezioni · ${p.events === "all" ? "tutti gli eventi" : `${p.events.length} eventi`}${tp}`;
-  };
+export function PermAudit({ orgId, refreshKey }) {
+  const [items, setItems] = useState([]);
+  useEffect(() => { api.get("/org/permissions/audit", orgHeaders(orgId)).then(({ data }) => setItems(data.items || [])).catch(() => setItems([])); }, [orgId, refreshKey]);
   return (
-    <div className="animate-fade-up space-y-8" data-testid="permissions-page">
-      <PageHeader title="Permessi" subtitle="Ruoli e permessi dei membri della tua organizzazione, per sezione ed evento." />
-      {!meta ? <div className="text-slate-400">Caricamento...</div> : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[720px] text-sm" data-testid="perm-members-table">
-            <thead><tr className="bg-slate-50 text-xs uppercase text-slate-500">
-              <th className="text-left px-3 py-2.5">Utente</th><th className="text-left px-3 py-2.5">Ruolo</th><th className="text-left px-3 py-2.5">Permessi</th><th className="text-left px-3 py-2.5">Stato</th><th className="px-3 py-2.5"></th>
-            </tr></thead>
-            <tbody>
-              {meta.members.map((m) => (
-                <tr key={m.user_id} className="border-t border-slate-100" data-testid={`perm-row-${m.user_id}`}>
-                  <td className="px-3 py-2.5"><div className="font-medium text-slate-800">{m.name || "—"}</div><div className="text-xs text-slate-500">{m.email}</div></td>
-                  <td className="px-3 py-2.5"><StatusBadge color={ROLE_COLORS[m.role] || "gray"}>{m.role_label}</StatusBadge></td>
-                  <td className="px-3 py-2.5 text-slate-600" data-testid={`perm-summary-${m.user_id}`}>{summary(m.permissions)}{m.custom && <span className="ml-2 text-[10px] text-tiffany-fg">personalizzati</span>}</td>
-                  <td className="px-3 py-2.5"><StatusBadge color={m.active ? "green" : "gray"}>{m.active ? "Attivo" : "Disattivato"}</StatusBadge></td>
-                  <td className="px-3 py-2.5 text-right">{m.is_self ? <span className="text-xs text-slate-400">Tu</span> :
-                    <Button variant="outline" size="sm" onClick={() => setEdit(m)} data-testid={`perm-edit-${m.user_id}`}><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <div>
-        <div className="flex items-center gap-2 mb-3 text-slate-800 font-semibold"><History className="w-4 h-4" />Storico modifiche</div>
-        <div className="space-y-2" data-testid="perm-audit">
-          {audit.length === 0 && <div className="text-sm text-slate-400">Nessuna modifica registrata.</div>}
-          {audit.map((a) => (
-            <div key={a.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              <div className="flex flex-wrap gap-x-2 text-slate-800"><span className="font-medium">{a.action_label}</span><span className="text-slate-400">·</span><span>{a.target_name || a.target_email}</span><span className="text-slate-400">· da {a.actor_name || a.actor_email} · {fmt(a.created_at)}</span></div>
-              {a.detail && <div className="text-xs text-slate-500 mt-0.5 break-words">{a.detail}</div>}
-            </div>
-          ))}
-        </div>
+    <div>
+      <div className="flex items-center gap-2 mb-2 text-slate-800 font-semibold text-sm"><History className="w-4 h-4" />Storico modifiche ruoli e permessi</div>
+      <div className="space-y-2 max-h-72 overflow-y-auto" data-testid="perm-audit">
+        {items.length === 0 && <div className="text-sm text-slate-400">Nessuna modifica registrata.</div>}
+        {items.map((a) => (
+          <div key={a.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <div className="flex flex-wrap gap-x-2 text-slate-800"><span className="font-medium">{a.action_label}</span><span className="text-slate-400">·</span><span>{a.target_name || a.target_email}</span><span className="text-slate-400">· da {a.actor_name || a.actor_email} · {fmt(a.created_at)}</span></div>
+            {a.detail && <div className="text-xs text-slate-500 mt-0.5 break-words">{a.detail}</div>}
+          </div>
+        ))}
       </div>
-      {edit && meta && <EditDialog meta={meta} member={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
-      <KeyRound className="hidden" />
     </div>
   );
 }

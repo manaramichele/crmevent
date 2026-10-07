@@ -27,6 +27,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 import asyncio
+import news
 import email_utils
 import permissions as P
 import storage_utils
@@ -185,7 +186,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     if org_role in ("admin_org", "superadmin"):
         return {"admin": True, "event_ids": None}
     mem = await db.memberships.find_one({"user_id": user["user_id"], "org_id": org_id, "active": True},
-                                        {"_id": 0, "role": 1, "permissions": 1}) or {"role": org_role}
+                                        {"_id": 0, "role": 1, "permissions": 1, "persona_id": 1}) or {"role": org_role}
     eff = P.effective(mem)
     if eff.get("admin"):
         return {"admin": True, "event_ids": None}
@@ -198,8 +199,9 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     if not P.allows(eff, secs, action):
         raise HTTPException(status_code=403, detail="Non hai i permessi per questa operazione")
     ids = None if eff["events"] == "all" else list(eff["events"])
-    team_ids = await _allowed_team_ids(user, org_id, eff.get("teams") or {})
-    perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids}
+    team_ids = await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"))
+    perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
+            "teams": eff.get("teams") or {}}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
     seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
@@ -208,7 +210,9 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
             raise nf
         if seg in ("staff", "shifts"):
             doc = await db[seg].find_one({"org_id": org_id, "id": pp["item_id"]}, {"_id": 0, "team_id": 1})
-            if doc and doc.get("team_id") not in team_ids:
+            # Staff/volontari senza Team: visibili e assegnabili (GET/PUT) al proprio Team, non eliminabili
+            free = seg == "staff" and doc is not None and not doc.get("team_id") and request.method in ("GET", "PUT")
+            if doc and not free and doc.get("team_id") not in team_ids:
                 raise nf
     if ids is None:
         return perm
@@ -235,13 +239,15 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     return perm
 
 
-async def _allowed_team_ids(user: dict, org_id: str, tp: dict):
-    """None = tutti i Team; altrimenti Team di cui è Team Leader (email utente = email persona) + selezionati."""
+async def _allowed_team_ids(user: dict, org_id: str, tp: dict, persona_id: Optional[str] = None):
+    """None = tutti i Team; altrimenti Team di cui è Team Leader (persona collegata o stessa email) + selezionati."""
     scope = tp.get("scope") or "all"
     if scope == "all":
         return None
     em = (user.get("email") or "").strip()
     pids = await db.persons.distinct("id", {"org_id": org_id, "email": {"$regex": f"^{re.escape(em)}$", "$options": "i"}}) if em else []
+    if persona_id:
+        pids = list(set(pids) | {persona_id})
     led = await db.teams.distinct("id", {"org_id": org_id, "responsabile_id": {"$in": pids}}) if pids else []
     sel = tp.get("ids") or [] if scope == "selected" else []
     return sorted(set(led) | set(sel))
@@ -1230,7 +1236,7 @@ def crud_routes(path, coll, model, org_scoped=True):
         elif coll in _CRUD_EVENT_COLL.values():
             q.update(_ev_scope(user))
         if _team_ids(user) is not None and coll in ("teams", "staff", "shifts"):
-            q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user)}
+            q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user) + ([None, ""] if coll == "staff" else [])}
         if evento_id:
             q["evento_id"] = evento_id
         return await _list(coll, q)
@@ -1274,6 +1280,12 @@ def crud_routes(path, coll, model, org_scoped=True):
         _assert_ev_allowed(user, clean.get("evento_id"))
         if coll in ("staff", "shifts"):
             _assert_team_allowed(user, clean.get("team_id"))
+        if coll == "staff" and "team_id" in clean and not (user.get("perm") or {"admin": True}).get("admin"):
+            cur = await db.staff.find_one({"org_id": user["org_id"], "id": item_id}, {"_id": 0, "categoria": 1, "team_id": 1}) or {}
+            if cur.get("team_id") != clean["team_id"]:
+                flag = "manage_volunteers" if (clean.get("categoria") or cur.get("categoria")) == "volontario" else "manage_staff"
+                if (user["perm"].get("teams") or {}).get(flag, True) is False:
+                    raise HTTPException(status_code=403, detail="Non hai il permesso di gestire " + ("i volontari" if flag == "manage_volunteers" else "lo staff") + " dei Team")
         if coll != "events":
             if clean.get("evento_id"):
                 await _assert_event_operational(user["org_id"], clean["evento_id"])
@@ -3101,8 +3113,9 @@ async def _gcal_unlocked(org_id: str) -> bool:
 async def calendar_feature(user: dict = Depends(require_admin)):
     oid = user["org_id"]
     c = await _ensure_org_credits(oid)
+    await _ensure_credits_setup()
     return {"configured": gcal_utils.is_configured(), "unlocked": await _gcal_unlocked(oid),
-            "cost": GCAL_UNLOCK_COST, "balance": c.get("balance", 0)}
+            "cost": (await _svc_cfg("google_calendar"))["cost"], "balance": c.get("balance", 0)}
 
 
 @api.post("/calendar/unlock")
@@ -3112,9 +3125,13 @@ async def calendar_unlock(user: dict = Depends(require_org_admin)):
         c = await _ensure_org_credits(oid)
         return {"unlocked": True, "charged": False, "balance": c.get("balance", 0)}
     await _ensure_credits_setup()
-    await _apply_credit_movement(oid, -GCAL_UNLOCK_COST, reason_code="google_calendar_unlock",
+    cost = (await _svc_cfg("google_calendar"))["cost"]
+    if cost is None:
+        raise HTTPException(status_code=400, detail="Servizio 'Google Calendar' non configurato")
+    if cost > 0:
+        await _apply_credit_movement(oid, -cost, reason_code="google_calendar_unlock",
                                  type_="spend", service_key="google_calendar", quantity=1,
-                                 unit_cost=GCAL_UNLOCK_COST, user_id=user.get("user_id"),
+                                 unit_cost=cost, user_id=user.get("user_id"),
                                  idempotency_key=f"gcal_unlock:{oid}", note="Attivazione Google Calendar")
     await db.organizations.update_one({"id": oid}, {"$set": {"features.google_calendar": True, "features.google_calendar_at": now_iso()}})
     c = await _ensure_org_credits(oid)
@@ -3467,6 +3484,7 @@ class PermUpdateIn(BaseModel):
     sections: Optional[dict] = None
     events: Optional[Any] = None
     teams: Optional[dict] = None
+    persona_id: Optional[str] = None  # "" = scollega
     reset: bool = False
 
 
@@ -3497,13 +3515,15 @@ async def org_permissions(admin: dict = Depends(require_org_admin)):
         members.append({"user_id": m["user_id"], "name": u.get("name"), "email": u.get("email"),
                         "role": m["role"], "role_label": P.ROLES.get(m["role"], m["role"]),
                         "active": m.get("active", True), "is_self": m["user_id"] == admin["user_id"],
-                        "custom": bool(m.get("permissions")), "permissions": eff})
+                        "custom": bool(m.get("permissions")), "permissions": eff, "persona_id": m.get("persona_id")})
     members.sort(key=lambda x: ((x["name"] or x["email"] or "").lower()))
     events = await db.events.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).sort("data_inizio", -1).to_list(2000)
-    teams = await db.teams.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "evento_id": 1}).sort("nome", 1).to_list(5000)
+    teams = await db.teams.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "evento_id": 1, "responsabile_id": 1}).sort("nome", 1).to_list(5000)
+    persons = await db.persons.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1}).to_list(20000)
+    persons.sort(key=lambda p: (f"{p.get('cognome') or ''} {p.get('nome') or ''}").strip().lower())
     return {"sections": [{"key": k, "label": l} for k, l in P.SECTIONS], "actions": P.ACTION_LABELS,
             "roles": P.ROLES, "defaults": {r: P.default_permissions(r) for r in ("user", "collaboratore")},
-            "members": members, "events": events, "teams": teams}
+            "members": members, "events": events, "teams": teams, "persons": persons}
 
 
 @api.put("/org/permissions/{target_id}")
@@ -3539,13 +3559,18 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
             new_perm["events"] = [e for e in new_perm["events"] if e in valid]
     else:
         new_perm = {} if new_role != m["role"] else (m.get("permissions") or {})
-    before = {"role": m["role"], "permissions": P.effective(m)}
+    new_pid = m.get("persona_id")
+    if body.persona_id is not None:
+        new_pid = body.persona_id or None
+        if new_pid and not await db.persons.find_one({"org_id": oid, "id": new_pid}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Persona non trovata nell'organizzazione")
+    before = {"role": m["role"], "permissions": P.effective(m), "persona_id": m.get("persona_id")}
     after_m = {**m, "role": new_role, "permissions": new_perm}
-    after = {"role": new_role, "permissions": P.effective(after_m)}
+    after = {"role": new_role, "permissions": P.effective(after_m), "persona_id": new_pid}
     if before == after and (m.get("permissions") or {}) == new_perm:
         return {"ok": True, "changed": False}
     await db.memberships.update_one({"org_id": oid, "user_id": target_id},
-                                    {"$set": {"role": new_role, "permissions": new_perm, "updated_at": now_iso()}})
+                                    {"$set": {"role": new_role, "permissions": new_perm, "persona_id": new_pid, "updated_at": now_iso()}})
     detail = f"Prima: {_perm_summary(before['role'], before['permissions'])} → Dopo: {_perm_summary(after['role'], after['permissions'])}"
     await record_audit(admin, "permissions_changed", org_id=oid, org_name=org.get("nome"),
                        target_email=tgt.get("email"), target_name=tgt.get("name"), detail=detail,
@@ -3625,6 +3650,8 @@ class InviteCreateIn(BaseModel):
     nome: Optional[str] = None
     cognome: Optional[str] = None
     telefono: Optional[str] = None
+    permissions: Optional[dict] = None  # configurati alla creazione, applicati all'accettazione
+    persona_id: Optional[str] = None
 
 
 @api.post("/platform/organizations")
@@ -4701,6 +4728,16 @@ async def brevo_unsubscribe(token: str):
 
 
 # ---------------- cron ----------------
+@api.post("/cron/event-renewals")
+async def cron_event_renewals(authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    expected = f"Bearer {WEBHOOK_CRON_SECRET}"
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(run_event_renewals())  # idempotente: addebiti protetti da idempotency_key per mese
+    return {"accepted": True}
+
+
 @api.post("/cron/brevo-funnel-tick")
 async def cron_brevo_funnel_tick(request: Request, authorization: str = Header(default="")):
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
@@ -4779,6 +4816,13 @@ async def create_org_invite(org_id: str, body: InviteCreateIn, user: dict = Depe
         raise HTTPException(status_code=400, detail="Questo utente è già associato all'organizzazione")
     inv = await _create_invite(org, email, role, user["user_id"],
                                nome=body.nome, cognome=body.cognome, telefono=telefono)
+    pre = {}
+    if body.permissions and role != "admin_org":
+        pre["permissions"] = P.normalize_permissions(body.permissions, role)
+    if body.persona_id and await db.persons.find_one({"org_id": org_id, "id": body.persona_id}, {"_id": 1}):
+        pre["persona_id"] = body.persona_id
+    if pre:
+        await db.org_invites.update_one({"id": inv["id"]}, {"$set": pre})
     sent = True
     try:
         await _send_invite_email(email, org.get("nome"), inv["token"], role, nome=body.nome)
@@ -4885,6 +4929,9 @@ async def _accept_invite(inv: dict, target_user: dict) -> None:
         await db.memberships.update_one({"id": m["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
     else:
         await _ensure_membership(target_user["user_id"], inv["org_id"], role, inv.get("invited_by"))
+    pre = {k: inv[k] for k in ("permissions", "persona_id") if inv.get(k)}
+    if pre:  # permessi/collegamento Staff configurati dall'Admin al momento dell'invito
+        await db.memberships.update_one({"user_id": target_user["user_id"], "org_id": inv["org_id"]}, {"$set": pre})
     await db.org_invites.update_one({"id": inv["id"]}, {"$set": {"status": "accepted", "accepted_at": now_iso(),
         "accepted_user_id": target_user["user_id"], "updated_at": now_iso()}})
     # Dedupe: once accepted, remove any other invite rows for the same email in this org so the
@@ -5245,6 +5292,7 @@ async def briefing_live(event_id: str, admin: dict = Depends(require_admin)):
     data["live_hash"] = live_hash
     data["latest_version"] = latest
     data["is_stale"] = bool(latest and latest.get("content_hash") != live_hash)
+    data["briefing_charge"] = await _briefing_charge_info(admin["org_id"], event_id)
     return data
 
 
@@ -5253,10 +5301,29 @@ class BriefingPublishIn(BaseModel):
     note: Optional[str] = None
 
 
+async def _briefing_charge_info(org_id: str, event_id: str) -> dict:
+    """Generazione briefing: addebito UNA TANTUM per evento (prima pubblicazione), poi gratis."""
+    await _ensure_credits_setup()
+    cfg = await _svc_cfg("ai_briefing")
+    charged = bool(await db.credit_ledger.find_one({"org_id": org_id, "idempotency_key": f"ai_briefing:{event_id}"}, {"_id": 1}))
+    applies = bool(cfg["active"] and cfg["cost"] and (cfg["svc"] or {}).get("consumo_active") and await _is_credit_model_org(org_id))
+    return {"cost": cfg["cost"] if applies and not charged else 0, "charged": charged}
+
+
+async def _charge_briefing_once(admin: dict, event_id: str):
+    info = await _briefing_charge_info(admin["org_id"], event_id)
+    if info["cost"]:
+        ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0, "nome": 1}) or {}
+        await _apply_credit_movement(admin["org_id"], -info["cost"], reason_code="ai_briefing", type_="debit",
+                                     service_key="ai_briefing", event_id=event_id, user_id=admin.get("user_id"),
+                                     idempotency_key=f"ai_briefing:{event_id}", note=f"Generazione briefing — {ev.get('nome')}")
+
+
 @api.post("/events/{event_id}/briefing-versions")
 async def publish_briefing(event_id: str, body: BriefingPublishIn, admin: dict = Depends(require_admin)):
     await _assert_event_operational(admin["org_id"], event_id)
     data = await _build_briefing(event_id, admin["org_id"])
+    await _charge_briefing_once(admin, event_id)
     last = await db.briefing_versions.find_one(oq(admin, evento_id=event_id), sort=[("versione", -1)])
     versione = (last.get("versione", 0) + 1) if last else 1
     doc = {"id": new_id(), "org_id": admin["org_id"], "evento_id": event_id, "versione": versione,
@@ -5625,6 +5692,11 @@ AUDIT_ACTION_LABELS = {
     "org_deleted": "Eliminazione organizzazione",
     "demo_seeded": "Popolamento dati Demo",
     "invites_cleaned": "Pulizia inviti",
+    "news_edited": "Novità modificata",
+    "news_published": "Novità approvata e pubblicata",
+    "news_withdrawn": "Novità ritirata",
+    "news_deleted": "Novità eliminata",
+    "news_simulated": "Simulazione rilascio (test)",
 }
 
 
@@ -8537,6 +8609,7 @@ async def startup():
     await migrate_person_companies()
     await migrate_memberships()
     await seed_support()
+    asyncio.create_task(news.sync_releases(db))  # bozze Novità solo se CRMEVENT_ENV=production
     creds = ROOT_DIR.parent / "memory" / "test_credentials.md"
     try:
         creds.write_text(
@@ -9602,6 +9675,19 @@ FASE_E_INITIAL = {
 }
 _credits_indexes_done = False
 
+# Servizi realmente collegati a un addebito nel codice (gli altri restano nascosti nel catalogo Super Admin).
+LINKED_CREDIT_SERVICES = {"ai_assistant", "ai_briefing", "event_activation", "event_maintenance",
+                          "event_pipeline_pro", "google_calendar"}
+# Descrizioni informative (verificate sul codice di addebito). Applicate una sola volta: poi modificabili dal Super Admin.
+CREDIT_SERVICE_DESCRIPTIONS = {
+    "ai_assistant": "Risponde con l'AI alle domande sull'uso di CRMEvent e sui dati della tua organizzazione. Il costo viene scalato per ogni domanda che riceve una risposta utile. Se l'assistente non sa rispondere, oppure la richiesta è un suggerimento di nuova funzione, non viene scalato nulla.",
+    "ai_briefing": "Pubblica il briefing operativo dell'evento, generato automaticamente con i dati aggiornati di staff, team, turni, ospitalità e pasti. Il costo viene scalato una sola volta per evento, alla prima pubblicazione. Dopo l'addebito il briefing dello stesso evento può essere aggiornato e ripubblicato in nuove versioni senza ulteriori addebiti.",
+    "event_activation": "Rende operativo un evento: staff, team, turni, ospitalità, briefing e tutte le funzioni operative. Il costo viene scalato una sola volta per evento, al momento dell'attivazione, e comprende il primo mese di utilizzo. Dal mese successivo si applica il Mantenimento evento.",
+    "event_maintenance": "Mantiene operativo un evento già attivato. Il costo viene scalato in automatico ogni mese di calendario a partire dalla data di attivazione, fino alla data dell'evento: il mese che arriva fino all'evento non viene addebitato di nuovo. Se i crediti non sono sufficienti l'evento viene sospeso; riattivandolo si paga un solo mese di mantenimento e il ciclo riparte.",
+    "event_pipeline_pro": "Attiva per un evento la Pipeline di preparazione: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni e tutte le attività da svolgere prima dell'evento. Il costo viene scalato una sola volta per evento, anche quando la Pipeline viene copiata da un'edizione precedente. Dopo l'attivazione modelli, attività e aggiornamenti dello stesso evento sono compresi.",
+    "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare Attività e Follow-up con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
+}
+
 
 async def _ensure_credits_setup():
     """Crea indici e semina il catalogo servizi (idempotente, lazy)."""
@@ -9647,6 +9733,22 @@ async def _ensure_credits_setup():
             upd = {"consumo_active": derived}
         upd["updated_at"] = now_iso()
         await db.credit_services.update_one({"key": svc["key"]}, {"$set": upd})
+    # Catalogo semplificato (v2, una sola volta): descrizioni complete, Google Calendar a catalogo, briefing a evento.
+    for key, text in CREDIT_SERVICE_DESCRIPTIONS.items():
+        svc = await db.credit_services.find_one({"key": key, "desc_v2": {"$ne": True}}, {"_id": 0})
+        if not svc:
+            continue
+        upd = {"description": text, "desc_v2": True, "updated_at": now_iso()}
+        if key == "ai_assistant":
+            upd["name"] = "Assistente CRMEvent"
+        if key == "google_calendar" and svc.get("unit_cost") is None:
+            upd.update({"unit_cost": GCAL_UNLOCK_COST, "pricing_mode": "flat", "unit_label": "organizzazione",
+                        "active": True, "consumo_active": True})
+        if key == "ai_briefing":
+            upd.update({"unit_label": "evento", "active": True, "consumo_active": True})
+            if svc.get("unit_cost") in (None, 3):
+                upd["unit_cost"] = 30
+        await db.credit_services.update_one({"key": key}, {"$set": upd})
 
 
 async def _ensure_org_credits(org_id: str) -> dict:
@@ -9841,7 +9943,7 @@ async def credits_services_public(user: dict = Depends(require_admin)):
 async def platform_credit_services(admin: dict = Depends(require_superadmin)):
     await _ensure_credits_setup()
     rows = await db.credit_services.find({}, {"_id": 0}).to_list(100)
-    return {"services": rows}
+    return {"services": [{**r, "linked": r["key"] in LINKED_CREDIT_SERVICES} for r in rows]}
 
 
 class CreditServiceUpdateIn(BaseModel):
@@ -9854,6 +9956,7 @@ class CreditServiceUpdateIn(BaseModel):
     unit_cost: Optional[float] = None
     min_units: Optional[int] = None
     period_days: Optional[int] = None
+    description: Optional[str] = None
 
 
 @api.put("/platform/credit-services/{key}")
@@ -9863,7 +9966,9 @@ async def update_credit_service(key: str, body: CreditServiceUpdateIn, admin: di
     if not svc:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     changes = {}
-    for f in ["name", "active", "consumo_active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units", "period_days"]:
+    if body.unit_cost is not None and (body.unit_cost < 0 or body.unit_cost != int(body.unit_cost)):
+        raise HTTPException(status_code=400, detail="Il costo deve essere un numero intero di crediti (0 o superiore)")
+    for f in ["name", "active", "consumo_active", "visible", "pricing_mode", "unit_label", "unit_cost", "min_units", "period_days", "description"]:
         v = getattr(body, f)
         if v is not None and v != svc.get(f):
             changes[f] = v
@@ -12144,6 +12249,7 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
 
 
 app.include_router(api)
+app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])

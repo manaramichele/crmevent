@@ -1,0 +1,35 @@
+{
+  "summary": "Iter69 — Pagina Team (nome testo semplice, matita apre scheda completa) + regole ordinamento default + Team Leader con staff:edit può assegnare/rimuovere presenze senza Team. 11/11 nuovi test backend verdi (test_iter69_team_leader_assign.py). Regressione iter66 16/16 verde dopo re-seed. UI verificata su admin, leader (sola visualizzazione), responsabile.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter69_team_leader_assign.py",
+    "/app/backend/tests/test_iter66_team_scope.py",
+    "/app/test_reports/pytest/iter69_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/server.py _enforce_perm: la logica che consente GET/PUT su staff con team_id vuoto è concisa (seg=='staff' and not team_id and method in GET/PUT); la stessa regola NON si applica a shifts — comportamento coerente con la specifica (i turni restano scoped).",
+    "crud_routes list: il filtro aggiunge [None, ''] solo per staff — ok. Attenzione: se in futuro altri scope (shifts) dovessero includere i 'liberi' va aggiornato il filtro.",
+    "frontend/src/components/crm.jsx: quando renderDetail è presente la matita apre la scheda ANCHE per utenti senza allow('edit'). Comportamento voluto dalla specifica ('con sola visualizzazione la matita apre comunque la scheda'); la logica di edit all'interno della scheda è governata da canEdit in TeamMembersDialog."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter69_team_leader_assign.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 iter69 + 16/16 iter66 regression)",
+    "frontend": "100% sui flussi iter69 testati (admin + leader view-only + responsabile)"
+  },
+  "test_credentials": "test_tl_admin@crmeventqa.it / TestTl2026! ; test_tl_leader@crmeventqa.it / TestTl2026! ; test_tl_resp@crmeventqa.it / TestTl2026! ; qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "python3 /app/backend/tests/seed_team_leader_test.py (eseguito prima dei test, ripulito con --clean al termine).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Verificato: (A) Pagina Team Admin: nome Team testo semplice (data-testid team-name-<id>, nessun team-open-*); colonne nell'ordine Team | Evento | Team Leader | Staff | Volontari | Azioni; ordine A-Z (Expo, Ristori, Start Line); matita edit-team-<id> apre team-members-dialog con team-card-coverage 'Necessari: 20 | Assegnati: 18 | Mancanti: 2 | Staff: 5' per Start Line; team-card-staff e team-card-volontari separati; team-card-edit visibile (apre form). (B) Leader (sola visualizzazione, scope=leader): vede solo Start Line; scheda in sola lettura (team-add-member, team-member-remove-*, team-card-edit assenti); coverage visibile. (C) Responsabile (teams.scope=all, sola lettura): vede 3 team A-Z, scheda in sola lettura. (D) Backend PUT /api/staff: admin crea presenza senza team → GET visibile (team_id vuoto) → PUT a tm_TEST_start assegna → PUT team_id:'' rimuove senza cancellare persona/presenza. (E) Leader con staff:[view,create,edit]: GET /api/staff include presenze senza Team; PUT su presenza libera a tm_TEST_start 200; PUT per spostare la propria presenza a tm_TEST_ristori 404; GET/PUT presenza di Ristori 404; DELETE presenza libera 403/404. (F) Ordinamenti default verificati tramite indicator freccia: Aziende/Attività per prima colonna, Eventi mostra indicatore (defaultSort=data_inizio nel codice). Seed TEST_ ripulito con --clean."
+}

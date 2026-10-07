@@ -1,0 +1,23 @@
+{
+  "summary": "Iter71 end-to-end verification of OrgUsers + Permissions moved under Profilo & Account for CRMEvent (IT). Backend: 9/9 pytest tests PASS covering GET /api/org/permissions (role/persons/members including persona_id), PUT /api/org/permissions/{uid} (persona_id + teams flags + audit record 'permissions_changed'), self-edit 400, invite creation persisting permissions+persona_id, _allowed_team_ids via membership.persona_id (resp sees only his leader team), staff edit 403 without staff:edit, staff edit 200 for volunteer moves but 403 for staff moves when manage_staff=false, super admin X-Org-Id can read /api/org/permissions, other-org admin X-Org-Id gets 403. Frontend (admin test_tl_admin): side menu has NO Permessi item (0 anchors to /permessi), /permessi redirects to /profilo, OrgUsers table rendered with all 7 columns and data-testids org-users-table, user-teams-<uid>, user-perms-<uid>, user-perms-btn-<uid>, user-toggle-<uid>; admin own row shows no Permessi button; dialog opens with all perm-* testids (perm-role-select, perm-persona-select, perm-matrix, perm-teams-all/leader/selected, perm-teams-manage-staff/volunteers, perm-save); Salva closes dialog and audit entry appears under perm-audit; Invita utente opens dialog containing invite-perms section. Super admin via /piattaforma/crediti → Organizzazioni → Gestisci TEST_TeamLeader Org loads the same OrgUsers component correctly (data-testids present, cells populated with 'Solo Team di cui è Team Leader' / '2/12 sezioni...'), confirming X-Org-Id header round-trips. Mobile 390x844 table wrapper is horizontally scrollable (scrollWidth > clientWidth). Regression: iter66/iter69 run clean after fresh seed (27/27 pass); iter64 pre-existing ERROR state unrelated to this change (depends on separately-seeded users). After tests, seed script run with --clean to tear down.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter71_org_users_permissions.py",
+    "/app/test_reports/pytest/iter71.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Observation (not a bug): iter66/iter69 tests reuse the same seeded users as iter71. Running iter71 mutates test_tl_leader/test_tl_resp membership permissions, so iter66 then fails until re-seed. Consider using independent seed fixtures per iteration file, or auto-reseed in conftest.",
+    "server.py _accept_invite correctly copies invite.permissions + invite.persona_id to the membership (line 4916). Verified at the DB level via the test asserting invite row persists both fields."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter71_org_users_permissions.py"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (admin flow + super-admin PlatformCredits + mobile scroll)"},
+  "test_credentials": "test_tl_admin / test_tl_leader / test_tl_resp @crmeventqa.it · TestTl2026! · Super Admin manara.michele.pro@gmail.com / CrmEvent2026! · QA admin qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "Used existing seed_team_leader_test.py; cleaned at end as instructed",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter71 regression file: /app/backend/tests/test_iter71_org_users_permissions.py. Prerequisite: python3 /app/backend/tests/seed_team_leader_test.py AND set test_tl_resp membership persona_id=pe_TEST_leader + teams {scope:leader, manage_staff:false, manage_volunteers:true}. Env var REACT_APP_BACKEND_URL must be exported or loaded (the test file uses dotenv). After the test, invite row for test_tl_invited@crmeventqa.it remains unless cleaned. Watch for test_iter66 regression if these tests are run before iter66 without re-seeding."
+}

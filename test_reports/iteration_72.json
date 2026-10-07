@@ -1,0 +1,21 @@
+{
+  "summary": "Iter72 frontend-only verification of Team Nota feature + mobile-first cards/sheets on CRMEvent. Logged in as QA admin (qa.eventi@crmeventqa.it). Desktop 1920: /staff-volontari Team tab shows exactly 6 columns [Team|Evento|Team Leader|Staff|Volontari|Azioni] - NO Descrizione column. 3 teams sorted A-Z: Team Pacer, Team Ristori, Team Run. Nota buttons have correct data-has-note attribute (Team Ristori = true/tiffany bg rgb(10,186,181); Team Pacer & Team Run = false/white). Clicked tiffany button on Team Ristori -> team-note-dialog shows team-note-text with original 'Volontari richiesti: 14. Portare pettorine e radio.'; team-note-edit -> textarea -> appended ' QA_EDIT' -> team-note-save -> PUT /api/teams/{id} succeeded; re-open confirms persistence; then restored to original text successfully. Grey flow on Team Run: added TEMP_QA_NOTE -> button became data-has-note=true (tiffany); then saved empty -> data-has-note=false again (restored to original state). Pencil edit-team-{id} opens team-members-dialog containing ALL expected sections: team-card-details, team-card-leader-section, team-card-coverage, team-card-req, team-card-assigned, team-card-missing, team-card-note, team-card-note-btn, team-card-staff, team-card-volontari. team-add-member present. team-card-note-btn opens the same note dialog. Mobile 390x844: Team tab renders 3 team-mobile-card-{id} with no horizontal overflow (sw=390=vw). m-edit-team-{id} opens team-members-dialog as full-screen bottom sheet (w=390, h=844, top=0 = exactly viewport). 4 team-member-card-{id} rendered. Add-team-button opens dialog as mobile bottom sheet (w=390, bottom=0, h=793), Salva reachable. Staff tab renders 5 person-card-{id}. OrgUsers at /profilo -> Utenti e accessi tab renders 6 m-user-card-{id}. No horizontal overflow on /dashboard /eventi /staff-volontari /aziende /anagrafiche /ospitalita /sponsor /attivita /profilo at 390px. All 30 assertions PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TeamNoteButton is rendered TWICE in desktop Azioni column (once via EntityManager extraActions prop in Persons.jsx line 450 and once as the mobileCard - but on desktop the hidden mobile-card parent still renders giving duplicate data-testid='team-note-btn-{id}'). Tests had to filter for the visible one. Not a blocker but duplicate testids complicate selectors and may confuse other tooling. Consider rendering mobileCard inside a hidden-on-desktop wrapper that short-circuits children (CSS 'hidden md:block' alone still renders them). Suggest hiding via conditional render based on media-query hook."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (30/30)"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "None. Note on Team Ristori was temporarily appended with ' QA_EDIT' and restored. Team Run temporarily received 'TEMP_QA_NOTE' then cleared back to empty. Final state matches initial.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Teams and testids: Team Pacer=team_d9f90c33dd (grey), Team Ristori=team_571a235a17 (tiffany/has note), Team Run=team_1ffab54ca2 (grey). Default hospitality event when loading /ospitalita for qa.eventi is 'Regressione Fase QA' with no assignees - to test m-hosp-person-{id} cards, change event filter to 'Maratona QA' first. Duplicate data-testid for TeamNoteButton on desktop (hidden mobileCard still in DOM) - use visibility-aware locators."
+}

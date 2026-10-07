@@ -20,45 +20,46 @@ const REASON_LABELS = {
 };
 const norm = (s) => (s || "").toString().trim().toLowerCase();
 
+// Catalogo semplificato: Servizio | Descrizione completa | Costo in crediti. La logica di consumo resta interna.
 function ServicesTab() {
   const [rows, setRows] = useState([]);
   const [edits, setEdits] = useState({});
-  const load = () => api.get("/platform/credit-services").then(({ data }) => setRows(data.services || [])).catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
+  const load = () => api.get("/platform/credit-services").then(({ data }) => setRows((data.services || []).filter((s) => s.linked && s.visible !== false).sort((a, b) => (a.name || "").localeCompare(b.name || "", "it", { sensitivity: "base" })))).catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
   useEffect(() => { load(); }, []);
   const set = (k, f, v) => setEdits((s) => ({ ...s, [k]: { ...s[k], [f]: v } }));
   const save = async (svc) => {
     const body = edits[svc.key] || {};
+    if (body.unit_cost !== undefined && (body.unit_cost === null || body.unit_cost < 0 || !Number.isInteger(body.unit_cost))) return toast.error("Inserisci un numero intero di crediti (0 o superiore)");
     try { await api.put(`/platform/credit-services/${svc.key}`, body); toast.success(`Servizio "${svc.name}" aggiornato`); setEdits((s) => ({ ...s, [svc.key]: undefined })); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   return (
-    <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="svc-table">
-      <thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100">
-        <th className="py-2 pr-3">Servizio</th><th className="py-2 pr-3">Modalità</th><th className="py-2 pr-3">Costo</th><th className="py-2 pr-3">Unità</th><th className="py-2 pr-3">Disponibile</th><th className="py-2 pr-3">Consumo crediti</th><th className="py-2 pr-3">Ver.</th><th className="py-2"></th></tr></thead>
-      <tbody>
+    <div data-testid="svc-list">
+      <div className="hidden md:grid grid-cols-[220px_1fr_150px] gap-4 px-1 pb-2 text-xs uppercase text-slate-400 border-b border-slate-100"><span>Servizio</span><span>Descrizione completa</span><span>Costo in crediti</span></div>
+      <div className="divide-y divide-slate-100">
         {rows.map((s) => {
           const e = edits[s.key] || {};
           const v = (f) => (e[f] !== undefined ? e[f] : s[f]);
           return (
-            <tr key={s.key} className="border-b border-slate-50" data-testid={`svc-row-${s.key}`}>
-              <td className="py-2 pr-3"><div className="font-medium text-slate-800">{s.name}</div><div className="text-xs text-slate-400">{s.key}</div></td>
-              <td className="py-2 pr-3">
-                <select value={v("pricing_mode") || ""} onChange={(ev) => set(s.key, "pricing_mode", ev.target.value || null)} data-testid={`svc-mode-${s.key}`} className="h-9 rounded-md border border-slate-200 px-2 bg-white">
-                  <option value="">—</option><option value="flat">Fisso</option><option value="per_unit">A quantità</option>
-                </select>
-              </td>
-              <td className="py-2 pr-3"><Input type="number" className="h-9 w-24" value={v("unit_cost") ?? ""} onChange={(ev) => set(s.key, "unit_cost", ev.target.value === "" ? null : Number(ev.target.value))} data-testid={`svc-cost-${s.key}`} /></td>
-              <td className="py-2 pr-3"><Input className="h-9 w-28" value={v("unit_label") ?? ""} onChange={(ev) => set(s.key, "unit_label", ev.target.value)} data-testid={`svc-unit-${s.key}`} /></td>
-              <td className="py-2 pr-3"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={!!v("active")} onChange={(ev) => set(s.key, "active", ev.target.checked)} data-testid={`svc-active-${s.key}`} /></td>
-              <td className="py-2 pr-3"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={v("consumo_active") !== undefined ? !!v("consumo_active") : !!(s.active && s.unit_cost != null && s.pricing_mode)} onChange={(ev) => set(s.key, "consumo_active", ev.target.checked)} data-testid={`svc-consumo-${s.key}`} /></td>
-              <td className="py-2 pr-3 text-slate-400">{s.version}</td>
-              <td className="py-2"><Button size="sm" disabled={!edits[s.key]} onClick={() => save(s)} data-testid={`svc-save-${s.key}`} className="bg-slate-900 text-white"><Save className="w-4 h-4" /></Button></td>
-            </tr>
+            <div key={s.key} className="py-4 grid grid-cols-1 md:grid-cols-[220px_1fr_150px] gap-3 md:gap-4 md:items-start" data-testid={`svc-row-${s.key}`}>
+              <div className="font-semibold text-slate-900" data-testid={`svc-name-${s.key}`}>{s.name}</div>
+              <div>
+                <label className="md:hidden text-[11px] uppercase tracking-wide text-slate-400">Descrizione completa</label>
+                <textarea rows={4} value={v("description") ?? ""} onChange={(ev) => set(s.key, "description", ev.target.value)} data-testid={`svc-desc-${s.key}`}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-tiffany/40" />
+              </div>
+              <div className="flex md:flex-col items-end md:items-stretch gap-2">
+                <div className="flex-1 md:flex-none">
+                  <label className="md:hidden text-[11px] uppercase tracking-wide text-slate-400">Costo in crediti</label>
+                  <div className="flex items-center gap-2"><Input type="number" min={0} step={1} inputMode="numeric" className="h-10 w-24" value={v("unit_cost") ?? ""} onChange={(ev) => set(s.key, "unit_cost", ev.target.value === "" ? null : Number(ev.target.value))} data-testid={`svc-cost-${s.key}`} /><span className="text-sm text-slate-500">crediti</span></div>
+                </div>
+                <Button disabled={!edits[s.key]} onClick={() => save(s)} data-testid={`svc-save-${s.key}`} className="h-10 bg-slate-900 text-white"><Save className="w-4 h-4 mr-1.5" />Salva</Button>
+              </div>
+            </div>
           );
         })}
-      </tbody>
-    </table>
-    <p className="text-xs text-slate-400 mt-3"><b>Disponibile</b> = la funzione è utilizzabile. <b>Consumo crediti</b> = quando utilizzata, scala crediti. Disponibile + consumo OFF = servizio gratuito (es. Google Calendar). Le modifiche valgono per le operazioni successive; lo storico resta invariato.</p>
+      </div>
+      <p className="text-xs text-slate-400 mt-3">Il nuovo costo vale dalle operazioni successive; lo storico resta invariato. La descrizione è solo informativa: il modo in cui il servizio scala i crediti è definito internamente e non cambia.</p>
     </div>
   );
 }

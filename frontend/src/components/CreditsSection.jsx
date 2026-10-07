@@ -14,7 +14,8 @@ const REASON = {
   automation_run: "Automazione", newsletter_email: "Newsletter / email",
   google_calendar: "Google Calendar", whatsapp_send: "WhatsApp", sms_send: "SMS", purchase: "Ricarica crediti",
   event_activation: "Attivazione evento", event_maintenance: "Mantenimento evento",
-  event_active_period: "Attivazione evento",
+  event_active_period: "Attivazione evento", google_calendar_unlock: "Google Calendar",
+  event_pipeline_pro: "Pipeline Evento Pro", ai_assistant: "Assistente CRMEvent",
 };
 const PURCHASE_STATUS = {
   pending: ["In attesa", "text-amber-700 bg-amber-50 border-amber-200"],

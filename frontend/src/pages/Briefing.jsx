@@ -642,6 +642,9 @@ export default function Briefing() {
           <div className="space-y-3 py-1">
             <div className="space-y-1.5"><Label className="text-xs">Titolo versione</Label><Input value={pubForm.titolo} onChange={(e) => setPubForm((f) => ({ ...f, titolo: e.target.value }))} placeholder="es. Briefing definitivo pre-evento" data-testid="publish-titolo" /></div>
             <div className="space-y-1.5"><Label className="text-xs">Note (facoltative)</Label><Textarea value={pubForm.note} onChange={(e) => setPubForm((f) => ({ ...f, note: e.target.value }))} data-testid="publish-note" /></div>
+            {live?.briefing_charge?.cost > 0
+              ? <p className="text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-800 p-2.5" data-testid="publish-charge-note">Prima pubblicazione per questo evento: verranno scalati <b>{live.briefing_charge.cost} crediti</b>. Le versioni successive dello stesso evento sono comprese.</p>
+              : live?.briefing_charge?.charged && <p className="text-xs text-emerald-700" data-testid="publish-charge-included">Generazione briefing già attivata per questo evento: nessun addebito.</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowPublish(false)}>Annulla</Button>
