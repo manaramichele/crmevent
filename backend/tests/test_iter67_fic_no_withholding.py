@@ -62,7 +62,7 @@ def test_fic_build_payload_no_withholding():
     allowed_top = {"type", "e_invoice", "entity", "items_list", "currency", "language",
                    "rivalsa", "cassa", "cassa2", "withholding_tax", "withholding_tax_taxable",
                    "other_withholding_tax", "use_gross_prices",
-                   "payment_method", "payments_list"}
+                   "ei_data", "payment_method", "payments_list"}
     assert set(d.keys()).issubset(allowed_top), f"Chiavi extra: {set(d.keys()) - allowed_top}"
 
 

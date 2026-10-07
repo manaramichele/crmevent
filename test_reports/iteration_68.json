@@ -1,0 +1,26 @@
+{
+  "summary": "Iter68 FIC ei_data.payment_method='MP08' - 12/12 test pytest verdi. Verificato in modo isolato (httpx + FIC token/company/vat mockati, nessuna chiamata reale a Fatture in Cloud): (1) costante server.FIC_EI_PAYMENT_METHOD = env FIC_EI_PAYMENT_METHOD default 'MP08'; (2) _fic_build_payload per ricarica 250+22%=305 contiene data.ei_data == {'payment_method':'MP08'} + rivalsa/cassa/cassa2/withholding_tax/withholding_tax_taxable/other_withholding_tax = 0, use_gross_prices False, items_list[0].apply_withholding_taxes False, net_price 250, payments_list[0].amount 305, payment_method.name 'Carta di credito (Stripe)'; (3) _fic_issue_document(dry_run=False) con monkeypatch invia nel POST body gli stessi campi fiscali + ei_data MP08 + e_invoice True + payment_account={'id':123} quando FIC_PAYMENT_ACCOUNT_ID='123' e assente quando vuoto; (4) ei_data identico tra reale e simulazione. Aggiornato allow-list del test iter67 esistente per includere la nuova chiave 'ei_data'. Regressione endpoint Super Admin (login manara.michele.pro@gmail.com, create TEST invoice → simulate → delete) verde: fic_payload_preview.data.ei_data.payment_method == 'MP08'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter68_fic_ei_payment_method.py",
+    "/app/backend/tests/test_iter67_fic_no_withholding.py",
+    "/app/backend/tests/test_iter67_fic_simulate_regression.py",
+    "/app/test_reports/pytest/iter68_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py supera 12k righe: valutare split (fatturazione FIC in modulo dedicato billing/fic.py).",
+    "FIC_EI_PAYMENT_METHOD hardcoded a MP08: va bene come default per pagamento carta Stripe; se in futuro verranno supportati bonifici/SEPA (MP05/MP19) servirà derivare il codice dal metodo Stripe effettivo invece che da env globale."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter68_fic_ei_payment_method.py (new)",
+    "/app/backend/tests/test_iter67_fic_no_withholding.py (aggiunta chiave 'ei_data' nell'allow-list)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "skipped per richiesta"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (usato dal test di regressione iter67)",
+  "seed_data_creation": "Il test di regressione crea una invoice TEST_ via /api/platform/credit-invoices/test e la elimina al termine (finally).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "ei_data.payment_method ora inviato in POST /c/{cid}/issued_documents sia LIVE sia simulazione. Tutti i test iter67/iter68 su payload FIC passano senza network reale. Per futuri cambi payload FIC aggiornare allow-list in test_iter67_fic_no_withholding::test_fic_build_payload_no_withholding."
+}
