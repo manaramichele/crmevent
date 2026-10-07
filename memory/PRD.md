@@ -367,6 +367,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Costi per servizio semplificati + addebiti reali — 2026-10-07 ✅ VERIFICATO (iter 74)
+- Super Admin → Servizi e crediti → Servizi: solo Servizio | Descrizione completa | Costo in crediti (A–Z, card su mobile). Modalità/unità/flag restano interni (non modificabili da UI). Costo intero ≥0, letto a runtime dal catalogo.
+- Mostrati solo i servizi collegati a un addebito reale (LINKED_CREDIT_SERVICES): Assistente CRMEvent (1/risposta utile), Attivazione evento (30 una tantum), Mantenimento evento (20/mese fino alla data evento), Pipeline Evento Pro (20 una tantum/evento), Google Calendar (20 una tantum/org, ORA dal catalogo), Generazione briefing (30, NUOVO: addebitato alla prima pubblicazione versione per evento, idempotency ai_briefing:{event_id}; org legacy esenti; dialog Pubblica mostra l'addebito). Nascosti finché non collegati: analisi, checklist, contenuti, immagini, automazioni, newsletter, WhatsApp, SMS.
+- Descrizioni iniziali applicate una sola volta (flag desc_v2), poi modificabili.
+- Rinnovo automatico Mantenimento: POST /api/cron/event-renewals (Bearer WEBHOOK_CRON_SECRET) + `.emergent/crons.yml` ogni giorno 03:00 UTC. Su Aruba serve crontab di sistema equivalente.
+- NB: il briefing NON è generato con AI (è costruito dai dati evento).
+
 ## Sistema "Novità" (rilascio → bozza AI → approvazione Super Admin → pubblicazione → badge) — 2026-10-07 ✅ VERIFICATO (iter 73: backend 18/18, frontend 20/20)
 - Rilevamento rilascio REALE: registro `backend/releases.json` distribuito col codice; all'avvio, SOLO se `CRMEVENT_ENV=production`, `news.sync_releases` registra i rilasci mai visti (lock atomico `news_releases.id` unico) e crea le bozze. Preview/branch/sviluppo: mai bozze automatiche. Ad ogni nuovo rilascio aggiungere una voce in releases.json (id, date, changes[area, kind, note, fallback_title/text, user_visible]); kind bugfix/tecnica/refactoring/server o user_visible=false vengono ignorati; più modifiche della stessa area = una sola Novità.
 - Testo generato da GPT (openai gpt-5.6-terra, chiave Emergent) per l'utente finale; fallback al testo di riserva.
