@@ -1,0 +1,25 @@
+{
+  "summary": "Iter67 FIC no-withholding fix verified. 5 unit tests (mocked httpx) + 1 regression test on Super Admin simulate endpoint, tutti passati. Payload FIC per ricariche crediti ora NON applica rivalsa/cassa/ritenute: imponibile 250 + IVA 22% 55 = totale 305, uguale al pagamento Stripe. Payload reale e payload simulazione contengono gli stessi campi fiscali a zero. Nessuna chiamata reale a Fatture in Cloud effettuata. Transazione TEST creata e poi eliminata.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter67_fic_no_withholding.py",
+    "/app/backend/tests/test_iter67_fic_simulate_regression.py",
+    "/app/test_reports/pytest/iter67.xml",
+    "/app/test_reports/pytest/iter67_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FIC_NO_WITHHOLDING_DOC/ITEM centralizzati e riusati sia in _fic_build_payload (simulazione) sia in _fic_issue_document (emissione reale): payload identico, nessuna divergenza.",
+    "_derive_amounts riconcilia correttamente net/iva/totale e produce coerente=True per il caso 250/55/305 @22%.",
+    "use_gross_prices=False forza FIC a trattare i prezzi come netti, evitando che riapplichi gross defaults aziendali.",
+    "Nota non bloccante: server.py >12k linee, considerare split in moduli (fic.py, invoices.py)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (login OK)",
+  "seed_data_creation": "Creata una ricarica TEST (is_test=True) tramite POST /api/platform/credit-invoices/test ed eliminata al termine del test via DELETE /api/platform/credit-invoices/test/{purchase_id}. DB pulito.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "I test unitari in test_iter67_fic_no_withholding.py mockano httpx.AsyncClient, _fic_token, _fic_company_id, _fic_vat_id e db (invoices.update_one, organizations.find_one), quindi NON toccano FIC. Il test di regressione colpisce solo l'endpoint simulate interno che per design non chiama FIC. Mantenere questa separazione in iterazioni future."
+}
