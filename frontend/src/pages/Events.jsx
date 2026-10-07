@@ -433,7 +433,7 @@ export default function Events() {
   return (
     <>
       <EntityManager title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
-        endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event"
+        endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event" defaultSort={{ key: "data_inizio", dir: "asc" }}
         searchKeys={["nome", "citta", "tipologia"]} guardCreate={guardCreate} fullActions
         rowActions={(row, helpers) => (
           <EventRowActions row={row} navigate={navigate}

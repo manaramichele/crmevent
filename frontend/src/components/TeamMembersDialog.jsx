@@ -160,7 +160,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
               <DialogTitle className="font-display flex items-center gap-2"><Users className="w-5 h-5 text-tiffany-active" /><span data-testid="team-card-name">{team.nome}</span></DialogTitle>
               <DialogDescription data-testid="team-card-event">{eventName}</DialogDescription>
             </div>
-            {canEdit && onEdit && <Button size="sm" variant="outline" onClick={() => onEdit(team)} data-testid="team-card-edit">Modifica</Button>}
+            {canEdit && onEdit && <Button size="sm" variant="outline" onClick={() => onEdit(team)} data-testid="team-card-edit">Modifica dati Team</Button>}
           </div>
         </DialogHeader>
 
@@ -177,12 +177,20 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
           {(team.descrizione || team.note) && <div className="col-span-2 md:col-span-4 grid gap-3 md:grid-cols-2"><Info label="Descrizione" value={team.descrizione} /><Info label="Note" value={team.note} /></div>}
         </div>
 
+        <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-semibold shrink-0" data-testid="team-card-coverage">
+          <span>Necessari: {req == null ? "—" : req}</span><span className="text-slate-300">|</span>
+          <span>Assegnati: {counts.vol.size}</span><span className="text-slate-300">|</span>
+          <span className={miss ? "text-red-600" : "text-emerald-600"}>Mancanti: {miss == null ? "—" : miss}</span>
+          {extra > 0 && <span className="text-amber-700">+{extra} in esubero</span>}
+          <span className="text-slate-300">|</span><span>Staff: {counts.staff.size}</span>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 mt-1 shrink-0">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input className="pl-9 h-9" placeholder="Cerca persona..." value={query} onChange={(e) => setQuery(e.target.value)} data-testid="team-members-search" />
           </div>
-          <Popover open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) resetAdd(); }}>
+          {canEdit && <Popover open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) resetAdd(); }}>
             <PopoverTrigger asChild>
               <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold h-9" data-testid="team-add-member"><UserPlus className="w-4 h-4 mr-1.5" />Aggiungi componente</Button>
             </PopoverTrigger>
@@ -229,7 +237,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
                 </>
               )}
             </PopoverContent>
-          </Popover>
+          </Popover>}
         </div>
 
         {[["staff", "Staff del Team", sortedStaff, counts.staff.size], ["volontari", "Volontari del Team", sortedVol, counts.vol.size]].map(([key, title, list, n]) => (

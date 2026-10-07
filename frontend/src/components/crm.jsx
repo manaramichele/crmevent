@@ -386,7 +386,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail, defaultSort }) {
   const [detailRow, setDetailRow] = useState(null);
   const { user } = useAuth();
   const allow = (a) => !section || can(user, section, a);
@@ -416,7 +416,8 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
     (!query || searchKeys.some((k) => String(i[k] || "").toLowerCase().includes(query.toLowerCase()))) &&
     filters.every((f) => !filterVals[f.name] || filterVals[f.name] === "all" || i[f.name] === filterVals[f.name])
   );
-  const { sort, toggle } = useSort();
+  // Regola CRMEvent: elenchi in ordine alfabetico (prima colonna) salvo ordinamento funzionale esplicito (defaultSort)
+  const { sort, toggle } = useSort(defaultSort || { key: columns[0]?.key || null, dir: "asc" });
   const sorted = sortRows(filtered, sort, columns);
 
   return (
@@ -473,7 +474,9 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
                     ) : (
                       <div className="flex items-center justify-end gap-1">
                         {rowActions && rowActions(row, { openEdit, onDelete })}
-                        {allow("edit") && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>}
+                        {renderDetail
+                          ? <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Apri la scheda completa" onClick={() => setDetailRow(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>
+                          : allow("edit") && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>}
                         {allow("delete") && <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-${testid}-${row.id}`}><Trash2 className="w-4 h-4" /></Button>

@@ -208,7 +208,9 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
             raise nf
         if seg in ("staff", "shifts"):
             doc = await db[seg].find_one({"org_id": org_id, "id": pp["item_id"]}, {"_id": 0, "team_id": 1})
-            if doc and doc.get("team_id") not in team_ids:
+            # Staff/volontari senza Team: visibili e assegnabili (GET/PUT) al proprio Team, non eliminabili
+            free = seg == "staff" and doc is not None and not doc.get("team_id") and request.method in ("GET", "PUT")
+            if doc and not free and doc.get("team_id") not in team_ids:
                 raise nf
     if ids is None:
         return perm
@@ -1230,7 +1232,7 @@ def crud_routes(path, coll, model, org_scoped=True):
         elif coll in _CRUD_EVENT_COLL.values():
             q.update(_ev_scope(user))
         if _team_ids(user) is not None and coll in ("teams", "staff", "shifts"):
-            q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user)}
+            q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user) + ([None, ""] if coll == "staff" else [])}
         if evento_id:
             q["evento_id"] = evento_id
         return await _list(coll, q)

@@ -149,7 +149,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
-  const { sort, toggle } = useSort();
+  const { sort, toggle } = useSort({ key: "nome", dir: "asc" });
   const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare";
   const ACC = {
     nome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
@@ -342,9 +342,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   ];
   // Conteggi da assegnazioni reali (teamCounts): stessa regola volontari del backend (_team_coverage)
   const teamCols = [
-    { key: "nome", label: "Team", render: (r, h) => (
-      <button type="button" onClick={h?.openDetail} title="Apri la scheda del Team" data-testid={`team-open-${r.id}`}
-        className="font-semibold text-tiffany-fg underline decoration-tiffany/40 underline-offset-4 hover:decoration-tiffany hover:text-tiffany-active cursor-pointer text-left">{r.nome}</button>) },
+    { key: "nome", label: "Team", render: (r) => <span className="font-medium text-slate-800" data-testid={`team-name-${r.id}`}>{r.nome}</span> },
     { key: "evento_id", label: "Evento", render: (r) => eName(r.evento_id) },
     { key: "responsabile_id", label: "Team Leader", render: (r) => r.responsabile_id ? pName(r.responsabile_id) : <StatusBadge color="orange">Da assegnare</StatusBadge> },
     { key: "staff_count", label: "Staff", sortable: false, render: (r) => <span className="text-slate-700" data-testid={`team-staff-count-${r.id}`}>{teamCounts(r, staffLinks).staff.size}</span> },
@@ -358,7 +356,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
   const shiftCols = [
-    { key: "data", label: "Data", render: (r) => <span className="font-medium text-slate-800">{r.data}</span> },
+    { key: "data", label: "Data", sortAccessor: (r) => `${r.data || ""} ${r.ora_inizio || ""}`.trim(), sortType: "string", render: (r) => <span className="font-medium text-slate-800">{r.data}</span> },
     { key: "ora", label: "Orario", render: (r) => `${r.ora_inizio || ""}–${r.ora_fine || ""}` },
     { key: "persona_id", label: "Persona", render: (r) => r.persona_id ? pName(r.persona_id) : <StatusBadge color="red">Scoperto</StatusBadge> },
     { key: "area", label: "Area" }, { key: "team_id", label: "Team", render: (r) => r.team_id ? tName(r.team_id) : "—" },

@@ -36,7 +36,7 @@ export default function Companies() {
 
   const del = async (r) => { try { await api.delete(`/companies/${r.id}`); await reload(); toast.success("Azienda eliminata"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const filtered = rows.filter((r) => !q || `${r.nome} ${r.settore || ""} ${r.citta || ""}`.toLowerCase().includes(q.toLowerCase()));
-  const { sort, toggle } = useSort();
+  const { sort, toggle } = useSort({ key: "nome", dir: "asc" });
   const COLS = [
     { key: "nome", label: "Azienda" }, { key: "settore", label: "Settore" }, { key: "citta", label: "Città" },
     { key: "email", label: "Email" }, { key: "tipo", label: "Tipo", sortAccessor: (r) => TIPO_LABEL[r.tipo] || r.tipo || "" },
