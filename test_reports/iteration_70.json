@@ -1,0 +1,27 @@
+{
+  "summary": "Verified CRMEvent favicon replacement (black calendar on Tiffany background) with ?v=6 cache-buster. All 8 static assets (favicon.ico, favicon-16/32/48/192/512.png, apple-touch-icon.png 180, favicon_calendario_nero.png 725) are served with correct MIME, correct square dimensions, and ICO contains 16/32/48 sub-images. index.html head contains all required rel=icon/apple-touch-icon links with ?v=6 and no ?v=5. manifest.webmanifest exposes 192/512 icons with ?v=6 and both are reachable. Main logo (logo-crmevent.png) is unchanged and still renders on landing header and login page (naturalWidth=2000). Pixel-level sampling of favicon-512 confirms calendar palette: >10% dark pixels (black calendar) and >20% Tiffany-tone pixels (background #0ABAB5/#0CC0C0). Required a frontend restart because CRA dev server had cached the pre-change index.html in memory (served ?v=5 until restart) — after `supervisorctl restart frontend` the preview URL correctly serves ?v=6.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_favicon_assets.py",
+    "/app/test_reports/pytest/iter70_favicon.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CRA dev server caches public/index.html at startup — any edits to index.html (icons, meta tags, etc.) require a frontend restart to be reflected on the live preview URL. If main agent edits public/index.html in future, remember to `sudo supervisorctl restart frontend`."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_favicon_assets.py"
+  ],
+  "success_rate": {"backend": "N/A (frontend-only task)", "frontend": "100% (12/12 asset+markup tests passed)"},
+  "test_credentials": "not needed for this task",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Favicon assets live in /app/frontend/public/ as favicon-{16,32,48,192,512}.png, favicon.ico (multi-size 16/32/48), apple-touch-icon.png (180), favicon_calendario_nero.png (725 source). All referenced in index.html + manifest.webmanifest with ?v=6. Regression test file: /app/backend/tests/test_favicon_assets.py. For future favicon changes bump to ?v=7 and update the test's version regex.",
+  "rca of the issue": "Initial pytest run showed index.html still contained ?v=5 even though the source file /app/frontend/public/index.html had been updated to ?v=6. Root cause: craco/webpack-dev-server caches the index.html template at startup; the file was modified AFTER the frontend supervisor process started. Mitigation: `sudo supervisorctl restart frontend`, then re-ran tests — all 12 passed."
+}
