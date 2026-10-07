@@ -1,0 +1,30 @@
+{
+  "summary": "Iter66 — Revisione pagina Team + accesso collaboratori ai Team (CRMEvent). BACKEND pytest 16/16 PASSED (/app/backend/tests/test_iter66_team_scope.py). Verificato: (1) Admin TEST → GET /api/teams?evento_id=ev_TEST_tl mostra tutti e 3 i team; dashboard staff totali richiesti=30, assegnati=25, mancanti=5 (Start 20/18, Ristori 10/7, Expo escluso dal totale perché volontari_richiesti=None); PUT luogo_operativo persiste su GET successivo. (2) Collaboratore test_tl_leader (scope default 'leader'): GET /api/teams → solo Start Line; GET /api/teams/tm_TEST_ristori → 404; GET /api/staff → 23 record (18 vol + 4 staff + leader-as-staff sl_TEST_leader) tutti con team_id=tm_TEST_start; GET /api/staff/sl_TEST_tl23 (Ristori) → 404; GET /api/shifts solo team Start; POST /api/teams → 403; GET /api/dashboard?evento_id=ev_TEST_tl → staff.volontari_richiesti=20, assegnati=18, mancanti=2. (3) Responsabile Volontari (teams.scope=all, sections solo staff/dashboard/anagrafiche view): vede tutti e 3 i team; PUT /api/teams/tm_TEST_ristori → 403. (4) PUT /api/org/permissions/user_TEST_tl_leader body {teams:{scope:'selected', ids:['tm_TEST_ristori']}} → leader ora vede Start Line + Ristori; audit log registra la modifica con menzione 'Team'; ripristino a scope='leader' torna a solo Start Line. (5) /api/org/permissions include lista teams (id/nome/evento_id). (6) Isolamento multi-tenant: admin QA non vede alcun team TEST (404). FRONTEND (admin test_tl_admin, leader test_tl_leader, resp test_tl_resp): tab Team con colonne esattamente [Team, Evento, Team Leader, Staff, Volontari, Azioni] — nessuna Area/Luogo/Componenti, nessun team-members-btn-*. team-staff-count: Start 5, Ristori 2, Expo 1. team-missing-tm_TEST_start='2 mancanti', team-missing-tm_TEST_ristori='3 mancanti'. Click team-open-tm_TEST_start apre team-members-dialog con tutti i data-testid: team-card-name='Start Line', team-card-event='TEST_Maratona', team-card-leader='Michele Leader', team-card-area='Area Start Line', team-card-luogo='Luogo Start Line', team-card-ritrovo='Gazebo', team-card-req=20, team-card-assigned=18, team-card-missing=2, team-card-staff-count=5; sezioni team-card-staff e team-card-volontari separate; pulsante team-card-edit visibile per admin, assente per leader. Leader: sidebar NO Sponsor/Pipeline; sees solo team-open-tm_TEST_start, card senza pulsante Modifica. Resp vede tutti e 3 i team. /permessi admin: dialog contiene perm-teams-leader/perm-teams-selected/perm-teams-all; selezionando 'selected' compare perm-teams-list con checkbox perm-team-tm_TEST_ristori; perm-summary-* presenti su ogni riga. Mobile 390x844: tab Team scrollabile, team-members-dialog apre correttamente.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter66_team_scope.py",
+    "/app/test_reports/pytest/iter66.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "permissions.py normalize_teams/default_teams coerente: scope 'leader' default per Collaboratore, 'all' per Utente. normalize dedup+sort ids. OK.",
+    "server.py _allowed_team_ids: match persona via regex case-insensitive su email (OK requisito 'email utente = email persona case-insensitive'); scope 'leader' + 'selected' → union di Team gestiti come leader + ids; scope 'all' → None (nessun filtro). Fail-safe.",
+    "server.py _enforce_perm: controllo item_id su teams/staff/shifts prima dei filtri evento: scope-item lookup su staff/shifts fa 1 query extra ma è obbligato per 404. Potenziale miglioria: proiettare org_id insieme a team_id per ridurre fetch inutili (minore).",
+    "crud_routes _l/_c/_u: filtro q['id'/'team_id'] via $in con _team_ids(user) e 403 esplicito su create team. Coerente con la spec.",
+    "staff_quick_add e dashboard: entrambi applicano _team_ids filter → nessun leak di staff/shift fuori scope.",
+    "update_org_permissions: validazione teams.ids tramite db.teams.distinct → filtra silenziosamente ids non appartenenti all'org (comportamento coerente con events). Audit via _perm_summary include frase su Team ('tutti i Team' / 'solo Team di cui è Team Leader' / 'N Team selezionati + Team di cui è leader'). OK.",
+    "TeamMembersDialog.teamCounts: dedup staff via Set + leader incluso una sola volta → conteggio Start=5 corretto (4 staff + leader as staff distinto). Rendering missing/extra con colori semaforici."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter66_team_scope.py",
+    "/app/test_reports/iteration_66.json",
+    "/app/test_reports/pytest/iter66.xml"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (admin, leader, resp, permessi, mobile verificati)"},
+  "test_credentials": "test_tl_admin@crmeventqa.it / TestTl2026! | test_tl_leader@crmeventqa.it / TestTl2026! | test_tl_resp@crmeventqa.it / TestTl2026! | qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "Dati seminati via /app/backend/tests/seed_team_leader_test.py (org_TEST_tl, ev_TEST_tl, 3 team, 22+1 persone, 23 staff/vol+leader, 23 shifts). I test ripristinano lo scope del leader ad 'leader' dopo la verifica selected.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Comando: `REACT_APP_BACKEND_URL=https://manage-events-12.preview.emergentagent.com pytest -o addopts='' /app/backend/tests/test_iter66_team_scope.py -v`. Reseed: `python3 /app/backend/tests/seed_team_leader_test.py`. Testid chiave: tab-team, team-open-{id}, team-staff-count-{id}, team-missing-{id}, team-members-dialog, team-card-{name|event|leader|area|luogo|ritrovo|req|assigned|missing|staff-count|edit|staff|volontari}, perm-teams-{leader|selected|all}, perm-teams-list, perm-team-{id}, perm-summary-{uid}. NOTA post-login redirect: /app (non /dashboard) → attendi 'nav, aside' nel sidebar."
+}
