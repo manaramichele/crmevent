@@ -11,7 +11,7 @@ const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
 const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
 const INV_LABEL = { pending: "In attesa", accepted: "Accettato", expired: "Scaduto", revoked: "Revocato" };
 const INV_COLOR = { pending: "orange", accepted: "green", expired: "gray", revoked: "red" };
-const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }];
+const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }, { value: "collaboratore", label: "Collaboratore" }];
 const AUTH_LABEL = (p) => (p === "google" ? "Google" : p ? "Email e password" : "—");
 
 const inputCls = "h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-tiffany focus:ring-2 focus:ring-tiffany/30";

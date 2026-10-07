@@ -7,7 +7,7 @@ import { X, UserCheck, Link2, Mail, Building2, Workflow } from "lucide-react";
 
 const STATO = { nuovo: "blue", da_contattare: "orange", contattato: "tiffany", demo_fissata: "tiffany", interessato: "green", cliente: "green", non_interessato: "red" };
 const STATO_LABEL = { nuovo: "Nuovo", da_contattare: "Da contattare", contattato: "Contattato", demo_fissata: "Demo fissata", interessato: "Interessato", cliente: "Cliente", non_interessato: "Non interessato" };
-const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }];
+const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }, { value: "collaboratore", label: "Collaboratore" }];
 const FUNNEL_ST = { active: { label: "attivo", cls: "text-emerald-700 bg-emerald-50 border-emerald-200" }, stopped: { label: "interrotto", cls: "text-amber-700 bg-amber-50 border-amber-200" }, completed: { label: "completato", cls: "text-slate-600 bg-slate-50 border-slate-200" } };
 const STEP_ST = { scheduled: "Programmata", sent: "Inviata", failed: "Fallita", canceled: "Annullata", skipped: "Saltata" };
 const STOP_LABEL = { trial_started: "prova gratuita avviata", cliente: "diventato cliente", unsubscribed: "disiscritto", hard_bounce: "hard bounce", spam: "spam", lead_deleted: "lead eliminato" };

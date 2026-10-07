@@ -48,6 +48,8 @@ import EventPipeline from "@/pages/EventPipeline";
 import LeadFinder from "@/pages/LeadFinder";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
+import Permissions from "@/pages/Permissions";
+import { can, isOrgAdmin } from "@/lib/perms";
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
 const isSuper = (u) => u && u.role === "superadmin";
@@ -85,9 +87,26 @@ function SuperAdminOnly({ children }) {
   return children;
 }
 
+function NoAccess() {
+  return (
+    <div className="max-w-lg mx-auto text-center py-24" data-testid="no-access">
+      <div className="font-display text-2xl font-bold text-slate-900">Accesso non consentito</div>
+      <p className="text-slate-500 mt-2">Non hai i permessi per questa sezione. Chiedi all'Admin Organizzatore di abilitarla.</p>
+    </div>
+  );
+}
+
+// Guardia UI per sezione (il backend applica comunque i permessi).
+function Perm({ s, children }) {
+  const { user } = useAuth();
+  if (isVol(user)) return <Navigate to="/app" replace />;
+  if (s === "admin" ? !isOrgAdmin(user) : !can(user, s, "view")) return <NoAccess />;
+  return children;
+}
+
 function HomeRoute() {
   const { user } = useAuth();
-  return isVol(user) ? <VolunteerDashboard /> : <Dashboard />;
+  return isVol(user) ? <VolunteerDashboard /> : can(user, "dashboard") ? <Dashboard /> : <NoAccess />;
 }
 
 function Shell() {
@@ -115,7 +134,8 @@ function Shell() {
         <Route path="/invito" element={<Invite />} />
         <Route path="/app" element={<Protected><HomeRoute /></Protected>} />
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
-        <Route path="/account" element={<Protected><AdminOnly><Account /></AdminOnly></Protected>} />
+        <Route path="/account" element={<Protected><Perm s="admin"><Account /></Perm></Protected>} />
+        <Route path="/permessi" element={<Protected><Perm s="admin"><Permissions /></Perm></Protected>} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
@@ -124,20 +144,20 @@ function Shell() {
         <Route path="/piattaforma/org/:id" element={<Protected><SuperAdminOnly><OrgDetail /></SuperAdminOnly></Protected>} />
         <Route path="/audit" element={<Protected><SuperAdminOnly><AuditLog /></SuperAdminOnly></Protected>} />
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />
-        <Route path="/eventi" element={<Protected><AdminOnly><Events /></AdminOnly></Protected>} />
-        <Route path="/eventi/:id/briefing" element={<Protected><AdminOnly><Briefing /></AdminOnly></Protected>} />
-        <Route path="/eventi/:id/pipeline" element={<Protected><AdminOnly><EventPipeline /></AdminOnly></Protected>} />
-        <Route path="/pipeline/attenzione" element={<Protected><AdminOnly><PipelineAttentionPage /></AdminOnly></Protected>} />
-        <Route path="/aziende" element={<Protected><AdminOnly><Companies /></AdminOnly></Protected>} />
-        <Route path="/persone" element={<Protected><AdminOnly><Persons mode="anagrafiche" /></AdminOnly></Protected>} />
-        <Route path="/staff-volontari" element={<Protected><AdminOnly><Persons mode="staff" /></AdminOnly></Protected>} />
-        <Route path="/ospitalita" element={<Protected><AdminOnly><Hospitality /></AdminOnly></Protected>} />
-        <Route path="/sponsor" element={<Protected><AdminOnly><SponsorsPartners /></AdminOnly></Protected>} />
-        <Route path="/attivita" element={<Protected><AdminOnly><Activities /></AdminOnly></Protected>} />
-        <Route path="/followup" element={<Protected><AdminOnly><Followups /></AdminOnly></Protected>} />
+        <Route path="/eventi" element={<Protected><Perm s="eventi"><Events /></Perm></Protected>} />
+        <Route path="/eventi/:id/briefing" element={<Protected><Perm s="briefing"><Briefing /></Perm></Protected>} />
+        <Route path="/eventi/:id/pipeline" element={<Protected><Perm s="pipeline"><EventPipeline /></Perm></Protected>} />
+        <Route path="/pipeline/attenzione" element={<Protected><Perm s="pipeline"><PipelineAttentionPage /></Perm></Protected>} />
+        <Route path="/aziende" element={<Protected><Perm s="aziende"><Companies /></Perm></Protected>} />
+        <Route path="/persone" element={<Protected><Perm s="anagrafiche"><Persons mode="anagrafiche" /></Perm></Protected>} />
+        <Route path="/staff-volontari" element={<Protected><Perm s="staff"><Persons mode="staff" /></Perm></Protected>} />
+        <Route path="/ospitalita" element={<Protected><Perm s="ospitalita"><Hospitality /></Perm></Protected>} />
+        <Route path="/sponsor" element={<Protected><Perm s="sponsor"><SponsorsPartners /></Perm></Protected>} />
+        <Route path="/attivita" element={<Protected><Perm s="attivita"><Activities /></Perm></Protected>} />
+        <Route path="/followup" element={<Protected><Perm s="followup"><Followups /></Perm></Protected>} />
         <Route path="/lead" element={<Navigate to="/marketing/organizzatori?tab=leads" replace />} />
         <Route path="/supporto" element={<Protected><SuperAdminOnly><Support /></SuperAdminOnly></Protected>} />
-        <Route path="/impostazioni" element={<Protected><AdminOnly><SettingsPage /></AdminOnly></Protected>} />
+        <Route path="/impostazioni" element={<Protected><Perm s="admin"><SettingsPage /></Perm></Protected>} />
         <Route path="/marketing/organizzatori" element={<Protected><AdminOnly><LeadFinder /></AdminOnly></Protected>} />
         <Route path="/marketing/social" element={<Protected><AdminOnly><Social /></AdminOnly></Protected>} />
         <Route path="/marketing/calendario" element={<Protected><AdminOnly><SocialCalendar /></AdminOnly></Protected>} />

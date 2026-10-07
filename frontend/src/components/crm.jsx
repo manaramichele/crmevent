@@ -18,6 +18,8 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { MODAL, MODAL_SCROLL } from "@/lib/modal";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
+import { useAuth } from "@/context/AuthContext";
+import { can } from "@/lib/perms";
 import TeamSelect from "@/components/TeamSelect";
 import CalendarSyncField from "@/components/CalendarSyncField";
 
@@ -384,7 +386,9 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section }) {
+  const { user } = useAuth();
+  const allow = (a) => !section || can(user, section, a);
   const { items, loading, create, update, remove } = useCollection(endpoint);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -419,7 +423,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
       <PageHeader
         title={title}
         subtitle={subtitle}
-        action={<PrimaryButton onClick={openNew} data-testid={`add-${testid}-button`}><Plus className="w-4 h-4 mr-1.5" />Aggiungi</PrimaryButton>}
+        action={allow("create") ? <PrimaryButton onClick={openNew} data-testid={`add-${testid}-button`}><Plus className="w-4 h-4 mr-1.5" />Aggiungi</PrimaryButton> : null}
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-64">
@@ -468,8 +472,8 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
                     ) : (
                       <div className="flex items-center justify-end gap-1">
                         {rowActions && rowActions(row, { openEdit, onDelete })}
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>
-                        <AlertDialog>
+                        {allow("edit") && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => openEdit(row)} data-testid={`edit-${testid}-${row.id}`}><Pencil className="w-4 h-4" /></Button>}
+                        {allow("delete") && <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-${testid}-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
                           </AlertDialogTrigger>
@@ -483,7 +487,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
                               <AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(row)} data-testid={`confirm-delete-${testid}-${row.id}`}>Elimina</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
-                        </AlertDialog>
+                        </AlertDialog>}
                       </div>
                     )}
                   </td>

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { EntityManager, EntityDialog, StatusBadge, useCollection, useSettings, toOptions, PageHeader, PrimaryButton } from "@/components/crm";
+import { useAuth } from "@/context/AuthContext";
+import { can } from "@/lib/perms";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,6 +263,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
 }
 
 export default function Persons({ mode = "anagrafiche" }) {
+  const { user } = useAuth();
   const { items: companies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
   const { staff: staffLinks, persons: rows, loading, reload } = usePeople();
@@ -359,7 +362,7 @@ export default function Persons({ mode = "anagrafiche" }) {
       <PageHeader
         title={isStaff ? "Staff / Volontari" : "Anagrafiche"}
         subtitle={isStaff ? "Staff e Volontari degli eventi: ruoli, team e turni" : "Referenti e contatti delle aziende"}
-        action={<PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />{isStaff ? "Aggiungi Staff / Volontario" : "Aggiungi persona"}</PrimaryButton>} />
+        action={can(user, isStaff ? "staff" : "anagrafiche", "create") ? <PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />{isStaff ? "Aggiungi Staff / Volontario" : "Aggiungi persona"}</PrimaryButton> : null} />
       {isStaff ? (
         <Tabs defaultValue="staff">
           <TabsList className="mb-4 flex-wrap h-auto">
@@ -376,11 +379,11 @@ export default function Persons({ mode = "anagrafiche" }) {
           ))}
           <TabsContent value="team">
             <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
-              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]} />
+              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="staff" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]} />
           </TabsContent>
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
-              fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" searchKeys={["ruolo", "area", "luogo"]}
+              fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" section="staff" searchKeys={["ruolo", "area", "luogo"]}
               filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
           </TabsContent>
         </Tabs>

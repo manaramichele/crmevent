@@ -10,7 +10,7 @@ import { UserPlus, RefreshCw, XCircle, Pencil } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 
-const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }];
+const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }, { value: "collaboratore", label: "Collaboratore" }];
 const fmt = (iso) => { if (!iso) return "—"; try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 const STATUS = {
   member_active: ["green", "Attivo"], member_inactive: ["gray", "Accesso disattivato"],

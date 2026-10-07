@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import api from "@/lib/api";
 import CompanyDialog from "@/components/CompanyDialog";
+import { useCan } from "@/lib/perms";
 
 const FASI = ["prospect", "contattato", "proposta_inviata", "in_trattativa", "confermato", "perso"];
 const FASE_LABEL = { prospect: "Prospect", contattato: "Contattato", proposta_inviata: "Proposta inviata", in_trattativa: "In trattativa", confermato: "Confermato", perso: "Perso" };
@@ -17,6 +18,7 @@ const FASE_ACCENT = { prospect: "border-t-slate-300", contattato: "border-t-sky-
 const TIPO_LABEL = { sponsor: "Sponsor", partner: "Partner", fornitore: "Fornitore", prospect: "Prospect" };
 
 export default function SponsorsPartners() {
+  const perm = useCan("sponsor");
   const { items: deals, loading, create, update, remove, setItems } = useCollection("/deals");
   const { items: companies, setItems: setCompanies } = useCollection("/companies");
   const { items: events } = useCollection("/events");
@@ -68,7 +70,7 @@ export default function SponsorsPartners() {
       <PageHeader
         title="Sponsor & Partner"
         subtitle="Pipeline commerciale per sponsor, partner e fornitori"
-        action={<PrimaryButton onClick={() => { setEditing(null); setOpen(true); }} data-testid="add-deal-button"><Plus className="w-4 h-4 mr-1.5" />Nuova trattativa</PrimaryButton>}
+        action={perm.create ? <PrimaryButton onClick={() => { setEditing(null); setOpen(true); }} data-testid="add-deal-button"><Plus className="w-4 h-4 mr-1.5" />Nuova trattativa</PrimaryButton> : null}
       />
 
       {eventFilter !== "all" && (

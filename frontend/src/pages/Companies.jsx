@@ -12,11 +12,13 @@ import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import CompanyDialog from "@/components/CompanyDialog";
 import CompanyDetailDialog from "@/components/CompanyDetailDialog";
+import { useCan } from "@/lib/perms";
 
 const TIPO_LABEL = { azienda: "Azienda", prospect: "Prospect", fornitore: "Fornitore", sponsor: "Sponsor", partner: "Partner", media: "Media", istituzione: "Istituzione" };
 const TIPO_COLOR = { azienda: "tiffany", prospect: "orange", fornitore: "blue", sponsor: "green", partner: "green", media: "blue", istituzione: "gray" };
 
 export default function Companies() {
+  const perm = useCan("aziende");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -44,7 +46,7 @@ export default function Companies() {
   return (
     <div className="animate-fade-up">
       <PageHeader title="Aziende" subtitle="Anagrafica unica: sponsor, partner, media, fornitori, prospect e istituzioni"
-        action={<PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-company-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi azienda</PrimaryButton>} />
+        action={perm.create ? <PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-company-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi azienda</PrimaryButton> : null} />
       <div className="mb-4 relative w-full sm:w-72">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <Input className="pl-9" placeholder="Cerca aziende..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-company-input" />

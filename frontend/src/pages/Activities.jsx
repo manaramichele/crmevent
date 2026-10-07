@@ -50,7 +50,7 @@ export default function Activities() {
     <EntityManager
       title="Attività" subtitle="Task, chiamate, email e meeting"
       endpoint="/activities" fields={fields} columns={columns(events, persons)}
-      entityLabel="attività" testid="activity" searchKeys={["titolo", "tipo"]} onSaved={onSaved}
+      entityLabel="attività" testid="activity" section="attivita" searchKeys={["titolo", "tipo"]} onSaved={onSaved}
     />
   );
 }

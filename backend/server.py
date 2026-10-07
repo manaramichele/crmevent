@@ -15,7 +15,7 @@ import contextlib
 from collections import defaultdict
 import support_service
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import jwt
 import bcrypt
@@ -28,6 +28,7 @@ from pydantic import BaseModel, EmailStr, model_validator
 
 import asyncio
 import email_utils
+import permissions as P
 import storage_utils
 import gcal_utils
 import brevo_funnel
@@ -167,7 +168,84 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
         return {**user, "org_id": PLATFORM_ORG_ID, "org_role": "superadmin",
                 "acting_org": PLATFORM_ORG_ID, "platform_scope": True}
     org_id, org_role = await _resolve_active_org(request, user)
-    return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id}
+    perm = await _enforce_perm(request, user, org_id, org_role)
+    return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id, "perm": perm}
+
+
+# Collezioni con id di oggetto collegato a un evento: (param path, collezione, campo evento)
+_CRUD_EVENT_COLL = {"deals": "deals", "staff": "staff", "teams": "teams", "shifts": "shifts",
+                    "maps": "event_maps", "activities": "activities", "followups": "followups",
+                    "lodgings": "lodgings", "meals": "meals"}
+_OBJ_EVENT_PARAMS = {"task_id": ("pipeline_tasks", "event_id"), "cat_id": ("pipeline_categories", "event_id"),
+                     "version_id": ("briefing_versions", "evento_id"), "aid": ("availabilities", "evento_id")}
+
+
+async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str) -> dict:
+    """Unico punto di controllo permessi per sezione/azione/evento (server-side, fail-closed)."""
+    if org_role in ("admin_org", "superadmin"):
+        return {"admin": True, "event_ids": None}
+    mem = await db.memberships.find_one({"user_id": user["user_id"], "org_id": org_id, "active": True},
+                                        {"_id": 0, "role": 1, "permissions": 1}) or {"role": org_role}
+    eff = P.effective(mem)
+    if eff.get("admin"):
+        return {"admin": True, "event_ids": None}
+    route = request.scope.get("route")
+    tpl = getattr(route, "path", "") or ""
+    tpl = tpl[4:] if tpl.startswith("/api") else tpl
+    secs, action = P.route_rule(tpl, request.method)
+    if secs is None:
+        raise HTTPException(status_code=403, detail="Funzione riservata all'Admin Organizzatore")
+    if not P.allows(eff, secs, action):
+        raise HTTPException(status_code=403, detail="Non hai i permessi per questa operazione")
+    ids = None if eff["events"] == "all" else list(eff["events"])
+    perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids}
+    if ids is None:
+        return perm
+    pp = request.path_params
+    nf = HTTPException(status_code=404, detail="Elemento non trovato")
+    eid = pp.get("event_id") or request.query_params.get("evento_id") or request.query_params.get("event_id")
+    if eid and eid not in ids:
+        raise nf
+    seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
+    checks = []
+    if "item_id" in pp:
+        if seg == "events" and pp["item_id"] not in ids:
+            raise nf
+        if seg in _CRUD_EVENT_COLL:
+            checks.append((_CRUD_EVENT_COLL[seg], "evento_id", "id", pp["item_id"]))
+    if "rec_id" in pp and seg in ("activities", "followups"):
+        checks.append((seg, "evento_id", "id", pp["rec_id"]))
+    if "gruppo_id" in pp:
+        checks.append(("lodgings" if request.query_params.get("tipo") == "lodging" else "meals", "evento_id", "gruppo_id", pp["gruppo_id"]))
+    for k, (coll, field) in _OBJ_EVENT_PARAMS.items():
+        if k in pp:
+            checks.append((coll, field, "id", pp[k]))
+    for coll, field, key, val in checks:
+        doc = await db[coll].find_one({"org_id": org_id, key: val}, {"_id": 0, field: 1})
+        if doc and doc.get(field) and doc[field] not in ids:
+            raise nf
+    return perm
+
+
+def _can(user: dict, section: str, action: str = "view") -> bool:
+    p = user.get("perm") or {"admin": True}
+    return P.allows(p, (section,), action)
+
+
+def _ev_ids(user: dict):
+    return (user.get("perm") or {}).get("event_ids")
+
+
+def _assert_ev_allowed(user: dict, eid: Optional[str]) -> None:
+    ids = _ev_ids(user)
+    if ids is not None and eid and eid not in ids:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+
+
+def _ev_scope(user: dict, field: str = "evento_id") -> dict:
+    """Filtro Mongo per utenti limitati a eventi selezionati (record senza evento restano visibili)."""
+    ids = _ev_ids(user)
+    return {} if ids is None else {field: {"$in": ids + [None, ""]}}
 
 
 async def require_org_admin(request: Request, user: dict = Depends(get_current_user)) -> dict:
@@ -390,10 +468,12 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     # Operational member (global role admin/user/member) — access via memberships.
     mems = await db.memberships.find({"user_id": u["user_id"], "active": True}, {"_id": 0}).to_list(200)
     orgs_out = []
+    perm_by_org = {}
     for m in mems:
         org = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0})
         if not org or org.get("status") == "disabled":
             continue
+        perm_by_org[org["id"]] = P.effective(m)
         orgs_out.append({"org_id": org["id"], "nome": org.get("nome"), "type": org.get("type", "cliente"),
                          "role": m["role"], "status": org.get("status", "active")})
     base["organizations"] = orgs_out
@@ -408,6 +488,7 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base["active_org_id"] = chosen["org_id"]
     base["org_name"] = chosen["nome"]
     base["org_role"] = chosen["role"]
+    base["permissions"] = perm_by_org.get(chosen["org_id"])
     base["org_type"] = chosen["type"]
     base["subscription"] = _sub_summary(org)
     return base
@@ -1094,6 +1175,10 @@ def crud_routes(path, coll, model, org_scoped=True):
     @api.get(f"/{path}", name=f"list_{path}")
     async def _l(evento_id: Optional[str] = None, user: dict = Depends(require_admin)):
         q = oq(user)
+        if coll == "events" and _ev_ids(user) is not None:
+            q["id"] = {"$in": _ev_ids(user)}
+        elif coll in _CRUD_EVENT_COLL.values():
+            q.update(_ev_scope(user))
         if evento_id:
             q["evento_id"] = evento_id
         return await _list(coll, q)
@@ -1102,6 +1187,10 @@ def crud_routes(path, coll, model, org_scoped=True):
     async def _c(body: model, user: dict = Depends(require_admin)):
         data = body.model_dump()
         data["org_id"] = user["org_id"]
+        if coll == "events" and _ev_ids(user) is not None:
+            raise HTTPException(status_code=403, detail="Puoi operare solo sugli eventi assegnati: non puoi creare nuovi eventi")
+        if coll != "events":
+            _assert_ev_allowed(user, data.get("evento_id"))
         if coll == "events":
             await _assert_can_create_event(user["org_id"])
             data.setdefault("credit_state", "preparazione")
@@ -1125,6 +1214,7 @@ def crud_routes(path, coll, model, org_scoped=True):
         clean = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
         clean["updated_at"] = now_iso()
         await _assert_org_operational(user["org_id"])
+        _assert_ev_allowed(user, clean.get("evento_id"))
         if coll != "events":
             if clean.get("evento_id"):
                 await _assert_event_operational(user["org_id"], clean["evento_id"])
@@ -1249,6 +1339,7 @@ async def _resolve_persons(b: BulkAssignIn, org_id: str) -> list:
 
 @api.post("/lodgings/bulk")
 async def lodgings_bulk(b: BulkAssignIn, admin: dict = Depends(require_admin)):
+    _assert_ev_allowed(admin, b.evento_id)
     persons = await _resolve_persons(b, admin["org_id"])
     if not persons:
         raise HTTPException(status_code=400, detail="Nessuna persona selezionata")
@@ -1260,6 +1351,7 @@ async def lodgings_bulk(b: BulkAssignIn, admin: dict = Depends(require_admin)):
 
 @api.post("/meals/bulk")
 async def meals_bulk(b: BulkAssignIn, admin: dict = Depends(require_admin)):
+    _assert_ev_allowed(admin, b.evento_id)
     persons = await _resolve_persons(b, admin["org_id"])
     if not persons:
         raise HTTPException(status_code=400, detail="Nessuna persona selezionata")
@@ -1415,6 +1507,7 @@ class CopyServicesIn(BaseModel):
 
 @api.post("/hospitality/copy")
 async def hospitality_copy(b: CopyServicesIn, admin: dict = Depends(require_admin)):
+    _assert_ev_allowed(admin, b.evento_id)
     oid = admin["org_id"]
     do_lod = b.what in ("ospitalita", "both")
     do_meal = b.what in ("pasti", "both")
@@ -1565,6 +1658,7 @@ class StaffQuickAddIn(BaseModel):
 
 @api.post("/staff/quick-add")
 async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_admin)):
+    _assert_ev_allowed(admin, body.evento_id)
     if not body.evento_id:
         raise HTTPException(status_code=400, detail="Evento mancante")
     if not (body.nome or "").strip():
@@ -1938,10 +2032,13 @@ async def onboarding_set_state(body: OnboardingStateIn, user: dict = Depends(get
 async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(require_admin)):
     ev_q = oq(admin) if not evento_id else oq(admin, id=evento_id)
     rel_q = oq(admin) if not evento_id else oq(admin, evento_id=evento_id)
+    if _ev_ids(admin) is not None and not evento_id:
+        ev_q["id"] = {"$in": _ev_ids(admin)}
+        rel_q.update(_ev_scope(admin))
     events = await db.events.find(ev_q, {"_id": 0}).to_list(5000)
-    companies = await db.companies.find(oq(admin), {"_id": 0}).to_list(5000)
-    persons = await db.persons.find(oq(admin), {"_id": 0}).to_list(5000)
-    deals = await db.deals.find(rel_q, {"_id": 0}).to_list(5000)
+    companies = await db.companies.find(oq(admin), {"_id": 0}).to_list(5000) if _can(admin, "aziende") else []
+    persons = await db.persons.find(oq(admin), {"_id": 0}).to_list(5000) if (_can(admin, "anagrafiche") or _can(admin, "staff")) else []
+    deals = await db.deals.find(rel_q, {"_id": 0}).to_list(5000) if _can(admin, "sponsor") else []
     staff = await db.staff.find(rel_q, {"_id": 0}).to_list(5000)
     teams = await db.teams.find(rel_q, {"_id": 0}).to_list(5000)
     shifts = await db.shifts.find(rel_q, {"_id": 0}).to_list(5000)
@@ -1998,7 +2095,9 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
 @api.get("/notifications")
 async def notifications(admin: dict = Depends(require_admin)):
     today = datetime.now(timezone.utc).date().isoformat()
-    fus = await db.followups.find(oq(admin, stato={"$ne": "completato"}), {"_id": 0}).to_list(3000)
+    if not _can(admin, "followup"):
+        return {"count": 0, "items": []}
+    fus = await db.followups.find(oq(admin, stato={"$ne": "completato"}, **_ev_scope(admin)), {"_id": 0}).to_list(3000)
     items = []
     for f in fus:
         sc = (f.get("scadenza") or "")[:10]
@@ -2017,11 +2116,15 @@ async def search(q: str, admin: dict = Depends(require_admin)):
     rx = {"$regex": q, "$options": "i"}
     oid = admin["org_id"]
     results = []
-    for e in await db.events.find({"org_id": oid, "nome": rx}, {"_id": 0}).limit(6).to_list(6):
+    ev_q = {"org_id": oid, "nome": rx}
+    if _ev_ids(admin) is not None:
+        ev_q["id"] = {"$in": _ev_ids(admin)}
+    for e in (await db.events.find(ev_q, {"_id": 0}).limit(6).to_list(6) if _can(admin, "eventi") else []):
         results.append({"tipo": "evento", "id": e["id"], "label": e["nome"], "sub": e.get("citta", "")})
-    for c in await db.companies.find({"org_id": oid, "nome": rx}, {"_id": 0}).limit(6).to_list(6):
+    for c in (await db.companies.find({"org_id": oid, "nome": rx}, {"_id": 0}).limit(6).to_list(6) if _can(admin, "aziende") else []):
         results.append({"tipo": "azienda", "id": c["id"], "label": c["nome"], "sub": c.get("settore", "")})
-    for p in await db.persons.find({"org_id": oid, "$or": [{"nome": rx}, {"cognome": rx}, {"email": rx}]}, {"_id": 0}).limit(6).to_list(6):
+    can_p = _can(admin, "anagrafiche") or _can(admin, "staff")
+    for p in (await db.persons.find({"org_id": oid, "$or": [{"nome": rx}, {"cognome": rx}, {"email": rx}]}, {"_id": 0}).limit(6).to_list(6) if can_p else []):
         results.append({"tipo": "persona", "id": p["id"], "label": f"{p['nome']} {p.get('cognome','')}".strip(), "sub": p.get("ruolo", "")})
     return {"results": results}
 
@@ -3284,11 +3387,103 @@ async def delete_lead(lead_id: str, admin: dict = Depends(require_superadmin)):
 
 
 # ==================== Organizations, memberships & invites management ====================
-ORG_ROLE_LABELS = {"admin_org": "Admin Organizzazione", "user": "Utente"}
+ORG_ROLE_LABELS = {"admin_org": "Admin Organizzazione", "user": "Utente", "collaboratore": "Collaboratore"}
 
 
 def _norm_role(r: str) -> str:
-    return "admin_org" if r == "admin_org" else "user"
+    return r if r in ("admin_org", "collaboratore") else "user"
+
+
+# ---------- Permessi per organizzazione (gestiti dall'Admin Organizzatore) ----------
+class PermUpdateIn(BaseModel):
+    role: Optional[str] = None
+    sections: Optional[dict] = None
+    events: Optional[Any] = None
+    reset: bool = False
+
+
+def _perm_summary(role: str, perm: dict) -> str:
+    if role == "admin_org":
+        return "Admin Organizzatore: accesso completo"
+    secs = perm.get("sections") or {}
+    parts = [f"{lbl}: {'/'.join(P.ACTION_LABELS[a] for a in secs.get(k, []))}" for k, lbl in P.SECTIONS if secs.get(k)]
+    ev = perm.get("events")
+    evs = "tutti gli eventi" if ev == "all" else f"{len(ev or [])} eventi selezionati"
+    return f"{P.ROLES.get(role, role)} · {evs} · " + ("; ".join(parts) or "nessuna sezione")
+
+
+@api.get("/org/permissions")
+async def org_permissions(admin: dict = Depends(require_org_admin)):
+    oid = admin["org_id"]
+    mems = await db.memberships.find({"org_id": oid}, {"_id": 0}).to_list(1000)
+    users = {u["user_id"]: u for u in await db.users.find(
+        {"user_id": {"$in": [m["user_id"] for m in mems]}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}).to_list(1000)}
+    members = []
+    for m in mems:
+        u = users.get(m["user_id"]) or {}
+        if u.get("role") == "superadmin":
+            continue
+        eff = P.effective(m)
+        members.append({"user_id": m["user_id"], "name": u.get("name"), "email": u.get("email"),
+                        "role": m["role"], "role_label": P.ROLES.get(m["role"], m["role"]),
+                        "active": m.get("active", True), "is_self": m["user_id"] == admin["user_id"],
+                        "custom": bool(m.get("permissions")), "permissions": eff})
+    members.sort(key=lambda x: ((x["name"] or x["email"] or "").lower()))
+    events = await db.events.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).sort("data_inizio", -1).to_list(2000)
+    return {"sections": [{"key": k, "label": l} for k, l in P.SECTIONS], "actions": P.ACTION_LABELS,
+            "roles": P.ROLES, "defaults": {r: P.default_permissions(r) for r in ("user", "collaboratore")},
+            "members": members, "events": events}
+
+
+@api.put("/org/permissions/{target_id}")
+async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict = Depends(require_org_admin)):
+    oid = admin["org_id"]
+    if target_id == admin["user_id"]:
+        raise HTTPException(status_code=400, detail="Non puoi modificare il tuo ruolo o i tuoi permessi")
+    m = await db.memberships.find_one({"org_id": oid, "user_id": target_id}, {"_id": 0})
+    tgt = await db.users.find_one({"user_id": target_id}, {"_id": 0, "email": 1, "name": 1, "role": 1})
+    if not m or not tgt or tgt.get("role") == "superadmin":
+        raise HTTPException(status_code=404, detail="Utente non trovato nell'organizzazione")
+    org = await _org_or_404(oid)
+    new_role = m["role"]
+    if body.role is not None:
+        if body.role not in P.ROLES:
+            raise HTTPException(status_code=400, detail="Ruolo non valido")
+        new_role = body.role
+    if m["role"] == "admin_org" and new_role != "admin_org":
+        await _guard_last_admin(org, target_id)
+    if new_role == "admin_org" or body.reset:
+        new_perm = {}
+    elif body.sections is not None or body.events is not None:
+        cur = P.effective({**m, "role": new_role})
+        raw = {"sections": body.sections if body.sections is not None else cur["sections"],
+               "events": body.events if body.events is not None else cur["events"]}
+        new_perm = P.normalize_permissions(raw, new_role)
+        if new_perm["events"] != "all":
+            valid = set(await db.events.distinct("id", {"org_id": oid, "id": {"$in": new_perm["events"]}}))
+            new_perm["events"] = [e for e in new_perm["events"] if e in valid]
+    else:
+        new_perm = {} if new_role != m["role"] else (m.get("permissions") or {})
+    before = {"role": m["role"], "permissions": P.effective(m)}
+    after_m = {**m, "role": new_role, "permissions": new_perm}
+    after = {"role": new_role, "permissions": P.effective(after_m)}
+    if before == after and (m.get("permissions") or {}) == new_perm:
+        return {"ok": True, "changed": False}
+    await db.memberships.update_one({"org_id": oid, "user_id": target_id},
+                                    {"$set": {"role": new_role, "permissions": new_perm, "updated_at": now_iso()}})
+    detail = f"Prima: {_perm_summary(before['role'], before['permissions'])} → Dopo: {_perm_summary(after['role'], after['permissions'])}"
+    await record_audit(admin, "permissions_changed", org_id=oid, org_name=org.get("nome"),
+                       target_email=tgt.get("email"), target_name=tgt.get("name"), detail=detail,
+                       meta={"target_user_id": target_id, "before": before, "after": after})
+    return {"ok": True, "changed": True, "permissions": after["permissions"], "role": new_role}
+
+
+@api.get("/org/permissions/audit")
+async def org_permissions_audit(admin: dict = Depends(require_org_admin)):
+    rows = await db.audit_logs.find(
+        {"org_id": admin["org_id"], "action": {"$in": ["permissions_changed", "member_role_changed"]}},
+        {"_id": 0, "meta": 0}).sort("created_at", -1).to_list(200)
+    return {"items": rows}
 
 
 async def _org_or_404(org_id: str) -> dict:
@@ -3446,7 +3641,7 @@ async def update_org_member(org_id: str, target_id: str, body: MemberUpdateIn, u
         new_role = _norm_role(body.role)
         if m["role"] == "admin_org" and new_role != "admin_org":
             await _guard_last_admin(org, target_id)
-        upd["role"] = new_role; changes.append(f"ruolo: {ORG_ROLE_LABELS[m['role']]} → {ORG_ROLE_LABELS[new_role]}"); action = "member_role_changed"
+        upd["role"] = new_role; upd["permissions"] = {}; changes.append(f"ruolo: {ORG_ROLE_LABELS[m['role']]} → {ORG_ROLE_LABELS[new_role]}"); action = "member_role_changed"
     if body.active is not None and body.active != m.get("active", True):
         if not body.active and m["role"] == "admin_org":
             await _guard_last_admin(org, target_id)
@@ -5332,6 +5527,7 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
 AUDIT_ACTION_LABELS = {
+    "permissions_changed": "Modifica permessi",
     "org_access": "Accesso organizzazione",
     "org_switch": "Cambio organizzazione",
     "org_created": "Creazione organizzazione",
@@ -11442,6 +11638,8 @@ async def pipeline_attention(limit: int = 10, user: dict = Depends(require_admin
     org_id = user["org_id"]
     pipelines = await db.event_pipelines.find({"org_id": org_id, "active": True}, {"_id": 0, "event_id": 1}).to_list(5000)
     event_ids = [p["event_id"] for p in pipelines]
+    if _ev_ids(user) is not None:
+        event_ids = [e for e in event_ids if e in _ev_ids(user)]
     if not event_ids:
         return {"items": [], "total": 0}
     events = await db.events.find({"org_id": org_id, "id": {"$in": event_ids}}, {"_id": 0, "id": 1, "nome": 1}).to_list(5000)

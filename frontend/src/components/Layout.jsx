@@ -4,8 +4,9 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, UserCog, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, KeyRound,
 } from "lucide-react";
+import { can, isOrgAdmin } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 import ActivationGate from "@/components/ActivationGate";
@@ -13,21 +14,23 @@ import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
 
 const ORG_NAV = [
-  { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard" },
-  { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi" },
-  { to: "/staff-volontari", label: "Staff / Volontari", icon: UserCog, id: "staff-volontari" },
-  { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende" },
-  { to: "/persone", label: "Anagrafiche", icon: Users, id: "persone" },
-  { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita" },
-  { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor" },
-  { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita" },
-  { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup" },
-  { to: "/account", label: "Account e abbonamento", icon: CreditCard, id: "account" },
-  { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni" },
+  { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard", perm: "dashboard" },
+  { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi", perm: "eventi" },
+  { to: "/staff-volontari", label: "Staff / Volontari", icon: UserCog, id: "staff-volontari", perm: "staff" },
+  { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende", perm: "aziende" },
+  { to: "/persone", label: "Anagrafiche", icon: Users, id: "persone", perm: "anagrafiche" },
+  { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita", perm: "ospitalita" },
+  { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor", perm: "sponsor" },
+  { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita", perm: "attivita" },
+  { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
+  { to: "/account", label: "Account e abbonamento", icon: CreditCard, id: "account", perm: "admin" },
+  { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
+  { to: "/permessi", label: "Permessi", icon: KeyRound, id: "permessi", perm: "admin" },
 ];
 
-// Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing.
-const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account");
+// Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
+const SUPER_ORG_NAV = ORG_NAV.filter((n) => n.id !== "account" && n.id !== "permessi");
+const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
 
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
@@ -247,7 +250,7 @@ export default function Layout({ children }) {
 
   const navGroups = isSuper
     ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }, { title: "Marketing CRMEvent — Piattaforma", items: MARKETING_NAV }]
-    : [{ items: ORG_NAV }];
+    : [{ items: orgNavFor(user) }];
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !actingOrgId && !isPlatformRoute;
