@@ -6203,6 +6203,13 @@ def _fic_entity(org: dict) -> dict:
     return ent
 
 
+# Campi fiscali FIC API v2 (IssuedDocument / IssuedDocumentItemsListItem) per forzare
+# documento SENZA rivalsa INPS, cassa previdenziale e ritenute (altrimenti FIC applica i default aziendali).
+FIC_NO_WITHHOLDING_DOC = {"rivalsa": 0, "cassa": 0, "cassa2": 0, "withholding_tax": 0,
+                          "withholding_tax_taxable": 0, "other_withholding_tax": 0, "use_gross_prices": False}
+FIC_NO_WITHHOLDING_ITEM = {"apply_withholding_taxes": False}
+
+
 def _invoice_line_name(inv: dict, org: dict) -> str:
     """Descrizione riga fattura: ricariche crediti vs abbonamento (coerente FIC reale/simulazione)."""
     if inv.get("descrizione"):
@@ -6226,13 +6233,14 @@ async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
     vat_id = await _fic_vat_id(cid, token)
     a = _derive_amounts(inv)
     net = a["imponibile"] if a["imponibile"] is not None else 0
-    line = {"name": _invoice_line_name(inv, org), "qty": 1, "net_price": net}
+    line = {"name": _invoice_line_name(inv, org), "qty": 1, "net_price": net, **FIC_NO_WITHHOLDING_ITEM}
     if vat_id is not None:
         line["vat"] = {"id": vat_id}
     else:
         line["vat"] = {"value": a["aliquota_iva"]}
     body = {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
-                     "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"}}}
+                     "items_list": [line], "currency": {"id": "EUR"}, "language": {"code": "it"},
+                     **FIC_NO_WITHHOLDING_DOC}}
     # Metodo di pagamento (solo emissione reale): pagamento già incassato via Stripe/carta.
     # L'account di pagamento FIC NON viene hardcodato: usato solo se FIC_PAYMENT_ACCOUNT_ID è configurato.
     if not dry_run:
@@ -6325,14 +6333,14 @@ def _fic_build_payload(org: dict, amounts: dict, line_name: Optional[str] = None
     Include anche metodo di pagamento e incasso (pagato via Stripe) così l'anteprima è completa."""
     net = amounts["imponibile"] if amounts["imponibile"] is not None else 0
     line = {"name": line_name or f"Abbonamento CRMEvent ({org.get('nome')})", "qty": 1,
-            "net_price": net, "vat": {"value": amounts["aliquota_iva"]}}
+            "net_price": net, "vat": {"value": amounts["aliquota_iva"]}, **FIC_NO_WITHHOLDING_ITEM}
     today = datetime.now(timezone.utc).date().isoformat()
     pay = {"amount": amounts.get("totale") or net, "due_date": today, "paid_date": today, "status": "paid"}
     if FIC_PAYMENT_ACCOUNT_ID.isdigit():
         pay["payment_account"] = {"id": int(FIC_PAYMENT_ACCOUNT_ID)}
     return {"data": {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org),
                      "items_list": [line], "currency": {"id": (amounts.get("valuta") or "eur").upper()},
-                     "language": {"code": "it"},
+                     "language": {"code": "it"}, **FIC_NO_WITHHOLDING_DOC,
                      "payment_method": {"name": FIC_PAYMENT_METHOD_NAME},
                      "payments_list": [pay]}}
 
