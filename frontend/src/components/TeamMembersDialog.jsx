@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
-import { MODAL, MODAL_TABLE_LAYOUT } from "@/lib/modal";
+import { MODAL } from "@/lib/modal";
 import { useWheelScroll } from "@/lib/useWheelScroll";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
@@ -19,9 +19,25 @@ const displayName = (p) => `${p?.cognome || ""} ${p?.nome || ""}`.trim() || (p?.
 const hasName = (p) => !!displayName(p);
 const emptyNew = { nome: "", cognome: "", cellulare: "", email: "", tipo: "staff" };
 
-export default function TeamMembersDialog({ team, open, onOpenChange, persons = [], staffLinks = [], events = [], onReloadStaff, onOpenPerson }) {
+const RINUNCIA = ["rinunciato", "non_disponibile"];
+
+// Conteggi Team (unica regola, usata da tabella e scheda): Staff unici + Team Leader contato una sola volta;
+// volontari assegnati = volontari non rinunciatari con questo team.
+export function teamCounts(team, staffLinks = []) {
+  const links = (staffLinks || []).filter((l) => l.team_id === team.id && l.persona_id);
+  const staff = new Set(links.filter((l) => l.categoria !== "volontario").map((l) => l.persona_id));
+  const volAll = new Set(links.filter((l) => l.categoria === "volontario").map((l) => l.persona_id));
+  const vol = new Set(links.filter((l) => l.categoria === "volontario" && !RINUNCIA.includes(l.stato)).map((l) => l.persona_id));
+  if (team.responsabile_id && !volAll.has(team.responsabile_id)) staff.add(team.responsabile_id);
+  return { staff, vol };
+}
+
+const Info = ({ label, value, testid }) => (
+  <div className="min-w-0"><div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div><div className="text-sm text-slate-800 break-words" data-testid={testid}>{value || "—"}</div></div>
+);
+
+export default function TeamMembersDialog({ team, open, onOpenChange, persons = [], staffLinks = [], events = [], onReloadStaff, onOpenPerson, onEdit, canEdit = true }) {
   const [shifts, setShifts] = useState([]);
-  const [tipoFilter, setTipoFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [addQuery, setAddQuery] = useState("");
@@ -60,7 +76,11 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
     }).filter((m) => hasName(m));
   }, [team, staffLinks, persons, shifts]);
 
-  const totalTeam = members.length;
+  const counts = useMemo(() => (team ? teamCounts(team, staffLinks) : { staff: new Set(), vol: new Set() }), [team, staffLinks]);
+  const leader = team?.responsabile_id ? persons.find((p) => p.id === team.responsabile_id) : null;
+  const req = team?.volontari_richiesti;
+  const miss = req == null ? null : Math.max(req - counts.vol.size, 0);
+  const extra = req == null ? 0 : Math.max(counts.vol.size - req, 0);
 
   const columns = [
     { key: "cognome", label: "Cognome e Nome", sortAccessor: (r) => `${r.cognome} ${r.nome}`.trim() },
@@ -72,15 +92,15 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
 
   const filtered = useMemo(() => {
     const ql = query.trim().toLowerCase();
-    return members.filter((m) => {
-      if (tipoFilter === "staff" && m.tipo !== "Staff") return false;
-      if (tipoFilter === "volontari" && m.tipo !== "Volontario") return false;
-      if (ql && !(`${m.nome} ${m.cognome} ${m.cellulare}`.toLowerCase().includes(ql))) return false;
-      return true;
-    });
-  }, [members, tipoFilter, query]);
-  const sorted = sortRows(filtered, sort, columns);
-  const isFiltering = tipoFilter !== "all" || query.trim() !== "";
+    const list = members.filter((m) => !ql || `${m.nome} ${m.cognome} ${m.cellulare}`.toLowerCase().includes(ql));
+    // Team Leader non assegnato come presenza: compare comunque tra lo Staff (contato una sola volta)
+    if (leader && !members.some((m) => m.id === leader.id) && (!ql || `${leader.nome} ${leader.cognome}`.toLowerCase().includes(ql))) {
+      list.push({ id: leader.id, nome: leader.nome || "", cognome: leader.cognome || "", cellulare: leader.cellulare || "", tipo: "Staff", ruolo: "", turno: "", isLeader: true, link: null });
+    }
+    return list;
+  }, [members, query, leader]);
+  const sortedStaff = sortRows(filtered.filter((m) => m.tipo === "Staff"), sort, columns);
+  const sortedVol = sortRows(filtered.filter((m) => m.tipo === "Volontario"), sort, columns);
 
   // Candidati: Staff + Volontari dell'evento non ancora in questo team, con nominativo,
   // ordinati Cognome -> Nome (A-Z, case-insensitive).
@@ -133,18 +153,31 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`${MODAL.table} ${MODAL_TABLE_LAYOUT}`} data-testid="team-members-dialog">
+      <DialogContent className={`${MODAL.table} overflow-y-auto`} data-testid="team-members-dialog">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="font-display flex items-center gap-2"><Users className="w-5 h-5 text-tiffany-active" />{team.nome}</DialogTitle>
-          <DialogDescription>{eventName}</DialogDescription>
+          <div className="flex items-start justify-between gap-3 pr-6">
+            <div className="min-w-0">
+              <DialogTitle className="font-display flex items-center gap-2"><Users className="w-5 h-5 text-tiffany-active" /><span data-testid="team-card-name">{team.nome}</span></DialogTitle>
+              <DialogDescription data-testid="team-card-event">{eventName}</DialogDescription>
+            </div>
+            {canEdit && onEdit && <Button size="sm" variant="outline" onClick={() => onEdit(team)} data-testid="team-card-edit">Modifica</Button>}
+          </div>
         </DialogHeader>
 
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-xl border border-slate-200 p-3 shrink-0" data-testid="team-card-details">
+          <Info label="Team Leader" value={leader ? `${leader.nome || ""} ${leader.cognome || ""}`.trim() : "Da assegnare"} testid="team-card-leader" />
+          <Info label="Area" value={team.area} testid="team-card-area" />
+          <Info label="Luogo operativo" value={team.luogo_operativo} testid="team-card-luogo" />
+          <Info label="Punto di ritrovo" value={team.punto_ritrovo} testid="team-card-ritrovo" />
+          <Info label="Volontari richiesti" value={req == null ? "Non indicato" : String(req)} testid="team-card-req" />
+          <Info label="Volontari assegnati" value={String(counts.vol.size)} testid="team-card-assigned" />
+          <div className="min-w-0"><div className="text-[11px] uppercase tracking-wide text-slate-400">Volontari mancanti</div>
+            <div className="text-sm font-semibold" data-testid="team-card-missing">{miss == null ? "—" : miss > 0 ? <span className="text-red-600">{miss}</span> : <span className="text-emerald-600">0 · Completo</span>}{extra > 0 && <span className="ml-1 text-amber-700">(+{extra} esubero)</span>}</div></div>
+          <Info label="Staff" value={String(counts.staff.size)} testid="team-card-staff-count" />
+          {(team.descrizione || team.note) && <div className="col-span-2 md:col-span-4 grid gap-3 md:grid-cols-2"><Info label="Descrizione" value={team.descrizione} /><Info label="Note" value={team.note} /></div>}
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 mt-1 shrink-0">
-          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
-            {[["all", "Tutti"], ["staff", "Staff"], ["volontari", "Volontari"]].map(([v, l]) => (
-              <button key={v} onClick={() => setTipoFilter(v)} className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tipoFilter === v ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`} data-testid={`team-filter-${v}`}>{l}</button>
-            ))}
-          </div>
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input className="pl-9 h-9" placeholder="Cerca persona..." value={query} onChange={(e) => setQuery(e.target.value)} data-testid="team-members-search" />
@@ -199,9 +232,11 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
           </Popover>
         </div>
 
-        <div className="mt-3 bg-white border border-slate-200 rounded-xl flex flex-col min-h-0 flex-1 overflow-hidden">
-          <div className="overflow-auto flex-1 min-h-0">
-            <table className="w-full text-sm" data-testid="team-members-table">
+        {[["staff", "Staff del Team", sortedStaff, counts.staff.size], ["volontari", "Volontari del Team", sortedVol, counts.vol.size]].map(([key, title, list, n]) => (
+        <div key={key} className="mt-3 bg-white border border-slate-200 rounded-xl flex flex-col overflow-hidden shrink-0" data-testid={`team-card-${key}`}>
+          <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-sm font-semibold text-slate-700">{title} <span className="text-slate-400 font-normal">({n})</span></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid={`team-members-table-${key}`}>
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
                   {columns.map((c) => (
@@ -213,9 +248,9 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
                 </tr>
               </thead>
               <tbody>
-                {sorted.length === 0 ? (
-                  <tr><td colSpan={columns.length + 1} className="px-4 py-8 text-center text-slate-400" data-testid="team-members-empty">Nessun componente.</td></tr>
-                ) : sorted.map((m) => (
+                {list.length === 0 ? (
+                  <tr><td colSpan={columns.length + 1} className="px-4 py-6 text-center text-slate-400" data-testid={`team-members-empty-${key}`}>{key === "staff" ? "Nessuno Staff assegnato." : "Nessun volontario assegnato."}</td></tr>
+                ) : list.map((m) => (
                   <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50/80" data-testid={`team-member-row-${m.id}`}>
                     <td className="px-4 py-2.5">
                       <button onClick={() => onOpenPerson && onOpenPerson(m.id)} className="font-medium text-tiffany-active hover:underline text-left" data-testid={`team-member-open-${m.id}`}>{m.cognome} {m.nome}</button>
@@ -226,18 +261,15 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
                     <td className="px-4 py-2.5 text-slate-600">{m.ruolo || "—"}</td>
                     <td className="px-4 py-2.5 text-slate-600">{m.turno || "—"}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <Button variant="ghost" size="sm" className="h-8 text-slate-500 hover:text-red-500" onClick={() => removeMember(m)} disabled={busy} data-testid={`team-member-remove-${m.id}`}><X className="w-4 h-4 mr-1" />Rimuovi dal Team</Button>
+                      {m.link && canEdit && <Button variant="ghost" size="sm" className="h-8 text-slate-500 hover:text-red-500" onClick={() => removeMember(m)} disabled={busy} data-testid={`team-member-remove-${m.id}`}><X className="w-4 h-4 mr-1" />Rimuovi dal Team</Button>}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-50/70 border-t border-slate-200 text-sm font-semibold text-slate-700 shrink-0" data-testid="team-members-summary">
-            {isFiltering ? <span>Visualizzati: <span data-testid="team-count-visible">{sorted.length}</span> · Totale Team: <span data-testid="team-count-total">{totalTeam}</span></span>
-              : <span>Totale componenti Team: <span data-testid="team-count-total">{totalTeam}</span></span>}
-          </div>
         </div>
+        ))}
       </DialogContent>
     </Dialog>
   );

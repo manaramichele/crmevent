@@ -17,7 +17,7 @@ import { Plus, Pencil, Trash2, UserPlus, Search, Users } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
-import TeamMembersDialog from "@/components/TeamMembersDialog";
+import TeamMembersDialog, { teamCounts } from "@/components/TeamMembersDialog";
 import TeamSelect from "@/components/TeamSelect";
 import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 import { usePeople } from "@/lib/peopleStore";
@@ -262,8 +262,6 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
   );
 }
 
-const TEAM_RINUNCIA = ["rinunciato", "non_disponibile"];
-
 function TeamCoverage({ req, n, id }) {
   if (req === null || req === undefined) return <span className="text-xs text-slate-400" data-testid={`team-coverage-${id}`}>{n} assegnati · fabbisogno non indicato</span>;
   const miss = Math.max(req - n, 0);
@@ -291,7 +289,6 @@ export default function Persons({ mode = "anagrafiche" }) {
   const [editing, setEditing] = useState(null);
   const [invite, setInvite] = useState(null);
   const [rolesFor, setRolesFor] = useState(null);
-  const [teamMembersFor, setTeamMembersFor] = useState(null);
 
   const companyOpts = companies.map((c) => ({ value: c.id, label: c.nome }));
   const personFields = [
@@ -343,19 +340,15 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "volontari_richiesti", label: "Volontari richiesti", type: "number", placeholder: "Es. 20" },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
   ];
-  // Assegnati = volontari (non rinunciati) con questo team: stessa regola del backend (_team_coverage)
-  const assignedVol = (teamId) => new Set((staffLinks || []).filter((l) => l.team_id === teamId && l.categoria === "volontario" && !TEAM_RINUNCIA.includes(l.stato) && l.persona_id).map((l) => l.persona_id)).size;
+  // Conteggi da assegnazioni reali (teamCounts): stessa regola volontari del backend (_team_coverage)
   const teamCols = [
-    { key: "nome", label: "Team", render: (r) => <span className="font-medium text-slate-800">{r.nome}</span> },
-    { key: "evento_id", label: "Evento", render: (r) => eName(r.evento_id) }, { key: "area", label: "Area" },
+    { key: "nome", label: "Team", render: (r, h) => (
+      <button type="button" onClick={h?.openDetail} title="Apri la scheda del Team" data-testid={`team-open-${r.id}`}
+        className="font-semibold text-tiffany-fg underline decoration-tiffany/40 underline-offset-4 hover:decoration-tiffany hover:text-tiffany-active cursor-pointer text-left">{r.nome}</button>) },
+    { key: "evento_id", label: "Evento", render: (r) => eName(r.evento_id) },
     { key: "responsabile_id", label: "Team Leader", render: (r) => r.responsabile_id ? pName(r.responsabile_id) : <StatusBadge color="orange">Da assegnare</StatusBadge> },
-    { key: "luogo_operativo", label: "Luogo" },
-    { key: "volontari_richiesti", label: "Volontari", render: (r) => <TeamCoverage req={r.volontari_richiesti} n={assignedVol(r.id)} id={r.id} /> },
-    { key: "componenti", label: "Componenti", sortable: false, render: (r) => {
-        const named = new Set(rows.filter((p) => `${p.cognome || ""} ${p.nome || ""}`.trim() || p.email).map((p) => p.id));
-        const n = new Set((staffLinks || []).filter((l) => l.team_id === r.id && named.has(l.persona_id)).map((l) => l.persona_id)).size;
-        return <button onClick={() => setTeamMembersFor(r)} className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-2.5 py-1 text-xs font-semibold hover:bg-tiffany-light/70 whitespace-nowrap" data-testid={`team-members-btn-${r.id}`}><Users className="w-3.5 h-3.5" />Vedi componenti ({n})</button>;
-      } },
+    { key: "staff_count", label: "Staff", sortable: false, render: (r) => <span className="text-slate-700" data-testid={`team-staff-count-${r.id}`}>{teamCounts(r, staffLinks).staff.size}</span> },
+    { key: "volontari_richiesti", label: "Volontari", render: (r) => <TeamCoverage req={r.volontari_richiesti} n={teamCounts(r, staffLinks).vol.size} id={r.id} /> },
   ];
   const shiftFields = [
     { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts }, { name: "persona_id", label: "Persona (vuoto = scoperto)", type: "select", options: personOpts },
@@ -400,7 +393,11 @@ export default function Persons({ mode = "anagrafiche" }) {
           ))}
           <TabsContent value="team">
             <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
-              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="staff" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]} />
+              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="staff" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
+              renderDetail={(team, { close, edit }) => (
+                <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
+                  onReloadStaff={reload} onEdit={edit} canEdit={can(user, "staff", "edit")}
+                  onOpenPerson={(pid) => { close(); setDetailId(pid); }} />)} />
           </TabsContent>
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
@@ -419,9 +416,6 @@ export default function Persons({ mode = "anagrafiche" }) {
         onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={(p) => { setDetailId(null); setInvite(p); }} />}
       {invite && <InviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
       {rolesFor && <EventRolesDialog person={rolesFor} events={events} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
-      {teamMembersFor && <TeamMembersDialog team={teamMembersFor} open={!!teamMembersFor} onOpenChange={(o) => !o && setTeamMembersFor(null)}
-        persons={rows} staffLinks={staffLinks} events={events} onReloadStaff={reload}
-        onOpenPerson={(pid) => { setTeamMembersFor(null); setDetailId(pid); }} />}
     </div>
   );
 }

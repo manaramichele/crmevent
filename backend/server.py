@@ -198,15 +198,23 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     if not P.allows(eff, secs, action):
         raise HTTPException(status_code=403, detail="Non hai i permessi per questa operazione")
     ids = None if eff["events"] == "all" else list(eff["events"])
-    perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids}
-    if ids is None:
-        return perm
+    team_ids = await _allowed_team_ids(user, org_id, eff.get("teams") or {})
+    perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
+    seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
+    if team_ids is not None and "item_id" in pp:
+        if seg == "teams" and pp["item_id"] not in team_ids:
+            raise nf
+        if seg in ("staff", "shifts"):
+            doc = await db[seg].find_one({"org_id": org_id, "id": pp["item_id"]}, {"_id": 0, "team_id": 1})
+            if doc and doc.get("team_id") not in team_ids:
+                raise nf
+    if ids is None:
+        return perm
     eid = pp.get("event_id") or request.query_params.get("evento_id") or request.query_params.get("event_id")
     if eid and eid not in ids:
         raise nf
-    seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
     checks = []
     if "item_id" in pp:
         if seg == "events" and pp["item_id"] not in ids:
@@ -225,6 +233,28 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
         if doc and doc.get(field) and doc[field] not in ids:
             raise nf
     return perm
+
+
+async def _allowed_team_ids(user: dict, org_id: str, tp: dict):
+    """None = tutti i Team; altrimenti Team di cui è Team Leader (email utente = email persona) + selezionati."""
+    scope = tp.get("scope") or "all"
+    if scope == "all":
+        return None
+    em = (user.get("email") or "").strip()
+    pids = await db.persons.distinct("id", {"org_id": org_id, "email": {"$regex": f"^{re.escape(em)}$", "$options": "i"}}) if em else []
+    led = await db.teams.distinct("id", {"org_id": org_id, "responsabile_id": {"$in": pids}}) if pids else []
+    sel = tp.get("ids") or [] if scope == "selected" else []
+    return sorted(set(led) | set(sel))
+
+
+def _team_ids(user: dict):
+    return (user.get("perm") or {}).get("team_ids")
+
+
+def _assert_team_allowed(user: dict, team_id: Optional[str]) -> None:
+    tids = _team_ids(user)
+    if tids is not None and team_id and team_id not in tids:
+        raise HTTPException(status_code=404, detail="Team non trovato")
 
 
 def _can(user: dict, section: str, action: str = "view") -> bool:
@@ -1199,6 +1229,8 @@ def crud_routes(path, coll, model, org_scoped=True):
             q["id"] = {"$in": _ev_ids(user)}
         elif coll in _CRUD_EVENT_COLL.values():
             q.update(_ev_scope(user))
+        if _team_ids(user) is not None and coll in ("teams", "staff", "shifts"):
+            q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user)}
         if evento_id:
             q["evento_id"] = evento_id
         return await _list(coll, q)
@@ -1211,6 +1243,11 @@ def crud_routes(path, coll, model, org_scoped=True):
             raise HTTPException(status_code=403, detail="Puoi operare solo sugli eventi assegnati: non puoi creare nuovi eventi")
         if coll != "events":
             _assert_ev_allowed(user, data.get("evento_id"))
+        if _team_ids(user) is not None and coll in ("teams", "staff", "shifts"):
+            if coll == "teams":
+                raise HTTPException(status_code=403, detail="Puoi operare solo sui Team assegnati: non puoi creare nuovi Team")
+            if data.get("team_id") not in _team_ids(user):
+                raise HTTPException(status_code=403, detail="Seleziona uno dei Team a cui hai accesso")
         if coll == "events":
             await _assert_can_create_event(user["org_id"])
             data.setdefault("credit_state", "preparazione")
@@ -1235,6 +1272,8 @@ def crud_routes(path, coll, model, org_scoped=True):
         clean["updated_at"] = now_iso()
         await _assert_org_operational(user["org_id"])
         _assert_ev_allowed(user, clean.get("evento_id"))
+        if coll in ("staff", "shifts"):
+            _assert_team_allowed(user, clean.get("team_id"))
         if coll != "events":
             if clean.get("evento_id"):
                 await _assert_event_operational(user["org_id"], clean["evento_id"])
@@ -1679,6 +1718,8 @@ class StaffQuickAddIn(BaseModel):
 @api.post("/staff/quick-add")
 async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_admin)):
     _assert_ev_allowed(admin, body.evento_id)
+    if _team_ids(admin) is not None and body.team_id not in _team_ids(admin):
+        raise HTTPException(status_code=403, detail="Seleziona uno dei Team a cui hai accesso")
     if not body.evento_id:
         raise HTTPException(status_code=400, detail="Evento mancante")
     if not (body.nome or "").strip():
@@ -2062,6 +2103,11 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
     staff = await db.staff.find(rel_q, {"_id": 0}).to_list(5000)
     teams = await db.teams.find(rel_q, {"_id": 0}).to_list(5000)
     shifts = await db.shifts.find(rel_q, {"_id": 0}).to_list(5000)
+    if _team_ids(admin) is not None:
+        tids = set(_team_ids(admin))
+        staff = [s for s in staff if s.get("team_id") in tids]
+        teams = [t for t in teams if t["id"] in tids]
+        shifts = [s for s in shifts if s.get("team_id") in tids]
     activities = await db.activities.find(rel_q, {"_id": 0}).to_list(5000)
     followups = await db.followups.find(rel_q, {"_id": 0}).to_list(5000)
     today = datetime.now(timezone.utc).date().isoformat()
@@ -3420,6 +3466,7 @@ class PermUpdateIn(BaseModel):
     role: Optional[str] = None
     sections: Optional[dict] = None
     events: Optional[Any] = None
+    teams: Optional[dict] = None
     reset: bool = False
 
 
@@ -3430,7 +3477,9 @@ def _perm_summary(role: str, perm: dict) -> str:
     parts = [f"{lbl}: {'/'.join(P.ACTION_LABELS[a] for a in secs.get(k, []))}" for k, lbl in P.SECTIONS if secs.get(k)]
     ev = perm.get("events")
     evs = "tutti gli eventi" if ev == "all" else f"{len(ev or [])} eventi selezionati"
-    return f"{P.ROLES.get(role, role)} · {evs} · " + ("; ".join(parts) or "nessuna sezione")
+    tp = perm.get("teams") or {}
+    tms = {"all": "tutti i Team", "leader": "solo Team di cui è Team Leader"}.get(tp.get("scope"), f"{len(tp.get('ids') or [])} Team selezionati + Team di cui è leader")
+    return f"{P.ROLES.get(role, role)} · {evs} · {tms} · " + ("; ".join(parts) or "nessuna sezione")
 
 
 @api.get("/org/permissions")
@@ -3451,9 +3500,10 @@ async def org_permissions(admin: dict = Depends(require_org_admin)):
                         "custom": bool(m.get("permissions")), "permissions": eff})
     members.sort(key=lambda x: ((x["name"] or x["email"] or "").lower()))
     events = await db.events.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).sort("data_inizio", -1).to_list(2000)
+    teams = await db.teams.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "evento_id": 1}).sort("nome", 1).to_list(5000)
     return {"sections": [{"key": k, "label": l} for k, l in P.SECTIONS], "actions": P.ACTION_LABELS,
             "roles": P.ROLES, "defaults": {r: P.default_permissions(r) for r in ("user", "collaboratore")},
-            "members": members, "events": events}
+            "members": members, "events": events, "teams": teams}
 
 
 @api.put("/org/permissions/{target_id}")
@@ -3475,11 +3525,15 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
         await _guard_last_admin(org, target_id)
     if new_role == "admin_org" or body.reset:
         new_perm = {}
-    elif body.sections is not None or body.events is not None:
+    elif body.sections is not None or body.events is not None or body.teams is not None:
         cur = P.effective({**m, "role": new_role})
         raw = {"sections": body.sections if body.sections is not None else cur["sections"],
-               "events": body.events if body.events is not None else cur["events"]}
+               "events": body.events if body.events is not None else cur["events"],
+               "teams": body.teams if body.teams is not None else cur.get("teams")}
         new_perm = P.normalize_permissions(raw, new_role)
+        if new_perm["teams"]["ids"]:
+            valid_t = set(await db.teams.distinct("id", {"org_id": oid, "id": {"$in": new_perm["teams"]["ids"]}}))
+            new_perm["teams"]["ids"] = [t for t in new_perm["teams"]["ids"] if t in valid_t]
         if new_perm["events"] != "all":
             valid = set(await db.events.distinct("id", {"org_id": oid, "id": {"$in": new_perm["events"]}}))
             new_perm["events"] = [e for e in new_perm["events"] if e in valid]

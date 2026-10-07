@@ -12,6 +12,13 @@ ACTIONS = ["view", "create", "edit", "delete"]
 ACTION_LABELS = {"view": "Visualizza", "create": "Crea", "edit": "Modifica", "delete": "Elimina"}
 ROLES = {"admin_org": "Admin Organizzatore", "user": "Utente", "collaboratore": "Collaboratore"}
 COLLAB_HIDDEN = {"sponsor", "pipeline"}
+# Accesso ai Team: "all" | "leader" (solo Team di cui è Team Leader) | "selected" (ids + Team di cui è leader).
+# Struttura estendibile in futuro con azioni per Team (es. "actions": [...]).
+TEAM_SCOPES = ("all", "leader", "selected")
+
+
+def default_teams(role: str) -> dict:
+    return {"scope": "leader" if role == "collaboratore" else "all", "ids": []}
 
 METHOD_ACTION = {"GET": "view", "HEAD": "view", "POST": "create", "PUT": "edit", "PATCH": "edit", "DELETE": "delete"}
 
@@ -69,8 +76,16 @@ READ_ANY_EXACT = {"/settings", "/credits/balance", "/credits/services", "/events
 
 def default_permissions(role: str) -> dict:
     if role == "collaboratore":
-        return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all"}
-    return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all"}
+        return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all",
+                "teams": default_teams(role)}
+    return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role)}
+
+
+def normalize_teams(raw, role: str) -> dict:
+    if not isinstance(raw, dict) or raw.get("scope") not in TEAM_SCOPES:
+        return default_teams(role)
+    ids = sorted({str(x) for x in (raw.get("ids") or []) if x}) if raw["scope"] == "selected" else []
+    return {"scope": raw["scope"], "ids": ids}
 
 
 def normalize_permissions(raw: Optional[dict], role: str) -> dict:
@@ -86,7 +101,7 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
     ev = raw.get("events", "all")
     if ev != "all":
         ev = sorted({str(x) for x in (ev or []) if x})
-    return {"sections": secs, "events": ev}
+    return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role)}
 
 
 def effective(membership: dict) -> dict:
