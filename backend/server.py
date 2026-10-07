@@ -27,6 +27,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 import asyncio
+import news
 import email_utils
 import permissions as P
 import storage_utils
@@ -5656,6 +5657,11 @@ AUDIT_ACTION_LABELS = {
     "org_deleted": "Eliminazione organizzazione",
     "demo_seeded": "Popolamento dati Demo",
     "invites_cleaned": "Pulizia inviti",
+    "news_edited": "Novità modificata",
+    "news_published": "Novità approvata e pubblicata",
+    "news_withdrawn": "Novità ritirata",
+    "news_deleted": "Novità eliminata",
+    "news_simulated": "Simulazione rilascio (test)",
 }
 
 
@@ -8568,6 +8574,7 @@ async def startup():
     await migrate_person_companies()
     await migrate_memberships()
     await seed_support()
+    asyncio.create_task(news.sync_releases(db))  # bozze Novità solo se CRMEVENT_ENV=production
     creds = ROOT_DIR.parent / "memory" / "test_credentials.md"
     try:
         creds.write_text(
@@ -12175,6 +12182,7 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
 
 
 app.include_router(api)
+app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])

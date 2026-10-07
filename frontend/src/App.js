@@ -23,6 +23,8 @@ import OrgDetail from "@/pages/OrgDetail";
 import PricingAdmin from "@/pages/PricingAdmin";
 import PlatformCredits from "@/pages/PlatformCredits";
 import PlatformMessages from "@/pages/PlatformMessages";
+import PlatformNews from "@/pages/PlatformNews";
+import News from "@/pages/News";
 import PipelineTemplates from "@/pages/PipelineTemplates";
 import PipelineAttentionPage from "@/pages/PipelineAttentionPage";
 import Invite from "@/pages/Invite";
@@ -140,6 +142,8 @@ function Shell() {
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/messaggi" element={<Protected><SuperAdminOnly><PlatformMessages /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/novita" element={<Protected><SuperAdminOnly><PlatformNews /></SuperAdminOnly></Protected>} />
+        <Route path="/novita" element={<Protected><News /></Protected>} />
         <Route path="/piattaforma/org/:id" element={<Protected><SuperAdminOnly><OrgDetail /></SuperAdminOnly></Protected>} />
         <Route path="/audit" element={<Protected><SuperAdminOnly><AuditLog /></SuperAdminOnly></Protected>} />
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />

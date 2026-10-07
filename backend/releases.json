@@ -1,0 +1,47 @@
+[
+  {
+    "id": "2026-10-07-team-mobile",
+    "date": "2026-10-07",
+    "changes": [
+      {
+        "area": "Team",
+        "kind": "funzionalita",
+        "note": "Nella lista Team nuovo pulsante Nota: evidenziato quando il Team ha una nota operativa, apribile e modificabile senza aprire tutta la scheda.",
+        "fallback_title": "Note operative dei Team",
+        "fallback_text": "Ora vedi subito quali Team hanno una nota operativa e puoi leggerla o aggiornarla con un tocco."
+      },
+      {
+        "area": "Team",
+        "kind": "funzionalita",
+        "note": "Scheda Team riorganizzata: Team Leader, Staff, Volontari necessari/assegnati/mancanti e nota in un'unica schermata, ottimizzata per smartphone.",
+        "fallback_text": "Nella scheda del Team trovi Staff, Volontari e quanti ne mancano in un'unica schermata, comoda anche da smartphone."
+      },
+      {
+        "area": "Smartphone",
+        "kind": "funzionalita",
+        "note": "Elenchi di Staff, Volontari, Anagrafiche, Aziende, Ospitalità e Utenti mostrati a schede leggibili su smartphone; finestre aperte a tutto schermo dal basso; pulsanti più facili da toccare.",
+        "fallback_title": "CRMEvent più comodo da smartphone",
+        "fallback_text": "Elenchi, schede e pulsanti sono stati ripensati per essere usati con il dito durante l'evento, senza zoom né scorrimenti laterali."
+      },
+      {
+        "area": "Generale",
+        "kind": "tecnica",
+        "user_visible": false,
+        "note": "Refactoring componenti condivisi Dialog/Button/EntityManager."
+      }
+    ]
+  },
+  {
+    "id": "2026-10-08-novita",
+    "date": "2026-10-08",
+    "changes": [
+      {
+        "area": "Novità",
+        "kind": "funzionalita",
+        "note": "Nuova pagina Novità con gli aggiornamenti disponibili e indicatore nell'header delle novità non ancora lette.",
+        "fallback_title": "Arriva la pagina Novità",
+        "fallback_text": "Dal pulsante Novità nell'header scopri le ultime funzioni disponibili in CRMEvent; il numero indica quelle che non hai ancora letto."
+      }
+    ]
+  }
+]
