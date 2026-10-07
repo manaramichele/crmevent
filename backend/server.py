@@ -24,7 +24,7 @@ from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depend
 from fastapi.responses import RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, EmailStr, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 import asyncio
 import email_utils
@@ -898,6 +898,26 @@ class Team(BaseModel):
     luogo_operativo: Optional[str] = None
     punto_ritrovo: Optional[str] = None
     note: Optional[str] = None
+    volontari_richiesti: Optional[int] = Field(None, ge=0, le=100000)  # fabbisogno inserito dall'Admin
+
+
+TEAM_RINUNCIA = {"rinunciato", "non_disponibile"}
+
+
+def _team_coverage(teams: list, staff: list) -> dict:
+    """Fabbisogno volontari: assegnati = presenze volontario (non rinunciate) con team_id del team."""
+    tot = {"volontari_richiesti": 0, "volontari_assegnati": 0, "volontari_mancanti": 0, "volontari_esubero": 0}
+    for t in teams:
+        req = t.get("volontari_richiesti")
+        if req is None:
+            continue
+        n = len({s["persona_id"] for s in staff if s.get("team_id") == t["id"] and s.get("categoria") == "volontario"
+                 and s.get("stato") not in TEAM_RINUNCIA and s.get("persona_id")})
+        tot["volontari_richiesti"] += req
+        tot["volontari_assegnati"] += n
+        tot["volontari_mancanti"] += max(req - n, 0)
+        tot["volontari_esubero"] += max(n - req, 0)
+    return tot
 
 
 class Shift(BaseModel):
@@ -2083,7 +2103,8 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
                   "turni_totali": len(shifts),
                   "turni_scoperti": len([s for s in shifts if not s.get("persona_id")]),
                   "persone_senza_ruolo": len([s for s in staff if not s.get("ruolo")]),
-                  "persone_senza_team": len([s for s in staff if not s.get("team_id")])},
+                  "persone_senza_team": len([s for s in staff if not s.get("team_id")]),
+                  **_team_coverage(teams, staff)},
         "pipeline_chart": [{"fase": f, "count": len([d for d in deals if d.get("fase") == f]),
                             "valore": sum(float(d.get("valore") or 0) for d in deals if d.get("fase") == f)}
                            for f in ["prospect", "contattato", "proposta_inviata", "in_trattativa", "confermato", "perso"]],

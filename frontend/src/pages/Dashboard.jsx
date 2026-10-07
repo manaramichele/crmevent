@@ -150,6 +150,9 @@ export default function Dashboard() {
             <Kpi icon={Users} label="Volontari confermati" value={data.staff.volontari_confermati} color="green" testid="kpi-volontari" />
             <Kpi icon={AlertTriangle} label="Da riconfermare" value={data.staff.da_riconfermare} color="orange" testid="kpi-da-riconfermare" />
             <Kpi icon={AlertTriangle} label="Turni scoperti" value={data.staff.turni_scoperti} color="red" testid="kpi-turni-scoperti" />
+            <Kpi icon={Users} label="Volontari richiesti (Team)" value={data.staff.volontari_richiesti} testid="kpi-vol-richiesti" />
+            <Kpi icon={CheckCircle2} label="Volontari assegnati" value={data.staff.volontari_assegnati} color="green" testid="kpi-vol-assegnati" />
+            <Kpi icon={AlertTriangle} label={data.staff.volontari_esubero ? `Volontari mancanti (+${data.staff.volontari_esubero} esubero)` : "Volontari mancanti"} value={data.staff.volontari_mancanti} color={data.staff.volontari_mancanti ? "red" : "green"} testid="kpi-vol-mancanti" />
           </div>
         </div>
       </div>

@@ -262,6 +262,23 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
   );
 }
 
+const TEAM_RINUNCIA = ["rinunciato", "non_disponibile"];
+
+function TeamCoverage({ req, n, id }) {
+  if (req === null || req === undefined) return <span className="text-xs text-slate-400" data-testid={`team-coverage-${id}`}>{n} assegnati · fabbisogno non indicato</span>;
+  const miss = Math.max(req - n, 0);
+  const extra = Math.max(n - req, 0);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs whitespace-nowrap" data-testid={`team-coverage-${id}`}>
+      <span className="text-slate-600">{req} richiesti · {n} {n === 1 ? "assegnato" : "assegnati"}</span>
+      {miss > 0
+        ? <span className="rounded-full bg-red-100 text-red-700 px-2 py-0.5 font-semibold" data-testid={`team-missing-${id}`}>{miss} mancanti</span>
+        : <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 font-semibold" data-testid={`team-complete-${id}`}>Completo</span>}
+      {extra > 0 && <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-semibold" data-testid={`team-extra-${id}`}>+{extra} in esubero</span>}
+    </div>
+  );
+}
+
 export default function Persons({ mode = "anagrafiche" }) {
   const { user } = useAuth();
   const { items: companies } = useCollection("/companies");
@@ -323,13 +340,17 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "nome", label: "Nome team", required: true, full: true }, { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts },
     { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "responsabile_id", label: "Team Leader", type: "staffselect", eventFrom: "evento_id", staffPersonsFor: (form) => staffPersonsForEvent(form?.evento_id), allPersons: rows, onStaffAdded: reload, noEventHint: "Seleziona prima l'Evento per scegliere lo Staff." },
     { name: "luogo_operativo", label: "Luogo operativo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
+    { name: "volontari_richiesti", label: "Volontari richiesti", type: "number", placeholder: "Es. 20" },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
   ];
+  // Assegnati = volontari (non rinunciati) con questo team: stessa regola del backend (_team_coverage)
+  const assignedVol = (teamId) => new Set((staffLinks || []).filter((l) => l.team_id === teamId && l.categoria === "volontario" && !TEAM_RINUNCIA.includes(l.stato) && l.persona_id).map((l) => l.persona_id)).size;
   const teamCols = [
     { key: "nome", label: "Team", render: (r) => <span className="font-medium text-slate-800">{r.nome}</span> },
     { key: "evento_id", label: "Evento", render: (r) => eName(r.evento_id) }, { key: "area", label: "Area" },
     { key: "responsabile_id", label: "Team Leader", render: (r) => r.responsabile_id ? pName(r.responsabile_id) : <StatusBadge color="orange">Da assegnare</StatusBadge> },
     { key: "luogo_operativo", label: "Luogo" },
+    { key: "volontari_richiesti", label: "Volontari", render: (r) => <TeamCoverage req={r.volontari_richiesti} n={assignedVol(r.id)} id={r.id} /> },
     { key: "componenti", label: "Componenti", sortable: false, render: (r) => {
         const named = new Set(rows.filter((p) => `${p.cognome || ""} ${p.nome || ""}`.trim() || p.email).map((p) => p.id));
         const n = new Set((staffLinks || []).filter((l) => l.team_id === r.id && named.has(l.persona_id)).map((l) => l.persona_id)).size;
