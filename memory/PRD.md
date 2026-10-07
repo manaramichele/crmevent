@@ -367,6 +367,14 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Sistema "Novità" (rilascio → bozza AI → approvazione Super Admin → pubblicazione → badge) — 2026-10-07 ✅ VERIFICATO (iter 73: backend 18/18, frontend 20/20)
+- Rilevamento rilascio REALE: registro `backend/releases.json` distribuito col codice; all'avvio, SOLO se `CRMEVENT_ENV=production`, `news.sync_releases` registra i rilasci mai visti (lock atomico `news_releases.id` unico) e crea le bozze. Preview/branch/sviluppo: mai bozze automatiche. Ad ogni nuovo rilascio aggiungere una voce in releases.json (id, date, changes[area, kind, note, fallback_title/text, user_visible]); kind bugfix/tecnica/refactoring/server o user_visible=false vengono ignorati; più modifiche della stessa area = una sola Novità.
+- Testo generato da GPT (openai gpt-5.6-terra, chiave Emergent) per l'utente finale; fallback al testo di riserva.
+- Super Admin `/piattaforma/novita`: Da approvare | Pubblicate; Approva e pubblica · Modifica (solo bozze) · Elimina (non pubblicate) · Ritira/Ripubblica; tracciabilità (rilascio, testo generato/modificato, approvatore, data pubblicazione) solo admin; audit news_*. In preview: "Simula rilascio in produzione" (bozze marcate TEST; 403 in produzione).
+- Utenti: `/novita` card mobile-first (solo pubblicate, dalla più recente); header "Novità · N" (badge su mobile), azzerato con POST /news/mark-read (`news_reads`).
+- Backend `backend/news.py` (router incluso in server.py). Collezioni: news_items, news_releases, news_reads.
+- In preview esistono 2 bozze simulate (TEST) per prova.
+
 ## Team "Nota" + REGOLA PERMANENTE Mobile First — 2026-10-07 ✅ VERIFICATO (iter 72, 30/30)
 - Tabella Team: nessuna colonna Descrizione. In Azioni: Modifica (matita) | Nota (icona+etichetta) | Elimina. Nota = campo esistente `descrizione` (nessun nuovo campo DB). Nota presente → Tiffany #0ABAB5; assente → neutro. Dialog: lettura; Aggiungi/Modifica solo con permesso staff.edit (backend PUT /teams/{id} già protetto da _enforce_perm + team scope). Componente `components/TeamNote.jsx`.
 - Team mobile: card (NOME, Team Leader, Staff N · Volontari a/b, badge mancanti, [Modifica] [Nota] [Elimina]); evento nascosto se filtro evento attivo. Scheda Team (TeamMembersDialog) a sezioni: Dati Team, Team Leader, Volontari (Necessari/Assegnati/Mancanti), Nota, Staff (X), Volontari del Team (X/Y); su mobile full-screen dal basso, membri a card con Modifica/Rimuovi testuali.
