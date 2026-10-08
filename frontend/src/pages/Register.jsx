@@ -7,9 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Sparkles, ShieldCheck, Gift, Coins, Infinity as InfinityIcon } from "lucide-react";
+import { Sparkles, ShieldCheck, Gift } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 
@@ -19,7 +18,6 @@ export default function Register() {
   const [form, setForm] = useState({ nome: "", cognome: "", email: "", password: "", org_name: "", telefono: "" });
   const [accept, setAccept] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [welcome, setWelcome] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   useEffect(() => { trackEvent("sign_up_start"); }, []);
   useEffect(() => {
@@ -37,7 +35,7 @@ export default function Register() {
       setUser(data);
       trackEvent("sign_up", { method: "email" });
       try { localStorage.removeItem("crmevent_lead"); } catch {}
-      setWelcome(true);
+      nav("/app", { replace: true });  // unico benvenuto: WelcomeDemo nel Layout
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     finally { setLoading(false); }
   };
@@ -49,26 +47,14 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex">
-      <Dialog open={welcome} onOpenChange={() => {}}>
-        <DialogContent className="max-w-md text-center" data-testid="welcome-dialog">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-tiffany-light flex items-center justify-center"><Gift className="w-7 h-7 text-tiffany-active" /></div>
-          <h2 className="font-display text-2xl font-bold text-slate-900 mt-2">Benvenuto in CRMEvent</h2>
-          <div className="inline-flex items-center gap-2 mx-auto rounded-full bg-tiffany-light text-tiffany-fg px-4 py-1.5 text-sm font-bold"><Coins className="w-4 h-4" />Hai ricevuto 100 crediti</div>
-          <p className="text-sm text-slate-600 mt-1">Puoi iniziare subito a organizzare il tuo evento. I crediti servono per utilizzare i servizi avanzati e <b>non hanno scadenza</b>.</p>
-          <p className="text-xs text-slate-400 inline-flex items-center justify-center gap-1.5"><InfinityIcon className="w-3.5 h-3.5" />Nessuna carta richiesta · La gestione ordinaria dell'evento è gratuita</p>
-          <Button data-testid="welcome-start-btn" onClick={() => { trackEvent("signup_welcome_continue"); nav("/app"); }}
-            className="w-full h-11 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold mt-1">Inizia subito</Button>
-        </DialogContent>
-      </Dialog>
-
       <div className="hidden lg:flex flex-col justify-between w-1/2 bg-black p-12 relative overflow-hidden">
         <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-tiffany/20 blur-3xl" />
         <Link to="/" className="relative flex items-center gap-3"><img src="/logo-crmevent-dark.png?v=5" alt="CRMEvent" className="h-20 w-auto" /></Link>
         <div className="relative">
           <h1 className="font-display text-4xl font-bold text-white leading-tight">Crea la tua organizzazione su CRMEvent.</h1>
           <div className="mt-6 space-y-3 text-slate-200">
-            <div className="flex items-center gap-2"><Gift className="w-5 h-5 text-tiffany" />100 crediti CRMEvent inclusi</div>
-            <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-tiffany" />Nessuna carta richiesta · I crediti non scadono</div>
+            <div className="flex items-center gap-2"><Gift className="w-5 h-5 text-tiffany" />14 giorni di prova gratuita</div>
+            <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-tiffany" />Nessuna carta di credito richiesta</div>
           </div>
         </div>
         <div className="relative text-slate-500 text-sm">crmevent.it</div>
@@ -78,7 +64,7 @@ export default function Register() {
         <div className="w-full max-w-md py-8">
           <div className="lg:hidden flex items-center justify-center mb-8"><Link to="/"><img src="/logo-crmevent.png?v=5" alt="CRMEvent" className="h-14 w-auto" /></Link></div>
           <h2 className="font-display text-2xl font-bold text-slate-900">Inizia gratuitamente</h2>
-          <p className="text-sm text-slate-500 mb-6">Crea il tuo account organizzatore e ricevi 100 crediti CRMEvent.</p>
+          <p className="text-sm text-slate-500 mb-6">Crea il tuo account organizzatore e prova CRMEvent gratuitamente per 14 giorni.</p>
 
           <button onClick={googleLogin} data-testid="register-google-button"
             className="w-full h-11 rounded-lg border border-slate-300 hover:bg-slate-50 flex items-center justify-center gap-2 font-medium text-slate-700 transition-colors mb-4">

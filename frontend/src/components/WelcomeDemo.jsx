@@ -121,11 +121,11 @@ export default function WelcomeDemo() {
         <img src="/logo-crmevent-header.png?v=1" alt="CRMEvent" className="h-10 w-auto" />
         {view === "welcome" && (<div className="space-y-4" data-testid="welcome-demo-intro">
           <DialogTitle className="font-display text-2xl sm:text-3xl font-bold">Benvenuto in CRMEvent!</DialogTitle>
-          <DialogDescription className="text-slate-600 text-sm sm:text-base">La tua prova gratuita GOLD di 14 giorni è attiva. Vuoi scoprire come organizzare al meglio i tuoi eventi? Prenota una dimostrazione gratuita con noi.</DialogDescription>
+          <DialogDescription className="text-slate-600 text-sm sm:text-base">La tua prova gratuita di 14 giorni è attiva. Vuoi scoprire come organizzare al meglio i tuoi eventi? Prenota una dimostrazione gratuita con noi.</DialogDescription>
           <div className="flex flex-wrap gap-3 text-xs text-slate-600"><span className="inline-flex items-center gap-1.5"><Clock className="w-4 h-4 text-[#0ABAB5]" />30 minuti</span><span className="inline-flex items-center gap-1.5"><Video className="w-4 h-4 text-[#0ABAB5]" />Google Meet</span></div>
           <div className="flex flex-col sm:flex-row gap-2 pt-2">
             <Button onClick={() => setView("pick")} className="h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="welcome-demo-book">Prenota una demo</Button>
-            <Button variant="outline" onClick={close} className="h-11" data-testid="welcome-demo-skip">Vai alla dashboard</Button>
+            <Button variant="outline" onClick={close} className="h-11" data-testid="welcome-demo-skip">Lo farò in seguito</Button>
           </div>
         </div>)}
         {(view === "pick" || view === "form") && (<div className="space-y-4">
@@ -148,7 +148,7 @@ export default function WelcomeDemo() {
               </div>
             </div>
           )}
-          <button type="button" onClick={close} className="text-xs text-slate-500 underline" data-testid="welcome-demo-later">Non ora, vai alla dashboard</button>
+          <button type="button" onClick={close} className="text-xs text-slate-500 underline" data-testid="welcome-demo-later">Lo farò in seguito</button>
         </div>)}
         {(view === "done" || view === "booked") && (<div className="space-y-4 text-center py-2" data-testid="welcome-demo-done">
           <CheckCircle2 className="w-12 h-12 text-[#0ABAB5] mx-auto" />

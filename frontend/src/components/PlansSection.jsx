@@ -89,7 +89,7 @@ export default function PlansSection({ authed, claim }) {
     <div className="space-y-10" data-testid="plans-section">
       <div className="text-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-[#0ABAB5]/10 text-slate-800 px-3 py-1 text-xs font-semibold mb-4" data-testid="plans-trial-claim">
-          <Gift className="w-3.5 h-3.5 text-[#0ABAB5]" />{claim || `Prova GOLD gratis per ${data.trial_days || 14} giorni. Nessuna carta di credito richiesta.`}
+          <Gift className="w-3.5 h-3.5 text-[#0ABAB5]" />{claim || `${data.trial_days || 14} giorni di prova gratuita. Nessuna carta di credito richiesta.`}
         </div>
         <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Scegli il piano per il tuo evento</h2>
         <p className="text-slate-500 mt-3 text-sm md:text-base">Tutti i piani includono eventi, utenti, staff e volontari illimitati.</p>

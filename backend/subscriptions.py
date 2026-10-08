@@ -247,11 +247,11 @@ def build(db, deps: dict):
         st = await state_for(org_id)
         cfg = await get_config()
         url = f"{deps['app_url']}/profilo?tab=abbonamento"
-        tl = plan_label(cfg, st.get("trial_plan") or "gold")
+        days = cfg.get('trial_days', 14)
         texts = {
-            "welcome": (f"Benvenuto in CRMEvent: la tua prova {tl} è attiva", f"La tua prova gratuita {tl} di {cfg.get('trial_days', 14)} giorni è attiva: puoi usare tutte le funzionalità {tl}, con eventi e utenti illimitati. Nessuna carta di credito richiesta."),
-            "trial_3d": (f"La tua prova {tl} scade tra 3 giorni", f"Mancano 3 giorni alla fine della prova {tl}. Scegli il piano più adatto per continuare a lavorare senza interruzioni: i tuoi dati restano al sicuro."),
-            "trial_0d": (f"La tua prova {tl} scade oggi", f"La prova {tl} termina oggi. Dopo la scadenza i dati restano consultabili, ma per creare e modificare serve un piano attivo."),
+            "welcome": ("Benvenuto in CRMEvent: la tua prova gratuita è attiva", f"La tua prova gratuita di {days} giorni è attiva: puoi usare tutte le funzionalità di CRMEvent, con eventi e utenti illimitati. Nessuna carta di credito richiesta."),
+            "trial_3d": ("La tua prova gratuita scade tra 3 giorni", "Mancano 3 giorni alla fine della prova gratuita. Scegli il piano più adatto per continuare a lavorare senza interruzioni: i tuoi dati restano al sicuro."),
+            "trial_0d": ("La tua prova gratuita scade oggi", "La prova gratuita termina oggi. Dopo la scadenza i dati restano consultabili, ma per creare e modificare serve un piano attivo."),
             "purchase": ("Abbonamento CRMEvent confermato", f"Grazie! Il tuo abbonamento {extra} è confermato."),
             "renewal": ("Rinnovo abbonamento CRMEvent", f"Il tuo abbonamento {extra} è stato rinnovato correttamente."),
             "payment_failed": ("Pagamento abbonamento non riuscito", f"Non siamo riusciti a completare il pagamento dell'abbonamento {extra}. Aggiorna il metodo di pagamento da Gestisci abbonamento per evitare interruzioni."),

@@ -140,7 +140,7 @@ export function TutorialLauncher() {
   useEffect(() => { if (info?.events) setEid(pickEvent(info.events)); }, [info?.events]);
   useEffect(() => {
     if (!info || info.superadmin) return;
-    if (user?.welcome_demo === "pending") return; // prima la schermata di benvenuto Demo, poi il tutorial
+    if (user?.welcome_demo) return; // nuovi organizzatori: unico benvenuto = WelcomeDemo; tutorial dal pulsante "Tutorial"
     if (!info.state?.seen) { setWelcome(true); patch({ seen: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info?.state?.seen, info?.superadmin, user?.welcome_demo]);
