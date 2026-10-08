@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, Headset, Lock, Zap, Store, CalendarDays, Building2, Users, UserCog, Handshake,
+  LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, Handshake,
   ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
@@ -29,12 +29,11 @@ function NewsButton() {
     return () => window.removeEventListener(NEWS_READ_EVENT, reset);
   }, [pathname]);
   return (
-    <button type="button" onClick={() => navigate("/novita")} data-testid="header-news-button" aria-label={count ? `Novità, ${count} non lette` : "Novità"}
-      className="relative h-10 min-w-10 px-2 sm:px-3 inline-flex items-center justify-center gap-1.5 rounded-lg hover:bg-slate-100 text-sm font-medium text-slate-700 transition-colors">
+    <button type="button" onClick={() => navigate("/novita")} data-testid="header-news-button" title="Novità" aria-label={count ? `Novità, ${count} non lette` : "Novità"}
+      className="relative h-10 w-10 inline-flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-700 transition-colors">
       <Sparkles className="w-5 h-5 text-tiffany-active" />
-      <span className="hidden sm:inline">Novità</span>
-      {count > 0 && <span className="hidden sm:inline text-tiffany-active font-semibold" data-testid="header-news-count">· {count}</span>}
-      {count > 0 && <span className="sm:hidden absolute top-1 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-tiffany text-slate-900 text-[10px] font-bold flex items-center justify-center" data-testid="header-news-badge-mobile">{count}</span>}
+      <span className="sr-only">Novità</span>
+      {count > 0 && <span className="absolute top-1 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-tiffany text-slate-900 text-[10px] font-bold flex items-center justify-center" data-testid="header-news-count">{count}</span>}
     </button>
   );
 }
@@ -167,7 +166,7 @@ function Logo({ collapsed }) {
   );
 }
 
-function GlobalSearch() {
+export function GlobalSearch() {
   const [q, setQ] = useState("");
   const [res, setRes] = useState([]);
   const [open, setOpen] = useState(false);
@@ -266,6 +265,11 @@ export default function Layout({ children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [orgs, setOrgs] = useState([]);
+  useEffect(() => {
+    document.body.classList.add("app-shell");
+    return () => document.body.classList.remove("app-shell");
+  }, []);
+  useEffect(() => { setSearchOpen(false); }, [location.pathname]);
 
   const isSuper = user?.role === "superadmin";
   const multiOrg = !isSuper && (user?.organizations?.length || 0) > 1;
@@ -389,11 +393,16 @@ export default function Layout({ children }) {
           <div className="flex-1 min-w-0" />
           {!isSuper && <TrialButton saas={user?.saas} />}
           {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
-          <div className="hidden sm:block w-[220px] lg:w-[260px] shrink min-w-0" data-testid="header-search"><GlobalSearch /></div>
-          <button type="button" className="sm:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="mobile-search-button" aria-label="Cerca"><Search className="w-5 h-5" /></button>
+          {location.pathname !== "/app" && <button type="button" className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="header-search-button" title="Cerca" aria-label="Cerca"><Search className="w-5 h-5" /></button>}
+          {!isSuper && user?.saas?.enabled && user.saas.trial_active ? (
+            <button type="button" onClick={() => window.dispatchEvent(new Event("welcome-demo:open"))} data-testid="header-demo-button" aria-label="Prenota una demo"
+              className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
+              <Video className="w-4 h-4" aria-hidden="true" /><span className="hidden sm:inline">Prenota una demo</span><span className="sm:hidden">Demo</span>
+            </button>
+          ) : (
           <NavLink to="/assistenza" data-testid="header-assistenza-button" className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
             <Headset className="w-4 h-4" aria-hidden="true" /><span className={user?.saas?.enabled && ["trial", "expired", "canceled"].includes(user.saas.mode) && !user.saas.purchased ? "hidden sm:inline" : ""}>Assistenza</span>
-          </NavLink>
+          </NavLink>)}
           {!isSuper && <div className="hidden sm:block"><TutorialLauncher /></div>}
           {!isSuper && <div className="shrink-0"><NewsButton /></div>}
           <div className="shrink-0"><Notifications /></div>
@@ -415,9 +424,6 @@ export default function Layout({ children }) {
                 {!isSuper && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("tutorial:open-index")); }} data-testid="tutorial-menu-link" className="sm:hidden w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <HelpCircle className="w-4 h-4" />Tutorial
                 </button>}
-                {!isSuper && user?.welcome_demo && user.welcome_demo !== "booked" && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("welcome-demo:open")); }} data-testid="book-demo-menu-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
-                  <CalendarDays className="w-4 h-4" />Prenota una demo gratuita
-                </button>}
                 <button onClick={logout} data-testid="logout-button" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <LogOut className="w-4 h-4" />Esci
                 </button>
@@ -427,7 +433,7 @@ export default function Layout({ children }) {
         </header>
         {!isSuper && user?.saas?.mode === "past_due" && <TrialChip mobile s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
         </div>
-        {searchOpen && <div className="sm:hidden sticky top-[4.5rem] z-30 bg-white border-b border-slate-200 px-3 py-2" data-testid="mobile-search-row"><GlobalSearch /></div>}
+        {searchOpen && location.pathname !== "/app" && <div className="sticky top-[4.5rem] z-30 bg-white border-b border-slate-200 px-3 py-2" data-testid="header-search-row"><div className="max-w-md"><GlobalSearch /></div></div>}
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
         {user?.role !== "superadmin" && <CreditGuardBanner />}
         {isSuper && actingOrgId && !isPlatformRoute && (

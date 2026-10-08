@@ -1,0 +1,50 @@
+/* Piattaforma autenticata: tipografia ridotta del 10% (classe body.app-shell impostata dal Layout). Sito pubblico escluso. */
+body.app-shell { font-size: 0.9rem; }
+body.app-shell .text-xs { font-size: 0.72rem; line-height: 0.9rem; }
+body.app-shell .text-sm { font-size: 0.7875rem; line-height: 1.125rem; }
+body.app-shell .text-base { font-size: 0.9rem; line-height: 1.35rem; }
+body.app-shell .text-lg { font-size: 1.0125rem; line-height: 1.575rem; }
+body.app-shell .text-xl { font-size: 1.125rem; line-height: 1.575rem; }
+body.app-shell .text-2xl { font-size: 1.35rem; line-height: 1.8rem; }
+body.app-shell .text-3xl { font-size: 1.6875rem; line-height: 2.025rem; }
+body.app-shell .text-4xl { font-size: 2.025rem; line-height: 2.25rem; }
+@media (min-width: 640px) {
+  body.app-shell .sm\:text-xs { font-size: 0.72rem; line-height: 0.9rem; }
+  body.app-shell .sm\:text-sm { font-size: 0.7875rem; line-height: 1.125rem; }
+  body.app-shell .sm\:text-base { font-size: 0.9rem; line-height: 1.35rem; }
+  body.app-shell .sm\:text-lg { font-size: 1.0125rem; line-height: 1.575rem; }
+  body.app-shell .sm\:text-xl { font-size: 1.125rem; line-height: 1.575rem; }
+  body.app-shell .sm\:text-2xl { font-size: 1.35rem; line-height: 1.8rem; }
+  body.app-shell .sm\:text-3xl { font-size: 1.6875rem; line-height: 2.025rem; }
+  body.app-shell .sm\:text-4xl { font-size: 2.025rem; line-height: 2.25rem; }
+}
+@media (min-width: 768px) {
+  body.app-shell .md\:text-xs { font-size: 0.72rem; line-height: 0.9rem; }
+  body.app-shell .md\:text-sm { font-size: 0.7875rem; line-height: 1.125rem; }
+  body.app-shell .md\:text-base { font-size: 0.9rem; line-height: 1.35rem; }
+  body.app-shell .md\:text-lg { font-size: 1.0125rem; line-height: 1.575rem; }
+  body.app-shell .md\:text-xl { font-size: 1.125rem; line-height: 1.575rem; }
+  body.app-shell .md\:text-2xl { font-size: 1.35rem; line-height: 1.8rem; }
+  body.app-shell .md\:text-3xl { font-size: 1.6875rem; line-height: 2.025rem; }
+  body.app-shell .md\:text-4xl { font-size: 2.025rem; line-height: 2.25rem; }
+}
+@media (min-width: 1024px) {
+  body.app-shell .lg\:text-xs { font-size: 0.72rem; line-height: 0.9rem; }
+  body.app-shell .lg\:text-sm { font-size: 0.7875rem; line-height: 1.125rem; }
+  body.app-shell .lg\:text-base { font-size: 0.9rem; line-height: 1.35rem; }
+  body.app-shell .lg\:text-lg { font-size: 1.0125rem; line-height: 1.575rem; }
+  body.app-shell .lg\:text-xl { font-size: 1.125rem; line-height: 1.575rem; }
+  body.app-shell .lg\:text-2xl { font-size: 1.35rem; line-height: 1.8rem; }
+  body.app-shell .lg\:text-3xl { font-size: 1.6875rem; line-height: 2.025rem; }
+  body.app-shell .lg\:text-4xl { font-size: 2.025rem; line-height: 2.25rem; }
+}
+@media (min-width: 1280px) {
+  body.app-shell .xl\:text-xs { font-size: 0.72rem; line-height: 0.9rem; }
+  body.app-shell .xl\:text-sm { font-size: 0.7875rem; line-height: 1.125rem; }
+  body.app-shell .xl\:text-base { font-size: 0.9rem; line-height: 1.35rem; }
+  body.app-shell .xl\:text-lg { font-size: 1.0125rem; line-height: 1.575rem; }
+  body.app-shell .xl\:text-xl { font-size: 1.125rem; line-height: 1.575rem; }
+  body.app-shell .xl\:text-2xl { font-size: 1.35rem; line-height: 1.8rem; }
+  body.app-shell .xl\:text-3xl { font-size: 1.6875rem; line-height: 2.025rem; }
+  body.app-shell .xl\:text-4xl { font-size: 2.025rem; line-height: 2.25rem; }
+}

@@ -87,12 +87,14 @@ export default function WelcomeDemo() {
   const [f, setF] = useState({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
-  const eligible = user && user.role !== "superadmin" && !user.support && user.org_role === "admin_org" && !!user.welcome_demo;
+  const base = user && user.role !== "superadmin" && !user.support && !!user.org_id;
+  const eligible = base;
+  const autoOpen = base && user.org_role === "admin_org" && user.welcome_demo === "pending";
 
   const start = useCallback(async (v = "welcome") => {
     const { data } = await api.get("/demo/welcome"); setInfo(data); setF(data.prefill); setView(data.booking ? "booked" : v); setOpen(true);
   }, []);
-  useEffect(() => { if (eligible && user.welcome_demo === "pending") start().catch(() => {}); }, [eligible]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autoOpen) start().catch(() => {}); }, [autoOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const h = () => start("pick").catch(() => {});
     window.addEventListener("welcome-demo:open", h);
