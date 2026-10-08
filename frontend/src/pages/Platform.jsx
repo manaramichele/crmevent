@@ -3,7 +3,6 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
-import PaymentsCredits, { LegacySubscriptions } from "@/components/PaymentsCredits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert, Mail } from "lucide-react";
@@ -266,8 +265,6 @@ export default function Platform() {
         </div>
       </div>
 
-      <PaymentsCredits />
-      <LegacySubscriptions subs={subs} />
 
       {delUser && (
         <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !working && setDelUser(null)}>

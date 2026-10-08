@@ -3490,6 +3490,7 @@ GCAL_UNLOCK_COST = 20
 
 
 async def _gcal_unlocked(org_id: str) -> bool:
+    return True  # sistema a crediti dismesso: Google Calendar sempre disponibile
     org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "features": 1, "saas": 1})
     return bool((org or {}).get("saas")) or bool((org or {}).get("features", {}).get("google_calendar"))
 
@@ -9436,6 +9437,7 @@ async def startup():
     await migrate_person_companies()
     await migrate_memberships()
     await seed_support()
+    await migrate_legacy_orgs_to_trial()
     asyncio.create_task(news.sync_releases(db))  # bozze Novità solo se CRMEVENT_ENV=production
     creds = ROOT_DIR.parent / "memory" / "test_credentials.md"
     try:
@@ -10607,6 +10609,8 @@ async def _apply_credit_movement(org_id, amount, reason_code, type_, *, service_
     """Applica un movimento crediti in modo atomico e immutabile.
     amount > 0 = accredito, amount < 0 = addebito. Blocca il saldo negativo.
     Idempotenza: se idempotency_key è già presente, non riapplica (claim-first)."""
+    if amount < 0:
+        return None  # sistema a crediti dismesso: nessun addebito
     from pymongo.errors import DuplicateKeyError
     if amount == 0:
         raise HTTPException(status_code=400, detail="Importo nullo non consentito")
@@ -11042,8 +11046,19 @@ class CreditCheckoutIn(BaseModel):
     origin_url: str
 
 
+async def migrate_legacy_orgs_to_trial():
+    """Una tantum/idempotente: le org cliente ancora sul modello a crediti passano alla prova GOLD."""
+    cfg = await SAAS["get_config"]()
+    async for o in db.organizations.find({"saas": {"$exists": False}, "type": {"$in": ["cliente", None]}}, {"_id": 0, "id": 1, "nome": 1}):
+        res = await db.organizations.update_one({"id": o["id"], "saas": {"$exists": False}},
+                                                {"$set": {"saas": {**subscriptions.trial_doc(cfg), "migrated_from_credits": True}}})
+        if res.modified_count:
+            logger.info("Org %s migrata dal modello a crediti alla prova", o.get("nome"))
+
+
 @api.post("/credits/checkout")
 async def credits_checkout(body: CreditCheckoutIn, user: dict = Depends(require_admin)):
+    raise HTTPException(status_code=410, detail="L'acquisto di crediti non è più disponibile: le funzioni sono incluse negli abbonamenti.")
     """Crea una sessione Stripe Checkout (TEST) per l'acquisto di un pacchetto crediti.
     Prezzo e crediti provengono SEMPRE dal catalogo server-side (mai dal frontend).
     IVA 22% esclusa via TaxRate manuale. I crediti NON vengono accreditati qui:
@@ -11613,6 +11628,7 @@ async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, ide
     """Prenota i crediti SOLO se il servizio è configurato E attivo; altrimenti ritorna None (uso gratuito).
     Se il saldo è insufficiente solleva HTTP 402 e il servizio NON deve essere eseguito.
     Pattern: reservation = await _charge_begin(...); try: <esegui>; _credits_settle(); except: _credits_release()."""
+    return None  # sistema a crediti dismesso: servizi inclusi negli abbonamenti
     svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
     if not _service_consumo_on(svc) or await SAAS["is_saas"](org_id):
         return None
@@ -11677,7 +11693,7 @@ async def credits_estimate(body: EstimateIn, user: dict = Depends(require_admin)
     info = await _credit_service_cost(body.service_key, body.quantity)
     c = await _ensure_org_credits(user["org_id"])
     svc = info["service"]
-    will_charge = info["consumo_on"]
+    will_charge = False  # sistema a crediti dismesso
     cost = info["cost"]
     effective = cost if (will_charge and cost is not None) else 0
     balance = c.get("balance", 0)
@@ -11747,6 +11763,7 @@ def _event_display_state(ev: dict) -> str:
 
 
 async def _is_credit_model_org(org_id: str) -> bool:
+    return False  # sistema a crediti dismesso
     org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
     return bool(((org or {}).get("credits") or {}).get("signup_bonus_granted"))
 
@@ -11754,6 +11771,7 @@ async def _is_credit_model_org(org_id: str) -> bool:
 async def _assert_org_operational(org_id: str):
     """Guardia GLOBALE saldo minimo: le org sul modello a crediti devono avere saldo > 0 per
     eseguire scritture operative. Saldo 0 = sola consultazione. Le org legacy sono esentate."""
+    return  # sistema a crediti dismesso
     org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "credits": 1})
     c = (org or {}).get("credits") or {}
     if not c.get("signup_bonus_granted"):
@@ -12018,8 +12036,7 @@ async def _pipeline_status_payload(org_id: str, ev: dict) -> dict:
             "event_ref_date": event_ref_date, "pipeline_ref_date": pipeline_ref_date,
             "date_changed": date_changed,
             "service_active": cfg["active"], "cost": cost, "balance": bal,
-            "sufficient": (cost is not None and bal >= cost),
-            "balance_after": (bal - cost) if cost is not None else None}
+            "sufficient": True, "balance_after": None}
 
 
 @api.get("/events/{event_id}/pipeline/status")

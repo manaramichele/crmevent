@@ -13,7 +13,6 @@ import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
 import WelcomeDemo from "@/components/WelcomeDemo";
 import { TutorialHint } from "@/components/Onboarding";
-import { RechargeDialog } from "@/components/CreditsSection";
 import { NEWS_READ_EVENT } from "@/pages/News";
 
 function NewsButton() {
@@ -65,7 +64,6 @@ const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
   { to: "/piattaforma/utenti", label: "Gestione Utenti", icon: UserCog, id: "piattaforma-utenti" },
   { to: "/piattaforma/abbonamenti", label: "Abbonamenti", icon: BadgeEuro, id: "abbonamenti" },
-  { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
   { to: "/piattaforma/demo", label: "Demo", icon: CalendarDays, id: "piattaforma-demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
@@ -136,26 +134,6 @@ function TrialChip({ s, onCta, mobile }) {
 function TrialBanner() {
   // Modello a crediti: la piattaforma base è gratuita. Nessun banner di prova/abbonamento.
   return null;
-}
-
-function CreditGuardBanner() {
-  const { user } = useAuth();
-  const [bal, setBal] = useState(null);
-  const [recharge, setRecharge] = useState(false);
-  useEffect(() => {
-    if (user?.role === "superadmin" || user?.saas?.enabled) return;
-    api.get("/credits/balance").then(({ data }) => setBal(data)).catch(() => {});
-  }, [user]);
-  if (user?.role === "superadmin" || user?.saas?.enabled || !bal || bal.balance > 0) return null;
-  return (
-    <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-red-50 text-red-800 border-b border-red-200" data-testid="credits-guard-banner">
-      <AlertTriangle className="w-4 h-4 shrink-0" />
-      <span className="font-semibold">Crediti esauriti.</span>
-      <span className="hidden sm:inline">Modalità sola consultazione — i tuoi dati restano disponibili.</span>
-      <button onClick={() => setRecharge(true)} className="ml-auto rounded-md bg-red-600 text-white px-3 py-1 text-xs font-semibold hover:bg-red-700" data-testid="credits-guard-recharge">Ricarica crediti</button>
-      <RechargeDialog open={recharge} onClose={() => setRecharge(false)} />
-    </div>
-  );
 }
 
 function Logo({ collapsed }) {
@@ -431,8 +409,7 @@ export default function Layout({ children }) {
         </header>
         {!isSuper && user?.saas?.mode === "past_due" && <TrialChip mobile s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
         </div>
-        {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
-        {user?.role !== "superadmin" && <CreditGuardBanner />}
+        {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=abbonamento")} />}
         {isSuper && actingOrgId && !isPlatformRoute && (
           <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-amber-100 text-amber-900 border-b border-amber-300" data-testid="super-acting-banner">
             <ShieldCheck className="w-4 h-4 shrink-0" />

@@ -20,7 +20,6 @@ import Profile from "@/pages/Profile";
 import Platform from "@/pages/Platform";
 import OrgDetail from "@/pages/OrgDetail";
 import PricingAdmin from "@/pages/PricingAdmin";
-import PlatformCredits from "@/pages/PlatformCredits";
 import PlatformMessages from "@/pages/PlatformMessages";
 import PlatformNews from "@/pages/PlatformNews";
 import PlatformUsers from "@/pages/PlatformUsers";
@@ -110,7 +109,7 @@ function NoAccess() {
 // Guardia UI per sezione (il backend applica comunque i permessi).
 function AccountRedirect() {
   const { search } = useLocation();
-  const p = new URLSearchParams(search); p.set("tab", "crediti");
+  const p = new URLSearchParams(search); p.set("tab", "abbonamento");
   return <Navigate to={`/profilo?${p.toString()}`} replace />;
 }
 
@@ -166,7 +165,6 @@ function Shell() {
         <Route path="/piattaforma/demo" element={<Protected><SuperAdminOnly><PlatformDemo /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/richieste-demo" element={<Protected><SuperAdminOnly><PlatformDemoRequests /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/abbonamenti" element={<Protected><SuperAdminOnly><SaasAdmin /></SuperAdminOnly></Protected>} />
-        <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/messaggi" element={<Protected><SuperAdminOnly><PlatformMessages /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/novita" element={<Protected><SuperAdminOnly><PlatformNews /></SuperAdminOnly></Protected>} />

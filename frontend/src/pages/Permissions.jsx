@@ -170,13 +170,13 @@ export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId 
         <p className="text-xs text-slate-400">Collega l'account all'anagrafica esistente senza duplicarla. Essere Team Leader non concede permessi amministrativi.</p>
       </div>}
       {role === "admin_org" ? (
-        <p className="text-sm text-slate-600">L'Admin Organizzatore vede e gestisce tutto, compresi account, crediti, impostazioni e utenti.</p>
+        <p className="text-sm text-slate-600">L'Admin Organizzatore vede e gestisce tutto, compresi account, abbonamento, impostazioni e utenti.</p>
       ) : (<>
         <div className="space-y-1.5"><div className={SECTION_LBL}>Sezioni</div><MatrixEditor meta={meta} value={perm} onChange={setPerm} /></div>
         <div className="space-y-1.5"><div className={SECTION_LBL}>Eventi</div><EventScope events={meta.events} value={perm.events} onChange={(events) => setPerm((p) => ({ ...p, events }))} /></div>
         <div className="space-y-1.5"><div className={SECTION_LBL}>Accesso ai Team</div><TeamScope teams={meta.teams || []} events={meta.events} value={perm.teams} onChange={(teams) => setPerm((p) => ({ ...p, teams }))} /></div>
         <TeamLeaderPerms perm={perm} setPerm={setPerm} />
-        <p className="text-xs text-slate-400">Account, abbonamento, crediti, fatture, impostazioni e gestione utenti restano riservati all'Admin Organizzatore.</p>
+        <p className="text-xs text-slate-400">Account, abbonamento, fatture, impostazioni e gestione utenti restano riservati all'Admin Organizzatore.</p>
       </>)}
     </div>
   );

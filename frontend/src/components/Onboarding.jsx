@@ -74,7 +74,7 @@ const SECTIONS = [
   ]},
   { key: "pipeline", label: "Pipeline Evento Pro", ev: true, route: (e) => `/eventi/${e}/pipeline`, steps: [
     { t: "Pipeline Evento Pro", b: "Genera da un modello le attività dell'evento con scadenze relative alla data dell'evento e priorità.", s: [T("pipeline-intro"), T("pipeline-template-chooser"), T("pipeline-dashboard")] },
-    { t: "Attivazione a crediti", b: "È una funzione attivabile che può utilizzare crediti. Se non è attiva per l'evento selezionato, la attivi solo quando vuoi tu.", s: [T("pipeline-activate-cta"), T("pipeline-create-cta"), T("pipeline-actions-menu")] },
+    { t: "Attivazione", b: "La Pipeline è inclusa nel tuo piano: se non è ancora attiva per l'evento selezionato, la attivi quando vuoi tu.", s: [T("pipeline-activate-cta"), T("pipeline-create-cta"), T("pipeline-actions-menu")] },
     { t: "Da un'edizione precedente", b: "Puoi anche creare la Pipeline partendo da un'edizione precedente dell'evento.", s: [T("pipeline-dup-intro"), T("pipeline-actions-menu"), T("pipeline-template-chooser")] },
   ]},
 ];

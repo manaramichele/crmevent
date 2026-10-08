@@ -243,7 +243,7 @@ def build(db, deps: dict):
     def _clean(body: ServiceIn) -> dict:
         d = body.model_dump()
         if d["price_type"] not in PRICE_TYPES or d["status"] not in STATUSES or d["scope"] not in ("org", "event") \
-                or d["billing_method"] not in ("stripe", "credits"):
+                or d["billing_method"] != "stripe":
             raise HTTPException(status_code=400, detail="Valori non validi")
         if d["image"] and len(d["image"]) > 400_000:
             raise HTTPException(status_code=400, detail="Immagine troppo grande (max 300 KB)")

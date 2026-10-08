@@ -358,13 +358,12 @@ function Termini() {
         </p>
       </Section>
 
-      <Section title="7. Crediti e funzionalità a pagamento">
+      <Section title="7. Abbonamenti e funzionalità a pagamento">
         <p>
-          Alcune funzionalità del Servizio possono richiedere l'utilizzo di crediti o l'adesione a piani/servizi a
-          pagamento. Le caratteristiche, i crediti inclusi e i relativi costi sono quelli indicati sulla piattaforma
+          Il Servizio è offerto tramite piani in abbonamento (BRONZE, SILVER e GOLD) ed eventuali servizi
+          aggiuntivi a pagamento. Le caratteristiche dei piani e i relativi costi sono quelli indicati sulla piattaforma
           o nella pagina <Link to="/prezzi" className="text-tiffany-active font-semibold hover:underline">Prezzi</Link> al
-          momento dell'acquisto o dell'attivazione. Il consumo dei crediti avviene secondo quanto indicato nella
-          piattaforma in relazione alle singole funzionalità.
+          momento dell'acquisto o dell'attivazione.
         </p>
       </Section>
 

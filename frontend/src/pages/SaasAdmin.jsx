@@ -71,7 +71,7 @@ function OrgsTab() {
         <tbody>{rows.map((r) => (
           <tr key={r.id} className="border-t border-slate-100" data-testid={`saas-org-${r.id}`}>
             <td className="px-3 py-2 font-medium">{r.nome}</td>
-            <td className="px-3 py-2">{r.model === "abbonamento" ? "Abbonamento" : `Crediti (${r.credits_balance ?? 0})`}</td>
+            <td className="px-3 py-2">{r.model === "abbonamento" ? "Abbonamento" : "Da migrare"}</td>
             <td className="px-3 py-2">{r.plan_label || (r.paid_plan || "—").toUpperCase()}{r.pending_change ? ` → ${r.pending_change.plan.toUpperCase()}` : ""}</td>
             <td className="px-3 py-2">{MODE[r.mode] || "—"}{r.cancel_at_period_end ? " · annullato a fine periodo" : ""}</td>
             <td className="px-3 py-2">{r.billing_cycle === "yearly" ? "Annuale" : r.billing_cycle === "monthly" ? "Mensile" : "—"}</td>
@@ -126,11 +126,9 @@ export default function SaasAdmin() {
         <TabsList className="mb-4 w-full sm:w-auto overflow-x-auto justify-start h-auto flex-nowrap">
           <TabsTrigger value="orgs" data-testid="saas-tab-orgs">Organizzazioni</TabsTrigger>
           <TabsTrigger value="config" data-testid="saas-tab-config">Piani e prezzi</TabsTrigger>
-          <TabsTrigger value="migration" data-testid="saas-tab-migration">Migrazione crediti</TabsTrigger>
         </TabsList>
         <TabsContent value="orgs"><SectionCard title="Stato abbonamenti"><OrgsTab /></SectionCard></TabsContent>
         <TabsContent value="config"><SectionCard title="Configurazione piani"><ConfigTab /></SectionCard></TabsContent>
-        <TabsContent value="migration"><SectionCard title="Analisi migrazione dal modello a crediti"><MigrationTab /></SectionCard></TabsContent>
       </Tabs>
     </div>
   );
