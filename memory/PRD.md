@@ -476,6 +476,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Rinnovo automatico Mantenimento: POST /api/cron/event-renewals (Bearer WEBHOOK_CRON_SECRET) + `.emergent/crons.yml` ogni giorno 03:00 UTC. Su Aruba serve crontab di sistema equivalente.
 - NB: il briefing NON è generato con AI (è costruito dai dati evento).
 
+## Header interno riorganizzato + tipografia −10% — 2026-10-08 ✅ VERIFICATO (iter 94)
+- Pulsante unico: "Prenota una demo" (`header-demo-button`, apre WelcomeDemo sul calendario) finché `saas.trial_active`, poi "Assistenza" (regole del piano). Tolta la voce Demo dal menu profilo; la Demo è prenotabile da qualsiasi membro dell'organizzazione in prova.
+- Ricerca: GlobalSearch in alto a sinistra nella Dashboard; nelle altre pagine icona Cerca nell'header che apre la stessa ricerca.
+- Novità: solo icona + contatore delle non lette (title/aria "Novità").
+- Tipografia: `src/app-typography.css` riduce del 10% le classi text-* (prefissi responsive inclusi, text-xs minimo 0,72rem) solo con `body.app-shell`, impostata dal Layout autenticato; sito pubblico invariato.
+- "Lo farò in seguito" uniforme nel flusso di benvenuto e Demo.
+
 ## Rimozione "100 crediti" + benvenuto unico — 2026-10-08 ✅ VERIFICATO (iter 93)
 - Registrazione: nuovo sottotitolo "prova CRMEvent gratuitamente per 14 giorni", rimosso il popup "Hai ricevuto 100 crediti" (dopo la registrazione si va su /app → unico popup WelcomeDemo). Footer: "Prezzi" e "14 giorni di prova gratuita". Tolto "GOLD" dai testi della prova (/prezzi, /demo, email benvenuto/3 giorni/scadenza, header).
 - WelcomeDemo: "La tua prova gratuita di 14 giorni è attiva", pulsanti "Prenota una demo" / "Lo farò in seguito" (anche il link nel calendario). Per i nuovi organizzatori il tutorial non si apre più da solo (resta disponibile dal pulsante Tutorial).
