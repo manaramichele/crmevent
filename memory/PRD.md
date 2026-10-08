@@ -367,6 +367,9 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Ospitalità & Pasti: filtro Ruolo predefinito "Staff" — 2026-10-08 ✅ verificato (screenshot)
+- Hospitality.jsx: fRuolo iniziale "staff" (tutte le org); "Tutti i ruoli"/Volontario ecc. restano selezionabili. Altri filtri invariati.
+
 ## Header mobile + menu profilo — 2026-10-08 ✅ VERIFICATO (iter 79)
 - Layout.jsx: su <640px la ricerca diventa icona (riga di ricerca sotto l'header), lo switcher org si sposta nel drawer (mobile-org-switcher), il Tutorial va nel menu profilo; profilo sempre visibile a destra (shrink-0). Menu profilo: Profilo & Account · Impostazioni (solo se can(user,"admin")) · Tutorial (mobile, non superadmin) · Esci; chiusura toccando fuori. Pannello notifiche a larghezza schermo su mobile. Desktop invariato.
 - Ruoli Utente/Collaboratore non testati con login reale (nessun account di prova): logica verificata nel codice.

@@ -617,7 +617,7 @@ export default function Hospitality() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [structOpen, setStructOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [fRuolo, setFRuolo] = useState("");
+  const [fRuolo, setFRuolo] = useState("staff");
   const [fStato, setFStato] = useState("");
   const [fEsig, setFEsig] = useState("");
   const [day, setDay] = useState("");
