@@ -367,6 +367,10 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Colonna "Mansione" in Staff / Volontari — 2026-10-08 ✅ verificato con screenshot (1440/375/430)
+- Persons.jsx (tab Staff/Volontari): colonna Mansione subito dopo Team, valore = campo esistente Qualifica (persons.ruolo) o "—", ordinabile; card mobile con righe etichettate Team e Mansione. Ordinamento predefinito Cognome→Nome invariato.
+
+
 ## Rimossa voce "Assistenza" dal menu laterale — 2026-10-08 ✅ verificato con screenshot (desktop + 390px)
 - ORG_NAV senza /assistenza (desktop e mobile); l'accesso resta dal pulsante Tiffany nell'header. Pagina e route /assistenza invariate.
 
