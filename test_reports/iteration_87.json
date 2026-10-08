@@ -1,0 +1,35 @@
+{
+  "summary": "Iter 87 — Prenotazione Demo + Brevo lista Lead (ID 8) + funnel gating. Backend 11/11 pytest passing: privacy required (400), demo_slot/demo_status 'da_confermare' persisted, brevo_sync.status='non_configurato' (preview, BREVO_API_KEY empty) with attempts incrementing, marketing_consent/marketing_consent_at valorizzati, idempotent re-POST same email, invalid demo_data/demo_ora → 400, SA demo confirm/reschedule/cancel transitions + 400 on confirm w/o slot + 400 on reschedule w/o date, QA admin → 403 on SA endpoints, lead_brevo_sync increments attempts, demo_booking.tick retries errored sync (attempts 1→2 after 2h cutoff) and sets demo_reminder_sent_for exactly once per slot, cron endpoint requires WEBHOOK_CRON_SECRET bearer. UI: LandingPage form at 390px shows all fields (nome/email/demo_data[min=tomorrow]/demo_ora/marketing[not pre-checked]/privacy/submit), submission creates lead with demo_slot='2026-10-10T09:30' + brevo_sync=non_configurato. SA drawer at /marketing/organizzatori?tab=leads opens on row click, DemoBox renders status/confirm/cancel/new-date/new-time/reschedule/brevo-sync/brevo-retry/marketing-consent — confirm→Confermata, reschedule→Riprogrammata verified end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Leads.jsx DemoBox", "issue": "After rapid sequential actions (reschedule immediately followed by cancel), the second action may not fire — observed drawer still showing 'Riprogrammata' and backend demo_status unchanged to 'annullata'. Likely a state/refresh race: `sel.lead` in parent uses stale state while `act()` is in flight. Each action in isolation works. Low priority.", "selector": "[data-testid=\"lead-demo-cancel\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter87_demo_booking.py",
+    "/app/test_reports/pytest/iter87.xml"
+  ],
+  "action_items": [
+    "(optional, low) In Leads.jsx DemoBox, disable the whole action group while `busy` is true OR await `onDone()` to resolve before enabling subsequent clicks, to avoid stale-state races when the SA chains actions quickly."
+  ],
+  "critical_code_review_comments": [
+    "demo_booking.sync_lead always increments attempts even when status becomes 'non_configurato' or 'sincronizzato'. For successful syncs it's probably fine but 'attempts' loses its 'retry counter' meaning. Consider resetting attempts=0 on success for clearer semantics (currently cron retry gate uses $lt:5 so a successful sync eventually blocks retries anyway, but after many manual retries this could prematurely cap the real retry budget).",
+    "demo_booking.tick: 'lo' = now_rome formatted and demo_slot is also stored in local-naive 'YYYY-MM-DDTHH:MM' — if the server timezone differs from Europe/Rome at any point, string comparison could misfire for slots near midnight. Already works today because fmt is consistent.",
+    "server.py create_lead stores marketing_consent_at = now_iso() (UTC ISO) while brevo attribute 'DATA_CONSENSO_MARKETING' slices [:10] — fine, but if the user is at UTC+2 near 23:00 the date in Brevo may differ from the user's local day. Minor.",
+    "server.py lead_demo_action: on 'confirm' path a lead with demo_slot but marketing_consent=False still proceeds — correct (operational), but confirm with no demo_slot returns 400 as expected. OK.",
+    "demo_booking.sync_lead sets _attrs_ready at process level; after a backend restart it will re-POST the 6 contactAttributes creates on first sync. Idempotent on Brevo side (409 ignored) but adds latency. Minor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter87_demo_booking.py"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "90% — all testids present, form submission + confirm + reschedule verified; cancel-after-reschedule had a UI state race (not reproducible when done in isolation)."},
+  "test_credentials": "SA manara.michele.pro@gmail.com / CrmEvent2026! ; QA qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "No persistent seed. All TEST_iter87_* leads + related funnel_enrollments + audit_logs deleted at end of module fixture and at end of UI test (verified 1 lead + 2 audit entries removed).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Brevo preview env: BREVO_API_KEY='' → sync_lead returns status='non_configurato' with attempts incrementing on every call; this is expected and all assertions reflect that. BREVO_LEAD_LIST_ID='8' set in backend/.env, WEBHOOK_CRON_SECRET present. The lead list page is embedded at /marketing/organizzatori?tab=leads (there is NO /piattaforma/leads route). Clicking a <tr> opens the drawer; data-testid='lead-detail' + 'lead-demo-box' + all sub-testids are present. The demo funnel (brevo_funnel.FUNNEL_KEY) is NOT active in preview — _enroll_lead with marketing_consent=True proceeds without error but does not create duplicate enrollments. demo_booking.tick is driven by cron /api/cron/brevo-funnel-tick (requires WEBHOOK_CRON_SECRET bearer) and can also be invoked directly via `import demo_booking; await demo_booking.tick(db, APP_URL)` for deterministic testing.",
+  "rca of the issue": "N/A — no product bugs reproduced. Only noted a low-severity UI state race in the DemoBox when actions are chained quickly."
+}
