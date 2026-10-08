@@ -81,7 +81,7 @@ export default function Marketplace() {
   const cats = [...new Set((data?.services || []).map((s) => s.category))];
   return (
     <div className="animate-fade-up space-y-5" data-testid="marketplace-page">
-      <PageHeader title="Marketplace CRMEvent" subtitle="Espandi le funzionalità di CRMEvent con servizi aggiuntivi pensati per la tua organizzazione e i tuoi eventi." />
+      <PageHeader title="Marketplace" subtitle="Espandi le funzionalità di CRMEvent con servizi aggiuntivi pensati per la tua organizzazione e i tuoi eventi." />
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-md"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca un servizio" className="pl-9" data-testid="mkt-search" /></div>
         <div className="flex gap-2 overflow-x-auto pb-1" data-testid="mkt-categories">

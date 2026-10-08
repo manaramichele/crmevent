@@ -57,6 +57,7 @@ import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import PlanUpgrade from "@/components/PlanUpgrade";
 import SaasAdmin from "@/pages/SaasAdmin";
 import PlatformDemo from "@/pages/PlatformDemo";
+import PlatformDemoRequests from "@/pages/PlatformDemoRequests";
 import QuickActions from "@/pages/QuickActions";
 import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
@@ -163,6 +164,7 @@ function Shell() {
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/demo" element={<Protected><SuperAdminOnly><PlatformDemo /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/richieste-demo" element={<Protected><SuperAdminOnly><PlatformDemoRequests /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/abbonamenti" element={<Protected><SuperAdminOnly><SaasAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />
