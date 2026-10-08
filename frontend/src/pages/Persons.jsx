@@ -4,7 +4,8 @@ import { EntityManager, EntityDialog, StatusBadge, useCollection, useSettings, t
 import { TeamNoteButton } from "@/components/TeamNote";
 import { personName, personOptions } from "@/lib/names";
 import { useAuth } from "@/context/AuthContext";
-import { can } from "@/lib/perms";
+import { can, canSendInvites } from "@/lib/perms";
+import { PersonInviteDialog, BulkInviteBar, LastInvite, INV, INV_LABEL } from "@/components/PersonInvites";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,46 +25,9 @@ import TeamSelect from "@/components/TeamSelect";
 import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 import { usePeople } from "@/lib/peopleStore";
 
-const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
-const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Attivo", accesso_disabilitato: "Disabilitato" };
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
 const STATO_COLOR = { confermato: "green", disponibile: "green", da_riconfermare: "orange", disponibilita_richiesta: "blue", da_contattare: "gray", non_disponibile: "red", rinunciato: "red" };
-
-function InviteDialog({ person, open, onOpenChange, onDone }) {
-  const [role, setRole] = useState("volunteer");
-  const [busy, setBusy] = useState(false);
-  const status = person?.invite_status || "non_invitato";
-  const invite = async () => {
-    setBusy(true);
-    try { const { data } = await api.post(`/persons/${person.id}/invite`, { role }); toast.success(data.email_sent ? "Invito inviato via email" : "Invito creato (email non inviata)"); onDone(); onOpenChange(false); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
-  };
-  const toggle = async (enabled) => {
-    try { await api.put(`/persons/${person.id}/access`, { enabled }); toast.success(enabled ? "Accesso riattivato" : "Accesso disabilitato"); onDone(); onOpenChange(false); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="invite-dialog">
-        <DialogHeader><DialogTitle className="font-display">Invita su <strong className="font-semibold">CRMEvent</strong></DialogTitle>
-          <DialogDescription>{person?.cognome} {person?.nome} — {person?.email || "nessuna email"}</DialogDescription></DialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="flex items-center gap-2"><span className="text-sm text-slate-500">Stato attuale:</span><StatusBadge color={INV[status]}>{INV_LABEL[status]}</StatusBadge></div>
-          <div className="space-y-1.5"><Label className="text-xs">Ruolo accesso</Label>
-            <Select value={role} onValueChange={setRole}><SelectTrigger data-testid="invite-role"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="volunteer">Volontario</SelectItem><SelectItem value="staff">Staff</SelectItem></SelectContent></Select>
-          </div>
-        </div>
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          {status === "account_attivato" && <Button variant="outline" onClick={() => toggle(false)} data-testid="disable-access">Disabilita accesso</Button>}
-          {status === "accesso_disabilitato" && <Button variant="outline" onClick={() => toggle(true)} data-testid="enable-access">Riattiva accesso</Button>}
-          <Button onClick={invite} disabled={busy || !person?.email} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="send-invite">{busy ? "..." : status === "non_invitato" ? "Invia invito" : "Reinvia invito"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function EventRolesDialog({ person, events, settings, open, onOpenChange, onDone }) {
   const [links, setLinks] = useState([]);
@@ -139,9 +103,11 @@ function EventRolesDialog({ person, events, settings, open, onOpenChange, onDone
   );
 }
 
-function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite, onDelete, onRoleClick }) {
+function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite, onDelete, onRoleClick, onInvited }) {
   const [q, setQ] = useState("");
   const [evFilter, setEvFilter] = useState("all");
+  const [sel, setSel] = useState(() => new Set());
+  const flip = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const filtered = rows.filter((r) => {
     if (tab === "referenti_aziende" && !r.is_referente) return false;
     if (tab === "staff" && !r.is_staff) return false;
@@ -165,6 +131,10 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
   };
   const colsMeta = Object.entries(ACC).map(([key, sortAccessor]) => ({ key, sortAccessor, sortType: "string" }));
   const displayRows = sortRows(filtered, sort, colsMeta);
+  const selectedRows = displayRows.filter((r) => sel.has(r.id));
+  const allSel = displayRows.length > 0 && selectedRows.length === displayRows.length;
+  const toggleAll = () => setSel(allSel ? new Set() : new Set(displayRows.map((r) => r.id)));
+  const pick = (r) => onInvite && <input type="checkbox" className="accent-tiffany w-4 h-4" checked={sel.has(r.id)} onChange={() => flip(r.id)} onClick={(e) => e.stopPropagation()} aria-label="Seleziona per invito" data-testid={`select-invite-${r.id}`} />;
   const Th = ({ k, label, right }) => (
     <th onClick={() => toggle(k)} data-testid={`sort-${k}`} className={`font-semibold text-slate-600 px-4 py-3 whitespace-nowrap cursor-pointer select-none group ${right ? "text-right" : "text-left"}`}>
       <span className="inline-flex items-center gap-1">{label}<SortIcon active={sort.key === k} dir={sort.dir} /></span>
@@ -181,7 +151,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
   );
   const actionsCell = (r) => (
     <div className="flex items-center justify-end gap-1">
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Invita" onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>
+      {onInvite && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title={r.last_invite_at ? "Reinvia invito" : "Invita"} onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>}
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
       <AlertDialog>
         <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
@@ -217,7 +187,8 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
           : displayRows.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessuna persona trovata.</div>
           : displayRows.map((r) => (
             <div key={r.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" data-testid={`person-card-${r.id}`}>
-              <div className="font-semibold text-slate-900 break-words">{r.cognome} {r.nome}</div>
+              <div className="flex items-start gap-2">{pick(r)}<div className="font-semibold text-slate-900 break-words">{r.cognome} {r.nome}</div></div>
+              <LastInvite person={r} className="mt-0.5" />
               {!isStaffTab && r.ruolo && <div className="text-sm text-slate-500">{r.ruolo}</div>}
               <div className="mt-2 space-y-1.5 text-sm text-slate-700">
                 {r.cellulare && <a href={`tel:${r.cellulare}`} className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{r.cellulare}</a>}
@@ -233,7 +204,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
               <div className="mt-3 flex flex-wrap gap-2">
                 <TextAction icon={Eye} onClick={() => onOpen(r)} data-testid={`m-open-person-${r.id}`}>Apri</TextAction>
                 <TextAction icon={Pencil} onClick={() => onEdit(r)} data-testid={`m-edit-person-${r.id}`}>Modifica</TextAction>
-                <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>Invita</TextAction>
+                {onInvite && <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>{r.last_invite_at ? "Reinvia" : "Invita"}</TextAction>}
                 <DeleteConfirm onConfirm={() => onDelete(r)} testid={`m-confirm-delete-person-${r.id}`}><TextAction icon={Trash2} danger data-testid={`m-delete-person-${r.id}`}>Elimina</TextAction></DeleteConfirm>
               </div>
             </div>
@@ -243,6 +214,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
+              {onInvite && <th className="pl-4 py-3 w-8"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={allSel} onChange={toggleAll} aria-label="Seleziona tutti" data-testid={`select-invite-all-${tab}`} /></th>}
               {isStaffTab ? (<>
                 <Th k="nome" label="Cognome e Nome" />
                 <Th k="cellulare" label="Cellulare" />
@@ -260,11 +232,12 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
               </>)}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-                : displayRows.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
+              {loading ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
+                : displayRows.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
-                    <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.cognome} {r.nome}</span></td>
+                    {onInvite && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
+                    <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.cognome} {r.nome}</span><LastInvite person={r} /></td>
                     {isStaffTab ? (
                       <>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
@@ -287,6 +260,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
           </table>
         </div>
       </div>
+      {onInvite && <BulkInviteBar selected={selectedRows} onClear={() => setSel(new Set())} onDone={onInvited} />}
     </div>
   );
 }
@@ -419,10 +393,11 @@ export default function Persons({ mode = "anagrafiche" }) {
   ];
 
   const isStaff = mode === "staff";
+  const canInvite = canSendInvites(user);
   const peopleProps = {
     rows, loading, onOpen: (r) => setDetailId(r.id),
-    onEdit: (r) => { setEditing(r); setFormOpen(true); }, onInvite: (r) => setInvite(r),
-    onDelete: delPerson, onRoleClick: (r) => setRolesFor(r),
+    onEdit: (r) => { setEditing(r); setFormOpen(true); }, onInvite: canInvite ? (r) => setInvite(r) : null,
+    onDelete: delPerson, onRoleClick: (r) => setRolesFor(r), onInvited: reload,
   };
 
   return (
@@ -469,8 +444,8 @@ export default function Persons({ mode = "anagrafiche" }) {
         fields={personFields} initial={editing} onSubmit={submitPerson} testid="person" />
       {detailId && <PersonDetailDialog personId={detailId} open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}
         events={events} settings={settings} onChanged={reload}
-        onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={(p) => { setDetailId(null); setInvite(p); }} />}
-      {invite && <InviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
+        onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={canInvite ? (p) => { setDetailId(null); setInvite(p); } : null} />}
+      {invite && <PersonInviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
       {rolesFor && <EventRolesDialog person={rolesFor} events={events} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
     </div>
   );

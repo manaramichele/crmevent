@@ -56,7 +56,8 @@ ROUTE_RULES = [
     ("/companies", "aziende", None),
     ("/company-contacts", "aziende", None),
     ("/persons-match", "anagrafiche|staff", "view"),
-    ("/persons/{person_id}/invite", "anagrafiche|staff", "edit"),
+    ("/persons/{person_id}/invite", "*", None),  # verifica dedicata: permesso send_invites + accesso destinatario
+    ("/person-invites", "*", None),
     ("/persons/{person_id}/access", "anagrafiche|staff", "edit"),
     ("/persons", "anagrafiche|staff", None),
     ("/deals", "sponsor", None),
@@ -78,8 +79,9 @@ READ_ANY_EXACT = {"/settings", "/credits/balance", "/credits/services", "/events
 def default_permissions(role: str) -> dict:
     if role == "collaboratore":
         return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all",
-                "teams": default_teams(role)}
-    return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role)}
+                "teams": default_teams(role), "send_invites": False}
+    return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role),
+            "send_invites": False}
 
 
 def normalize_teams(raw, role: str) -> dict:
@@ -104,7 +106,8 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
     ev = raw.get("events", "all")
     if ev != "all":
         ev = sorted({str(x) for x in (ev or []) if x})
-    return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role)}
+    return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role),
+            "send_invites": raw.get("send_invites") is True}
 
 
 def effective(membership: dict) -> dict:

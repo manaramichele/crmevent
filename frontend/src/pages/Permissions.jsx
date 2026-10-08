@@ -33,7 +33,7 @@ export function permSummary(p, meta) {
   const secs = meta?.sections || [];
   const vis = secs.filter((s) => (p.sections?.[s.key] || []).length);
   const edit = vis.filter((s) => (p.sections[s.key] || []).some((a) => a !== "view"));
-  return `${vis.length}/${secs.length} sezioni (${edit.length} con modifica) · ${p.events === "all" ? "tutti gli eventi" : `${(p.events || []).length} eventi`}`;
+  return `${vis.length}/${secs.length} sezioni (${edit.length} con modifica) · ${p.events === "all" ? "tutti gli eventi" : `${(p.events || []).length} eventi`}${p.send_invites ? " · inviti email" : ""}`;
 }
 
 function MatrixEditor({ meta, value, onChange }) {
@@ -123,9 +123,22 @@ function TeamScope({ teams, events, value, onChange }) {
   );
 }
 
+function InviteToggle({ value, onChange }) {
+  return (
+    <div className="space-y-1.5">
+      <div className={SECTION_LBL}>Invio inviti email</div>
+      <div className="flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2"><input type="radio" checked={value} onChange={() => onChange(true)} data-testid="perm-send-invites-on" />Attivo</label>
+        <label className="flex items-center gap-2"><input type="radio" checked={!value} onChange={() => onChange(false)} data-testid="perm-send-invites-off" />Disattivo</label>
+      </div>
+      <p className="text-xs text-slate-400">Consente di inviare via email l'invito all'area personale a Staff, Volontari e Collaboratori dei soli Team ed eventi accessibili. Non permette di creare utenti CRM, cambiare ruoli o assegnare permessi.</p>
+    </div>
+  );
+}
+
 export const initialPerm = (meta, p) => {
   const base = !p || p.admin ? meta.defaults.user : p;
-  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] } };
+  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] }, send_invites: !!base.send_invites };
 };
 
 export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId }) {
@@ -145,6 +158,7 @@ export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId 
         <div className="space-y-1.5"><div className={SECTION_LBL}>Sezioni</div><MatrixEditor meta={meta} value={perm} onChange={setPerm} /></div>
         <div className="space-y-1.5"><div className={SECTION_LBL}>Eventi</div><EventScope events={meta.events} value={perm.events} onChange={(events) => setPerm((p) => ({ ...p, events }))} /></div>
         <div className="space-y-1.5"><div className={SECTION_LBL}>Accesso ai Team</div><TeamScope teams={meta.teams || []} events={meta.events} value={perm.teams} onChange={(teams) => setPerm((p) => ({ ...p, teams }))} /></div>
+        <InviteToggle value={!!perm.send_invites} onChange={(send_invites) => setPerm((p) => ({ ...p, send_invites }))} />
         <p className="text-xs text-slate-400">Account, abbonamento, crediti, fatture, impostazioni e gestione utenti restano riservati all'Admin Organizzatore.</p>
       </>)}
     </div>

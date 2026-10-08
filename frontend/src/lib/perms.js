@@ -11,6 +11,8 @@ export const can = (u, section, action = "view") => {
   return (p.sections?.[section] || []).includes(action);
 };
 
+export const canSendInvites = (u) => !!u && (isOrgAdmin(u) || !!u.permissions?.admin || !!u.permissions?.send_invites);
+
 export function useCan(section) {
   const { user } = useAuth();
   return {

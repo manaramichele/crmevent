@@ -16,6 +16,7 @@ from collections import defaultdict
 import support_service
 from datetime import datetime, timezone, timedelta
 from typing import Any, List, Optional
+from zoneinfo import ZoneInfo
 
 import jwt
 import bcrypt
@@ -202,7 +203,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     ids = None if eff["events"] == "all" else list(eff["events"])
     team_ids = await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"))
     perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
-            "teams": eff.get("teams") or {}}
+            "teams": eff.get("teams") or {}, "send_invites": eff.get("send_invites", False)}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
     seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
@@ -1914,22 +1915,81 @@ async def delete_company_contact(rel_id: str, admin: dict = Depends(require_admi
 
 # ---------------- person invite ----------------
 class InviteIn(BaseModel):
-    role: str = "volunteer"
+    role: Optional[str] = None
+    force: bool = False
+
+
+class BulkInviteIn(BaseModel):
+    person_ids: List[str]
 
 
 class AccessIn(BaseModel):
     enabled: bool
 
 
-@api.post("/persons/{person_id}/invite")
-async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(require_admin)):
-    person = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0})
-    if not person:
-        raise HTTPException(status_code=404, detail="Persona non trovata")
+INVITE_DUP_HOURS = 24
+
+
+def _assert_can_invite(user: dict) -> None:
+    p = user.get("perm") or {"admin": True}
+    if not (p.get("admin") or p.get("send_invites")):
+        raise HTTPException(status_code=403, detail="Non hai il permesso di inviare inviti email")
+
+
+async def _invite_roles_for(user: dict, person: dict) -> set:
+    """Ruoli invitabili per la persona: Admin tutti; altri solo da presenze in Team/eventi/categorie gestiti."""
+    p = user.get("perm") or {"admin": True}
+    if p.get("admin"):
+        return {"staff", "volunteer"}
+    tids, eids, tp = p.get("team_ids"), p.get("event_ids"), p.get("teams") or {}
+    links = await db.staff.find({"org_id": user["org_id"], "persona_id": person["id"]},
+                                {"_id": 0, "categoria": 1, "team_id": 1, "evento_id": 1}).to_list(1000)
+    roles = set()
+    for l in links:
+        cat = l.get("categoria")
+        if cat not in ("staff", "collaboratore", "volontario"):
+            continue
+        if (eids is not None and l.get("evento_id") not in eids) or (tids is not None and l.get("team_id") not in tids):
+            continue
+        if tp.get("manage_volunteers" if cat == "volontario" else "manage_staff", True) is False:
+            continue
+        roles.add("volunteer" if cat == "volontario" else "staff")
+    return roles
+
+
+async def _send_person_invite(user: dict, person: dict, role: Optional[str], force: bool) -> dict:
+    """Invito area personale (template/link esistenti) con controllo accesso destinatario e anti-doppione."""
     if not person.get("email"):
         raise HTTPException(status_code=400, detail="La persona non ha un'email")
-    role = body.role if body.role in ("staff", "volunteer") else "volunteer"
+    is_admin = (user.get("perm") or {"admin": True}).get("admin")
+    allowed = await _invite_roles_for(user, person)
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Non hai accesso a questa persona")
+    if role not in ("staff", "volunteer"):
+        role = person.get("user_role") if person.get("user_role") in allowed else ("volunteer" if "volunteer" in allowed else "staff")
+    if role not in allowed:
+        raise HTTPException(status_code=403, detail="Non puoi invitare questa persona con il ruolo selezionato")
     email = person["email"].lower()
+    existing = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "role": 1})
+    if not is_admin:
+        if person.get("invite_status") == "accesso_disabilitato":
+            raise HTTPException(status_code=403, detail="Accesso disabilitato dall'Admin: non puoi reinviare l'invito")
+        if existing and (existing.get("role") not in ("staff", "volunteer") or await db.memberships.find_one({"user_id": existing["user_id"]}, {"_id": 1})):
+            raise HTTPException(status_code=409, detail="Questa persona dispone già di un account CRMEvent")
+    last = person.get("last_invite_at")
+    if last and not force:
+        try:
+            dt = datetime.fromisoformat(last)
+            if datetime.now(timezone.utc) - dt < timedelta(hours=INVITE_DUP_HOURS):
+                raise HTTPException(status_code=409, detail={"code": "recent_invite", "last_invite_at": last,
+                                    "message": f"Invito già inviato il {dt.astimezone(ZoneInfo('Europe/Rome')).strftime('%d/%m/%Y alle %H:%M')}"})
+        except ValueError:
+            pass
+    return await _do_person_invite(user, person, role, email)
+
+
+async def _do_person_invite(admin: dict, person: dict, role: str, email: str) -> dict:
+    person_id = person["id"]
     token = secrets.token_urlsafe(32)
     existing = await db.users.find_one({"email": email})
     if existing:
@@ -1954,8 +2014,44 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
     except Exception as e:
         logger.error(f"invite email failed: {e}")
         sent = False
-    await db.persons.update_one(oq(admin, id=person_id), {"$set": {"invite_status": "invito_inviato", "user_role": role}})
-    return {"ok": True, "email_sent": sent}
+    ts = now_iso()
+    await db.persons.update_one(oq(admin, id=person_id), {"$set": {"invite_status": "invito_inviato", "user_role": role,
+                                                                  "last_invite_at": ts, "last_invite_by": admin.get("name") or admin.get("email")},
+                                                         "$inc": {"invite_count": 1}})
+    await record_audit(admin, "person_invite_sent", org_id=admin["org_id"], target_email=email,
+                       target_name=f"{person.get('cognome') or ''} {person.get('nome') or ''}".strip(),
+                       detail=f"Ruolo: {'Staff' if role == 'staff' else 'Volontario'}" + ("" if sent else " · email non inviata"))
+    return {"ok": True, "email_sent": sent, "last_invite_at": ts, "role": role}
+
+
+@api.post("/persons/{person_id}/invite")
+async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(require_admin)):
+    _assert_can_invite(admin)
+    person = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0})
+    if not person:
+        raise HTTPException(status_code=404, detail="Persona non trovata")
+    return await _send_person_invite(admin, person, body.role, body.force)
+
+
+@api.post("/person-invites/bulk")
+async def invite_persons_bulk(body: BulkInviteIn, admin: dict = Depends(require_admin)):
+    """Invio multiplo: chi è già stato invitato nelle ultime 24h, senza email o fuori dal proprio ambito viene saltato."""
+    _assert_can_invite(admin)
+    ids = list(dict.fromkeys(body.person_ids))[:200]
+    persons = {p["id"]: p for p in await db.persons.find(oq(admin, id={"$in": ids}), {"_id": 0}).to_list(200)}
+    sent, skipped = [], []
+    for pid in ids:
+        p = persons.get(pid)
+        name = f"{(p or {}).get('cognome') or ''} {(p or {}).get('nome') or ''}".strip() or pid
+        if not p:
+            skipped.append({"id": pid, "name": name, "reason": "Persona non trovata"}); continue
+        try:
+            r = await _send_person_invite(admin, p, None, False)
+            sent.append({"id": pid, "name": name, "email_sent": r["email_sent"]})
+        except HTTPException as e:
+            d = e.detail
+            skipped.append({"id": pid, "name": name, "reason": d.get("message") if isinstance(d, dict) else d})
+    return {"sent": sent, "skipped": skipped}
 
 
 @api.put("/persons/{person_id}/access")
@@ -3511,6 +3607,7 @@ class PermUpdateIn(BaseModel):
     sections: Optional[dict] = None
     events: Optional[Any] = None
     teams: Optional[dict] = None
+    send_invites: Optional[bool] = None
     persona_id: Optional[str] = None  # "" = scollega
     reset: bool = False
 
@@ -3524,7 +3621,8 @@ def _perm_summary(role: str, perm: dict) -> str:
     evs = "tutti gli eventi" if ev == "all" else f"{len(ev or [])} eventi selezionati"
     tp = perm.get("teams") or {}
     tms = {"all": "tutti i Team", "leader": "solo Team di cui è Team Leader"}.get(tp.get("scope"), f"{len(tp.get('ids') or [])} Team selezionati + Team di cui è leader")
-    return f"{P.ROLES.get(role, role)} · {evs} · {tms} · " + ("; ".join(parts) or "nessuna sezione")
+    inv = "inviti email: sì" if perm.get("send_invites") else "inviti email: no"
+    return f"{P.ROLES.get(role, role)} · {evs} · {tms} · {inv} · " + ("; ".join(parts) or "nessuna sezione")
 
 
 @api.get("/org/permissions")
@@ -3572,11 +3670,12 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
         await _guard_last_admin(org, target_id)
     if new_role == "admin_org" or body.reset:
         new_perm = {}
-    elif body.sections is not None or body.events is not None or body.teams is not None:
+    elif body.sections is not None or body.events is not None or body.teams is not None or body.send_invites is not None:
         cur = P.effective({**m, "role": new_role})
         raw = {"sections": body.sections if body.sections is not None else cur["sections"],
                "events": body.events if body.events is not None else cur["events"],
-               "teams": body.teams if body.teams is not None else cur.get("teams")}
+               "teams": body.teams if body.teams is not None else cur.get("teams"),
+               "send_invites": body.send_invites if body.send_invites is not None else cur.get("send_invites", False)}
         new_perm = P.normalize_permissions(raw, new_role)
         if new_perm["teams"]["ids"]:
             valid_t = set(await db.teams.distinct("id", {"org_id": oid, "id": {"$in": new_perm["teams"]["ids"]}}))
@@ -5806,6 +5905,7 @@ AUDIT_ACTION_LABELS = {
     "member_disabled": "Disabilitazione accesso",
     "invite_sent": "Invio invito",
     "invite_resent": "Reinvio invito",
+    "person_invite_sent": "Invito area personale",
     "invite_revoked": "Revoca invito",
     "invite_accepted": "Accettazione invito",
     "lead_linked": "Collegamento account a Lead",
