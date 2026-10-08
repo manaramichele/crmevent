@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="8" time="4.965" timestamp="2026-10-08T18:02:06.237014+00:00" hostname="agent-env-bc348517-1a03-4a72-ae60-aa38be59b5cb"><testcase classname="tests.test_iter88_maps_and_demo" name="test_maps_attachments_structure" time="1.229"><failure message="AssertionError: {'file_url', 'gpx_url', 'immagine_url'}&#10;assert {'file_url', ...immagine_url'} == {'file_url', ...l', 'pdf_url'}&#10;  &#10;  Extra items in the right set:&#10;  'pdf_url'&#10;  &#10;  Full diff:&#10;    {&#10;        'file_url',...&#10;  &#10;  ...Full output truncated (4 lines hidden), use '-vv' to show">E   AssertionError: {'file_url', 'gpx_url', 'immagine_url'}
+    assert {'file_url', ...immagine_url'} == {'file_url', ...l', 'pdf_url'}
+      
+      Extra items in the right set:
+      'pdf_url'
+      
+      Full diff:
+        {
+            'file_url',...
+      
+      ...Full output truncated (4 lines hidden), use '-vv' to show</failure></testcase><testcase classname="tests.test_iter88_maps_and_demo" name="test_maps_attachments_query_string_pdf_resolved" time="0.090"><failure message="StopIteration">E   StopIteration</failure></testcase><testcase classname="tests.test_iter88_maps_and_demo" name="test_maps_attachments_pdf_url_is_200" time="0.092" /><testcase classname="tests.test_iter88_maps_and_demo" name="test_maps_attachments_cross_org_blocked" time="0.445" /><testcase classname="tests.test_iter88_maps_and_demo" name="test_lead_demo_confirm_meet_sim" time="0.589" /><testcase classname="tests.test_iter88_maps_and_demo" name="test_lead_demo_reschedule_keeps_same_link" time="0.650" /><testcase classname="tests.test_iter88_maps_and_demo" name="test_lead_demo_cancel_clears_link" time="0.622" /><testcase classname="tests.test_iter88_maps_and_demo" name="test_lead_demo_requires_superadmin" time="1.193" /></testsuite></testsuites>

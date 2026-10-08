@@ -1,0 +1,33 @@
+{
+  "summary": "Iter 88 — Tested (A) GET /api/maps-attachments + Events 'Mappe & Percorsi' dialog UI and (B) POST /api/leads/{id}/demo (Meet simulato) + SA Leads drawer. Backend 6/8 pytest pass. UI: 5/5 checks pass (no 'GPX presente/assente' labels, map-att-<kind>-<mapId>-<field> buttons present, gpx-viewer dialog + gpx-viewer-download link render, PDF href → /api/files/{id} 200, 390px no overflow, SA drawer shows lead-demo-meet with https://meet.google.com/sim-... href). 2 backend failures reveal ONE real bug: _resolve_attachment regex r'/api/files/([A-Za-z0-9_\\-]+)$' has an end-anchor so URLs with a query string (e.g. '/api/files/<id>?x=1') don't match → the file is reported as excluded even though it exists in db.files and belongs to the org. Spec explicitly says 'query string ignorata'. Fix: strip the query string before the regex (or change pattern to '/api/files/([A-Za-z0-9_\\-]+)(?:\\?|$)') in /app/backend/server.py:2293. The public-file regex at line 2289 is already fine (no $ anchor). Confirm/reschedule/cancel + Meet simulato link preserve-on-reschedule / clear-on-cancel all work. QA admin → 403 on /leads/{id}/demo. SA cross-org call to /api/maps-attachments returns 428 (require_admin rejects SA with no org_id) — acceptable.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/maps-attachments", "issue": "_resolve_attachment regex has '$' anchor so '/api/files/<id>?x=1' is treated as not-matching and the whole URL falls through to the http-prefix branch (returns None for relative URLs), excluding valid attachments whenever the stored map URL has any query string. Spec requires 'query string ignorata'. Fix: strip querystring or change regex to '/api/files/([A-Za-z0-9_\\-]+)(?:\\?|$)' at server.py line 2293.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter88_maps_and_demo.py",
+    "/app/test_reports/pytest/iter88.xml"
+  ],
+  "action_items": [
+    "Fix _resolve_attachment() in /app/backend/server.py (~line 2293): make the /api/files/{id} regex ignore query strings. Suggested: `url_no_q = url.split('?', 1)[0]; m = re.search(r'/api/files/([A-Za-z0-9_\\\\-]+)$', url_no_q)` — or change pattern to `/api/files/([A-Za-z0-9_\\-]+)(?:\\?|$)`."
+  ],
+  "critical_code_review_comments": [
+    "server.py:2289-2301 _resolve_attachment: the public-token branch regex has no $ anchor (good), but the private /api/files/{id} branch does — inconsistent. Normalize both to tolerate query strings and fragments.",
+    "server.py:2267 upload() returns `/api/files/{fid}` for non-public kinds; good — but any caller appending ?v=1 for cache busting will break maps-attachments resolution until the bug above is fixed.",
+    "server.py:3819 lead_demo_action always calls demo_booking.sync_lead even for 'cancel' (where Brevo attributes still need to be updated — probably intended, but worth documenting).",
+    "demo_booking.meet_for_demo relies on `lead.get('demo_meet_link') or <new sim link>` to preserve the link across reschedule — works, but if lead has demo_meet_link=null (e.g. after a cancel then reschedule), a new sim link is generated. Current spec is OK with that; just noting the semantics."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter88_maps_and_demo.py"
+  ],
+  "success_rate": {"backend": "75% (6/8) — 2 failures = same root cause (query-string regex bug)", "frontend": "100% — all UI assertions pass"},
+  "test_credentials": "SA manara.michele.pro@gmail.com / CrmEvent2026! ; QA qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "All TEST_ files/maps/leads created during the run were deleted at teardown. One orphan map from a mid-run error was cleaned up manually. Verified no TEST_ data left behind.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend bug is deterministic — any map whose pdf_url/gpx_url/immagine_url/file_url has a '?...' suffix is wrongly reported as missing by GET /api/maps-attachments. Once main agent patches _resolve_attachment, re-run test_iter88_maps_and_demo.py; all 8 tests should pass. UI code (Events.jsx AttachmentButtons + Leads.jsx DemoBox) is clean, no changes needed. SA cannot call /api/maps-attachments (require_admin → 428 for superadmin w/o org_id) — if cross-tenant SA viewing is ever required, that endpoint will need adjustment, but current spec only mentions org admins.",
+  "rca of the issue": "RCA: In /app/backend/server.py the helper `_resolve_attachment(url, org_id)` tries to resolve a stored map URL against db.files. The regex for the private download URL `r'/api/files/([A-Za-z0-9_\\-]+)$'` is anchored with `$`. When the URL is `/api/files/<id>?x=1` (or any query string), the regex returns None. The code then falls into the `url.startswith('http')` branch — but a relative '/api/files/...' URL does not start with 'http', so the function returns None and the attachment is dropped from the response. The spec explicitly requires that query strings be ignored. Reproduction: POST /api/maps with pdf_url=`/api/files/<validId>?x=1`, then GET /api/maps-attachments?evento_id=<ev> — the resulting items list omits the pdf. Fix: strip the query string before matching (`url.split('?',1)[0]`) OR change the regex to `r'/api/files/([A-Za-z0-9_\\-]+)(?:\\?|$)'`. Public-token path (line 2289) is already tolerant because its regex has no `$` anchor."
+}
