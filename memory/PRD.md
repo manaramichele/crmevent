@@ -367,6 +367,15 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Assistenza in videochiamata (Google Meet) a crediti — 2026-10-08 ✅ VERIFICATO (iter 84, backend 25/25 + frontend)
+- backend/video_support.py (router dedicato): config disponibilità SA (fasce settimanali, chiusure, preavviso, orizzonte; calendario = SA che salva), slot 30 min che escludono le prenotazioni e il free/busy di Google, prenotazione reserve → Meet (conferenceData) → settle (release + stato errore se il Meet fallisce), indice unico slot_lock, idempotency_key, email di conferma. Annullo org ≥24h riaccredito / <24h no; SA sempre riaccredito; riprogrammazione org 1 volta ≥24h, SA sempre. Note interne SA.
+- Meet SIMULATO solo fuori produzione con VIDEO_SUPPORT_MEET_SIMULATION=1 (backend/.env preview); email saltate in simulazione. In produzione serve Google Calendar del SA collegato (credenziali OAuth già usate da CRMEvent).
+- Catalogo: servizio video_support (disattivato di default, checkbox "Prenotabile" nel catalogo SA). service-costs lo mostra solo se attivo → Simulatore costi in Account (ServiceCosts).
+- UI: /assistenza (+ /assistenza/prenotazioni) per tutti i membri dell'org (admin vede tutte le prenotazioni dell'org); /piattaforma/assistenza-video per SA.
+- Novità: release "2026-10-08-assistenza-video" in releases.json (fixed_text, requires_service): bozza creata solo in produzione; pubblicazione bloccata finché il servizio non è attivo.
+- Fix: al login viene rimosso acting_org_id stale (X-Org-Id di un account precedente).
+
+
 ## Super Admin: Accedi come utente (assistenza) — 2026-10-08 ✅ VERIFICATO (iter 83, backend 13/13 + frontend)
 - /piattaforma/utenti (PlatformUsers.jsx, nav "Gestione Utenti"): Cognome e Nome, Email, Org, Ruolo, Stato, Ultimo accesso, "Accedi come". Ordine Cognome→Nome; ricerca SOLO cognome/nome (scelta utente); filtri org/ruolo/stato; card su mobile.
 - Backend: POST /api/platform/impersonate {user_id, org_id} (require_base_superadmin) → support_sessions (token solo hash, cookie httpOnly `support_session`, 30 min). get_current_user restituisce l'utente target con `support`; _resolve_active_org usa l'org della sessione e il ruolo reale (X-Org-Id ignorato); nessun privilegio SA. Multi-org: 409 choose_org + cambio dal banner. POST /api/platform/impersonate/stop; logout chiude anche l'assistenza.
