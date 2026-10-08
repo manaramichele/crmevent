@@ -52,9 +52,9 @@
       {
         "area": "Profilo & Account",
         "kind": "funzionalita",
-        "note": "Crediti, fatturazione e costi dei servizi riuniti in Profilo & Account; avviso email 7 giorni prima del mantenimento mensile se i crediti non bastano.",
+        "note": "Crediti, fatturazione e costi dei servizi riuniti in Profilo & Account.",
         "fallback_title": "Crediti sempre sotto controllo",
-        "fallback_text": "In Profilo & Account trovi crediti, fatture e il costo di ogni servizio; se i crediti non bastano per il mantenimento mensile di un evento ti avvisiamo via email con una settimana di anticipo."
+        "fallback_text": "In Profilo & Account trovi crediti, fatture e il costo di ogni servizio."
       }
     ]
   },

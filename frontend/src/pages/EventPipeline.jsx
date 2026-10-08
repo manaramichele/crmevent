@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RechargeDialog } from "@/components/CreditsSection";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
 import { usePeople, invalidatePeople } from "@/lib/peopleStore";
@@ -115,8 +114,7 @@ export default function EventPipeline() {
       const s = await loadStatus();
       await refreshActive(s);
     } catch (e) {
-      if (e.response?.status === 402) { toast.error("Crediti insufficienti"); setConfirmOpen(false); setRecharge(true); }
-      else toast.error(formatApiError(e.response?.data?.detail));
+      toast.error(formatApiError(e.response?.data?.detail));
     }
     setBusy(false);
   };
@@ -162,12 +160,11 @@ export default function EventPipeline() {
     setDupBusy(true);
     try {
       const { data } = await api.post(`/events/${id}/pipeline/duplicate-from`, { source_event_id: dupSource, confirm });
-      toast.success(`Pipeline creata da edizione precedente: ${data.duplicated} attività${data.charged ? ` · −${status.cost} crediti` : ""}`);
+      toast.success(`Pipeline creata da edizione precedente: ${data.duplicated} attività`);
       setDupOpen(false); setDupSource(null);
       const s = await loadStatus(); await refreshActive(s);
     } catch (e) {
-      if (e.response?.status === 402) { toast.error("Crediti insufficienti"); setDupOpen(false); setRecharge(true); }
-      else if (e.response?.status === 409) { if (window.confirm(e.response.data.detail + "\n\nProcedere?")) { await doDuplicate(true); setDupBusy(false); return; } }
+      if (e.response?.status === 409) { if (window.confirm(e.response.data.detail + "\n\nProcedere?")) { await doDuplicate(true); setDupBusy(false); return; } }
       else toast.error(formatApiError(e.response?.data?.detail));
     }
     setDupBusy(false);
@@ -288,9 +285,8 @@ export default function EventPipeline() {
           <div className="w-14 h-14 rounded-2xl bg-tiffany-light/40 flex items-center justify-center mx-auto mb-4"><Rocket className="w-7 h-7 text-tiffany-active" /></div>
           <h1 className="text-2xl font-bold text-slate-900">Porta il tuo evento dalla pianificazione al giorno della gara</h1>
           <p className="text-slate-500 mt-3">Tieni sotto controllo tutto quello che serve: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni, sponsor e attività operative.</p>
-          <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-4 py-2 text-sm font-semibold"><Coins className="w-4 h-4 text-tiffany" />Attivazione Pipeline Evento Pro: {status.cost} crediti</div>
           <div className="mt-6">
-            <Button onClick={() => setConfirmOpen(true)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-activate-cta"><Rocket className="w-4 h-4 mr-1.5" />Attiva Pipeline Evento</Button>
+            <Button onClick={activate} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-activate-cta"><Rocket className="w-4 h-4 mr-1.5" />Attiva Pipeline Evento</Button>
           </div>
           <button onClick={openDup} className="mt-4 text-sm text-slate-500 hover:text-tiffany-active inline-flex items-center gap-1.5" data-testid="pipeline-dup-intro"><Layers className="w-4 h-4" />oppure crea da un'edizione precedente</button>
         </div>
@@ -444,25 +440,6 @@ export default function EventPipeline() {
         </>
       )}
 
-      {/* Conferma attivazione */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-w-sm" data-testid="pipeline-confirm-dialog">
-          <DialogHeader><DialogTitle>Attiva Pipeline Evento Pro</DialogTitle><DialogDescription>Il costo viene addebitato una sola volta per questo evento. Dopo l'attivazione sceglierai il modello.</DialogDescription></DialogHeader>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-slate-500">Crediti disponibili</span><span className="font-semibold">{status.balance}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Costo attivazione</span><span className="font-semibold">{status.cost}</span></div>
-            <div className="flex justify-between border-t pt-2"><span className="text-slate-500">Saldo dopo attivazione</span><span className="font-semibold">{status.balance_after}</span></div>
-          </div>
-          {!status.sufficient && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800 mt-2">Non hai crediti sufficienti per attivare la Pipeline Evento.</div>}
-          <DialogFooter className="mt-3">
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Annulla</Button>
-            {status.sufficient
-              ? <Button onClick={activate} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-confirm-activate"><Coins className="w-4 h-4 mr-1.5" />Attiva per {status.cost} crediti</Button>
-              : <Button onClick={() => { setConfirmOpen(false); setRecharge(true); }} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-confirm-recharge"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Dialog cambio data evento */}
       <Dialog open={dateDlg} onOpenChange={setDateDlg}>
         <DialogContent className="max-w-md" data-testid="pipeline-date-dialog">
@@ -527,26 +504,15 @@ export default function EventPipeline() {
               <div className="flex justify-between"><span className="text-slate-500">Pipeline origine</span><span className="font-semibold">{dupSel.event_name}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Nuovo evento</span><span className="font-semibold">{status.event_name}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Attività da copiare</span><span className="font-semibold">{dupSel.task_count}</span></div>
-              {!status.active && (<>
-                <div className="border-t border-slate-200 my-2" />
-                <div className="flex items-center gap-1.5 text-slate-700 font-semibold"><Coins className="w-4 h-4 text-tiffany-active" />Attivazione Pipeline Evento Pro: {status.cost} crediti</div>
-                <div className="flex justify-between"><span className="text-slate-500">Saldo disponibile</span><span className="font-semibold">{status.balance}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Saldo dopo attivazione</span><span className="font-semibold">{status.balance_after}</span></div>
-                {!status.sufficient && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800">Crediti insufficienti per attivare la Pipeline su questo evento.</div>}
-              </>)}
-              {status.active && <div className="text-xs text-emerald-700">La Pipeline di questo evento è già attiva: la copia non consuma crediti.</div>}
             </div>
           )}
           <DialogFooter className="mt-3">
             <Button variant="outline" onClick={() => setDupOpen(false)}>Annulla</Button>
-            {(!status.active && !status.sufficient)
-              ? <Button onClick={() => { setDupOpen(false); setRecharge(true); }} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-dup-recharge"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
-              : <Button onClick={() => doDuplicate(false)} disabled={!dupSource || dupBusy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-dup-confirm"><Layers className="w-4 h-4 mr-1.5" />Crea Pipeline</Button>}
+            <Button onClick={() => doDuplicate(false)} disabled={!dupSource || dupBusy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="pipeline-dup-confirm"><Layers className="w-4 h-4 mr-1.5" />Crea Pipeline</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <RechargeDialog open={recharge} onClose={() => { setRecharge(false); loadStatus(); }} />
     </div>
   );
 }

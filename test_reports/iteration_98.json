@@ -1,0 +1,28 @@
+{
+  "summary": "Iter98 - Verified full dismissal of the credit model after switch to BRONZE/SILVER/GOLD subscriptions. Backend (6/6 pytest passed /app/backend/tests/test_iter98_credits_removed.py): POST /api/credits/checkout -> 410 Gone; POST /api/credits/estimate returns will_charge=false, effective_cost=0, sufficient=true for ai_assistant, ai_briefing, google_calendar_unlock, pipeline_event_pro, social_ai; POST /api/events/{id}/pipeline/activate on a TEST event completes with 200 (not 402) and credits/ledger shows no new debit entries; POST /api/shifts never returns 402; GET /api/account/subscription for QA admin returns {status:'trial', plan:'crmevent', trial_end:2026-10-14, access:'full', effective_plan:'premium', org_type:'cliente'} confirming the GOLD trial migration. Code review (backend/server.py:11627-11704): _charge_begin returns None early (credit system dismissed) and credits_estimate hard-codes will_charge=False. Frontend (Playwright 1920x1080) as QA admin (qa.eventi@crmeventqa.it): /profilo tabs are ['Account','Il mio abbonamento','Servizi aggiuntivi','Utenti e Permessi'] - NO 'Crediti e fatturazione' tab; 'Il mio abbonamento' shows PIANO ATTIVO=GOLD, STATO='Prova gratuita', SCADENZA PROVA=22/10/2026 (14 gg), lists all funzionalita disponibili and the three plans (BRONZE 19/mese, SILVER 49/mese, GOLD 79/mese); Storico pagamenti card present (invoices-card); no 'Ricarica' button, no 'Crediti insufficienti' banner, no credits-guard-banner, no gcal-unlock-prompt. /profilo?tab=crediti still renders the Il mio abbonamento tab content (invoices-card + subscription widget) [URL stays as ?tab=crediti but UI opens the abbonamento tab - acceptable]. /account correctly 302s to /profilo?tab=abbonamento. Assistant panel (header-assistant-button) opens with greeting message and 3 preset questions, no credits text in the panel body. As Super Admin (manara.michele.pro@gmail.com): /piattaforma sidebar enumerates [Dashboard piattaforma, Gestione Utenti, Abbonamenti, Prenotazioni assistenza, Demo, Richieste demo, Marketplace, Modelli Pipeline, Messaggi, Novità, Supporto, Audit Log, Organizzatori, Email & Brevo, Social, Calendario editoriale, Impostazioni Social] - no 'Servizi e crediti' entry; /piattaforma page body does NOT contain 'crediti' nor 'Pagamenti e Crediti' block; /piattaforma/crediti direct URL redirects to '/' (route gone). Public pages: home '/', /registrati, /termini body texts contain NO 'crediti' word; /termini displays the renamed section 'Abbonamenti e funzionalità a pagamento'. Marketplace admin page body does NOT contain 'crediti'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter98_credits_removed.py",
+    "/app/test_reports/pytest/iter98.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/server.py:11627 _charge_begin and :11691 credits_estimate have dead-code tails after the early return / hard-coded will_charge=False - safe to delete to shrink the file (~70 lines) and avoid confusing future readers.",
+    "backend/server.py:11060 credits_checkout: raise HTTPException 410 is correctly placed as the first statement, but the entire Stripe setup code (lines 11062-11210) after the raise is unreachable - consider deleting or guarding behind a feature flag.",
+    "The /profilo?tab=crediti URL currently shows the 'Il mio abbonamento' tab content but keeps the ?tab=crediti query string - minor UX nit: the frontend could rewrite the URL via history.replaceState to ?tab=abbonamento for consistency (not a bug)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter98_credits_removed.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6 pytest)", "frontend": "100% (Profilo tabs, /account & ?tab=crediti redirects, SA sidebar no crediti, public pages no crediti, /termini renamed section, assistant panel no credit text, /piattaforma/crediti route gone)"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! and Super Admin manara.michele.pro@gmail.com / CrmEvent2026! both used successfully.",
+  "seed_data_creation": "test_pipeline_activate_no_debit and test_shifts_create_not_402 each created and then deleted a TEST_Iter98_* event via /api/events DELETE. No residual TEST_ data in QA org.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Credit model is fully dismissed on both API and UI. QA org (org_qa_eventi) is on GOLD trial until 2026-10-14. If the main agent proceeds with cleanup, the dead code after early-return in _charge_begin, credits_estimate, credits_checkout (and migrate_legacy_orgs_to_trial once all 32 orgs are confirmed migrated) can be removed. Pipeline activation and shift creation no longer gate on credits/402."
+}

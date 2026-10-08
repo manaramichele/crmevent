@@ -10,16 +10,13 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { EventCreditDialog } from "@/components/EventCreditDialog";
-import { Coins, Rocket, Image as ImageIcon, Paperclip } from "lucide-react";
+import { Rocket, Image as ImageIcon, Paperclip } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
 import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import AvailabilityDialog from "@/components/AvailabilityDialog";
-import { RechargeDialog } from "@/components/CreditsSection";
 
 const STATO = { attivo: "green", pianificato: "tiffany", concluso: "gray", annullato: "red" };
 const STATO_LABEL = { attivo: "In corso", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
@@ -282,26 +279,8 @@ function MapsDialog({ eventId, open, onOpenChange }) {
   );
 }
 
-const EV_STATE = {
-  preparazione: ["Da attivare", "bg-slate-100 text-slate-600"],
-  attivo: ["Attivo", "bg-emerald-50 text-emerald-700"],
-  sospeso: ["Sospeso", "bg-red-50 text-red-700"],
-  concluso: ["Concluso", "bg-slate-100 text-slate-500"],
-};
-const dmyEv = (d) => (d ? d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4) : "");
-function eventDisplayState(r) {
-  const end = r.data_fine || r.data_inizio;
-  if (end && new Date(end + "T23:59:59") < new Date()) return "concluso";
-  if (r.credit_state === "attivo") return "attivo";
-  if (r.credit_state === "sospeso") return "sospeso";
-  if (r.credit_state === "concluso") return "concluso";
-  if (!r.credit_state) return "attivo"; // legacy: operativo, nessun prompt
-  return "preparazione";
-}
-
-function EventRowActions({ row, navigate, setCreditFor, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, saas }) {
+function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete }) {
   const all = [
-    ...(saas ? [] : [{ key: "event-credits", label: "Crediti", Icon: Coins, run: () => setCreditFor(row.id), title: "Crediti evento (attiva / stato)" }]),
     { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
     { key: "briefing", label: "Briefing", Icon: FileText, run: () => navigate(`/eventi/${row.id}/briefing`), title: "Briefing evento" },
     { key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" },
@@ -383,24 +362,7 @@ export default function Events() {
     if (m) { setMapsFor(m); sp.delete("maps"); setSp(sp, { replace: true }); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [availFor, setAvailFor] = useState(null);
-  const [creditFor, setCreditFor] = useState(null);
-  const [recharge, setRecharge] = useState(false);
-  const [noCredits, setNoCredits] = useState(false);
   const [delRow, setDelRow] = useState(null);
-  const { user } = useAuth();
-  const saas = !!user?.saas?.enabled;  // abbonamento: eventi subito operativi, nessuna attivazione a crediti
-  const balRef = useRef({ balance: null });
-  const refreshBalance = async () => {
-    if (saas) return null;
-    try { const { data } = await api.get("/credits/balance"); balRef.current = data; return data; } catch { return null; }
-  };
-  useEffect(() => { refreshBalance(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const guardCreate = async () => {
-    if (saas) return true;
-    const b = await refreshBalance();
-    if (b && b.balance < 1) { setNoCredits(true); return false; }
-    return true;
-  };
   if (!settings) return <div className="text-slate-400">Caricamento...</div>;
 
   const fields = [
@@ -448,17 +410,6 @@ export default function Events() {
       );
     } },
     { key: "stato", label: "Fase", render: (r) => <StatusBadge color={STATO[r.stato] || "gray"}>{STATO_LABEL[r.stato] || r.stato}</StatusBadge> },
-    ...(saas ? [] : [{ key: "credit_state", label: "CRMEvent", render: (r) => {
-      const s = eventDisplayState(r);
-      const [lbl, cls] = EV_STATE[s] || EV_STATE.preparazione;
-      const end = r.data_fine || r.data_inizio;
-      return (
-        <button onClick={() => setCreditFor(r.id)} data-testid={`event-credit-badge-${r.id}`} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${cls} hover:opacity-80 transition`}>
-          <Coins className="w-3.5 h-3.5" />
-          {s === "attivo" && end ? `Attivo · fino al ${dmyEv(end)}` : lbl}
-        </button>
-      );
-    } }]),
   ];
 
   const syncCal = async (row) => {
@@ -470,25 +421,14 @@ export default function Events() {
     <>
       <EntityManager title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event" defaultSort={{ key: "data_inizio", dir: "asc" }}
-        searchKeys={["nome", "citta", "tipologia"]} guardCreate={guardCreate} fullActions
+        searchKeys={["nome", "citta", "tipologia"]} fullActions
         rowActions={(row, helpers) => (
           <EventRowActions row={row} navigate={navigate}
-            setCreditFor={setCreditFor} setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal} saas={saas}
+            setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal}
             openEdit={helpers.openEdit} onRequestDelete={() => setDelRow({ row, del: helpers.onDelete })} />
         )} />
       {mapsFor && <MapsDialog eventId={mapsFor} open={!!mapsFor} onOpenChange={(o) => !o && setMapsFor(null)} />}
       {availFor && <AvailabilityDialog eventId={availFor} open={!!availFor} onOpenChange={(o) => !o && setAvailFor(null)} />}
-      {creditFor && <EventCreditDialog eventId={creditFor} open={!!creditFor} onOpenChange={(o) => { if (!o) { setCreditFor(null); refreshBalance(); } }} />}
-      <Dialog open={noCredits} onOpenChange={setNoCredits}>
-        <DialogContent className="max-w-md" data-testid="event-no-credits-dialog">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Coins className="w-5 h-5 text-tiffany-active" />Crediti insufficienti</DialogTitle>
-            <DialogDescription>Per creare un nuovo evento devi avere almeno 1 credito disponibile. Il tuo saldo è {balRef.current?.balance ?? 0} crediti.</DialogDescription>
-          </DialogHeader>
-          <Button onClick={() => { setNoCredits(false); setRecharge(true); }} className="w-full bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="event-no-credits-recharge"><Coins className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>
-        </DialogContent>
-      </Dialog>
-      <RechargeDialog open={recharge} onClose={() => { setRecharge(false); refreshBalance(); }} />
       <AlertDialog open={!!delRow} onOpenChange={(o) => !o && setDelRow(null)}>
         <AlertDialogContent data-testid="event-delete-dialog">
           <AlertDialogHeader>
