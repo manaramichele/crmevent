@@ -1,0 +1,28 @@
+{
+  "summary": "Iter97 — Verified removal of CRMEvent/credit activation flow and header streamlining. Backend (5/5 pytest passed /app/backend/tests/test_iter97_events_no_activation.py): QA admin can POST /api/events, PUT /api/events/{id} with stato='attivo' (previously 400) and 'concluso', POST /api/shifts linked to event does NOT return 403 event_not_operational (confirmed _assert_event_operational is a no-op at server.py:11778; run_event_renewals also a no-op). Frontend (Playwright, 1920/768/390) as QA admin qa.eventi@crmeventqa.it: /eventi columns are ['Evento','Tipologia','Città','Date','Fase','Azioni'] — no 'CRMEvent' column, 0 element matches [data-testid^='event-credit-badge-'], body text does NOT contain 'Da attivare', 'Attiva evento' or 'Sospeso', 'Fase' column with StatusBadge (Pianificato) renders correctly, event-no-credits-dialog never appears on 'Aggiungi' click. Header: header-search-button, header-search-row and header-tutorial-button are absent; header-assistant-button opens support-panel; profile-button is a small circular icon that opens profile-menu with 'QA Eventi / email / Profilo & Account / Esci'. Mobile 390x844: news/assistant/profile icons at x=226/266/346 (36x36) — no overlaps and clickable. Tablet 768x1024: same icons at x=529/571/655 — no overlaps. Deleted TEST_EvOp event (f5682b…) and TEST_Iter97_* ephemeral events. DB clean.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter97_events_no_activation.py",
+    "/app/test_reports/pytest/iter97.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/server.py:11778 _assert_event_operational is correctly a no-op (early `return`); dead code remains below the return — safe to delete in a follow-up to reduce confusion.",
+    "backend/server.py still has run_event_renewals and _charge_event_activation code paths and the scheduler kicks run_event_renewals at line 5261. Since activation is dismissed these could be dead-code cleaned later; currently harmless because no event has credit_state in ('attivo','sospeso') for new orgs."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter97_events_no_activation.py (new)"
+  ],
+  "success_rate": {"backend": "100% (5/5 pytest)", "frontend": "100% (headers, columns, no credit UI, mobile/tablet alignment, create event dialog)"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! used. Super Admin login not required for these checks.",
+  "seed_data_creation": "test_iter97 fixture created and tore down TEST_Iter97_* events; also deleted the pre-existing TEST_EvOp event (id f5682b51c5e94d078d8e3f0edb691d41) left by main agent, per request. No residual TEST_ data in QA org.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Events activation flow is fully removed from backend guard (no-op) and UI (no CRMEvent column, no Crediti actions, no credit badges, no event-no-credits-dialog). Header no longer has search/tutorial buttons; assistant/profile buttons work and are compact. For future reporting the dead code in _assert_event_operational / run_event_renewals / _charge_event_activation can be removed if the main agent wants to simplify server.py.",
+  "rca of the issue": "N/A — all requested behaviours are already correctly implemented."
+}

@@ -540,6 +540,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Nuovo componente `frontend/src/components/OrgUsers.jsx` montato in `Profile.jsx` come scheda "Utenti e accessi", visibile SOLO se `user.org_role === "admin_org"`. Tabella unica membri+inviti: Nome | Email | Cellulare | Ruolo | Stato (Invito inviato/Attivo/Invito scaduto) | Ultimo accesso | Azioni. "+ Invita utente" (Nome, Cognome, Email, Cellulare con PhoneInput intl, Ruolo). Azioni: Reinvia · Cambia ruolo · Disattiva/Riattiva accesso. Scadenza invito 7gg. Nessun consumo crediti; nessuna modifica a Stripe/wallet/ledger/FIC.
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
+## Eventi senza attivazione + header compatto — 2026-10-08 ✅ VERIFICATO (iteration_97)
+- Events.jsx: rimossa colonna "CRMEvent", azione Crediti, EventCreditDialog e controllo "Crediti insufficienti" alla creazione. Colonna Fase invariata.
+- server.py: creazione evento senza credit_state/controllo saldo; consentito stato "attivo" (In corso) in modifica; `_assert_event_operational` e `run_event_renewals` disattivati (no-op, nessun addebito). Dati eventi esistenti invariati. ActivationGate rimosso dal Layout.
+- Header: rimossi lente/ricerca globale e Tutorial (contenuto Onboarding invariato); icona account piccola circolare; gap ridotti, icone 36px.
+
 ## Assistente IA senza crediti per abbonamenti — 2026-10-08 ✅ VERIFICATO (curl)
 - server.py /support/chat: se org.saas enabled → nessun ai_charge; se abbonamento non attivo (prova scaduta/annullata) → 402 "scegli un piano". Org legacy invariate (crediti).
 - SupportChat.jsx: per org con abbonamento niente "Crediti insufficienti"/"Ricarica crediti"; eventuale 402 mostra "Scopri i piani" → /profilo?tab=abbonamento.
