@@ -28,6 +28,7 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 
 import asyncio
 import news
+import brevo_org_lists
 import email_utils
 import permissions as P
 import storage_utils
@@ -585,7 +586,8 @@ async def register_organization(body: OrgRegisterIn, response: Response):
                                "nome": body.nome, "cognome": body.cognome, "registered_at": now_iso(),
                                "password_hash": hash_password(body.password), "role": "admin",
                                "auth_provider": "password", "org_id": org["id"], "telefono": phone,
-                               "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso()})
+                               "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso(),
+                               "self_registered": True})
     await _ensure_membership(uid, org["id"], "admin_org", uid)
     # Lead continuity: if this email already requested a demo, link that lead to the new account
     # (no duplicate contact) and advance the funnel — preserving the lead → demo → trial history.
@@ -619,7 +621,7 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
     phone = _normalize_phone(body.telefono)
     org = await _create_organization(body.org_name.strip(), user["user_id"])
     await db.users.update_one({"user_id": user["user_id"]},
-                              {"$set": {"org_id": org["id"], "role": "admin", "telefono": phone,
+                              {"$set": {"org_id": org["id"], "role": "admin", "telefono": phone, "self_registered": True,
                                         "registered_at": now_iso(), "accepted_terms_at": now_iso()}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
     try:
@@ -3727,10 +3729,7 @@ async def add_org_member(org_id: str, body: MemberAddIn, user: dict = Depends(ge
     await db.memberships.update_one({"user_id": target["user_id"], "org_id": org_id}, {"$set": {"persona_id": body.persona_id}})
     await record_audit(user, "member_added", org_id=org_id, org_name=org.get("nome"),
                        target_email=email, target_name=target.get("name"), detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
-    try:
-        await sync_registered_user(target["user_id"], org_id, source="member_added")
-    except Exception as e:
-        logger.error(f"registered-user sync error: {e}")
+    asyncio.create_task(brevo_org_lists.sync_invited_user(db, target["user_id"], org_id))
     return {"ok": True}
 
 
@@ -4213,6 +4212,9 @@ async def sync_registered_user(user_id: str, org_id: str = None, *, nome=None, c
     # Non sincronizzare account staff/volontari (solo area personale) né il Super Admin.
     if u.get("role") in ("volunteer", "staff", "superadmin"):
         return {"ok": False, "skipped": True}
+    # Solo chi si è registrato autonomamente: gli invitati seguono il percorso dedicato (liste per organizzazione).
+    if source != "registration" and not (u.get("self_registered") or await db.organizations.find_one({"owner_user_id": user_id}, {"_id": 1})):
+        return {"ok": False, "skipped": True, "reason": "invited"}
     # Deve esistere almeno una membership attiva: un invito pending non rende "registrato" l'utente.
     if not await db.memberships.find_one({"user_id": user_id, "active": True}):
         return {"ok": False, "skipped": True}
@@ -4277,6 +4279,8 @@ async def platform_sync_registered_users(admin: dict = Depends(require_superadmi
             continue
         if u.get("role") in ("volunteer", "staff", "superadmin"):
             continue
+        if not (u.get("self_registered") or await db.organizations.find_one({"owner_user_id": uid}, {"_id": 1})):
+            continue  # invitati: percorso dedicato (non si rimuovono quelli già presenti)
         email = u["email"].lower()
         if email in seen:
             continue
@@ -5049,11 +5053,8 @@ async def _accept_invite(inv: dict, target_user: dict) -> None:
     await record_audit(target_user, "invite_accepted", org_id=inv["org_id"], org_name=(org or {}).get("nome"),
                        target_email=target_user.get("email"), target_name=target_user.get("name"),
                        detail=f"Ruolo: {ORG_ROLE_LABELS[role]}")
-    # Invito accettato → l'utente diventa "registrato": upsert nella lista Brevo Utenti registrati.
-    try:
-        await sync_registered_user(target_user["user_id"], inv["org_id"], source="invite_accepted")
-    except Exception as e:
-        logger.error(f"registered-user sync error: {e}")
+    # Invitato: percorso dedicato (lista Utenti_invitati dell'org), mai la lista/funnel delle registrazioni autonome.
+    asyncio.create_task(brevo_org_lists.sync_invited_user(db, target_user["user_id"], inv["org_id"]))
 
 
 @api.get("/invites/{token}")
@@ -5195,8 +5196,8 @@ async def assign_lead_org(lead_id: str, body: LeadAssignIn, admin: dict = Depend
     await record_audit(admin, "member_added", org_id=body.org_id, org_name=org.get("nome"),
                        target_email=u["email"], target_name=u.get("name"),
                        detail=f"Assegnato da Lead · Ruolo: {ORG_ROLE_LABELS[role]}")
-    try:
-        await sync_registered_user(u["user_id"], body.org_id, source="assigned_by_superadmin")
+    try:  # il lead si era registrato/richiesto demo autonomamente: resta nel percorso registrazioni
+        await sync_registered_user(u["user_id"], body.org_id, source="registration")
     except Exception as e:
         logger.error(f"registered-user sync error: {e}")
     return {"ok": True}
@@ -5796,6 +5797,8 @@ AUDIT_ACTION_LABELS = {
     "news_deleted": "Novità eliminata",
     "news_simulated": "Simulazione rilascio (test)",
     "maint_low_balance_notice": "Avviso saldo insufficiente per mantenimento",
+    "brevo_org_lists_toggle": "Liste Brevo per organizzazione",
+    "brevo_org_lists_sync": "Sincronizzazione liste Brevo organizzazione",
 }
 
 
@@ -12396,6 +12399,7 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
 
 app.include_router(api)
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
+app.include_router(brevo_org_lists.build_router(db, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
