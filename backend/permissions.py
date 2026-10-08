@@ -58,6 +58,7 @@ METHOD_ACTION = {"GET": "view", "HEAD": "view", "POST": "create", "PUT": "edit",
 ROUTE_RULES = [
     ("/video-support", "*", None),
     ("/demo/", "*", None),
+    ("/marketplace", "*", None),
     ("/saas/", "*", None),
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),
@@ -112,9 +113,9 @@ READ_ANY_EXACT = {"/settings", "/credits/balance", "/credits/services", "/events
 def default_permissions(role: str) -> dict:
     if role == "collaboratore":
         return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all",
-                "teams": default_teams(role), "send_invites": False, "team_leader": normalize_tl(None)}
+                "teams": default_teams(role), "send_invites": False, "marketplace_purchase": False, "team_leader": normalize_tl(None)}
     return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role),
-            "send_invites": False, "team_leader": normalize_tl(None)}
+            "send_invites": False, "marketplace_purchase": False, "team_leader": normalize_tl(None)}
 
 
 def normalize_teams(raw, role: str) -> dict:
@@ -140,7 +141,8 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
     if ev != "all":
         ev = sorted({str(x) for x in (ev or []) if x})
     return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role),
-            "send_invites": raw.get("send_invites") is True, "team_leader": normalize_tl(raw.get("team_leader"))}
+            "send_invites": raw.get("send_invites") is True, "marketplace_purchase": raw.get("marketplace_purchase") is True,
+            "team_leader": normalize_tl(raw.get("team_leader"))}
 
 
 def effective(membership: dict) -> dict:

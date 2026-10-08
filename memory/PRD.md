@@ -476,6 +476,27 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Rinnovo automatico Mantenimento: POST /api/cron/event-renewals (Bearer WEBHOOK_CRON_SECRET) + `.emergent/crons.yml` ogni giorno 03:00 UTC. Su Aruba serve crontab di sistema equivalente.
 - NB: il briefing NON è generato con AI (è costruito dai dati evento).
 
+## Prova automatica alla registrazione + niente "Attiva evento" — 2026-10-08 ✅ VERIFICATO (iter 95 + fix)
+- La prova parte alla registrazione (organizations.saas.trial_start/trial_end). Per le org ad abbonamento: eventi creati già operativi (credit_state attivo), nessuna colonna o badge crediti, nessuna azione "Crediti", nessun ActivationGate né dialog "crediti insufficienti"; POST /events/{id}/activate → 400. Org legacy a crediti invariate.
+- Fix: crash del menu "Altre" in Eventi (azione undefined filtrata). Header mobile: "Prenota una demo" solo icona sotto i 640px, così il profilo resta visibile a 375px.
+
+## Header interno riorganizzato + tipografia −10% — 2026-10-08 ✅ VERIFICATO (iter 94)
+- Pulsante unico: "Prenota una demo" (`header-demo-button`, apre WelcomeDemo sul calendario) finché `saas.trial_active`, poi "Assistenza" (regole del piano). Tolta la voce Demo dal menu profilo; la Demo è prenotabile da qualsiasi membro dell'organizzazione in prova.
+- Ricerca: GlobalSearch in alto a sinistra nella Dashboard; nelle altre pagine icona Cerca nell'header che apre la stessa ricerca.
+- Novità: solo icona + contatore delle non lette (title/aria "Novità").
+- Tipografia: `src/app-typography.css` riduce del 10% le classi text-* (prefissi responsive inclusi, text-xs minimo 0,72rem) solo con `body.app-shell`, impostata dal Layout autenticato; sito pubblico invariato.
+- "Lo farò in seguito" uniforme nel flusso di benvenuto e Demo.
+
+## Rimozione "100 crediti" + benvenuto unico — 2026-10-08 ✅ VERIFICATO (iter 93)
+- Registrazione: nuovo sottotitolo "prova CRMEvent gratuitamente per 14 giorni", rimosso il popup "Hai ricevuto 100 crediti" (dopo la registrazione si va su /app → unico popup WelcomeDemo). Footer: "Prezzi" e "14 giorni di prova gratuita". Tolto "GOLD" dai testi della prova (/prezzi, /demo, email benvenuto/3 giorni/scadenza, header).
+- WelcomeDemo: "La tua prova gratuita di 14 giorni è attiva", pulsanti "Prenota una demo" / "Lo farò in seguito" (anche il link nel calendario). Per i nuovi organizzatori il tutorial non si apre più da solo (resta disponibile dal pulsante Tutorial).
+- Backend: le nuove org cliente ricevono la prova (init_trial) e NON il bonus di 100 crediti (`_grant_signup_bonus` resta solo per le org non cliente e per lo strumento di migrazione Super Admin). Crediti, saldi, movimenti e fatture storici invariati.
+
+## Azioni rapide + Marketplace — 2026-10-08 ✅ VERIFICATO (iter 92: backend 9/9, frontend OK)
+- Menu: Dashboard → Azioni rapide (/azioni-rapide, scorciatoie filtrate per piano e permessi "create") → Marketplace (/marketplace), poi le voci esistenti. "Cosa richiede attenzione" rinominata "To Do List" (resta in Dashboard).
+- `marketplace.py`: catalogo `marketplace_services` (6 servizi iniziali "Prossimamente", non acquistabili), acquisti `marketplace_purchases` per org/evento, checkout Stripe TEST (una tantum con fattura / mensile / annuale), attivazione solo con verifica su Stripe (webhook o conferma lato server), rinnovi, pagamenti falliti e annullamenti, fatture (forfettario, FIC LIVE tramite `_emit_saas_invoice`). Il pagamento a consumo e l'addebito a crediti sono solo configurabili. LIVE bloccato finché non si imposta MARKETPLACE_STRIPE_LIVE_ENABLED=1.
+- Nuovo permesso `marketplace_purchase` ("Acquisto servizi Marketplace"); Super Admin /piattaforma/marketplace (catalogo + acquisti); Profilo → "Servizi aggiuntivi".
+
 ## Home senza "GOLD" nella prova + pulsante prova nell'header — 2026-10-08 ✅ VERIFICATO (iter 91)
 - Home: testi della prova senza "GOLD" ("14 giorni di prova gratuita"), rimosso "Guarda la demo", CTA "Registrati gratis" → /registrati (PlansSection accetta la prop `claim`, usata solo in Home).
 - Header interno: `TrialButton.jsx` ("N giorni rimasti" / "N gg" su mobile, ambra negli ultimi 3 giorni, "Prova terminata"), popup con riepilogo BRONZE/SILVER/GOLD e "Scopri i piani" → /profilo?tab=abbonamento; dati da /api/saas/me (aggiornati al focus della scheda e ogni 15 minuti). Nascosto con abbonamento acquistato, per le org legacy e per il Super Admin. Su mobile durante la prova il pulsante Assistenza mostra solo l'icona. Il vecchio indicatore resta solo per "pagamento non riuscito".

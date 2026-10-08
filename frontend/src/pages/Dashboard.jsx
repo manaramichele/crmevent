@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { GlobalSearch } from "@/components/Layout";
 import { useCollection, SectionCard, formatEUR } from "@/components/crm";
 import PipelineAttention from "@/components/PipelineAttention";
 import OrgMessagesBanner from "@/components/OrgMessagesBanner";
@@ -81,6 +82,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 font-display">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">Panoramica delle sezioni a cui hai accesso</p>
+          <div className="mt-3 w-full sm:w-80" data-testid="dashboard-search"><GlobalSearch /></div>
         </div>
         {S.eventi && <div className="w-full sm:w-64">
           <Select value={eventoId} onValueChange={setEventoId}>

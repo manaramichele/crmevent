@@ -16,7 +16,7 @@ export default function PipelineAttentionPage() {
       <div className="flex items-center gap-2">
         <span className="w-10 h-10 rounded-xl flex items-center justify-center text-amber-600 bg-amber-50"><CalendarClock className="w-5 h-5" /></span>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cosa richiede attenzione</h1>
+          <h1 className="text-2xl font-bold text-slate-900">To Do List</h1>
           <p className="text-sm text-slate-500">Tutte le attività delle Pipeline attive che richiedono un intervento{data ? ` · ${data.total}` : ""}</p>
         </div>
       </div>

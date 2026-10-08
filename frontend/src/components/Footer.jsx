@@ -13,7 +13,7 @@ export default function Footer() {
           <ul className="space-y-2 text-sm">
             <li><a href="/#funzionalita" className="hover:text-white">Funzionalità</a></li>
             <li><a href="/#come-funziona" className="hover:text-white">Come funziona</a></li>
-            <li><a href="/#crediti" data-testid="footer-credits-link" className="hover:text-white">Crediti</a></li>
+            <li><a href="/#prezzi" data-testid="footer-credits-link" className="hover:text-white">Prezzi</a></li>
             <li><a href="/#demo" className="hover:text-white">Demo</a></li>
             <li><Link to="/login" className="hover:text-white">Accedi</Link></li>
           </ul>
@@ -21,7 +21,7 @@ export default function Footer() {
         <div>
           <div className="text-white font-semibold mb-3 text-sm">CRMEvent</div>
           <ul className="space-y-2 text-sm">
-            <li><a href="/#crediti" className="hover:text-white">100 crediti inclusi</a></li>
+            <li><Link to="/registrati" className="hover:text-white">14 giorni di prova gratuita</Link></li>
             <li><a href="/#demo" className="hover:text-white">Contatti</a></li>
           </ul>
         </div>

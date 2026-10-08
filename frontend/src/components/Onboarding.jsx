@@ -15,11 +15,11 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", route: () => "/app", steps: [
     { t: "La tua Dashboard", b: "È il punto di partenza: riepiloghi di eventi, contatti, trattative, Staff / Volontari e scadenze.", s: [T("kpi-eventi-attivi")] },
     { t: "Filtra per evento", b: "Con questo selettore scegli l'evento da analizzare: tutti i riepiloghi si aggiornano sull'evento scelto.", s: [T("dashboard-event-filter")] },
-    { t: "Cosa richiede attenzione", b: "Qui trovi le attività in ritardo o critiche della Checklist Evento e i turni ancora scoperti.", s: [T("dashboard-attention"), T("kpi-turni-scoperti")] },
+    { t: "To Do List", b: "Qui trovi le attività in ritardo o critiche della Checklist Evento e i turni ancora scoperti.", s: [T("dashboard-attention"), T("kpi-turni-scoperti")] },
   ]},
   { key: "eventi", label: "Eventi", route: () => "/eventi", steps: [
     { t: "Crea e gestisci gli eventi", b: "Con «Aggiungi» crei un nuovo evento (nome, tipologia, date, logo); dall'elenco gestisci quelli esistenti.", s: [T("add-event-button")] },
-    { t: "Stato e attivazione", b: "Il badge CRMEvent mostra se l'evento è in preparazione, attivo, sospeso o concluso. L'attivazione sblocca le funzioni operative e può utilizzare crediti.", s: (e) => [T(`event-credit-badge-${e}`), P("event-credit-badge-")] },
+    { t: "Stato dell'evento", b: "La colonna «Fase» mostra se l'evento è pianificato, in corso, concluso o annullato. Con l'abbonamento ogni evento è subito operativo, senza attivazioni.", s: (e) => [T(`event-credit-badge-${e}`), P("event-credit-badge-")] },
     { t: "Raccolta disponibilità", b: "Da «Disponibilità» puoi preparare un link pubblico per raccogliere giorni e orari di Staff / Volontari.", s: (e) => [T(`availability-${e}`), T(`actions-menu-${e}`), P("availability-"), P("actions-menu-")] },
     { t: "Altre azioni dell'evento", b: "Da qui accedi anche a Briefing, Pipeline, Percorsi, Calendario, modifica ed eliminazione dell'evento.", s: (e) => [T(`more-actions-${e}`), T(`actions-menu-${e}`), P("more-actions-"), P("actions-menu-")] },
   ]},
@@ -140,7 +140,7 @@ export function TutorialLauncher() {
   useEffect(() => { if (info?.events) setEid(pickEvent(info.events)); }, [info?.events]);
   useEffect(() => {
     if (!info || info.superadmin) return;
-    if (user?.welcome_demo === "pending") return; // prima la schermata di benvenuto Demo, poi il tutorial
+    if (user?.welcome_demo) return; // nuovi organizzatori: unico benvenuto = WelcomeDemo; tutorial dal pulsante "Tutorial"
     if (!info.state?.seen) { setWelcome(true); patch({ seen: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info?.state?.seen, info?.superadmin, user?.welcome_demo]);

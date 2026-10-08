@@ -115,8 +115,6 @@ def build_router(db, require_admin, require_superadmin, record_audit, app_url: s
     @r.post("/demo/welcome/book")
     async def book(body: BookIn, user: dict = Depends(require_admin)):
         await _idx()
-        if not (user.get("perm") or {}).get("admin"):
-            raise HTTPException(status_code=403, detail="Prenotazione riservata all'organizzatore")
         if body.slot_key not in {s["slot_key"] for s in await slots()}:
             raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile")
         email = (user.get("email") or "").lower()
