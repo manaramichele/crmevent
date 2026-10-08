@@ -3,15 +3,16 @@ import { Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import Footer from "@/components/Footer";
+import PlansSection from "@/components/PlansSection";
 import { toast } from "sonner";
 import {
   CalendarDays, Building2, Users, Handshake, UserCog, Users2, Clock, Map as MapIcon,
-  BellRing, CalendarCheck2, ArrowRight, Check, Menu, X, MapPin, Navigation, ChevronRight, Coins, Sparkles,
+  BellRing, CalendarCheck2, ArrowRight, Check, Menu, X, MapPin, Navigation, ChevronRight, Sparkles,
 } from "lucide-react";
 
 const NAV = [
   ["Funzionalità", "funzionalita"], ["Per chi è", "per-chi"], ["Staff & Volontari", "staff"],
-  ["Sponsor", "sponsor"], ["Come funziona", "come-funziona"], ["Contatti", "demo"],
+  ["Sponsor", "sponsor"], ["Come funziona", "come-funziona"], ["Prezzi", "prezzi"], ["Contatti", "demo"],
 ];
 
 const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -224,7 +225,7 @@ export default function LandingPage() {
               <Link to="/demo" data-testid="hero-cta-demo" className="h-12 px-6 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-800 font-semibold transition-colors inline-flex items-center">Guarda la demo</Link>
             </div>
             <div className="mt-5 flex items-center gap-2 text-sm text-slate-500" data-testid="hero-credits-note">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1.5 font-semibold"><Coins className="w-4 h-4" />100 crediti CRMEvent inclusi</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1.5 font-semibold"><Sparkles className="w-4 h-4" />Prova GOLD gratis per 14 giorni</span>
               <span>· Nessuna carta richiesta</span>
             </div>
           </div>
@@ -369,40 +370,10 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* Crediti — nuovo modello */}
-      <Section id="crediti" className="py-20 bg-slate-900 text-white">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <div>
-            <div className="inline-flex items-center gap-2 text-tiffany font-semibold text-sm uppercase tracking-wide mb-3"><Coins className="w-4 h-4" />Inizia gratuitamente</div>
-            <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Inizia gratuitamente con 100 crediti</h2>
-            <p className="text-slate-300 mt-5 max-w-lg">Usa CRMEvent per organizzare e gestire i tuoi eventi. La gestione ordinaria non consuma crediti: utilizzi i crediti quando chiedi a CRMEvent di fare qualcosa per te — analizzare l'evento, generare contenuti e briefing, usare automazioni o servizi di comunicazione.</p>
-            <div className="mt-7"><Link to="/registrati" data-testid="credits-cta" className="h-12 px-7 rounded-xl bg-tiffany hover:bg-tiffany-hover text-slate-900 text-base font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Inizia gratuitamente <ArrowRight className="w-5 h-5" /></Link></div>
-            <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-200">
-              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />100 crediti inclusi alla registrazione</div>
-              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-tiffany" />Nessuna carta richiesta</div>
-            </div>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-5 backdrop-blur">
-              <div className="text-tiffany font-semibold text-sm">Gestione ordinaria</div>
-              <div className="text-xs text-slate-400 mt-0.5 mb-3">Nessun consumo di crediti</div>
-              <ul className="space-y-1.5 text-sm text-slate-200">
-                {["Eventi e informazioni", "Persone, staff e volontari", "Sponsor e partner", "Team e turni", "Attività e follow-up", "Ospitalità, pasti e briefing"].map((t) => (
-                  <li key={t} className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-tiffany shrink-0" />{t}</li>))}
-              </ul>
-            </div>
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-5 backdrop-blur">
-              <div className="text-tiffany font-semibold text-sm">Servizi avanzati</div>
-              <div className="text-xs text-slate-400 mt-0.5 mb-3">Utilizzano i crediti</div>
-              <ul className="space-y-1.5 text-sm text-slate-200">
-                {["Assistente IA e analisi evento", "Generazione contenuti e briefing", "Automazioni", "Newsletter ed email", "Google Calendar", "WhatsApp (prossimamente)"].map((t) => (
-                  <li key={t} className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-tiffany shrink-0" />{t}</li>))}
-              </ul>
-            </div>
-          </div>
-        </div>
+      {/* Piani e prezzi */}
+      <Section id="prezzi" className="py-20 bg-slate-50">
+        <PlansSection />
       </Section>
-
       {/* Footer */}
       <Footer />
     </div>

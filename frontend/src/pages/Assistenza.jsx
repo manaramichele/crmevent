@@ -38,6 +38,7 @@ export function SlotPicker({ slots, value, onChange, testid = "slot" }) {
 }
 
 function Book({ info, onBooked }) {
+  const navigate = useNavigate();
   const [slots, setSlots] = useState([]);
   const [slot, setSlot] = useState(null);
   const [note, setNote] = useState("");
@@ -45,8 +46,9 @@ function Book({ info, onBooked }) {
   const [busy, setBusy] = useState(false);
   const load = useCallback(() => api.get("/video-support/slots").then(({ data }) => setSlots(data.slots || [])).catch(() => setSlots([])), []);
   useEffect(() => { if (info.ready) load(); }, [info.ready, load]);
-  const cost = info.service.unit_cost;
-  const enough = info.balance >= cost;
+  const planMode = info.plan?.mode === "plan";
+  const cost = planMode ? 0 : info.service.unit_cost;
+  const enough = planMode || info.balance >= cost;
   const book = async () => {
     setBusy(true);
     try {
@@ -56,6 +58,7 @@ function Book({ info, onBooked }) {
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail?.message || e.response?.data?.detail)); setConfirm(false); load(); onBooked(true); }
     finally { setBusy(false); }
   };
+  if (planMode && !info.available) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600 space-y-3" data-testid="support-video-plan-blocked"><p>{info.plan.reason}</p><Button onClick={() => navigate("/profilo?tab=abbonamento")} className="bg-[#0ABAB5] hover:bg-[#09a39f] text-slate-900 font-semibold" data-testid="support-video-plans-cta">Scopri i piani</Button></div>;
   if (!info.available) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600" data-testid="support-video-unavailable">Il servizio di assistenza in videochiamata non è ancora disponibile. Ti avviseremo nella sezione Novità quando potrai prenotarlo.</div>;
   if (!info.ready) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600" data-testid="support-video-not-ready">Le prenotazioni non sono al momento disponibili. Riprova più tardi.</div>;
   return (
@@ -71,11 +74,11 @@ function Book({ info, onBooked }) {
             <DialogDescription>Assistenza in videochiamata di 30 minuti su Google Meet.</DialogDescription></DialogHeader>
           <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm space-y-1.5">
             <div className="capitalize"><b className="font-semibold">{slot && when(slot)}</b></div>
-            <div>Costo: <b className="font-semibold" data-testid="support-video-confirm-cost">{cost} crediti</b> · saldo dopo la prenotazione: {info.balance - cost}</div>
-            <div className="text-xs text-slate-500">Annullando almeno 24 ore prima i crediti vengono riaccreditati; entro le 24 ore non è previsto riaccredito. Puoi riprogrammare gratuitamente una volta, fino a 24 ore prima.</div>
+            <div>{planMode ? <b className="font-semibold" data-testid="support-video-confirm-cost">Inclusa nel piano {info.plan.plan_label}{info.plan.unlimited ? "" : ` · ne restano ${info.plan.remaining - 1} dopo questa`}</b> : <>Costo: <b className="font-semibold" data-testid="support-video-confirm-cost">{cost} crediti</b> · saldo dopo la prenotazione: {info.balance - cost}</>}</div>
+            <div className="text-xs text-slate-500">{planMode ? "Annullando almeno 24 ore prima la videochiamata non viene conteggiata; annullamenti tardivi e mancata partecipazione la consumano. Puoi riprogrammare gratuitamente una volta, fino a 24 ore prima." : "Annullando almeno 24 ore prima i crediti vengono riaccreditati; entro le 24 ore non è previsto riaccredito. Puoi riprogrammare gratuitamente una volta, fino a 24 ore prima."}</div>
           </div>
           <DialogFooter className="gap-2"><Button variant="outline" onClick={() => setConfirm(false)}>Annulla</Button>
-            <Button disabled={busy} onClick={book} className="bg-[#0ABAB5] hover:bg-[#09a39f] text-slate-900 font-semibold" data-testid="support-video-confirm-btn">{busy ? "Prenotazione..." : `Conferma e usa ${cost} crediti`}</Button></DialogFooter>
+            <Button disabled={busy} onClick={book} className="bg-[#0ABAB5] hover:bg-[#09a39f] text-slate-900 font-semibold" data-testid="support-video-confirm-btn">{busy ? "Prenotazione..." : planMode ? "Conferma prenotazione" : `Conferma e usa ${cost} crediti`}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -90,7 +93,8 @@ function MyBookings({ reloadKey, onChange }) {
   const load = useCallback(() => api.get("/video-support/bookings").then(({ data }) => setRows(data.bookings || [])).catch(() => setRows([])), []);
   useEffect(() => { load(); }, [load, reloadKey]);
   const cancel = async (b) => {
-    const msg = b.can_cancel_refund ? `Annullare la prenotazione? I ${b.credits_charged} crediti verranno riaccreditati.` : "Mancano meno di 24 ore: annullando NON è previsto il riaccredito dei crediti. Confermi?";
+    const plan = b.charge_mode === "plan";
+    const msg = b.can_cancel_refund ? (plan ? "Annullare la prenotazione? La videochiamata non verrà conteggiata." : `Annullare la prenotazione? I ${b.credits_charged} crediti verranno riaccreditati.`) : (plan ? "Mancano meno di 24 ore: annullando la videochiamata resta conteggiata. Confermi?" : "Mancano meno di 24 ore: annullando NON è previsto il riaccredito dei crediti. Confermi?");
     if (!window.confirm(msg)) return;
     try { const { data } = await api.post(`/video-support/bookings/${b.id}/cancel`, {}); toast.success(data.refunded ? `Prenotazione annullata · ${data.refunded} crediti riaccreditati` : "Prenotazione annullata"); load(); onChange(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -107,7 +111,7 @@ function MyBookings({ reloadKey, onChange }) {
       {rows.map((b) => (
         <div key={b.id} className="bg-white border border-slate-200 rounded-xl p-4" data-testid={`my-booking-${b.id}`}>
           <div className="flex items-start justify-between gap-2"><div className="font-semibold text-slate-900 capitalize">{when(b.slot_key)}</div><StatusBadge color={STATUS[b.status]?.[0]}>{STATUS[b.status]?.[1]}</StatusBadge></div>
-          <div className="text-xs text-slate-500 mt-1">{b.user_name} · {b.credits_charged} crediti{b.refunded ? ` · ${b.refunded} riaccreditati` : ""}{b.simulated ? " · SIMULAZIONE" : ""}</div>
+          <div className="text-xs text-slate-500 mt-1">{b.user_name} · {b.charge_mode === "plan" ? `inclusa nel piano${b.quota_refunded ? " · non conteggiata" : ""}` : `${b.credits_charged} crediti`}{b.refunded ? ` · ${b.refunded} riaccreditati` : ""}{b.simulated ? " · SIMULAZIONE" : ""}</div>
           {b.note && <p className="text-sm text-slate-600 mt-1">{b.note}</p>}
           {b.status === "confermata" && (
             <div className="flex flex-wrap gap-2 mt-3">
@@ -143,8 +147,12 @@ function Intro({ info }) {
       <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 space-y-3">
         <div className="flex items-center gap-2 text-sm text-slate-600"><Clock className="w-4 h-4 text-[#0ABAB5]" />Durata: <b className="font-semibold text-slate-900">{info.duration_min} minuti</b></div>
         <div className="flex items-center gap-2 text-sm text-slate-600"><MonitorUp className="w-4 h-4 text-[#0ABAB5]" />Google Meet con condivisione schermo</div>
+        {info.plan?.mode === "plan" ? (
+          <div className="rounded-lg bg-[#0ABAB5]/10 px-3 py-2 text-sm text-slate-800" data-testid="support-video-plan">{info.plan.support === "email" ? "Piano " + info.plan.plan_label + ": assistenza via email" : info.plan.unlimited ? `Piano ${info.plan.plan_label}: videochiamate illimitate e prioritarie` : `Videochiamate utilizzate: ${info.plan.used ?? 0} di ${info.plan.quota ?? 0}${info.plan.trial ? " (prova)" : " questo mese"}`}</div>
+        ) : (<>
         <div className="flex items-center gap-2 text-sm text-slate-600"><Coins className="w-4 h-4 text-[#0ABAB5]" />Costo: <b className="font-semibold text-slate-900" data-testid="support-video-cost">{info.available ? `${info.service.unit_cost} crediti` : "—"}</b></div>
         <div className="rounded-lg bg-[#0ABAB5]/10 px-3 py-2 text-sm text-slate-800">Saldo organizzazione: <b className="font-semibold" data-testid="support-video-balance">{info.balance} crediti</b></div>
+        </>)}
       </div>
     </div>
   );

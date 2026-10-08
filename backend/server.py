@@ -35,6 +35,7 @@ import permissions as P
 import storage_utils
 import gcal_utils
 import video_support
+import subscriptions
 import pipeline_seed_sports
 import demo_booking
 import brevo_funnel
@@ -235,7 +236,24 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
                 "acting_org": PLATFORM_ORG_ID, "platform_scope": True}
     org_id, org_role = await _resolve_active_org(request, user)
     perm = await _enforce_perm(request, user, org_id, org_role)
+    await _enforce_plan(request, org_id, org_role)
     return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id, "perm": perm}
+
+
+SAAS: dict = {}
+
+
+async def _enforce_plan(request: Request, org_id: str, org_role: str) -> None:
+    """Funzionalità incluse nel piano + sola lettura a prova/abbonamento terminati (Super Admin escluso)."""
+    if org_role == "superadmin" or not SAAS:
+        return
+    st = await SAAS["state_for"](org_id)
+    if not st.get("enabled"):
+        return
+    tpl = getattr(request.scope.get("route"), "path", "") or ""
+    tpl = tpl[4:] if tpl.startswith("/api") else tpl
+    secs, _ = P.route_rule(tpl, request.method)
+    SAAS["check"](st, secs, request.method, tpl)
 
 
 # Collezioni con id di oggetto collegato a un evento: (param path, collezione, campo evento)
@@ -411,6 +429,7 @@ async def require_org_admin(request: Request, user: dict = Depends(get_current_u
     org_id, org_role = await _resolve_active_org(request, user)
     if org_role not in ("admin_org", "superadmin"):
         raise HTTPException(status_code=403, detail="Riservato agli amministratori dell'organizzazione")
+    await _enforce_plan(request, org_id, org_role)
     return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id}
 
 
@@ -497,7 +516,10 @@ async def _create_organization(name: str, owner_user_id: Optional[str] = None,
            "owner_user_id": owner_user_id, "subscription": sub,
            "created_at": now_iso(), "updated_at": now_iso()}
     await db.organizations.insert_one(org)
-    await _grant_signup_bonus(org["id"], org.get("nome"))
+    if org_type == "cliente":
+        await SAAS["init_trial"](org["id"], owner_user_id)  # nuovo modello: prova GOLD, nessun bonus crediti
+    else:
+        await _grant_signup_bonus(org["id"], org.get("nome"))
     return org
 
 
@@ -647,6 +669,7 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base["led_team_ids"] = [] if chosen["role"] == "admin_org" else await _led_team_ids(u, chosen["org_id"], cm.get("persona_id"))
     base["org_type"] = chosen["type"]
     base["subscription"] = _sub_summary(org)
+    base["saas"] = subscriptions.org_state(org, await SAAS["get_config"]())
     return base
 
 
@@ -1393,8 +1416,10 @@ def crud_routes(path, coll, model, org_scoped=True):
                 raise HTTPException(status_code=403, detail="Seleziona uno dei Team a cui hai accesso")
         if coll == "events":
             await _assert_can_create_event(user["org_id"])
+            if await SAAS["is_saas"](user["org_id"]):
+                data["credit_state"] = "attivo"  # abbonamento: eventi illimitati, nessuna attivazione a crediti
             data.setdefault("credit_state", "preparazione")
-            if data.get("stato") == "attivo":
+            if data.get("stato") == "attivo" and data["credit_state"] != "attivo":
                 data["stato"] = "pianificato"  # 'Attivo' si ottiene solo via attivazione a crediti
         else:
             await _assert_org_operational(user["org_id"])
@@ -3461,8 +3486,8 @@ GCAL_UNLOCK_COST = 20
 
 
 async def _gcal_unlocked(org_id: str) -> bool:
-    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "features": 1})
-    return bool((org or {}).get("features", {}).get("google_calendar"))
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "features": 1, "saas": 1})
+    return bool((org or {}).get("saas")) or bool((org or {}).get("features", {}).get("google_calendar"))
 
 
 @api.get("/calendar/feature")
@@ -6681,6 +6706,8 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Firma webhook non valida")
     t, obj = event["type"], event["data"]["object"]
+    if await SAAS["handle_webhook"](t, obj):
+        return {"received": True}
     if t == "customer.subscription.deleted":
         await db.organizations.update_one({"subscription.stripe_subscription_id": obj["id"]},
                                           {"$set": {"subscription.status": "canceled", "updated_at": now_iso()}})
@@ -7002,6 +7029,89 @@ def _invoice_line_name(inv: dict, org: dict) -> str:
     if inv.get("kind") == "credit_recharge":
         return f"Ricarica {inv.get('credits_total')} crediti CRMEvent"
     return f"Abbonamento CRMEvent ({org.get('nome')})"
+
+
+SAAS_WEBHOOK_EVENTS = ("customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
+                       "invoice.paid", "invoice.payment_failed")
+FIC_FORFETTARIO_NOTE = ("Operazione effettuata ai sensi dell'art. 1, commi da 54 a 89, della Legge n. 190/2014 – Regime forfettario. "
+                        "Operazione senza applicazione dell'IVA.")
+FIC_SAAS_NUMERATION = (os.environ.get("FIC_SAAS_NUMERATION") or "").strip()
+
+
+async def _fic_vat_forfettario(company_id: str, token: str) -> Optional[int]:
+    """Aliquota FIC 0% con natura N2.2 (forfettario). Override: FIC_VAT_ID_FORFETTARIO."""
+    override = (os.environ.get("FIC_VAT_ID_FORFETTARIO") or "").strip()
+    if override.isdigit():
+        return int(override)
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(f"{FIC_BASE}/c/{company_id}/settings/vat_types", headers={"Authorization": f"Bearer {token}"})
+    for v in (r.json().get("data") or []):
+        if abs(float(v.get("value") or 0)) < 0.01 and str(v.get("ei_type") or "").upper() == "N2.2":
+            return v["id"]
+    return None
+
+
+async def _emit_saas_invoice(inv_id: str):
+    """Fattura reale abbonamento (FIC LIVE): forfettario N2.2, sezionale dedicato, invio SDI. Idempotente con tentativi."""
+    inv = await db.invoices.find_one({"id": inv_id, "kind": "saas_subscription"}, {"_id": 0})
+    if not inv or inv.get("is_test") or inv.get("payment_status") != "paid" or FIC_MODE != "live":
+        return
+    if inv.get("fic_stato_sdi") == "inviato":
+        return
+    lock = await db.invoices.update_one({"id": inv_id, "fic_lock": {"$ne": True}}, {"$set": {"fic_lock": True}})
+    if not lock.modified_count:
+        return
+    base = {"fic_attempts": int(inv.get("fic_attempts") or 0) + 1, "fic_last_attempt_at": now_iso(), "fic_mode": FIC_MODE, "updated_at": now_iso()}
+    try:
+        if not fic_configured() or not await db.fic_settings.find_one({"provider": "fic"}):
+            raise RuntimeError("Fatture in Cloud non connesso (OAuth mancante)")
+        token, cid = await _fic_token(), await _fic_company_id()
+        doc_id = inv.get("fic_document_id")
+        if not doc_id:
+            org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+            vat_id = await _fic_vat_forfettario(cid, token)
+            if vat_id is None:
+                raise RuntimeError("Aliquota 0% natura N2.2 non trovata su Fatture in Cloud (imposta FIC_VAT_ID_FORFETTARIO)")
+            tot = float(inv.get("totale") or 0)
+            today = datetime.now(timezone.utc).date().isoformat()
+            pay = {"amount": tot, "due_date": today, "paid_date": today, "status": "paid"}
+            if FIC_PAYMENT_ACCOUNT_ID.isdigit():
+                pay["payment_account"] = {"id": int(FIC_PAYMENT_ACCOUNT_ID)}
+            data = {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org or {}),
+                    "items_list": [{"name": _invoice_line_name(inv, org or {}), "qty": 1, "net_price": tot, "vat": {"id": vat_id}, **FIC_NO_WITHHOLDING_ITEM}],
+                    "currency": {"id": "EUR"}, "language": {"code": "it"}, "notes": FIC_FORFETTARIO_NOTE,
+                    "ei_data": {"payment_method": FIC_EI_PAYMENT_METHOD}, "payment_method": {"name": FIC_PAYMENT_METHOD_NAME},
+                    "payments_list": [pay], **FIC_NO_WITHHOLDING_DOC}
+            if FIC_SAAS_NUMERATION:
+                data["numeration"] = FIC_SAAS_NUMERATION
+            async with httpx.AsyncClient(timeout=30) as c:
+                r = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents", headers={"Authorization": f"Bearer {token}"}, json={"data": data})
+            if r.status_code >= 400:
+                raise RuntimeError(f"creazione documento: {r.text[:300]}")
+            d = r.json().get("data", {})
+            doc_id = d.get("id")
+            await db.invoices.update_one({"id": inv_id}, {"$set": {"fic_document_id": doc_id, "fic_numero": d.get("number"),
+                                                                  "fic_data": d.get("date"), "fic_pdf_url": d.get("url"), "fic_stato_documento": "emessa"}})
+        async with httpx.AsyncClient(timeout=30) as c:
+            sr = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents/{doc_id}/e_invoice/send",
+                              headers={"Authorization": f"Bearer {token}"}, json={"data": {}})
+        if sr.status_code >= 400:
+            raise RuntimeError(f"invio SDI: {sr.text[:300]}")
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_stato_sdi": "inviato", "fic_error": None}})
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"FIC abbonamento {inv_id}: {e}")
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_stato_documento": "errore_emissione" if not inv.get("fic_document_id") else "emessa",
+                                                              "fic_error": str(e)[:500]}})
+    finally:
+        await db.invoices.update_one({"id": inv_id}, {"$set": {"fic_lock": False}})
+
+
+async def _retry_saas_invoices() -> int:
+    rows = await db.invoices.find({"kind": "saas_subscription", "is_test": {"$ne": True}, "payment_status": "paid",
+                                   "fic_stato_sdi": {"$ne": "inviato"}, "fic_attempts": {"$not": {"$gte": 6}}}, {"_id": 0, "id": 1}).to_list(200)
+    for r in rows:
+        await _emit_saas_invoice(r["id"])
+    return len(rows)
 
 
 async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
@@ -11235,6 +11345,9 @@ async def platform_stripe_live_diagnostics(admin: dict = Depends(require_superad
                 evts = list(getattr(match, "enabled_events", []) or [])
                 if "checkout.session.completed" not in evts and "*" not in evts:
                     problems.append("evento checkout.session.completed non sottoscritto")
+                for ev_name in SAAS_WEBHOOK_EVENTS:
+                    if ev_name not in evts and "*" not in evts:
+                        problems.append(f"evento {ev_name} non sottoscritto (abbonamenti)")
                 if not getattr(match, "livemode", False):
                     problems.append("non in modalità live")
                 if problems:
@@ -11494,7 +11607,7 @@ async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, ide
     Se il saldo è insufficiente solleva HTTP 402 e il servizio NON deve essere eseguito.
     Pattern: reservation = await _charge_begin(...); try: <esegui>; _credits_settle(); except: _credits_release()."""
     svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
-    if not _service_consumo_on(svc):
+    if not _service_consumo_on(svc) or await SAAS["is_saas"](org_id):
         return None
     return await _credits_reserve(org_id, service_key, 1, user_id=user_id, event_id=event_id,
                                   idempotency_key=idempotency_key, note=note)
@@ -13021,11 +13134,17 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
             "current_plan": ((ev or {}).get("entitlement") or {}).get("plan")}
 
 
+SAAS.update(subscriptions.build(db, {
+    "require_admin": require_admin, "require_org_admin": require_org_admin, "require_superadmin": require_superadmin,
+    "record_audit": record_audit, "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
+    "record_invoice": _record_invoice, "emit_invoice": _emit_saas_invoice, "retry_invoices": _retry_saas_invoices,
+    "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET}))
 app.include_router(api)
+app.include_router(SAAS["router"])
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
     "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,
-    "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}))
+    "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}, SAAS))
 app.include_router(brevo_org_lists.build_router(db, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],

@@ -53,7 +53,9 @@ import EventPipeline from "@/pages/EventPipeline";
 import LeadFinder from "@/pages/LeadFinder";
 import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
-import { can, isOrgAdmin } from "@/lib/perms";
+import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
+import PlanUpgrade from "@/components/PlanUpgrade";
+import SaasAdmin from "@/pages/SaasAdmin";
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
 const isSuper = (u) => u && u.role === "superadmin";
@@ -110,6 +112,7 @@ function AccountRedirect() {
 function Perm({ s, children }) {
   const { user } = useAuth();
   if (isVol(user)) return <Navigate to="/app" replace />;
+  if (s !== "admin" && planBlocks(user, s)) return <PlanUpgrade />;
   if (s === "admin" ? !isOrgAdmin(user) : !can(user, s, "view")) return <NoAccess />;
   return children;
 }
@@ -152,6 +155,7 @@ function Shell() {
         <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/abbonamenti" element={<Protected><SuperAdminOnly><SaasAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/messaggi" element={<Protected><SuperAdminOnly><PlatformMessages /></SuperAdminOnly></Protected>} />

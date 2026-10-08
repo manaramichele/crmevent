@@ -3,10 +3,10 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, Headset, CalendarDays, Building2, Users, UserCog, Handshake,
+  LayoutDashboard, Headset, Lock, CalendarDays, Building2, Users, UserCog, Handshake,
   ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle,
 } from "lucide-react";
-import { can, isOrgAdmin } from "@/lib/perms";
+import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 import SupportBanner from "@/components/SupportBanner";
@@ -52,12 +52,16 @@ const ORG_NAV = [
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
 const SUPER_ORG_NAV = ORG_NAV;
-const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
+const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
+  if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...n, locked: true }];
+  return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [n] : [];
+});
 
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
   { to: "/piattaforma/utenti", label: "Gestione Utenti", icon: UserCog, id: "piattaforma-utenti" },
+  { to: "/piattaforma/abbonamenti", label: "Abbonamenti", icon: BadgeEuro, id: "abbonamenti" },
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
@@ -95,6 +99,34 @@ function OrgSwitcher({ orgs, actingOrgId, onChange }) {
   );
 }
 
+function trialInfo(s) {
+  if (!s?.enabled) return null;
+  if (s.mode === "trial" && !s.purchased) {
+    const n = s.days_left;
+    return { urgent: n <= 3, text: `Prova ${s.plan_label || "GOLD"} · ${n === 1 ? "Ti resta 1 giorno" : `Ti restano ${n} giorni`}`, short: `${s.plan_label || "GOLD"} · ${n}g` };
+  }
+  if (s.mode === "expired" || s.mode === "canceled") return { expired: true, urgent: true, text: s.mode === "expired" ? "Prova terminata – Scegli il tuo piano" : "Abbonamento terminato – Scegli il tuo piano", short: "Prova terminata" };
+  if (s.mode === "past_due") return { urgent: true, text: "Pagamento non riuscito – Aggiorna il metodo di pagamento", short: "Pagamento" };
+  return null;
+}
+
+function TrialChip({ s, onCta, mobile }) {
+  const t = trialInfo(s);
+  if (!t) return null;
+  const tone = t.expired ? "bg-red-50 text-red-800 ring-red-200" : t.urgent ? "bg-amber-50 text-amber-900 ring-amber-300" : "bg-[#0ABAB5]/10 text-slate-800 ring-[#0ABAB5]/40";
+  const cta = <button type="button" onClick={onCta} data-testid={mobile ? "trial-cta-mobile" : "trial-cta"} className="shrink-0 h-8 px-3 rounded-lg bg-[#0ABAB5] text-slate-900 text-xs font-semibold transition-[background-color,transform] hover:bg-[#09A8A3] active:scale-[0.98]">Scopri i piani</button>;
+  if (mobile) return (
+    <div className={`md:hidden flex items-center gap-2 px-3 py-2 text-xs font-semibold ring-1 ring-inset ${tone}`} data-testid="trial-banner-mobile">
+      {t.urgent && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}<span className="flex-1 min-w-0 truncate">{t.text}</span>{cta}
+    </div>
+  );
+  return (
+    <div className={`hidden md:flex items-center gap-2 h-10 pl-3 pr-1 rounded-lg ring-1 ${tone} min-w-0`} data-testid="trial-chip">
+      {t.urgent && <AlertTriangle className="w-4 h-4 shrink-0" />}<span className="text-sm font-semibold truncate" data-testid="trial-chip-text"><span className="hidden xl:inline">{t.text}</span><span className="xl:hidden">{t.short}</span></span>{cta}
+    </div>
+  );
+}
+
 function TrialBanner() {
   // Modello a crediti: la piattaforma base è gratuita. Nessun banner di prova/abbonamento.
   return null;
@@ -105,10 +137,10 @@ function CreditGuardBanner() {
   const [bal, setBal] = useState(null);
   const [recharge, setRecharge] = useState(false);
   useEffect(() => {
-    if (user?.role === "superadmin") return;
+    if (user?.role === "superadmin" || user?.saas?.enabled) return;
     api.get("/credits/balance").then(({ data }) => setBal(data)).catch(() => {});
   }, [user]);
-  if (user?.role === "superadmin" || !bal || bal.balance > 0) return null;
+  if (user?.role === "superadmin" || user?.saas?.enabled || !bal || bal.balance > 0) return null;
   return (
     <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-red-50 text-red-800 border-b border-red-200" data-testid="credits-guard-banner">
       <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -283,14 +315,15 @@ export default function Layout({ children }) {
   const activeOrgName = orgs.find((o) => o.id === actingOrgId)?.nome || user?.org_name;
 
   const renderLink = (n, onClick) => (
-    <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`}
+    <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`} title={n.locked ? "Non incluso nel tuo piano" : undefined}
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-          isActive ? "bg-tiffany-light text-tiffany-fg" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          isActive ? "bg-tiffany-light text-tiffany-fg" : n.locked ? "text-slate-400 hover:bg-slate-50" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
         }`}>
       {({ isActive }) => (<>
         <n.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-tiffany-active" : ""}`} />
-        {!(collapsed && !onClick) && <span className="truncate">{n.label}</span>}
+        {!(collapsed && !onClick) && <span className="truncate flex-1">{n.label}</span>}
+        {n.locked && !(collapsed && !onClick) && <Lock className="w-3.5 h-3.5 shrink-0" data-testid={`sidebar-lock-${n.id}`} />}
       </>)}
     </NavLink>
   );
@@ -347,6 +380,7 @@ export default function Layout({ children }) {
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
           <div className="flex-1 min-w-0" />
+          {!isSuper && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
           <div className="hidden sm:block w-[220px] lg:w-[260px] shrink min-w-0" data-testid="header-search"><GlobalSearch /></div>
           <button type="button" className="sm:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="mobile-search-button" aria-label="Cerca"><Search className="w-5 h-5" /></button>
           <NavLink to="/assistenza" data-testid="header-assistenza-button" className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
@@ -380,6 +414,7 @@ export default function Layout({ children }) {
             )}
           </div>
         </header>
+        {!isSuper && <TrialChip mobile s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
         </div>
         {searchOpen && <div className="sm:hidden sticky top-[4.5rem] z-30 bg-white border-b border-slate-200 px-3 py-2" data-testid="mobile-search-row"><GlobalSearch /></div>}
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
