@@ -367,6 +367,10 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## REGOLA PERMANENTE: persone "Cognome Nome" + ordinamento A–Z per cognome — 2026-10-08 ✅ VERIFICATO (iter 78)
+- Helper `frontend/src/lib/names.js` (personName, sortPersons, personOptions) da usare in ogni nuovo elenco/dropdown di persone. Backend: `_fmt_person`, persona_nome briefing, label ricerca, _member_view (preferisce persona collegata) in formato Cognome Nome.
+- Applicato a Staff/Volontari/Da classificare/Anagrafiche (header "Cognome e Nome"), Team, Turni (colonna Persona ordinabile; default turni resta cronologico), Utenti (OrgUsers), Invito, Ospitalità, Briefing, Lead, Disponibilità, Aziende, dropdown Referente (Attività, Follow-up, Sponsor), StaffAssignSelect, Pipeline. Solo visualizzazione: nessun dato DB modificato.
+
 ## Automazioni email centralizzate in Email & Brevo — 2026-10-08 ✅ VERIFICATO (iter 77)
 - Rimossi FunnelPanel e AvailabilityEmailPanel dalla Dashboard Amministrazione (Platform.jsx). /marketing/brevo a schede: Funnel CRMEvent (FunnelPanel) | Staff & Volontari (AvailabilityEmailPanel, unica istanza, card su mobile) | Liste e contatti (RegisteredUsersPanel + OrgListsPanel). Deep link ?tab=funnel|staff|liste. Solo spostamento UI: API, stato, trigger, webhook, liste e template invariati.
 
