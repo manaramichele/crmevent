@@ -48,12 +48,11 @@ const ORG_NAV = [
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita", perm: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
-  { to: "/assistenza", label: "Assistenza", icon: Headset, id: "assistenza", perm: "any" },
 ];
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
 const SUPER_ORG_NAV = ORG_NAV;
-const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "any" ? true : n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
+const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
 
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
