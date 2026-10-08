@@ -38,6 +38,7 @@ import video_support
 import subscriptions
 import pipeline_seed_sports
 import demo_booking
+import demo_slots
 import brevo_funnel
 import social_ai
 import social_creative
@@ -669,6 +670,7 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base["led_team_ids"] = [] if chosen["role"] == "admin_org" else await _led_team_ids(u, chosen["org_id"], cm.get("persona_id"))
     base["org_type"] = chosen["type"]
     base["subscription"] = _sub_summary(org)
+    base["welcome_demo"] = u.get("welcome_demo") if chosen["role"] == "admin_org" else None
     base["saas"] = subscriptions.org_state(org, await SAAS["get_config"]())
     return base
 
@@ -729,7 +731,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
                                "password_hash": hash_password(body.password), "role": "admin",
                                "auth_provider": "password", "org_id": org["id"], "telefono": phone,
                                "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso(),
-                               "self_registered": True})
+                               "self_registered": True, "welcome_demo": "pending"})
     await _ensure_membership(uid, org["id"], "admin_org", uid)
     # Lead continuity: if this email already requested a demo, link that lead to the new account
     # (no duplicate contact) and advance the funnel — preserving the lead → demo → trial history.
@@ -13141,6 +13143,7 @@ SAAS.update(subscriptions.build(db, {
     "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET}))
 app.include_router(api)
 app.include_router(SAAS["router"])
+app.include_router(demo_slots.build_router(db, require_admin, require_superadmin, record_audit, APP_URL))
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
     "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,

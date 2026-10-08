@@ -130,7 +130,7 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits, p
         q = {"slot_lock": {"$type": "string"}}
         if exclude_booking:
             q["id"] = {"$ne": exclude_booking}
-        taken = set(await db.video_support_bookings.distinct("slot_lock", q))
+        taken = set(await db.video_support_bookings.distinct("slot_lock", q)) | set(await db.demo_slot_locks.distinct("slot"))
         busy = [(datetime.fromisoformat(s.replace("Z", "+00:00")), datetime.fromisoformat(e.replace("Z", "+00:00")))
                 for s, e in await _busy(cfg, now, horizon)]
         closed = set(cfg.get("closed_dates") or [])

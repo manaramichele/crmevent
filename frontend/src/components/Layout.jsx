@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 import SupportBanner from "@/components/SupportBanner";
 import ActivationGate from "@/components/ActivationGate";
+import WelcomeDemo from "@/components/WelcomeDemo";
 import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
 import { NEWS_READ_EVENT } from "@/pages/News";
@@ -64,6 +65,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/abbonamenti", label: "Abbonamenti", icon: BadgeEuro, id: "abbonamenti" },
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
+  { to: "/piattaforma/demo", label: "Demo", icon: CalendarDays, id: "piattaforma-demo" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },
@@ -407,6 +409,9 @@ export default function Layout({ children }) {
                 {!isSuper && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("tutorial:open-index")); }} data-testid="tutorial-menu-link" className="sm:hidden w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <HelpCircle className="w-4 h-4" />Tutorial
                 </button>}
+                {!isSuper && user?.welcome_demo && user.welcome_demo !== "booked" && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("welcome-demo:open")); }} data-testid="book-demo-menu-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
+                  <CalendarDays className="w-4 h-4" />Prenota una demo gratuita
+                </button>}
                 <button onClick={logout} data-testid="logout-button" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <LogOut className="w-4 h-4" />Esci
                 </button>
@@ -438,6 +443,7 @@ export default function Layout({ children }) {
       </div>
       <SupportChat />
       <ActivationGate />
+      <WelcomeDemo />
     </div>
   );
 }

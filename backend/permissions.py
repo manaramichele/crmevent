@@ -57,6 +57,7 @@ METHOD_ACTION = {"GET": "view", "HEAD": "view", "POST": "create", "PUT": "edit",
 # Il primo prefisso che corrisponde vince. Path non mappati => solo Admin Organizzatore (fail-closed).
 ROUTE_RULES = [
     ("/video-support", "*", None),
+    ("/demo/", "*", None),
     ("/saas/", "*", None),
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),

@@ -99,7 +99,7 @@ export default function PlansSection({ authed }) {
         {data.plans.map((p) => (
           <PlanCard key={p.key} p={p} cycle={cycle} features={data.features}
             cta={<Link to={authed ? "/profilo?tab=abbonamento" : "/registrati"} data-testid={`plan-cta-${p.key}`}
-              className="flex h-11 items-center justify-center rounded-xl bg-[#0ABAB5] text-sm font-semibold text-slate-900 transition-[background-color,transform] hover:bg-[#09A8A3] active:scale-[0.98]">Scegli piano</Link>} />
+              className="flex h-11 items-center justify-center rounded-xl bg-[#0ABAB5] text-sm font-semibold text-slate-900 transition-[background-color,transform] hover:bg-[#09A8A3] active:scale-[0.98]">{authed ? "Scegli piano" : "Registrati gratis"}</Link>} />
         ))}
       </div>
       <div>
