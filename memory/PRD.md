@@ -367,6 +367,14 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Permesso "Invio inviti email" — 2026-10-08 ✅ VERIFICATO (iter 81, backend 11/11 + frontend)
+- permissions.py: `send_invites` (default False per tutti; Admin Org sempre abilitato). Toggle Attivo/Disattivo in PermFields (Utenti e Permessi), incluso nello storico.
+- Copre SOLO l'invito area personale (POST /api/persons/{id}/invite, template/link esistenti) con ruolo staff/volunteer. L'invito account CRM (org_invites) resta solo Admin.
+- Destinatari verificati server-side: presenze staff in Team/eventi accessibili + flag manage_staff/manage_volunteers. Non-admin bloccati su accesso disabilitato e su email con account CRM esistente.
+- Anti-doppione 24h: singolo 409 `recent_invite` salvo `force` dopo conferma; multiplo POST /api/person-invites/bulk salta e segnala. Tracciati last_invite_at / last_invite_by / invite_count + audit `person_invite_sent`.
+- UI: components/PersonInvites.jsx (dialog con conferma + Reinvia + ultimo invito; barra invio multiplo con checkbox). Pulsanti nascosti senza permesso (canSendInvites).
+
+
 ## Dashboard dinamica per permessi — 2026-10-08 ✅ VERIFICATO (iter 80, backend 9/9 + frontend)
 - GET /api/dashboard: restituisce `sections` (permessi effettivi letti a ogni richiesta) e rimuove i blocchi non autorizzati (eventi, crm parziale aziende/anagrafiche, commerciale+grafici senza sponsor, attività/follow-up separati, staff con scope Team/eventi). Nessuna query sulle sezioni non autorizzate.
 - Dashboard.jsx: KpiGroup mostra solo i blocchi presenti, griglia adattiva (niente spazi vuoti), PipelineAttention solo con permesso pipeline, filtro eventi solo con eventi, messaggio "dashboard-empty"; ricarica al ritorno sulla scheda (permessi aggiornati senza nuovo login).

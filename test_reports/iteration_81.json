@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 81 validated the new 'Invio inviti email' (send_invites) permission end-to-end. Backend pytest suite (11/11 PASS) covers: default=false in GET /api/org/permissions; PUT /api/org/permissions/{uid} saves send_invites and audit detail includes 'inviti email: sì'; 403 on POST /api/persons/{id}/invite and POST /api/person-invites/bulk for members without the perm; team-scope=leader allows own-team staff invite and returns 403 for other-team persons; recent_invite 409 with detail.code='recent_invite' and force=true -> 200; manage_volunteers=false forbids volunteer invites and role=volunteer on staff person; bulk payload mixed (sent/skipped) correctly flags no-email/other-team/recent-invite; non-admin blocked on 'accesso_disabilitato' and (403/409) when CRM account already linked. Frontend (admin): /profilo -> 'Utenti e Permessi' tab exposes dialog with 'INVIO INVITI EMAIL' section and perm-send-invites-on/off radios (default off); Staff/Volontari page shows invite-{id}, m-invite-{id}, select-invite-{id}, select-invite-all-staff; bulk-invite-bar + bulk-invite-open + bulk-invite-confirm + bulk-invite-confirm-send present; invite-dialog + invite-role + send-invite present. Mobile 390 shows checkboxes and m-invite-* actions. No real emails sent to real persons (all TEST_* ephemeral data).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Anagrafiche (/persone)", "issues": ["Only select-invite-all-referenti_aziende testid found and bulk-invite-bar did not appear after select-all (table was empty in QA org). Not a bug per se, but worth seeding an Anagrafiche-only person to validate the referenti_aziende tab bulk flow in future runs."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter81_send_invites_perm.py",
+    "/app/test_reports/pytest/iter81_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py _send_person_invite(): the 'invite_count' is $inc'd only in _do_person_invite — ok, but note the admin bypass of accesso_disabilitato is implicit (only non-admins blocked). Behaviour matches spec but double-check UX in Permissions.jsx surfaces this to Admin clearly.",
+    "server.py invite_persons_bulk(): deduplicates with dict.fromkeys and caps at 200 — good. However, there is no cap/signal when input exceeds 200 (silently truncates). Consider returning a 'truncated' flag or 400 if len > 200 for operator awareness.",
+    "server.py _send_person_invite(): existing CRM-account check raises 409 for non-admins only. Admin can thus re-send to any linked account bypassing membership check — intended per spec but ensure UI prevents accidental double-member creation (role is forced to staff/volunteer, fine).",
+    "permissions.py normalize_permissions(): send_invites is coerced via `is True` which drops any truthy non-boolean — strict and safe. OK.",
+    "PersonInvites.jsx: invite-confirm-box only renders after clicking send once (two-step confirm). Spec aligns; good UX with invite-recent-warning when <24h detected client-side."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter81_send_invites_perm.py",
+    "/app/test_reports/iteration_81.json"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (UI testids and flows verified for admin; non-admin UI hide validated indirectly via backend 403)"},
+  "test_credentials": "Org Admin: qa.eventi@crmeventqa.it / QaEvents2026! ; TEST collaboratore ephemeral: test_collab_TEST_iter81_<rand>@example.com / Collab2026! (deleted at teardown)",
+  "seed_data_creation": "Created and cleaned up TEST_iter81_* events, teams, persons (with/without email), staff rows (staff/volontario), collaboratore user + membership. All deleted in fixture teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file: /app/backend/tests/test_iter81_send_invites_perm.py (11 tests). Note the admin-vs-non-admin distinction: _assert_can_invite requires send_invites or admin; _invite_roles_for restricts non-admin to staff/volontario presences in allowed teams/events and respects manage_staff/manage_volunteers. Anti-doppione 24h returns detail={'code':'recent_invite','last_invite_at','message'}; force=true bypasses. Bulk endpoint truncates input to 200. Front-end routes: /profilo tab 'Utenti e Permessi' -> user-perms-btn-{uid} opens permissions dialog with perm-send-invites-on/off; /staff and /persone sidebar links expose invite-{id}/select-invite-* testids. Admin always sees invite UI; non-admin only when send_invites=true (verified via canSendInvites in frontend/src/lib/perms.js).",
+  "rca of the issue": "N/A — feature implementation matches spec; no bugs found."
+}
