@@ -64,14 +64,15 @@ function BookingCard({ b, onAction }) {
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2" data-testid={`vs-booking-${b.id}`}>
       <div className="flex items-start justify-between gap-2"><div><div className="font-semibold text-slate-900">{when(b.slot_key)}</div><div className="text-sm text-slate-600">{b.org_name} · {b.user_name}</div><div className="text-xs text-slate-500 break-all">{b.user_email}</div></div>
         <StatusBadge color={STATUS[b.status]?.[0]}>{STATUS[b.status]?.[1]}</StatusBadge></div>
-      <div className="text-xs text-slate-500">{b.credits_charged} crediti addebitati{b.refunded ? ` · ${b.refunded} riaccreditati` : ""}{b.cancelled_by ? ` · annullata da ${b.cancelled_by}` : ""}{b.simulated ? " · SIMULAZIONE" : ""}{b.error ? ` · errore ${b.error} (nessun addebito)` : ""}</div>
+      <div className="text-xs text-slate-500">{b.charge_mode === "plan" ? `Inclusa nel piano${b.quota_consumed && !b.quota_refunded ? " · conteggiata" : ""}${b.quota_refunded ? " · restituita" : ""}` : `${b.credits_charged} crediti addebitati`}{b.refunded ? ` · ${b.refunded} riaccreditati` : ""}{b.cancelled_by ? ` · annullata da ${b.cancelled_by}` : ""}{b.simulated ? " · SIMULAZIONE" : ""}{b.error ? ` · errore ${b.error} (nessun addebito)` : ""}</div>
       {b.note && <p className="text-sm text-slate-600">Richiesta: {b.note}</p>}
       {b.meet_link && b.status === "confermata" && <a href={b.meet_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-[#088F8A]" data-testid={`vs-meet-${b.id}`}><ExternalLink className="w-4 h-4" />{b.meet_link}</a>}
       <div className="flex gap-2"><Textarea rows={1} className="min-h-10" placeholder="Note interne" value={note} onChange={(e) => setNote(e.target.value)} data-testid={`vs-note-${b.id}`} /><Button variant="outline" onClick={saveNote} data-testid={`vs-note-save-${b.id}`}><Save className="w-4 h-4" /></Button></div>
       {b.status === "confermata" && <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => onAction("reschedule", b)} data-testid={`vs-reschedule-${b.id}`}>Riprogramma</Button>
-        <Button size="sm" variant="outline" className="text-red-600" onClick={() => onAction("cancel", b)} data-testid={`vs-cancel-${b.id}`}>Annulla e riaccredita</Button>
+        <Button size="sm" variant="outline" className="text-red-600" onClick={() => onAction("cancel", b)} data-testid={`vs-cancel-${b.id}`}>{b.charge_mode === "plan" ? "Annulla" : "Annulla e riaccredita"}</Button>
       </div>}
+      {b.charge_mode === "plan" && b.quota_consumed && !b.quota_refunded && b.status !== "errore" && <Button size="sm" variant="outline" onClick={() => onAction("restore", b)} data-testid={`vs-restore-quota-${b.id}`}>Restituisci videochiamata (rettifica)</Button>}
     </div>
   );
 }
@@ -84,8 +85,13 @@ export default function PlatformVideoSupport() {
   const load = useCallback(() => api.get("/platform/video-support/bookings").then(({ data }) => setRows(data.bookings || [])), []);
   useEffect(() => { load(); }, [load]);
   const onAction = async (kind, b) => {
+    if (kind === "restore") {
+      if (!window.confirm(`Restituire la videochiamata a ${b.org_name}?`)) return;
+      try { await api.post(`/platform/video-support/bookings/${b.id}/restore-quota`); toast.success("Videochiamata restituita"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+      return;
+    }
     if (kind === "cancel") {
-      if (!window.confirm(`Annullare la prenotazione di ${b.org_name}? I ${b.credits_charged} crediti verranno riaccreditati.`)) return;
+      if (!window.confirm(b.charge_mode === "plan" ? `Annullare la prenotazione di ${b.org_name}? La videochiamata non verrà conteggiata.` : `Annullare la prenotazione di ${b.org_name}? I ${b.credits_charged} crediti verranno riaccreditati.`)) return;
       try { await api.post(`/platform/video-support/bookings/${b.id}/cancel`, {}); toast.success("Annullata e riaccreditata"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     } else { setRes(b); setSlot(null); const { data } = await api.get("/platform/video-support/slots"); setSlots(data.slots || []); }
   };

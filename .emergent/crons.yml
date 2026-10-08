@@ -6,6 +6,14 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: saas-trial-tick
+    description: "Sends GOLD trial reminders (3 days before and on expiry day) and marks expired trials"
+    cron: "0 8 * * *"
+    timezone: "Europe/Rome"
+    endpoint: "{{BASE_URL}}/api/cron/saas-trial-tick"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
   - name: event-renewals
     description: "Charges monthly Event Maintenance credits for active events, suspends if balance is insufficient"
     cron: "0 3 * * *"

@@ -3,6 +3,15 @@ import { useAuth } from "@/context/AuthContext";
 // Specchio lato UI dei permessi calcolati dal backend (/auth/me → permissions). Il backend resta l'autorità.
 export const isOrgAdmin = (u) => !!u && (u.role === "superadmin" || u.org_role === "admin_org");
 
+// Funzionalità soggette al piano (BRONZE / SILVER / GOLD). Super Admin escluso.
+const PLAN_SECTIONS = ["dashboard", "eventi", "staff", "pipeline", "aziende", "anagrafiche", "attivita", "mappe", "ospitalita", "sponsor", "briefing", "followup"];
+export const planBlocks = (u, section) => {
+  if (!u?.saas?.enabled || u.role === "superadmin") return false;
+  const sec = section === "teams" || section === "turni" ? "staff" : section;
+  return PLAN_SECTIONS.includes(sec) && !(u.saas.features || []).includes(sec);
+};
+export const planReadonly = (u) => !!u?.saas?.enabled && u.role !== "superadmin" && !u.saas.writable;
+
 // Nomina Team Leader: lettura dei propri Team garantita; modifica componenti / turni solo con i flag dedicati.
 const tlCan = (u, section, action) => {
   if (!(u.led_team_ids || []).length) return false;
@@ -16,6 +25,8 @@ const tlCan = (u, section, action) => {
 // "teams" e "turni" sono sotto-aree della sezione Staff
 export const can = (u, section, action = "view") => {
   if (!u) return false;
+  if (planBlocks(u, section)) return false;
+  if (action !== "view" && planReadonly(u)) return false;
   if (isOrgAdmin(u)) return true;
   const p = u.permissions;
   if (!p || p.admin) return true;

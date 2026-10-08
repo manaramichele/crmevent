@@ -55,7 +55,7 @@ export function ServiceCosts() {
   );
 }
 
-export default function Account({ embedded = false }) {
+export default function Account({ embedded = false, hideCredits = false }) {
   const [data, setData] = useState(null);
   const [billing, setBilling] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -99,14 +99,14 @@ export default function Account({ embedded = false }) {
       {!embedded && <><h1 className="font-display text-3xl font-bold text-slate-900">Account e crediti</h1>
       <p className="text-slate-500 mt-1 mb-6">Gestisci i tuoi crediti CRMEvent e i dati di fatturazione.</p></>}
 
-      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 mb-4">
+      {!hideCredits && <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 mb-4">
         <div className="flex items-center gap-2 text-slate-500 text-sm"><Building2 className="w-4 h-4" />Organizzazione</div>
         <div className="text-xl font-semibold text-slate-900 mt-1" data-testid="account-org-name">{data.organization.nome}</div>
-      </div>
+      </div>}
 
       {/* Crediti CRMEvent */}
-      <CreditsSection />
-      <ServiceCosts />
+      {!hideCredits && <CreditsSection />}
+      {!hideCredits && <ServiceCosts />}
 
       {/* Billing details */}
       <div className="bg-white border border-slate-200 rounded-xl p-6 mb-4" data-testid="billing-form">
@@ -134,7 +134,7 @@ export default function Account({ embedded = false }) {
         <Button onClick={saveBilling} disabled={saving} data-testid="billing-save" className="mt-4 bg-slate-900 hover:bg-slate-800 text-white"><Save className="w-4 h-4 mr-2" />{saving ? "Salvataggio..." : "Salva dati"}</Button>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4" data-testid="invoices-card">
+      {!hideCredits && <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4" data-testid="invoices-card">
         <div className="flex items-center gap-2 mb-1"><ReceiptText className="w-4 h-4 text-tiffany-active" /><h2 className="font-semibold text-slate-800">Fatture</h2></div>
         <p className="text-xs text-slate-400 mb-4">La <b>simulazione (TEST)</b> verifica il documento internamente: <b>nessun</b> documento reale su Fatture in Cloud e <b>nessun</b> invio SDI.</p>
         {invoices.length === 0 ? (
@@ -178,7 +178,7 @@ export default function Account({ embedded = false }) {
             </details>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

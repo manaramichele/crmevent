@@ -35,6 +35,7 @@ import permissions as P
 import storage_utils
 import gcal_utils
 import video_support
+import subscriptions
 import pipeline_seed_sports
 import demo_booking
 import brevo_funnel
@@ -235,7 +236,24 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
                 "acting_org": PLATFORM_ORG_ID, "platform_scope": True}
     org_id, org_role = await _resolve_active_org(request, user)
     perm = await _enforce_perm(request, user, org_id, org_role)
+    await _enforce_plan(request, org_id, org_role)
     return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id, "perm": perm}
+
+
+SAAS: dict = {}
+
+
+async def _enforce_plan(request: Request, org_id: str, org_role: str) -> None:
+    """Funzionalità incluse nel piano + sola lettura a prova/abbonamento terminati (Super Admin escluso)."""
+    if org_role == "superadmin" or not SAAS:
+        return
+    st = await SAAS["state_for"](org_id)
+    if not st.get("enabled"):
+        return
+    tpl = getattr(request.scope.get("route"), "path", "") or ""
+    tpl = tpl[4:] if tpl.startswith("/api") else tpl
+    secs, _ = P.route_rule(tpl, request.method)
+    SAAS["check"](st, secs, request.method, tpl)
 
 
 # Collezioni con id di oggetto collegato a un evento: (param path, collezione, campo evento)
@@ -411,6 +429,7 @@ async def require_org_admin(request: Request, user: dict = Depends(get_current_u
     org_id, org_role = await _resolve_active_org(request, user)
     if org_role not in ("admin_org", "superadmin"):
         raise HTTPException(status_code=403, detail="Riservato agli amministratori dell'organizzazione")
+    await _enforce_plan(request, org_id, org_role)
     return {**user, "org_id": org_id, "org_role": org_role, "acting_org": org_id}
 
 
@@ -497,7 +516,10 @@ async def _create_organization(name: str, owner_user_id: Optional[str] = None,
            "owner_user_id": owner_user_id, "subscription": sub,
            "created_at": now_iso(), "updated_at": now_iso()}
     await db.organizations.insert_one(org)
-    await _grant_signup_bonus(org["id"], org.get("nome"))
+    if org_type == "cliente":
+        await SAAS["init_trial"](org["id"], owner_user_id)  # nuovo modello: prova GOLD, nessun bonus crediti
+    else:
+        await _grant_signup_bonus(org["id"], org.get("nome"))
     return org
 
 
@@ -647,6 +669,7 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base["led_team_ids"] = [] if chosen["role"] == "admin_org" else await _led_team_ids(u, chosen["org_id"], cm.get("persona_id"))
     base["org_type"] = chosen["type"]
     base["subscription"] = _sub_summary(org)
+    base["saas"] = subscriptions.org_state(org, await SAAS["get_config"]())
     return base
 
 
@@ -1393,8 +1416,10 @@ def crud_routes(path, coll, model, org_scoped=True):
                 raise HTTPException(status_code=403, detail="Seleziona uno dei Team a cui hai accesso")
         if coll == "events":
             await _assert_can_create_event(user["org_id"])
+            if await SAAS["is_saas"](user["org_id"]):
+                data["credit_state"] = "attivo"  # abbonamento: eventi illimitati, nessuna attivazione a crediti
             data.setdefault("credit_state", "preparazione")
-            if data.get("stato") == "attivo":
+            if data.get("stato") == "attivo" and data["credit_state"] != "attivo":
                 data["stato"] = "pianificato"  # 'Attivo' si ottiene solo via attivazione a crediti
         else:
             await _assert_org_operational(user["org_id"])
@@ -3461,8 +3486,8 @@ GCAL_UNLOCK_COST = 20
 
 
 async def _gcal_unlocked(org_id: str) -> bool:
-    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "features": 1})
-    return bool((org or {}).get("features", {}).get("google_calendar"))
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "features": 1, "saas": 1})
+    return bool((org or {}).get("saas")) or bool((org or {}).get("features", {}).get("google_calendar"))
 
 
 @api.get("/calendar/feature")
@@ -6681,6 +6706,8 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Firma webhook non valida")
     t, obj = event["type"], event["data"]["object"]
+    if await SAAS["handle_webhook"](t, obj):
+        return {"received": True}
     if t == "customer.subscription.deleted":
         await db.organizations.update_one({"subscription.stripe_subscription_id": obj["id"]},
                                           {"$set": {"subscription.status": "canceled", "updated_at": now_iso()}})
@@ -11494,7 +11521,7 @@ async def _charge_begin(org_id, service_key, *, user_id=None, event_id=None, ide
     Se il saldo è insufficiente solleva HTTP 402 e il servizio NON deve essere eseguito.
     Pattern: reservation = await _charge_begin(...); try: <esegui>; _credits_settle(); except: _credits_release()."""
     svc = await db.credit_services.find_one({"key": service_key}, {"_id": 0})
-    if not _service_consumo_on(svc):
+    if not _service_consumo_on(svc) or await SAAS["is_saas"](org_id):
         return None
     return await _credits_reserve(org_id, service_key, 1, user_id=user_id, event_id=event_id,
                                   idempotency_key=idempotency_key, note=note)
@@ -13021,11 +13048,16 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
             "current_plan": ((ev or {}).get("entitlement") or {}).get("plan")}
 
 
+SAAS.update(subscriptions.build(db, {
+    "require_admin": require_admin, "require_org_admin": require_org_admin, "require_superadmin": require_superadmin,
+    "record_audit": record_audit, "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
+    "record_invoice": _record_invoice, "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET}))
 app.include_router(api)
+app.include_router(SAAS["router"])
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
     "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,
-    "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}))
+    "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}, SAAS))
 app.include_router(brevo_org_lists.build_router(db, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],

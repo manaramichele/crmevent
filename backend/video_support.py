@@ -78,8 +78,8 @@ class NoteIn(BaseModel):
     admin_note: str = ""
 
 
-def build_router(db, require_admin, require_superadmin, record_audit, credits) -> APIRouter:
-    """credits: dict con reserve/settle/release/ensure_setup/ensure_org (funzioni del sistema crediti esistente)."""
+def build_router(db, require_admin, require_superadmin, record_audit, credits, plan=None) -> APIRouter:
+    """credits: funzioni del sistema crediti esistente; plan: modulo abbonamenti (quote videochiamate per piano)."""
     r = APIRouter(prefix="/api")
     state = {"idx": False}
 
@@ -117,9 +117,15 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
             logger.warning(f"video_support freebusy failed: {type(e).__name__}")
             return []
 
-    async def _slots(cfg: dict, enforce_notice: bool = True, exclude_booking: Optional[str] = None) -> list:
+    async def _policy(org_id: str) -> dict:
+        return await plan["video_policy"](org_id) if plan else {"mode": "credits"}
+
+    async def _slots(cfg: dict, enforce_notice: bool = True, exclude_booking: Optional[str] = None, priority: bool = False) -> list:
         now = _now()
-        start_min = now + timedelta(hours=cfg.get("min_notice_hours", 24) if enforce_notice else 0)
+        notice = cfg.get("min_notice_hours", 24)
+        if priority:
+            notice = min(notice, plan["gold_notice_hours"])  # GOLD: disponibilità prioritaria (preavviso ridotto)
+        start_min = now + timedelta(hours=notice if enforce_notice else 0)
         horizon = now + timedelta(days=cfg.get("horizon_days", 30))
         q = {"slot_lock": {"$type": "string"}}
         if exclude_booking:
@@ -145,8 +151,8 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
             day += timedelta(days=1)
         return sorted({s["slot_key"]: s for s in out}.values(), key=lambda s: s["slot_key"])
 
-    async def _assert_free_slot(cfg, slot_key, enforce_notice=True, exclude_booking=None):
-        if slot_key not in {s["slot_key"] for s in await _slots(cfg, enforce_notice, exclude_booking)}:
+    async def _assert_free_slot(cfg, slot_key, enforce_notice=True, exclude_booking=None, priority=False):
+        if slot_key not in {s["slot_key"] for s in await _slots(cfg, enforce_notice, exclude_booking, priority)}:
             raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile")
 
     def _event_body(b: dict, start: datetime) -> dict:
@@ -214,7 +220,8 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
     def _public(b: dict) -> dict:
         return {k: b.get(k) for k in ("id", "org_id", "org_name", "user_id", "user_name", "user_email", "slot_key", "start", "end",
                                       "status", "meet_link", "credits_charged", "refunded", "note", "reschedule_count",
-                                      "cancelled_by", "cancel_reason", "simulated", "created_at")}
+                                      "cancelled_by", "cancel_reason", "simulated", "created_at", "charge_mode", "quota_period",
+                                      "quota_consumed", "quota_refunded")}
 
     def _hours_left(b: dict) -> float:
         return (_slot_dt(b["slot_key"]) - _now()).total_seconds() / 3600
@@ -232,17 +239,29 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
                      "cancel_reason": reason, "cancelled_at": _iso(_now())}, "$unset": {"slot_lock": ""}})
         if not res.modified_count:
             raise HTTPException(status_code=409, detail="Prenotazione già aggiornata")
-        amt = await _refund(b, actor, "Super Admin" if by_admin else "organizzatore") if refund else 0
+        amt = 0
+        if b.get("charge_mode") == "plan":
+            if refund and b.get("quota_consumed") and not b.get("quota_refunded"):
+                await _quota_back(b)
+        else:
+            amt = await _refund(b, actor, "Super Admin" if by_admin else "organizzatore") if refund else 0
         await db.video_support_bookings.update_one({"id": b["id"]}, {"$set": {"refunded": amt}})
         await _gcal_call(await _config(), b, lambda t, c: gcal_utils.delete_event(t, c, b["google_event_id"]))
         await _audit(actor, "video_support_cancelled", b, f"{_fmt(b['slot_key'])} · riaccredito {amt} crediti")
         return {"ok": True, "refunded": amt}
 
+    async def _quota_back(b: dict) -> bool:
+        res = await db.video_support_bookings.update_one({"id": b["id"], "quota_refunded": {"$ne": True}}, {"$set": {"quota_refunded": True}})
+        if res.modified_count:
+            await plan["video_release"](b["org_id"], b["quota_period"])
+        return bool(res.modified_count)
+
     async def _reschedule(b: dict, slot_key: str, actor: dict, by_admin: bool) -> dict:
         if b["status"] != "confermata":
             raise HTTPException(status_code=400, detail="La prenotazione non è attiva")
         cfg = await _config()
-        await _assert_free_slot(cfg, slot_key, enforce_notice=not by_admin, exclude_booking=b["id"])
+        pr = b.get("charge_mode") == "plan" and bool((await _policy(b["org_id"])).get("priority"))
+        await _assert_free_slot(cfg, slot_key, enforce_notice=not by_admin, exclude_booking=b["id"], priority=pr)
         start = _slot_dt(slot_key)
         upd = {"slot_key": slot_key, "slot_lock": slot_key, "start": _iso(start), "end": _iso(start + timedelta(minutes=DURATION_MIN))}
         try:
@@ -268,18 +287,25 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
     @r.get("/video-support/info")
     async def info(user: dict = Depends(require_admin)):
         svc, cfg = await _service(), await _config()
+        pol = await _policy(user["org_id"])
+        if pol["mode"] == "plan":
+            return {"service": {"name": "Assistenza in videochiamata", "description": "Sessione di 30 minuti su Google Meet con un esperto CRMEvent, inclusa nel tuo piano.", "unit_cost": 0},
+                    "available": pol["allowed"], "ready": pol["allowed"] and await _ready(cfg), "duration_min": DURATION_MIN,
+                    "balance": 0, "policy_hours": POLICY_HOURS, "simulation": simulation(), "plan": pol}
         c = await credits["ensure_org"](user["org_id"])
         available = _bookable(svc)
         return {"service": {"name": svc.get("name"), "description": svc.get("description"), "unit_cost": svc.get("unit_cost")},
                 "available": available, "ready": available and await _ready(cfg), "duration_min": DURATION_MIN,
-                "balance": c.get("balance", 0), "policy_hours": POLICY_HOURS, "simulation": simulation()}
+                "balance": c.get("balance", 0), "policy_hours": POLICY_HOURS, "simulation": simulation(), "plan": pol}
 
     @r.get("/video-support/slots")
     async def slots(user: dict = Depends(require_admin)):
         svc, cfg = await _service(), await _config()
-        if not _bookable(svc) or not await _ready(cfg):
+        pol = await _policy(user["org_id"])
+        ok = pol["allowed"] if pol["mode"] == "plan" else _bookable(svc)
+        if not ok or not await _ready(cfg):
             return {"slots": []}
-        return {"slots": await _slots(cfg)}
+        return {"slots": await _slots(cfg, priority=bool(pol.get("priority")))}
 
     @r.get("/video-support/bookings")
     async def my_bookings(user: dict = Depends(require_admin)):
@@ -295,6 +321,9 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
     async def book(body: BookIn, user: dict = Depends(require_admin)):
         await _indexes()
         svc, cfg = await _service(), await _config()
+        pol = await _policy(user["org_id"])
+        if pol["mode"] == "plan":
+            return await _book_plan(body, user, cfg, pol)
         if not _bookable(svc):
             raise HTTPException(status_code=403, detail="Il servizio di assistenza in videochiamata non è ancora disponibile")
         if not await _ready(cfg):
@@ -337,6 +366,44 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
         await _email(b, f"La tua assistenza CRMEvent in videochiamata è confermata per il {_fmt(body.slot_key)} (durata 30 minuti). "
                         "Al momento dell'appuntamento apri il link Google Meet: potrai condividere lo schermo.", "Assistenza CRMEvent confermata")
         await _audit(user, "video_support_booked", b, f"{_fmt(body.slot_key)} · {b['credits_charged']} crediti")
+        return _public(b)
+
+    async def _book_plan(body: BookIn, user: dict, cfg: dict, pol: dict) -> dict:
+        """Prenotazione inclusa nel piano: quota controllata e consumata in modo atomico sul backend, nessun credito."""
+        if not pol["allowed"]:
+            raise HTTPException(status_code=403, detail={"code": "video_quota", "message": pol.get("reason") or "Videochiamate non disponibili con il tuo piano"})
+        if not await _ready(cfg):
+            raise HTTPException(status_code=503, detail="Le prenotazioni non sono al momento disponibili")
+        await _assert_free_slot(cfg, body.slot_key, priority=bool(pol.get("priority")))
+        org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "nome": 1}) or {}
+        start = _slot_dt(body.slot_key)
+        nome = f"{user.get('cognome') or ''} {user.get('nome') or ''}".strip() or user.get("name") or user.get("email")
+        b = {"id": uuid.uuid4().hex, "org_id": user["org_id"], "org_name": org.get("nome"), "user_id": user["user_id"],
+             "user_name": nome, "user_email": user.get("email"), "slot_key": body.slot_key, "slot_lock": body.slot_key,
+             "start": _iso(start), "end": _iso(start + timedelta(minutes=DURATION_MIN)), "status": "in_creazione",
+             "note": (body.note or "").strip()[:1000] or None, "reschedule_count": 0, "credits_charged": 0,
+             "charge_mode": "plan", "plan": pol.get("plan"), "priority": bool(pol.get("priority")), "quota_period": pol["period"],
+             "quota_consumed": False, "created_at": _iso(_now())}
+        try:
+            await db.video_support_bookings.insert_one({**b})
+        except DuplicateKeyError:
+            raise HTTPException(status_code=409, detail="L'orario selezionato è appena stato prenotato")
+        if not await plan["video_consume"](user["org_id"], pol["period"], pol.get("quota")):
+            await db.video_support_bookings.update_one({"id": b["id"]}, {"$set": {"status": "errore", "error": "quota"}, "$unset": {"slot_lock": ""}})
+            raise HTTPException(status_code=403, detail={"code": "video_quota", "message": "Hai già utilizzato tutte le videochiamate incluse nel periodo."})
+        try:
+            ev = await _create_meet(cfg, b)
+        except Exception as e:
+            logger.error(f"video_support meet creation failed booking={b['id']}: {type(e).__name__}: {e}")
+            await plan["video_release"](user["org_id"], pol["period"])
+            await db.video_support_bookings.update_one({"id": b["id"]}, {"$set": {"status": "errore", "error": "appuntamento"}, "$unset": {"slot_lock": ""}})
+            raise HTTPException(status_code=502, detail="Non è stato possibile creare l'appuntamento Google Meet. Nessuna videochiamata è stata conteggiata: riprova più tardi.")
+        upd = {"status": "confermata", "meet_link": ev["meet_link"], "google_event_id": ev["id"], "simulated": ev["simulated"], "quota_consumed": True}
+        await db.video_support_bookings.update_one({"id": b["id"]}, {"$set": upd})
+        b.update(upd)
+        await _email(b, f"La tua assistenza CRMEvent in videochiamata è confermata per il {_fmt(body.slot_key)} (durata 30 minuti). "
+                        "Al momento dell'appuntamento apri il link Google Meet: potrai condividere lo schermo.", "Assistenza CRMEvent confermata")
+        await _audit(user, "video_support_booked", b, f"{_fmt(body.slot_key)} · incluso nel piano {pol.get('plan_label') or ''}")
         return _public(b)
 
     @r.post("/video-support/bookings/{bid}/cancel")
@@ -390,7 +457,8 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
             raise HTTPException(status_code=404, detail="Prenotazione non trovata")
         out = await _cancel(b, admin, True, body.reason)
         await _email({**b, "meet_link": f"{os.environ.get('APP_URL', '')}/assistenza"},
-                     f"La tua assistenza CRMEvent del {_fmt(b['slot_key'])} è stata annullata da CRMEvent. I {out['refunded']} crediti sono stati riaccreditati.",
+                     f"La tua assistenza CRMEvent del {_fmt(b['slot_key'])} è stata annullata da CRMEvent. "
+                     + ("La videochiamata non viene conteggiata nel tuo piano." if b.get("charge_mode") == "plan" else f"I {out['refunded']} crediti sono stati riaccreditati."),
                      "Assistenza CRMEvent annullata")
         return out
 
@@ -400,6 +468,17 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits) -
         if not b:
             raise HTTPException(status_code=404, detail="Prenotazione non trovata")
         return await _reschedule(b, body.slot_key, admin, True)
+
+    @r.post("/platform/video-support/bookings/{bid}/restore-quota")
+    async def admin_restore_quota(bid: str, admin: dict = Depends(require_superadmin)):
+        """Rettifica Super Admin: restituisce la videochiamata (annullo tardivo / mancata partecipazione)."""
+        b = await db.video_support_bookings.find_one({"id": bid}, {"_id": 0})
+        if not b or b.get("charge_mode") != "plan" or not b.get("quota_consumed"):
+            raise HTTPException(status_code=400, detail="Rettifica non applicabile")
+        if not await _quota_back(b):
+            raise HTTPException(status_code=400, detail="Videochiamata già restituita")
+        await _audit(admin, "video_support_quota_restored", b)
+        return {"ok": True}
 
     @r.put("/platform/video-support/bookings/{bid}/note")
     async def admin_note(bid: str, body: NoteIn, admin: dict = Depends(require_superadmin)):

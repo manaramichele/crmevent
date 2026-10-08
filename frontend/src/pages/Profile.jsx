@@ -11,6 +11,7 @@ import { CalendarCheck2, Link2, Unplug } from "lucide-react";
 import OrgUsers from "@/components/OrgUsers";
 import Account from "@/pages/Account";
 import { isOrgAdmin } from "@/lib/perms";
+import MySubscription from "@/components/MySubscription";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -41,21 +42,26 @@ export default function Profile() {
   };
   const disconnect = async () => { await api.post("/calendar/disconnect"); toast.success("Google Calendar scollegato"); loadCal(); };
   const selectCal = async (id) => { await api.post("/calendar/select", { calendar_id: id }); setCal((c) => ({ ...c, calendar_id: id })); toast.success("Calendario aggiornato"); };
-  const showCredits = isOrgAdmin(user) && !isSuper;
+  const saas = !!user?.saas?.enabled;
+  const showCredits = isOrgAdmin(user) && !isSuper && !saas;
+  const showSub = isOrgAdmin(user) && !isSuper && saas;
   const [params, setParams] = useSearchParams();
-  const tabs = ["account", ...(showCredits ? ["crediti"] : []), ...(canManageUsers ? ["utenti"] : [])];
-  const tab = tabs.includes(params.get("tab")) ? params.get("tab") : "account";
+  const tabs = ["account", ...(showCredits ? ["crediti"] : []), ...(showSub ? ["abbonamento"] : []), ...(canManageUsers ? ["utenti"] : [])];
+  const req = showSub && params.get("tab") === "crediti" ? "abbonamento" : params.get("tab");
+  const tab = tabs.includes(req) ? req : "account";
 
   return (
     <div className="animate-fade-up space-y-6 max-w-6xl">
-      <PageHeader title="Profilo & Account" subtitle="Il tuo account, crediti e fatturazione, utenti e permessi" />
+      <PageHeader title="Profilo & Account" subtitle={saas ? "Il tuo account, abbonamento e fatturazione, utenti e permessi" : "Il tuo account, crediti e fatturazione, utenti e permessi"} />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
         <TabsList className="mb-4 w-full sm:w-auto overflow-x-auto justify-start h-auto flex-nowrap" data-testid="profile-tabs">
           <TabsTrigger value="account" className="h-9" data-testid="profile-tab-account">Account</TabsTrigger>
           {showCredits && <TabsTrigger value="crediti" className="h-9" data-testid="profile-tab-crediti">Crediti e fatturazione</TabsTrigger>}
+          {showSub && <TabsTrigger value="abbonamento" className="h-9" data-testid="profile-tab-abbonamento">Il mio abbonamento</TabsTrigger>}
           {canManageUsers && <TabsTrigger value="utenti" className="h-9" data-testid="profile-tab-utenti">Utenti e Permessi</TabsTrigger>}
         </TabsList>
         {showCredits && <TabsContent value="crediti"><div className="max-w-3xl"><Account embedded /></div></TabsContent>}
+        {showSub && <TabsContent value="abbonamento" className="space-y-4"><MySubscription /><div className="max-w-3xl"><Account embedded hideCredits /></div></TabsContent>}
         {canManageUsers && <TabsContent value="utenti">
           <SectionCard title="Utenti e Permessi">
             {manageOrgId ? <OrgUsers orgId={manageOrgId} /> : <p className="text-sm text-slate-500" data-testid="org-users-no-org">Seleziona un'organizzazione per gestire utenti e accessi.</p>}
