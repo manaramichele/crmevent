@@ -367,6 +367,12 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## 5 nuovi Modelli Pipeline sportivi — 2026-10-08 ✅ VERIFICATO (iter 86, backend 22/22)
+- backend/pipeline_seed_sports.py: Triathlon (92), Nuoto in acque libere (77), Ciclismo su strada (77), Mountain Bike (76), Trail Running (93) = blocco comune + attività specifiche, ordinate per offset; fornitore/referente nelle note; nota di verifica normativa su autorizzazioni/sicurezza. Seed idempotente per key in _ensure_pipeline_templates (Running/Generico invariati).
+- SA Modelli Pipeline: ordine A–Z, flag in_use, delete 409 se usato da un evento (pulsante disabilitato).
+- GET /events/{id}/pipeline/templates → `suggested` da tipologia (suggest_template); EventPipeline preseleziona + badge "Consigliato". Aggiunta tipologia standard "Mountain Bike".
+
+
 ## Pagamenti e Crediti (Super Admin) + rimozione link Impostazioni dal menu profilo — 2026-10-08 ✅ VERIFICATO (iter 85)
 - Rimosso solo il link duplicato "Impostazioni" dal menu profilo (aggiunto il 2026-10-08 con il fix header mobile). Pagina /impostazioni e voce nel menu laterale Admin invariate.
 - Analisi MASSIMO GHEZZI: "Trial" = organizations.subscription.status legacy (mai aggiornato dagli acquisti crediti); Stripe Customer ≠ pagamento; "non_inviato" = valore scritto alla creazione del documento FIC (CRMEvent non invia allo SDI e prima non rileggeva lo stato). Nel DB di produzione Emergent l'org NON ha acquisti/fatture/stripe customer → i dati citati dall'utente sono in un altro ambiente (probabilmente Aruba).
