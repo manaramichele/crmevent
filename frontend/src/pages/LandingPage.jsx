@@ -193,9 +193,9 @@ export default function LandingPage() {
   return (
     <div className="bg-white text-slate-900">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 pt-[env(safe-area-inset-top)]">
+      <header className="sticky top-0 z-50 bg-[#FFFFFF] border-b border-slate-100 pt-[env(safe-area-inset-top)]" data-testid="landing-header">
         <div className="max-w-6xl mx-auto px-6 min-h-[4.75rem] py-2.5 flex items-center justify-between">
-          <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent.png?v=5" alt="CRMEvent" className="h-14 sm:h-16 w-auto" /></Link>
+          <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent-header.png?v=1" alt="CRMEvent" className="h-14 sm:h-16 w-auto" /></Link>
           <nav className="hidden lg:flex items-center gap-7">
             {NAV.map(([l, id]) => <button key={id} onClick={() => scrollTo(id)} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{l}</button>)}
           </nav>
@@ -206,7 +206,7 @@ export default function LandingPage() {
           <button className="lg:hidden" onClick={() => setOpen((o) => !o)} data-testid="landing-menu">{open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
         </div>
         {open && (
-          <div className="lg:hidden border-t border-slate-100 bg-white px-6 py-4 space-y-3">
+          <div className="lg:hidden border-t border-slate-100 bg-[#FFFFFF] px-6 py-4 space-y-3" data-testid="landing-mobile-menu">
             {NAV.map(([l, id]) => <button key={id} onClick={() => { scrollTo(id); setOpen(false); }} className="block text-sm font-medium text-slate-600">{l}</button>)}
             <div className="flex gap-3 pt-2"><Link to="/login" className="flex-1 h-10 rounded-lg border border-slate-200 flex items-center justify-center text-sm font-semibold">Accedi</Link>
               <Link to="/registrati" onClick={() => setOpen(false)} className="flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">Inizia gratuitamente</Link></div>
