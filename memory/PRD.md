@@ -367,6 +367,10 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Rimossa voce "Assistenza" dal menu laterale — 2026-10-08 ✅ verificato con screenshot (desktop + 390px)
+- ORG_NAV senza /assistenza (desktop e mobile); l'accesso resta dal pulsante Tiffany nell'header. Pagina e route /assistenza invariate.
+
+
 ## Header: pulsante Assistenza + Cerca compatto — 2026-10-08 ✅ verificato con screenshot (375/390/430/1440)
 - Layout.jsx header: spacer + Cerca 220px (lg 260px, placeholder "Cerca...", dropdown risultati 22rem a destra) → pulsante "Assistenza" (Tiffany #0ABAB5, testo nero, icona Headset, link /assistenza, sempre visibile) → Tutorial → Novità → Notifiche → Profilo. Mobile: lente che apre la riga di ricerca esistente; nessuno scroll orizzontale.
 
