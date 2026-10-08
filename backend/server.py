@@ -3011,7 +3011,13 @@ async def support_chat(body: ChatIn, request: Request, user: dict = Depends(get_
     # Consumo crediti centralizzato (servizio 'ai_assistant', costo letto dal catalogo).
     # Saldo verificato PRIMA della chiamata AI (402 se insufficiente). Addebito SOLO se la risposta
     # è realmente utile: answered=true e NON una semplice richiesta di funzionalità (feature request).
-    if oid:
+    saas_st = (await SAAS["state_for"](oid)) if (oid and SAAS) else {}
+    if saas_st.get("enabled"):
+        # Abbonamento (Bronze/Silver/Gold): assistente incluso, nessun consumo crediti.
+        if not saas_st.get("writable"):
+            raise HTTPException(status_code=402, detail="Per utilizzare l'Assistente CRMEvent scegli un piano di abbonamento.")
+        result = await _ask()
+    elif oid:
         idem = f"ai_assistant:{body.request_id}" if body.request_id else None
         async with ai_charge(oid, "ai_assistant", user_id=user.get("user_id"), event_id=body.event_id,
                              idempotency_key=idem, note="Assistente CRMEvent") as ctl:

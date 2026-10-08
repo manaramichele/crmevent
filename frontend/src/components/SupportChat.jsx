@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import api, { formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +15,11 @@ const CTX = {
   "/app": "Area personale — I miei eventi",
 };
 
-export default function SupportChat({ bottomOffset = false }) {
+export default function SupportChat({ bottomOffset = false, fab = true }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const saas = !!user?.saas?.enabled;
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);
   const [q, setQ] = useState("");
@@ -26,6 +30,11 @@ export default function SupportChat({ bottomOffset = false }) {
   const pageContext = location.pathname.startsWith("/evento/") ? "Area personale — Dettaglio evento" : (CTX[location.pathname] || "CRMEvent");
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
+  useEffect(() => {
+    const h = () => setOpen(true);
+    window.addEventListener("support-chat:open", h);
+    return () => window.removeEventListener("support-chat:open", h);
+  }, []);
 
   const send = async () => {
     const question = q.trim();
@@ -39,7 +48,9 @@ export default function SupportChat({ bottomOffset = false }) {
       setConvId(data.conversation_id);
       setMsgs((m) => [...m, { role: "assistant", id: data.message_id, content: data.answer, answered: data.answered, feedback: null }]);
     } catch (e) {
-      if (e.response?.status === 402) {
+      if (e.response?.status === 402 && saas) {
+        setMsgs((m) => [...m, { role: "assistant", plan: true, answered: false, content: "Per utilizzare l'Assistente CRMEvent scegli un piano di abbonamento." }]);
+      } else if (e.response?.status === 402) {
         setMsgs((m) => [...m, { role: "assistant", insufficient: true, answered: false, content: "Crediti insufficienti. Per utilizzare l'Assistente CRMEvent devi ricaricare i tuoi crediti." }]);
       } else {
         setMsgs((m) => [...m, { role: "assistant", content: "Si è verificato un errore. Riprova tra poco.", answered: false, error: true }]);
@@ -63,7 +74,7 @@ export default function SupportChat({ bottomOffset = false }) {
 
   return (
     <>
-      {!open && (
+      {!open && fab && (
         <button onClick={() => setOpen(true)} data-testid="support-fab" aria-label="Apri assistente CRMEvent"
           className={`fixed ${bottomOffset ? "bottom-20" : "bottom-5"} right-5 z-50 w-12 h-12 sm:w-[52px] sm:h-[52px] rounded-full bg-slate-900 text-white shadow-xl hover:bg-slate-800 transition-all hover:scale-105 active:scale-95 flex items-center justify-center`}>
           <Sparkles className="w-6 h-6 text-tiffany" />
@@ -98,7 +109,7 @@ export default function SupportChat({ bottomOffset = false }) {
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-tiffany text-slate-900 rounded-br-sm" : "bg-white border border-slate-200 text-slate-700 rounded-bl-sm"}`} data-testid={m.role === "assistant" ? "support-answer" : undefined}>
                     {m.content}
-                    {m.role === "assistant" && !m.error && !m.insufficient && (
+                    {m.role === "assistant" && !m.error && !m.insufficient && !m.plan && (
                       <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-3">
                         {m.id && (
                           <div className="flex items-center gap-1.5">
@@ -112,7 +123,10 @@ export default function SupportChat({ bottomOffset = false }) {
                     {m.insufficient && (
                       <button onClick={() => setRecharge(true)} data-testid="support-recharge-btn" className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold bg-tiffany hover:bg-tiffany-hover text-slate-900 rounded-lg px-3 py-2 transition-colors"><Wallet className="w-3.5 h-3.5" />Ricarica crediti</button>
                     )}
-                    {m.role === "assistant" && m.answered === false && !m.error && !m.insufficient && (
+                    {m.plan && (
+                      <button onClick={() => { setOpen(false); navigate("/profilo?tab=abbonamento"); }} data-testid="support-plans-btn" className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold bg-tiffany hover:bg-tiffany-hover text-slate-900 rounded-lg px-3 py-2 transition-colors">Scopri i piani</button>
+                    )}
+                    {m.role === "assistant" && m.answered === false && !m.error && !m.insufficient && !m.plan && (
                       <button onClick={openTicket} data-testid="support-ticket-btn" className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold bg-slate-900 text-white rounded-lg px-3 py-2 hover:bg-slate-800 transition-colors"><LifeBuoy className="w-3.5 h-3.5" />Invia richiesta al supporto</button>
                     )}
                   </div>
@@ -129,7 +143,7 @@ export default function SupportChat({ bottomOffset = false }) {
           </div>
         </div>
       )}
-      <RechargeDialog open={recharge} onClose={() => setRecharge(false)} />
+      {!saas && <RechargeDialog open={recharge} onClose={() => setRecharge(false)} />}
     </>
   );
 }
