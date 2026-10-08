@@ -123,22 +123,38 @@ function TeamScope({ teams, events, value, onChange }) {
   );
 }
 
-function InviteToggle({ value, onChange }) {
+function OnOff({ label, value, onChange, testid, hint }) {
   return (
-    <div className="space-y-1.5">
-      <div className={SECTION_LBL}>Invio inviti email</div>
-      <div className="flex flex-wrap gap-4 text-sm">
-        <label className="flex items-center gap-2"><input type="radio" checked={value} onChange={() => onChange(true)} data-testid="perm-send-invites-on" />Attivo</label>
-        <label className="flex items-center gap-2"><input type="radio" checked={!value} onChange={() => onChange(false)} data-testid="perm-send-invites-off" />Disattivo</label>
+    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 py-2 border-t border-slate-100 first:border-t-0">
+      <div className="text-sm text-slate-700 sm:w-64">{label}{hint && <div className="text-xs text-slate-400">{hint}</div>}</div>
+      <div className="flex gap-4 text-sm">
+        <label className="flex items-center gap-2"><input type="radio" checked={value} disabled={!onChange} onChange={() => onChange(true)} data-testid={`${testid}-on`} />Attivo</label>
+        <label className="flex items-center gap-2"><input type="radio" checked={!value} disabled={!onChange} onChange={() => onChange(false)} data-testid={`${testid}-off`} />Disattivo</label>
       </div>
-      <p className="text-xs text-slate-400">Consente di inviare via email l'invito all'area personale a Staff, Volontari e Collaboratori dei soli Team ed eventi accessibili. Non permette di creare utenti CRM, cambiare ruoli o assegnare permessi.</p>
+    </div>
+  );
+}
+
+function TeamLeaderPerms({ perm, setPerm }) {
+  const tl = perm.team_leader || {};
+  const setTl = (k) => (v) => setPerm((p) => ({ ...p, team_leader: { ...(p.team_leader || {}), [k]: v } }));
+  return (
+    <div className="space-y-1.5" data-testid="perm-team-leader">
+      <div className={SECTION_LBL}>Permessi Team Leader</div>
+      <div className="rounded-lg border border-slate-200 px-3">
+        <OnOff label="Visualizzazione componenti del team" hint="Garantita dalla nomina a Team Leader" value testid="perm-tl-view" />
+        <OnOff label="Gestione e modifica componenti del team" value={!!tl.edit_members} onChange={setTl("edit_members")} testid="perm-tl-edit-members" />
+        <OnOff label="Gestione turni del team" value={!!tl.manage_shifts} onChange={setTl("manage_shifts")} testid="perm-tl-manage-shifts" />
+        <OnOff label="Invio inviti email" hint="Area personale di Staff e Volontari accessibili" value={!!perm.send_invites} onChange={(send_invites) => setPerm((p) => ({ ...p, send_invites }))} testid="perm-send-invites" />
+      </div>
+      <p className="text-xs text-slate-400">Valgono solo per i Team di cui l'utente è Team Leader e decadono automaticamente se viene sostituito. Gli inviti non permettono di creare utenti CRM, cambiare ruoli o assegnare permessi.</p>
     </div>
   );
 }
 
 export const initialPerm = (meta, p) => {
   const base = !p || p.admin ? meta.defaults.user : p;
-  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] }, send_invites: !!base.send_invites };
+  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] }, send_invites: !!base.send_invites, team_leader: base.team_leader || { edit_members: false, manage_shifts: false } };
 };
 
 export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId }) {
@@ -158,7 +174,7 @@ export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId 
         <div className="space-y-1.5"><div className={SECTION_LBL}>Sezioni</div><MatrixEditor meta={meta} value={perm} onChange={setPerm} /></div>
         <div className="space-y-1.5"><div className={SECTION_LBL}>Eventi</div><EventScope events={meta.events} value={perm.events} onChange={(events) => setPerm((p) => ({ ...p, events }))} /></div>
         <div className="space-y-1.5"><div className={SECTION_LBL}>Accesso ai Team</div><TeamScope teams={meta.teams || []} events={meta.events} value={perm.teams} onChange={(teams) => setPerm((p) => ({ ...p, teams }))} /></div>
-        <InviteToggle value={!!perm.send_invites} onChange={(send_invites) => setPerm((p) => ({ ...p, send_invites }))} />
+        <TeamLeaderPerms perm={perm} setPerm={setPerm} />
         <p className="text-xs text-slate-400">Account, abbonamento, crediti, fatture, impostazioni e gestione utenti restano riservati all'Admin Organizzatore.</p>
       </>)}
     </div>

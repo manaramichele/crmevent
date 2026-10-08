@@ -196,6 +196,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
                 {isStaffTab ? (<>
                   {r.teams_nomi?.length > 0 && <div>{teamsCell(r)}</div>}
                   {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
+                  <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
                 </>) : (<>
                   {r.aziende_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.aziende_nomi.join(", ")}</div>}
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
@@ -221,6 +222,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
                 <Th k="ruolo_evento" label="Ruolo evento" />
                 <Th k="team" label="Team" />
                 <Th k="evento" label="Evento" />
+                <Th k="accesso" label="Invito" />
                 <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
               </>) : (<>
                 <Th k="nome" label="Cognome e Nome" />
@@ -232,8 +234,8 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
               </>)}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-                : displayRows.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
+              {loading ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
+                : displayRows.length === 0 ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
                     {onInvite && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
@@ -244,6 +246,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
+                        <td className="px-4 py-3" data-testid={`invite-status-${r.id}`}><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
                       </>
                     ) : (
                       <>
@@ -351,7 +354,8 @@ export default function Persons({ mode = "anagrafiche" }) {
     { key: "staff_count", label: "Staff", sortable: false, render: (r) => <span className="text-slate-700" data-testid={`team-staff-count-${r.id}`}>{teamCounts(r, staffLinks).staff.size}</span> },
     { key: "volontari_richiesti", label: "Volontari", render: (r) => <TeamCoverage req={r.volontari_richiesti} n={teamCounts(r, staffLinks).vol.size} id={r.id} /> },
   ];
-  const canEditStaff = can(user, "staff", "edit");
+  const canEditStaff = can(user, "teams", "edit");
+  const canEditMembers = can(user, "staff", "edit");
   const saveNote = (update, id) => async (text) => { await update(id, { descrizione: text }); invalidateTeams(); };
   const teamMobileCard = (r, { openDetail, update, onDelete, allow, filterVals }) => {
     const c = teamCounts(r, staffLinks);
@@ -422,17 +426,17 @@ export default function Persons({ mode = "anagrafiche" }) {
           ))}
           <TabsContent value="team">
             <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
-              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="staff" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
+              fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="teams" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
               extraActions={(r, { update }) => <TeamNoteButton team={r} canEdit={canEditStaff} onSave={saveNote(update, r.id)} />}
               mobileCard={teamMobileCard}
               renderDetail={(team, { close, edit, update }) => (
                 <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
-                  onReloadStaff={reload} onEdit={edit} canEdit={canEditStaff} onSaveNote={saveNote(update, team.id)}
+                  onReloadStaff={reload} onEdit={edit} canEdit={canEditMembers} onSaveNote={saveNote(update, team.id)}
                   onOpenPerson={(pid) => { close(); setDetailId(pid); }} />)} />
           </TabsContent>
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
-              fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" section="staff" searchKeys={["ruolo", "area", "luogo"]}
+              fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" section="turni" searchKeys={["ruolo", "area", "luogo"]}
               filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
           </TabsContent>
         </Tabs>

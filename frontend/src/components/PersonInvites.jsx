@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Send, AlertTriangle, X } from "lucide-react";
 
 export const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
-export const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Attivo", accesso_disabilitato: "Disabilitato" };
+export const INV_LABEL = { non_invitato: "Non invitato", invito_inviato: "Invito inviato", account_attivato: "Registrato", accesso_disabilitato: "Disabilitato" };
 const DUP_MS = 24 * 3600 * 1000;
 export const fmtInvite = (iso) => { try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 export const isRecentInvite = (p) => !!p?.last_invite_at && Date.now() - new Date(p.last_invite_at).getTime() < DUP_MS;

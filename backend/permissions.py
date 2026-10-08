@@ -17,6 +17,36 @@ COLLAB_HIDDEN = {"sponsor", "pipeline"}
 TEAM_SCOPES = ("all", "leader", "selected")
 
 
+# Permessi Team Leader: valgono solo sui Team di cui l'utente è Team Leader. La visualizzazione è garantita dalla nomina.
+TL_FLAGS = ("edit_members", "manage_shifts")
+# (path template, tipo, solo match esatto)
+TL_RULES = [
+    ("/events/{event_id}/availabilities", "members", True),
+    ("/availabilities/{aid}", "members", True),
+    ("/staff", "members", False),
+    ("/teams", "view", False),
+    ("/shifts", "shifts", False),
+    ("/persons-enriched", "view", True),
+    ("/persons/{person_id}/detail", "view", True),
+    ("/dashboard", "view", True),
+]
+
+
+def normalize_tl(raw) -> dict:
+    raw = raw if isinstance(raw, dict) else {}
+    return {k: raw.get(k) is True for k in TL_FLAGS}
+
+
+def tl_allows(perm: dict, path: str, action: str) -> bool:
+    tl = perm.get("team_leader") or {}
+    for prefix, kind, exact in TL_RULES:
+        if path == prefix or (not exact and path.startswith(prefix + "/")):
+            if action == "view":
+                return True
+            return {"members": tl.get("edit_members"), "shifts": tl.get("manage_shifts")}.get(kind) is True
+    return False
+
+
 def default_teams(role: str) -> dict:
     return {"scope": "leader" if role == "collaboratore" else "all", "ids": [],
             "manage_staff": True, "manage_volunteers": True}
@@ -79,9 +109,9 @@ READ_ANY_EXACT = {"/settings", "/credits/balance", "/credits/services", "/events
 def default_permissions(role: str) -> dict:
     if role == "collaboratore":
         return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all",
-                "teams": default_teams(role), "send_invites": False}
+                "teams": default_teams(role), "send_invites": False, "team_leader": normalize_tl(None)}
     return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role),
-            "send_invites": False}
+            "send_invites": False, "team_leader": normalize_tl(None)}
 
 
 def normalize_teams(raw, role: str) -> dict:
@@ -107,7 +137,7 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
     if ev != "all":
         ev = sorted({str(x) for x in (ev or []) if x})
     return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role),
-            "send_invites": raw.get("send_invites") is True}
+            "send_invites": raw.get("send_invites") is True, "team_leader": normalize_tl(raw.get("team_leader"))}
 
 
 def effective(membership: dict) -> dict:

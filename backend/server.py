@@ -196,14 +196,21 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     tpl = getattr(route, "path", "") or ""
     tpl = tpl[4:] if tpl.startswith("/api") else tpl
     secs, action = P.route_rule(tpl, request.method)
-    if secs is None:
-        raise HTTPException(status_code=403, detail="Funzione riservata all'Admin Organizzatore")
-    if not P.allows(eff, secs, action):
-        raise HTTPException(status_code=403, detail="Non hai i permessi per questa operazione")
+    led = await _led_team_ids(user, org_id, mem.get("persona_id"))
+    via_tl = False
+    if secs is None or not P.allows(eff, secs, action):
+        # Nomina Team Leader: accesso limitato ai soli Team guidati (revocato appena cambia il Team Leader)
+        if led and P.tl_allows(eff, tpl, action):
+            via_tl = True
+        elif secs is None:
+            raise HTTPException(status_code=403, detail="Funzione riservata all'Admin Organizzatore")
+        else:
+            raise HTTPException(status_code=403, detail="Non hai i permessi per questa operazione")
     ids = None if eff["events"] == "all" else list(eff["events"])
-    team_ids = await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"))
+    team_ids = list(led) if via_tl else await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"), led)
     perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
-            "teams": eff.get("teams") or {}, "send_invites": eff.get("send_invites", False)}
+            "teams": eff.get("teams") or {}, "send_invites": eff.get("send_invites", False),
+            "team_leader": eff.get("team_leader") or {}, "led_team_ids": led, "via_tl": via_tl}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
     seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
@@ -213,9 +220,16 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
         if seg in ("staff", "shifts"):
             doc = await db[seg].find_one({"org_id": org_id, "id": pp["item_id"]}, {"_id": 0, "team_id": 1})
             # Staff/volontari senza Team: visibili e assegnabili (GET/PUT) al proprio Team, non eliminabili
-            free = seg == "staff" and doc is not None and not doc.get("team_id") and request.method in ("GET", "PUT")
+            free = not via_tl and seg == "staff" and doc is not None and not doc.get("team_id") and request.method in ("GET", "PUT")
             if doc and not free and doc.get("team_id") not in team_ids:
                 raise nf
+    if team_ids is not None and "aid" in pp:
+        a = await db.availabilities.find_one({"org_id": org_id, "id": pp["aid"]}, {"_id": 0, "persona_id": 1, "evento_id": 1})
+        if a and a.get("persona_id") not in await _team_person_ids(org_id, team_ids, via_tl, a.get("evento_id")):
+            raise nf
+    if team_ids is not None and "person_id" in pp and request.method == "GET":
+        if pp["person_id"] not in await _person_scope({**user, "org_id": org_id, "perm": perm}):
+            raise HTTPException(status_code=404, detail="Persona non trovata")
     if ids is None:
         return perm
     eid = pp.get("event_id") or request.query_params.get("evento_id") or request.query_params.get("event_id")
@@ -241,18 +255,57 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     return perm
 
 
-async def _allowed_team_ids(user: dict, org_id: str, tp: dict, persona_id: Optional[str] = None):
-    """None = tutti i Team; altrimenti Team di cui è Team Leader (persona collegata o stessa email) + selezionati."""
-    scope = tp.get("scope") or "all"
-    if scope == "all":
-        return None
+async def _led_team_ids(user: dict, org_id: str, persona_id: Optional[str] = None) -> list:
+    """Team di cui l'utente è Team Leader (persona collegata all'account o con la stessa email)."""
     em = (user.get("email") or "").strip()
     pids = await db.persons.distinct("id", {"org_id": org_id, "email": {"$regex": f"^{re.escape(em)}$", "$options": "i"}}) if em else []
     if persona_id:
         pids = list(set(pids) | {persona_id})
-    led = await db.teams.distinct("id", {"org_id": org_id, "responsabile_id": {"$in": pids}}) if pids else []
+    return sorted(await db.teams.distinct("id", {"org_id": org_id, "responsabile_id": {"$in": pids}})) if pids else []
+
+
+async def _allowed_team_ids(user: dict, org_id: str, tp: dict, persona_id: Optional[str] = None, led: Optional[list] = None):
+    """None = tutti i Team; altrimenti Team di cui è Team Leader (persona collegata o stessa email) + selezionati."""
+    scope = tp.get("scope") or "all"
+    if scope == "all":
+        return None
+    if led is None:
+        led = await _led_team_ids(user, org_id, persona_id)
     sel = tp.get("ids") or [] if scope == "selected" else []
     return sorted(set(led) | set(sel))
+
+
+MEMBER_CATS = ("staff", "collaboratore", "volontario")
+
+
+async def _team_person_ids(org_id: str, team_ids: list, strict: bool, evento_id: Optional[str] = None) -> set:
+    """Persone nei Team indicati (strict=False: anche presenze senza Team, regola esistente)."""
+    allowed = list(team_ids) + ([] if strict else [None, ""])
+    q = {"org_id": org_id, "team_id": {"$in": allowed}}
+    if evento_id:
+        q["evento_id"] = evento_id
+    return set(await db.staff.distinct("persona_id", q))
+
+
+async def _person_scope(user: dict) -> Optional[set]:
+    """None = nessun limite; altrimenti persone visibili: componenti dei Team accessibili + contatti non Staff se ha Anagrafiche."""
+    p = user.get("perm") or {"admin": True}
+    tids = p.get("team_ids")
+    if p.get("admin") or tids is None:
+        return None
+    vis = await _team_person_ids(user["org_id"], tids, p.get("via_tl"))
+    if _can(user, "anagrafiche"):
+        staffed = set(await db.staff.distinct("persona_id", {"org_id": user["org_id"], "categoria": {"$in": list(MEMBER_CATS)}}))
+        vis |= set(await db.persons.distinct("id", {"org_id": user["org_id"], "id": {"$nin": list(staffed)}}))
+    return vis
+
+
+def _link_visible(user: dict, link: dict) -> bool:
+    p = user.get("perm") or {"admin": True}
+    tids = p.get("team_ids")
+    if p.get("admin") or tids is None:
+        return True
+    return link.get("team_id") in tids or (not p.get("via_tl") and not link.get("team_id"))
 
 
 def _team_ids(user: dict):
@@ -527,6 +580,8 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base["org_name"] = chosen["nome"]
     base["org_role"] = chosen["role"]
     base["permissions"] = perm_by_org.get(chosen["org_id"])
+    cm = next((m for m in mems if m["org_id"] == chosen["org_id"]), {})
+    base["led_team_ids"] = [] if chosen["role"] == "admin_org" else await _led_team_ids(u, chosen["org_id"], cm.get("persona_id"))
     base["org_type"] = chosen["type"]
     base["subscription"] = _sub_summary(org)
     return base
@@ -1239,7 +1294,12 @@ def crud_routes(path, coll, model, org_scoped=True):
         elif coll in _CRUD_EVENT_COLL.values():
             q.update(_ev_scope(user))
         if _team_ids(user) is not None and coll in ("teams", "staff", "shifts"):
-            q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user) + ([None, ""] if coll == "staff" else [])}
+            strict = (user.get("perm") or {}).get("via_tl")
+            q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user) + ([None, ""] if coll == "staff" and not strict else [])}
+        if coll == "persons":
+            scope = await _person_scope(user)
+            if scope is not None:
+                q["id"] = {"$in": list(scope)}
         if evento_id:
             q["evento_id"] = evento_id
         return await _list(coll, q)
@@ -1271,6 +1331,10 @@ def crud_routes(path, coll, model, org_scoped=True):
     @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
     async def _g(item_id: str, user: dict = Depends(require_admin)):
         doc = await db[coll].find_one(oq(user, id=item_id), {"_id": 0})
+        if doc and coll == "persons":
+            scope = await _person_scope(user)
+            if scope is not None and item_id not in scope:
+                doc = None
         if not doc:
             raise HTTPException(status_code=404, detail="Elemento non trovato")
         return doc
@@ -1672,8 +1736,11 @@ async def _company_contacts(company_id: str, org_id: str):
 @api.get("/persons-enriched")
 async def persons_enriched(admin: dict = Depends(require_admin)):
     persons = await _list("persons", oq(admin))
+    scope = await _person_scope(admin)
+    if scope is not None:
+        persons = [p for p in persons if p["id"] in scope]
     rels = await db.person_companies.find(oq(admin), {"_id": 0}).to_list(10000)
-    pres = await db.staff.find(oq(admin), {"_id": 0}).to_list(10000)
+    pres = [x for x in await db.staff.find(oq(admin), {"_id": 0}).to_list(10000) if _link_visible(admin, x)]
     companies = {c["id"]: c for c in await _list("companies", oq(admin))}
     teams_map = {t["id"]: t.get("nome") for t in await _list("teams", oq(admin))}
     events_map = {e["id"]: e.get("nome") for e in await _list("events", oq(admin))}
@@ -1821,7 +1888,9 @@ async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
             companies.append({"relation": {"id": None, "company_id": c["id"], "person_id": person_id,
                                            "qualifica": p.get("ruolo"), "referente_principale": True, "legacy": True},
                               "company": c})
-    presences = await db.staff.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
+    if not _can(admin, "anagrafiche"):
+        companies = []
+    presences = [x for x in await db.staff.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _link_visible(admin, x)]
     events = []
     for pr in presences:
         e = await db.events.find_one({"id": pr["evento_id"], "org_id": admin["org_id"]}, {"_id": 0})
@@ -1829,10 +1898,13 @@ async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
     tids = {pr.get("team_id") for pr in presences if pr.get("team_id")}
     for t in await db.teams.find(oq(admin, responsabile_id=person_id), {"_id": 0}).to_list(100):
         tids.add(t["id"])
+    if _team_ids(admin) is not None:
+        tids &= set(_team_ids(admin))
     teams = [t for t in [await db.teams.find_one({"id": tid, "org_id": admin["org_id"]}, {"_id": 0}) for tid in tids] if t]
-    shifts = await db.shifts.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
-    activities = await db.activities.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
-    followups = await db.followups.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
+    shifts = [s for s in await db.shifts.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
+              if _team_ids(admin) is None or s.get("team_id") in _team_ids(admin)]
+    activities = await db.activities.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "attivita") else []
+    followups = await db.followups.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "followup") else []
     return {"person": p, "companies": companies, "events": events, "teams": teams,
             "shifts": shifts, "activities": activities, "followups": followups}
 
@@ -1942,6 +2014,8 @@ async def _invite_roles_for(user: dict, person: dict) -> set:
     if p.get("admin"):
         return {"staff", "volunteer"}
     tids, eids, tp = p.get("team_ids"), p.get("event_ids"), p.get("teams") or {}
+    if not P.allows(p, ("staff",), "view"):  # senza sezione Staff: solo i Team guidati
+        tids = p.get("led_team_ids") or []
     links = await db.staff.find({"org_id": user["org_id"], "persona_id": person["id"]},
                                 {"_id": 0, "categoria": 1, "team_id": 1, "evento_id": 1}).to_list(1000)
     roles = set()
@@ -2291,6 +2365,36 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
             a.pop("prossime")
     if not can["staff"]:
         out.pop("staff")
+    if (admin.get("perm") or {}).get("led_team_ids"):
+        out["my_teams"] = await _my_teams_overview(admin)
+    return out
+
+
+async def _my_teams_overview(user: dict) -> list:
+    """Riepilogo dei soli Team di cui l'utente è Team Leader."""
+    oid, led = user["org_id"], user["perm"]["led_team_ids"]
+    teams = await db.teams.find({"org_id": oid, "id": {"$in": led}, **_ev_scope(user)}, {"_id": 0}).to_list(500)
+    evs = {e["id"]: e.get("nome") for e in await db.events.find({"org_id": oid, "id": {"$in": [t.get("evento_id") for t in teams]}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)}
+    links = await db.staff.find({"org_id": oid, "team_id": {"$in": led}}, {"_id": 0}).to_list(20000)
+    shifts = await db.shifts.find({"org_id": oid, "team_id": {"$in": led}}, {"_id": 0, "team_id": 1, "persona_id": 1}).to_list(20000)
+    pids = list({l["persona_id"] for l in links if l.get("persona_id")})
+    inv = {p["id"]: p.get("invite_status") for p in await db.persons.find({"org_id": oid, "id": {"$in": pids}}, {"_id": 0, "id": 1, "invite_status": 1}).to_list(20000)}
+    out = []
+    for t in sorted(teams, key=lambda x: (x.get("nome") or "").lower()):
+        mine = [l for l in links if l.get("team_id") == t["id"] and l.get("stato") not in TEAM_RINUNCIA and l.get("persona_id")]
+        st = {l["persona_id"] for l in mine if l.get("categoria") in ("staff", "collaboratore")}
+        vo = {l["persona_id"] for l in mine if l.get("categoria") == "volontario"}
+        members = st | vo
+        cov = _team_coverage([t], links)
+        sh = [s for s in shifts if s.get("team_id") == t["id"]]
+        disp = await db.availabilities.count_documents({"org_id": oid, "evento_id": t.get("evento_id"), "persona_id": {"$in": list(members)}}) if members else 0
+        req = t.get("volontari_richiesti")
+        out.append({"id": t["id"], "nome": t.get("nome"), "evento_id": t.get("evento_id"), "evento_nome": evs.get(t.get("evento_id")),
+                    "componenti": len(members), "staff": len(st), "volontari": len(vo), "volontari_richiesti": req,
+                    "volontari_assegnati": len(vo), "volontari_mancanti": cov["volontari_mancanti"] if req is not None else None,
+                    "turni_totali": len(sh), "turni_scoperti": len([s for s in sh if not s.get("persona_id")]), "disponibilita": disp,
+                    "inviti_inviati": len([p for p in members if inv.get(p) in ("invito_inviato", "account_attivato", "accesso_disabilitato")]),
+                    "registrati": len([p for p in members if inv.get(p) == "account_attivato"])})
     return out
 
 
@@ -3608,6 +3712,7 @@ class PermUpdateIn(BaseModel):
     events: Optional[Any] = None
     teams: Optional[dict] = None
     send_invites: Optional[bool] = None
+    team_leader: Optional[dict] = None
     persona_id: Optional[str] = None  # "" = scollega
     reset: bool = False
 
@@ -3621,7 +3726,9 @@ def _perm_summary(role: str, perm: dict) -> str:
     evs = "tutti gli eventi" if ev == "all" else f"{len(ev or [])} eventi selezionati"
     tp = perm.get("teams") or {}
     tms = {"all": "tutti i Team", "leader": "solo Team di cui è Team Leader"}.get(tp.get("scope"), f"{len(tp.get('ids') or [])} Team selezionati + Team di cui è leader")
-    inv = "inviti email: sì" if perm.get("send_invites") else "inviti email: no"
+    tl = perm.get("team_leader") or {}
+    inv = ("inviti email: sì" if perm.get("send_invites") else "inviti email: no") + \
+        f" · Team Leader: componenti {'modifica' if tl.get('edit_members') else 'sola lettura'}, turni {'sì' if tl.get('manage_shifts') else 'no'}"
     return f"{P.ROLES.get(role, role)} · {evs} · {tms} · {inv} · " + ("; ".join(parts) or "nessuna sezione")
 
 
@@ -3670,12 +3777,13 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
         await _guard_last_admin(org, target_id)
     if new_role == "admin_org" or body.reset:
         new_perm = {}
-    elif body.sections is not None or body.events is not None or body.teams is not None or body.send_invites is not None:
+    elif any(x is not None for x in (body.sections, body.events, body.teams, body.send_invites, body.team_leader)):
         cur = P.effective({**m, "role": new_role})
         raw = {"sections": body.sections if body.sections is not None else cur["sections"],
                "events": body.events if body.events is not None else cur["events"],
                "teams": body.teams if body.teams is not None else cur.get("teams"),
-               "send_invites": body.send_invites if body.send_invites is not None else cur.get("send_invites", False)}
+               "send_invites": body.send_invites if body.send_invites is not None else cur.get("send_invites", False),
+               "team_leader": body.team_leader if body.team_leader is not None else cur.get("team_leader")}
         new_perm = P.normalize_permissions(raw, new_role)
         if new_perm["teams"]["ids"]:
             valid_t = set(await db.teams.distinct("id", {"org_id": oid, "id": {"$in": new_perm["teams"]["ids"]}}))
@@ -9024,6 +9132,9 @@ async def avail_list_received(event_id: str, user: dict = Depends(require_admin)
     if not event:
         raise HTTPException(status_code=404, detail="Evento non trovato")
     rows = await db.availabilities.find({"org_id": user["org_id"], "evento_id": event_id}, {"_id": 0}).sort("created_at", -1).to_list(3000)
+    if _team_ids(user) is not None:
+        vis = await _team_person_ids(user["org_id"], _team_ids(user), (user.get("perm") or {}).get("via_tl"), event_id)
+        rows = [r for r in rows if r.get("persona_id") in vis]
     out = []
     for r in rows:
         p = await db.persons.find_one({"id": r.get("persona_id"), "org_id": user["org_id"]}, {"_id": 0}) or {}

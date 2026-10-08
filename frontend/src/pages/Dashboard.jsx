@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import { useCollection, SectionCard, formatEUR } from "@/components/crm";
 import PipelineAttention from "@/components/PipelineAttention";
 import OrgMessagesBanner from "@/components/OrgMessagesBanner";
+import MyTeams from "@/components/MyTeams";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -72,7 +73,7 @@ export default function Dashboard() {
   const FASE_COLORS = { prospect: "#94A3B8", contattato: "#0EA5E9", proposta_inviata: "#F59E0B", in_trattativa: "#0ABAB5", confermato: "#10B981", perso: "#EF4444" };
   const PIE_COLORS = ["#0ABAB5", "#0EA5E9", "#F59E0B", "#10B981", "#94A3B8"];
   const ev = data.eventi, crm = data.crm, com = data.commerciale, att = data.attivita, st = data.staff;
-  const nothing = !ev && !crm && !com && !att && !st && !S.pipeline;
+  const nothing = !ev && !crm && !com && !att && !st && !S.pipeline && !data.my_teams?.length;
 
   return (
     <div className="animate-fade-up space-y-6" data-testid="dashboard">
@@ -93,6 +94,8 @@ export default function Dashboard() {
       </div>
 
       <OrgMessagesBanner />
+
+      <MyTeams teams={data.my_teams} />
 
       {S.pipeline && <PipelineAttention />}
 
