@@ -368,9 +368,6 @@ export default function Layout({ children }) {
                 <button onClick={() => { setMenuOpen(false); navigate("/profilo"); }} data-testid="profilo-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
                   <CircleUserRound className="w-4 h-4" />Profilo & Account
                 </button>
-                {can(user, "admin") && <button onClick={() => { setMenuOpen(false); navigate("/impostazioni"); }} data-testid="impostazioni-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
-                  <Settings className="w-4 h-4" />Impostazioni
-                </button>}
                 {!isSuper && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("tutorial:open-index")); }} data-testid="tutorial-menu-link" className="sm:hidden w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <HelpCircle className="w-4 h-4" />Tutorial
                 </button>}

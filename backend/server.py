@@ -6149,6 +6149,7 @@ AUDIT_ACTION_LABELS = {
     "impersonation_ended": "Termine accesso come utente",
     "impersonation_expired": "Scadenza accesso come utente",
     "impersonation_action": "Operazione in modalità assistenza",
+    "payments_status_refresh": "Aggiornamento stato pagamenti",
     "video_support_booked": "Prenotazione assistenza video",
     "video_support_cancelled": "Annullamento assistenza video",
     "video_support_rescheduled": "Riprogrammazione assistenza video",
@@ -6628,6 +6629,120 @@ async def platform_subscriptions(admin: dict = Depends(require_superadmin)):
                     "stripe_subscription_id": sub.get("stripe_subscription_id"),
                     "fatturazione": (last_inv or {}).get("fic_stato_sdi", "—") if last_inv else "—"})
     return out
+
+
+ORG_TYPE_LABEL = {"cliente": "Cliente", "test": "Test", "interna": "Interna", "internal": "Interna"}
+
+
+def _is_test_purchase(p: dict) -> bool:
+    return bool(p.get("is_test")) or str(p.get("stripe_session_id") or "").startswith("TEST")
+
+
+@api.get("/platform/payments")
+async def platform_payments(admin: dict = Depends(require_superadmin)):
+    """Pagamenti e Crediti: dati dalle fonti attuali (crediti, acquisti, fatture), separati dal tipo di organizzazione."""
+    orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "type": 1, "subscription.status": 1, "credits": 1}).to_list(5000)
+    out = []
+    for o in orgs:
+        purchases = await db.credit_purchases.find({"org_id": o["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+        paid = [p for p in purchases if p.get("status") == "paid"]
+        last = (paid or purchases or [None])[0]
+        inv = None
+        if last and last.get("invoice_id"):
+            inv = await db.invoices.find_one({"id": last["invoice_id"]}, {"_id": 0})
+        if not inv:
+            inv = await db.invoices.find_one({"org_id": o["id"]}, {"_id": 0}, sort=[("data", -1)])
+        otype = o.get("type") or "cliente"
+        tipo = ORG_TYPE_LABEL.get(otype, otype.capitalize())
+        if otype == "cliente" and not paid and (o.get("subscription") or {}).get("status", "trial") == "trial":
+            tipo = "Trial"
+        sc = (last or {}).get("stripe_check") or {}
+        out.append({
+            "id": o["id"], "nome": o.get("nome"), "tipo": tipo, "balance": (o.get("credits") or {}).get("balance", 0),
+            "purchases_paid": len(paid),
+            "last_purchase": None if not last else {
+                "date": last.get("paid_at") or last.get("created_at"), "amount_gross": last.get("amount_gross"),
+                "credits_total": last.get("credits_total"), "status": last.get("status"), "is_test": _is_test_purchase(last),
+                "stripe_payment_status": sc.get("payment_status"), "stripe_session_status": sc.get("session_status"),
+                "stripe_pi_status": sc.get("pi_status"), "stripe_checked_at": sc.get("checked_at"), "stripe_error": sc.get("error")},
+            "invoice": None if not inv else {
+                "id": inv.get("id"), "numero": inv.get("fic_numero"), "data": inv.get("fic_data") or inv.get("data"),
+                "totale": inv.get("totale"), "is_test": bool(inv.get("is_test")),
+                "stato_documento": inv.get("fic_stato_documento"), "stato_sdi": inv.get("fic_stato_sdi"),
+                "ei_status": inv.get("fic_ei_status"), "fic_checked_at": inv.get("fic_checked_at"), "fic_error": inv.get("fic_error")},
+        })
+    out.sort(key=lambda r: (r["nome"] or "").lower())
+    return out
+
+
+FIC_EI_TO_SDI = {"not_sent": "non_inviato", "attempt": "in_invio", "pending": "in_invio", "processing": "in_consegna",
+                 "sent": "inviato", "delivered": "consegnato", "accepted": "accettato", "manual_accepted": "accettato",
+                 "rejected": "rifiutato", "manual_rejected": "rifiutato", "discarded": "scartato", "not_delivered": "non_consegnato",
+                 "no_response": "decorrenza_termini", "error": "errore", "missing": "mancante"}
+
+
+async def _refresh_org_payment_status(org_id: str) -> dict:
+    """SOLA LETTURA su Stripe/FIC: aggiorna solo i campi di stato. Mai accrediti, pagamenti o fatture."""
+    res = {"stripe_checked": 0, "fic_checked": 0, "errors": []}
+    for p in await db.credit_purchases.find({"org_id": org_id}, {"_id": 0}).sort("created_at", -1).to_list(20):
+        if _is_test_purchase(p) or not p.get("stripe_session_id"):
+            continue
+        chk = {"checked_at": now_iso()}
+        try:
+            s = stripe_sdk.checkout.Session.retrieve(p["stripe_session_id"])
+            chk.update({"session_status": s.get("status"), "payment_status": s.get("payment_status"), "amount_total": s.get("amount_total")})
+            if s.get("payment_intent"):
+                chk["pi_status"] = stripe_sdk.PaymentIntent.retrieve(s["payment_intent"]).get("status")
+        except Exception as e:  # noqa: BLE001
+            chk["error"] = f"{type(e).__name__}"[:120]
+            res["errors"].append(f"Stripe {p['stripe_session_id'][:14]}…: {chk['error']}")
+        await db.credit_purchases.update_one({"stripe_session_id": p["stripe_session_id"]}, {"$set": {"stripe_check": chk}})
+        res["stripe_checked"] += 1
+    invs = await db.invoices.find({"org_id": org_id, "fic_document_id": {"$ne": None}, "is_test": {"$ne": True}}, {"_id": 0}).to_list(50)
+    if invs and fic_configured() and await db.fic_settings.find_one({"provider": "fic"}):
+        try:
+            token, cid = await _fic_token(), await _fic_company_id()
+        except Exception as e:  # noqa: BLE001
+            res["errors"].append(f"Fatture in Cloud: {type(e).__name__}")
+            return res
+        async with httpx.AsyncClient(timeout=30) as c:
+            for inv in invs:
+                upd = {"fic_checked_at": now_iso()}
+                try:
+                    r = await c.get(f"{FIC_BASE}/c/{cid}/issued_documents/{inv['fic_document_id']}", params={"fieldset": "detailed"},
+                                    headers={"Authorization": f"Bearer {token}"})
+                    if r.status_code >= 400:
+                        raise RuntimeError(f"HTTP {r.status_code}")
+                    d = r.json().get("data", {})
+                    ei = d.get("ei_status")
+                    upd.update({"fic_ei_status": ei, "fic_numero": d.get("number") or inv.get("fic_numero"),
+                                "fic_data": d.get("date") or inv.get("fic_data"), "fic_stato_documento": "emessa"})
+                    if ei:
+                        upd["fic_stato_sdi"] = FIC_EI_TO_SDI.get(ei, ei)
+                except Exception as e:  # noqa: BLE001
+                    upd["fic_check_error"] = str(e)[:200]
+                    res["errors"].append(f"FIC documento {inv['fic_document_id']}: {str(e)[:80]}")
+                await db.invoices.update_one({"id": inv["id"]}, {"$set": upd})
+                res["fic_checked"] += 1
+    return res
+
+
+class PaymentsRefreshIn(BaseModel):
+    org_id: Optional[str] = None
+
+
+@api.post("/platform/payments/refresh")
+async def platform_payments_refresh(body: PaymentsRefreshIn, admin: dict = Depends(require_superadmin)):
+    ids = [body.org_id] if body.org_id else await db.organizations.distinct("id")
+    tot = {"orgs": len(ids), "stripe_checked": 0, "fic_checked": 0, "errors": []}
+    for oid in ids:
+        r = await _refresh_org_payment_status(oid)
+        tot["stripe_checked"] += r["stripe_checked"]
+        tot["fic_checked"] += r["fic_checked"]
+        tot["errors"] += r["errors"]
+    await record_audit(admin, "payments_status_refresh", org_id=body.org_id,
+                       meta={k: v for k, v in tot.items() if k != "errors"} | {"errors": len(tot["errors"])})
+    return tot
 
 
 # ---------------- fatture in cloud (e-invoicing) ----------------
