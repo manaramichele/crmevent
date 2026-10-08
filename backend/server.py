@@ -6671,7 +6671,7 @@ async def platform_payments(admin: dict = Depends(require_superadmin)):
                 "stato_documento": inv.get("fic_stato_documento"), "stato_sdi": inv.get("fic_stato_sdi"),
                 "ei_status": inv.get("fic_ei_status"), "fic_checked_at": inv.get("fic_checked_at"), "fic_error": inv.get("fic_error")},
         })
-    out.sort(key=lambda r: (r["nome"] or "").lower())
+    out.sort(key=lambda r: (r["nome"] or "").strip().lower())
     return out
 
 

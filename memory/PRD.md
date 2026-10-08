@@ -367,6 +367,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Pagamenti e Crediti (Super Admin) + rimozione link Impostazioni dal menu profilo — 2026-10-08 ✅ VERIFICATO (iter 85)
+- Rimosso solo il link duplicato "Impostazioni" dal menu profilo (aggiunto il 2026-10-08 con il fix header mobile). Pagina /impostazioni e voce nel menu laterale Admin invariate.
+- Analisi MASSIMO GHEZZI: "Trial" = organizations.subscription.status legacy (mai aggiornato dagli acquisti crediti); Stripe Customer ≠ pagamento; "non_inviato" = valore scritto alla creazione del documento FIC (CRMEvent non invia allo SDI e prima non rileggeva lo stato). Nel DB di produzione Emergent l'org NON ha acquisti/fatture/stripe customer → i dati citati dall'utente sono in un altro ambiente (probabilmente Aruba).
+- GET /api/platform/payments (A–Z, tipo Cliente/Trial/Test/Interna, saldo, ultimo acquisto, importo, stato Stripe, stato fattura, stato SDI) + POST /api/platform/payments/refresh {org_id?}: SOLA LETTURA Stripe (Session/PaymentIntent) e FIC (issued_documents fieldset detailed → ei_status → fic_stato_sdi), acquisti TEST saltati; audit payments_status_refresh.
+- UI: components/PaymentsCredits.jsx (tabella + card mobile, Aggiorna stato / Aggiorna tutte) + "Storico abbonamenti" collassabile (dati legacy conservati, nessun ID Stripe o documento fiscale cancellato).
+
+
 ## Assistenza in videochiamata (Google Meet) a crediti — 2026-10-08 ✅ VERIFICATO (iter 84, backend 25/25 + frontend)
 - backend/video_support.py (router dedicato): config disponibilità SA (fasce settimanali, chiusure, preavviso, orizzonte; calendario = SA che salva), slot 30 min che escludono le prenotazioni e il free/busy di Google, prenotazione reserve → Meet (conferenceData) → settle (release + stato errore se il Meet fallisce), indice unico slot_lock, idempotency_key, email di conferma. Annullo org ≥24h riaccredito / <24h no; SA sempre riaccredito; riprogrammazione org 1 volta ≥24h, SA sempre. Note interne SA.
 - Meet SIMULATO solo fuori produzione con VIDEO_SUPPORT_MEET_SIMULATION=1 (backend/.env preview); email saltate in simulazione. In produzione serve Google Calendar del SA collegato (credenziali OAuth già usate da CRMEvent).

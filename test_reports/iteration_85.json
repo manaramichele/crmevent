@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 85 — Pagamenti e Crediti (Super Admin) + rimozione link duplicato Impostazioni dal menu profilo. Verified both backend endpoints and frontend behavior. All 5 pytest cases pass; DB counts (credit_ledger=72, invoices=1, credit_purchases=1) unchanged after bulk refresh; no mutations on balances or documents. QA profile menu no longer contains impostazioni-link while sidebar + /impostazioni remain. SA /piattaforma shows platform-payments table (A-Z sorted) and legacy-subscriptions collapsible. Mobile 390px shows payments-mobile cards with refresh button.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/piattaforma (preview)", "issues": ["Iubenda cookie banner overlay in preview env can intercept clicks on legacy-subscriptions-toggle; not a product bug, but if real users on preview see it they must dismiss it first."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter85_platform_payments.py",
+    "/app/test_reports/pytest/iter85.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "platform_payments uses projection {_id:0, id:1, nome:1, type:1, subscription.status:1, credits:1} but then accesses o.get('subscription').status — projection subscription.status correctly nests; works but note it also drops other fields which is intentional.",
+    "_refresh_org_payment_status silently continues when FIC not configured (no settings doc) — behavior correct and read-only, documented."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter85_platform_payments.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all data-testids present and reachable)"},
+  "test_credentials": "SA manara.michele.pro@gmail.com / CrmEvent2026! ; QA qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "None. No new documents created (verified by before/after counts).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Preview DB has only 1 real credit_purchase (paid, non-test) and 1 invoice. All other orgs have no purchases. Refresh single/all returned stripe_checked=1 fic_checked=0 with no mutations. Iubenda cookie banner can block clicks in preview — use keyboard events or close the banner first when testing additional UI buttons on /piattaforma.",
+  "rca of the issue": "N/A — no issues reproduced."
+}
