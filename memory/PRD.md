@@ -367,6 +367,10 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Header: pulsante Assistenza + Cerca compatto — 2026-10-08 ✅ verificato con screenshot (375/390/430/1440)
+- Layout.jsx header: spacer + Cerca 220px (lg 260px, placeholder "Cerca...", dropdown risultati 22rem a destra) → pulsante "Assistenza" (Tiffany #0ABAB5, testo nero, icona Headset, link /assistenza, sempre visibile) → Tutorial → Novità → Notifiche → Profilo. Mobile: lente che apre la riga di ricerca esistente; nessuno scroll orizzontale.
+
+
 ## 5 nuovi Modelli Pipeline sportivi — 2026-10-08 ✅ VERIFICATO (iter 86, backend 22/22)
 - backend/pipeline_seed_sports.py: Triathlon (92), Nuoto in acque libere (77), Ciclismo su strada (77), Mountain Bike (76), Trail Running (93) = blocco comune + attività specifiche, ordinate per offset; fornitore/referente nelle note; nota di verifica normativa su autorizzazioni/sicurezza. Seed idempotente per key in _ensure_pipeline_templates (Running/Generico invariati).
 - SA Modelli Pipeline: ordine A–Z, flag in_use, delete 409 se usato da un evento (pulsante disabilitato).
