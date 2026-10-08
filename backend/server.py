@@ -36,6 +36,7 @@ import storage_utils
 import gcal_utils
 import video_support
 import pipeline_seed_sports
+import demo_booking
 import brevo_funnel
 import social_ai
 import social_creative
@@ -3660,6 +3661,24 @@ class Lead(BaseModel):
     messaggio: Optional[str] = None
     privacy: Optional[bool] = False
     source: Optional[str] = None
+    marketing_consent: Optional[bool] = False
+    demo_data: Optional[str] = None  # YYYY-MM-DD preferita
+    demo_ora: Optional[str] = None  # HH:MM preferita
+
+
+class DemoActionIn(BaseModel):
+    action: str  # confirm | reschedule | cancel
+    demo_data: Optional[str] = None
+    demo_ora: Optional[str] = None
+
+
+def _demo_slot(d: Optional[str], t: Optional[str]) -> Optional[str]:
+    if not d:
+        return None
+    try:
+        return datetime.strptime(f"{d}T{t or '10:00'}", "%Y-%m-%dT%H:%M").strftime("%Y-%m-%dT%H:%M")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data o ora della demo non valida")
 
 
 class LeadUpdate(BaseModel):
@@ -3681,7 +3700,11 @@ async def create_lead(body: Lead):
     if not body.privacy:
         raise HTTPException(status_code=400, detail="È necessario accettare la privacy policy")
     now = now_iso()
-    doc = await _create("leads", {**body.model_dump(), "stato": "nuovo", "note": "",
+    slot = _demo_slot(body.demo_data, body.demo_ora)
+    data = body.model_dump(exclude={"demo_data", "demo_ora"})
+    data.update({"marketing_consent": bool(body.marketing_consent), "marketing_consent_at": now if body.marketing_consent else None,
+                 "demo_slot": slot, "demo_status": "da_confermare" if slot else None})
+    doc = await _create("leads", {**data, "stato": "nuovo", "note": "",
                                   "funnel_status": "demo_requested", "requested_at": now,
                                   "funnel_ts_demo_requested": now})
     try:
@@ -3692,32 +3715,61 @@ async def create_lead(body: Lead):
                                                                  footer_note="Gestisci il lead nella sezione Lead."))
     except Exception as e:
         logger.error(f"lead notify failed: {e}")
-    # Sync the contact to Brevo (best-effort; this call never sends an email).
+    # Brevo: lista Lead esistente (ID reale), nessun duplicato; errori registrati e ritentati dal cron.
     try:
-        list_id = await _lead_list_id()
-        await brevo_funnel.upsert_contact(email=body.email, nome=body.nome, cognome=body.cognome,
-                                          organizzazione=body.organizzazione, tipologia_eventi=body.tipologia_eventi,
-                                          source=body.source or "richiedi-demo", funnel_status="demo_requested",
-                                          list_ids=([list_id] if list_id else None))
+        await demo_booking.sync_lead(db, doc)
     except Exception as e:
         logger.error(f"brevo contact upsert failed: {e}")
-    # Demo funnel: when ACTIVE, EMAIL 1 replaces the legacy confirmation email (avoid double emails).
+        await db.leads.update_one({"id": doc["id"]}, {"$set": {"brevo_sync": {"status": "errore", "attempts": 1, "last_attempt_at": now_iso(), "error": type(e).__name__}}})
+    # Funnel commerciale SOLO con consenso marketing, mai ripetuto per la stessa email, mai se disiscritto.
     enrolled = False
-    try:
-        enrolled = (await _enroll_lead(doc)).get("enrolled", False)
-    except Exception as e:
-        logger.error(f"funnel enroll failed: {e}")
-    if not enrolled:
-        # Legacy single confirmation email (used when the funnel is not active).
+    if body.marketing_consent:
         try:
-            await email_utils.send_email(to=body.email, subject="La tua demo di CRMEvent",
-                                         html=email_utils.link_email(name=body.nome,
-                                                                     intro="Grazie per il tuo interesse in CRMEvent! Puoi guardare la demo interattiva quando vuoi cliccando qui sotto. Quando sei pronto, attiva la prova gratuita di 14 giorni.",
-                                                                     cta_label="Guarda la demo", url=f"{APP_URL}/demo",
-                                                                     footer_note="Hai ricevuto questa email perché hai richiesto una demo su crmevent.it."))
+            prior = await db.funnel_enrollments.find_one({"funnel_key": brevo_funnel.FUNNEL_KEY, "email": {"$regex": f"^{re.escape(body.email)}$", "$options": "i"}})
+            opted_out = await db.leads.find_one({"email": {"$regex": f"^{re.escape(body.email)}$", "$options": "i"}, "marketing_opt_out": True})
+            if not prior and not opted_out:
+                enrolled = (await _enroll_lead(doc)).get("enrolled", False)
         except Exception as e:
-            logger.error(f"lead demo email failed: {e}")
+            logger.error(f"funnel enroll failed: {e}")
+    if not enrolled:
+        await demo_booking.send_operational(doc, "ricevuta", APP_URL)
     return {"ok": True, "id": doc["id"]}
+
+
+@api.post("/leads/{lead_id}/demo")
+async def lead_demo_action(lead_id: str, body: DemoActionIn, admin: dict = Depends(require_superadmin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead non trovato")
+    upd = {}
+    if body.action == "confirm":
+        if not lead.get("demo_slot"):
+            raise HTTPException(status_code=400, detail="Nessuna data demo da confermare")
+        upd, kind = {"demo_status": "confermata"}, "confermata"
+    elif body.action == "reschedule":
+        slot = _demo_slot(body.demo_data, body.demo_ora)
+        if not slot:
+            raise HTTPException(status_code=400, detail="Indica la nuova data della demo")
+        upd, kind = {"demo_status": "riprogrammata", "demo_slot": slot}, "riprogrammata"
+    elif body.action == "cancel":
+        upd, kind = {"demo_status": "annullata"}, "annullata"
+    else:
+        raise HTTPException(status_code=400, detail="Azione non valida")
+    upd["updated_at"] = now_iso()
+    await db.leads.update_one({"id": lead_id}, {"$set": upd})
+    lead.update(upd)
+    sent = await demo_booking.send_operational(lead, kind, APP_URL)
+    sync = await demo_booking.sync_lead(db, lead)
+    await record_audit(admin, "lead_demo_" + body.action, target_email=lead.get("email"), detail=demo_booking.fmt_slot(lead.get("demo_slot")))
+    return {"ok": True, "demo_status": lead["demo_status"], "demo_slot": lead.get("demo_slot"), "email_sent": sent, "brevo_sync": sync}
+
+
+@api.post("/leads/{lead_id}/brevo-sync")
+async def lead_brevo_sync(lead_id: str, admin: dict = Depends(require_superadmin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead non trovato")
+    return await demo_booking.sync_lead(db, lead)
 
 
 @api.post("/leads/{lead_id}/funnel")
@@ -5129,6 +5181,7 @@ async def cron_brevo_funnel_tick(request: Request, authorization: str = Header(d
     if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", expected):
         raise HTTPException(status_code=401, detail="unauthorized")
     asyncio.create_task(process_due_funnel_steps())
+    asyncio.create_task(demo_booking.tick(db, APP_URL))  # retry sync Brevo demo + promemoria del giorno prima
     return {"accepted": True}
 
 
