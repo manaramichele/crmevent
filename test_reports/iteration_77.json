@@ -1,0 +1,18 @@
+{
+  "summary": "Iter 77 — Frontend-only verification of panel relocation from Platform.jsx (Dashboard Amministrazione) to MarketingBrevo.jsx (Email & Brevo). All acceptance criteria met. SA login OK. /piattaforma: NO [data-testid=funnel-dashboard] and 0 occurrences of 'Automazioni email'; 'Organizzazioni' section still rendered. /marketing/brevo: all 3 tabs present with correct testids [brevo-tab-funnel, brevo-tab-staff, brevo-tab-liste]; funnel tab is default and renders FunnelPanel (funnel-dashboard present). Staff tab shows AvailabilityEmailPanel with exactly 1 occurrence of 'Automazioni email · Staff & Volontari' on the page (desktop & mobile). Liste tab shows OrgListsPanel (org-lists-panel present) + RegisteredUsersPanel content ('registrati' text visible). Deep link ?tab=staff correctly activates staff tab (data-state=active). Mobile viewports 390px and 375px: 0px horizontal overflow on all three tabs (funnel/staff/liste). Grep of Platform.jsx shows no residual FunnelPanel/AvailabilityEmailPanel imports or 'Automazioni email' text. MarketingBrevo.jsx structure verified: Tabs with FunnelPanel on 'funnel' value, AvailabilityEmailPanel on 'staff', RegisteredUsersPanel + OrgListsPanel on 'liste'. Per request, no POST/toggle actions were performed; no funnel/automation state was changed; no real Brevo call made. Backend testing skipped per request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MarketingBrevo.jsx uses useSearchParams to drive the tab; good. Default fallback to 'funnel' is handled. No issues found in the relocation."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "SA manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "None. Read-only checks only.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FunnelPanel renders element with data-testid='funnel-dashboard'. AvailabilityEmailPanel renders a mobile cards container data-testid='availability-templates-cards' (verified visible under 390px). OrgListsPanel: data-testid='org-lists-panel'. Tabs testids: brevo-tab-funnel|staff|liste. Deep link via ?tab=<value>. No funnel toggles were pressed.",
+  "rca of the issue": "N/A"
+}

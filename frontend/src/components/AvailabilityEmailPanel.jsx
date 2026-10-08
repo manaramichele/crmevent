@@ -127,7 +127,21 @@ export function AvailabilityEmailPanel() {
         </div>
       )}
 
-      <div className="mt-4 overflow-x-auto">
+      <div className="mt-4 md:hidden space-y-2" data-testid="availability-templates-cards">
+        {templates.map((t) => (
+          <div key={t.name} className="rounded-lg border border-slate-200 p-3" data-testid={`m-availability-template-${t.kind}-${t.lang || "it"}`}>
+            <div className="font-medium text-slate-800 break-words">{t.name}</div>
+            <div className="text-[11px] text-slate-400">{TRIGGER[t.kind]}</div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+              <span>{t.type_label}</span><span className="font-mono">ID {t.template_id ?? "—"}</span>
+              {t.template_id == null ? <span className="text-slate-400">Non creato</span> : t.is_active ? <span className="text-emerald-600 font-medium">Attivo</span> : <span className="text-amber-600 font-medium">Bozza</span>}
+              <span className="text-slate-400">{fmtDate(t.updated_at)}</span>
+            </div>
+            {t.template_id != null && !t.is_active && <Button size="sm" variant="outline" className="mt-2 h-8 text-xs" onClick={() => activate(t.kind)} disabled={activatingKind === t.kind || !configured}>{activatingKind === t.kind ? "Attivo…" : "Attiva in Brevo"}</Button>}
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 hidden md:block overflow-x-auto">
         <table className="w-full text-sm" data-testid="availability-templates-table">
           <thead>
             <tr className="border-b border-slate-200 text-left text-slate-500">
