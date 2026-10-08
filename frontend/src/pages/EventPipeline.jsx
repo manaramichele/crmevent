@@ -213,7 +213,7 @@ export default function EventPipeline() {
   };
 
   const catName_ = useMemo(() => Object.fromEntries(cats.map((c) => [c.id, c.name])), [cats]);
-  const nameOf = (arr, pid) => { const p = arr.find((x) => x.id === pid); return p ? (p.nome ? `${p.nome} ${p.cognome || ""}`.trim() : p.ragione_sociale || p.name) : "—"; };
+  const nameOf = (arr, pid) => { const p = arr.find((x) => x.id === pid); return p ? (p.nome ? `${p.cognome || ""} ${p.nome}`.trim() : p.ragione_sociale || p.name) : "—"; };
   const eventStaffIds = useMemo(() => {
     const s = new Set();
     (staffLinks || []).forEach((l) => { if (l.evento_id === id && ["staff", "collaboratore"].includes(l.categoria)) s.add(l.persona_id); });

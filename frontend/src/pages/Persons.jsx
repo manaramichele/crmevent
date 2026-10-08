@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { EntityManager, EntityDialog, StatusBadge, useCollection, useSettings, toOptions, PageHeader, PrimaryButton, TextAction, DeleteConfirm } from "@/components/crm";
 import { TeamNoteButton } from "@/components/TeamNote";
+import { personName, personOptions } from "@/lib/names";
 import { useAuth } from "@/context/AuthContext";
 import { can } from "@/lib/perms";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -46,7 +47,7 @@ function InviteDialog({ person, open, onOpenChange, onDone }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="invite-dialog">
         <DialogHeader><DialogTitle className="font-display">Invita su <strong className="font-semibold">CRMEvent</strong></DialogTitle>
-          <DialogDescription>{person?.nome} {person?.cognome} — {person?.email || "nessuna email"}</DialogDescription></DialogHeader>
+          <DialogDescription>{person?.cognome} {person?.nome} — {person?.email || "nessuna email"}</DialogDescription></DialogHeader>
         <div className="space-y-3 py-2">
           <div className="flex items-center gap-2"><span className="text-sm text-slate-500">Stato attuale:</span><StatusBadge color={INV[status]}>{INV_LABEL[status]}</StatusBadge></div>
           <div className="space-y-1.5"><Label className="text-xs">Ruolo accesso</Label>
@@ -97,7 +98,7 @@ function EventRolesDialog({ person, events, settings, open, onOpenChange, onDone
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="event-roles-dialog">
-        <DialogHeader><DialogTitle className="font-display">Ruoli evento — {person?.nome} {person?.cognome}</DialogTitle>
+        <DialogHeader><DialogTitle className="font-display">Ruoli evento — {person?.cognome} {person?.nome}</DialogTitle>
           <DialogDescription>Assegna, modifica o rimuovi il ruolo di questa persona per ciascun evento. Una persona può avere ruoli diversi in eventi diversi.</DialogDescription></DialogHeader>
 
         <div className="space-y-2 py-2">
@@ -216,7 +217,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
           : displayRows.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessuna persona trovata.</div>
           : displayRows.map((r) => (
             <div key={r.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" data-testid={`person-card-${r.id}`}>
-              <div className="font-semibold text-slate-900 break-words">{r.nome} {r.cognome}</div>
+              <div className="font-semibold text-slate-900 break-words">{r.cognome} {r.nome}</div>
               {!isStaffTab && r.ruolo && <div className="text-sm text-slate-500">{r.ruolo}</div>}
               <div className="mt-2 space-y-1.5 text-sm text-slate-700">
                 {r.cellulare && <a href={`tel:${r.cellulare}`} className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{r.cellulare}</a>}
@@ -243,14 +244,14 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
               {isStaffTab ? (<>
-                <Th k="nome" label="Nome e Cognome" />
+                <Th k="nome" label="Cognome e Nome" />
                 <Th k="cellulare" label="Cellulare" />
                 <Th k="ruolo_evento" label="Ruolo evento" />
                 <Th k="team" label="Team" />
                 <Th k="evento" label="Evento" />
                 <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
               </>) : (<>
-                <Th k="nome" label="Nome" />
+                <Th k="nome" label="Cognome e Nome" />
                 <Th k="qualifica" label="Qualifica" />
                 <Th k="aziende" label="Aziende" />
                 <Th k="ruolo_evento" label="Ruolo eventi" />
@@ -263,7 +264,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
                 : displayRows.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
-                    <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.nome} {r.cognome}</span></td>
+                    <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.cognome} {r.nome}</span></td>
                     {isStaffTab ? (
                       <>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
@@ -337,7 +338,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   const delPerson = async (r) => { try { await api.delete(`/persons/${r.id}`); await reload(); toast.success("Persona eliminata"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
 
   // team & shift configs
-  const personOpts = rows.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() }));
+  const personOpts = personOptions(rows);
   // Team Leader: solo Staff dell'evento selezionato (esclude Volontari, Da classificare,
   // Referenti aziendali non-staff e Staff di altri eventi).
   const staffByEvent = useMemo(() => {
@@ -357,7 +358,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   const eventOpts = events.map((e) => ({ value: e.id, label: e.nome }));
   const teamOpts = teams.map((t) => ({ value: t.id, label: t.nome }));
   const areaOpts = toOptions(settings?.aree_operative);
-  const pName = (id) => { const p = rows.find((x) => x.id === id); return p ? `${p.nome} ${p.cognome || ""}`.trim() : "—"; };
+  const pName = (id) => { const p = rows.find((x) => x.id === id); return p ? personName(p) : "—"; };
   const eName = (id) => events.find((e) => e.id === id)?.nome || "—";
   const tName = (id) => teams.find((t) => t.id === id)?.nome || "—";
 
@@ -413,7 +414,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   const shiftCols = [
     { key: "data", label: "Data", sortAccessor: (r) => `${r.data || ""} ${r.ora_inizio || ""}`.trim(), sortType: "string", render: (r) => <span className="font-medium text-slate-800">{r.data}</span> },
     { key: "ora", label: "Orario", render: (r) => `${r.ora_inizio || ""}–${r.ora_fine || ""}` },
-    { key: "persona_id", label: "Persona", render: (r) => r.persona_id ? pName(r.persona_id) : <StatusBadge color="red">Scoperto</StatusBadge> },
+    { key: "persona_id", label: "Persona", sortAccessor: (r) => (r.persona_id ? pName(r.persona_id) : ""), sortType: "string", render: (r) => r.persona_id ? pName(r.persona_id) : <StatusBadge color="red">Scoperto</StatusBadge> },
     { key: "area", label: "Area" }, { key: "team_id", label: "Team", render: (r) => r.team_id ? tName(r.team_id) : "—" },
   ];
 

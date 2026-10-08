@@ -132,7 +132,7 @@ export default function StaffInviteDialog({ orgId, meta, open, onOpenChange, onS
           <div className="space-y-4" data-testid="invite-form-step">
             <button type="button" onClick={() => setStep("search")} className="inline-flex items-center gap-1 text-sm text-slate-500 py-1" data-testid="invite-back-search"><ArrowLeft className="w-4 h-4" />Cambia persona</button>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2" data-testid="invite-selected-person">
-              <div className="font-semibold text-slate-900 text-base">{sel.nome} {sel.cognome}</div>
+              <div className="font-semibold text-slate-900 text-base">{sel.cognome} {sel.nome}</div>
               <div className="text-sm text-slate-600 space-y-0.5">
                 {sel.email && <div className="flex items-center gap-1.5 break-all"><Mail className="w-3.5 h-3.5 text-slate-400" />{sel.email}</div>}
                 {sel.cellulare && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400" />{sel.cellulare}</div>}

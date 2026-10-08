@@ -1,5 +1,6 @@
 import { EntityManager, StatusBadge, useCollection } from "@/components/crm";
 import api, { formatApiError } from "@/lib/api";
+import { personOptions } from "@/lib/names";
 import { toast } from "sonner";
 
 const PRIO_LABEL = { alta: "Alta", media: "Media", bassa: "Bassa" };
@@ -36,7 +37,7 @@ export default function Followups() {
     { name: "stato", label: "Stato", keepOrder: true, type: "select", options: [{ value: "aperto", label: "Aperto" }, { value: "completato", label: "Completato" }] },
     { name: "evento_id", label: "Evento", type: "select", options: events.map((e) => ({ value: e.id, label: e.nome })) },
     { name: "azienda_id", label: "Azienda", type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })) },
-    { name: "persona_id", label: "Referente", type: "select", options: persons.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() })) },
+    { name: "persona_id", label: "Referente", type: "select", options: personOptions(persons) },
     { name: "note", label: "Note", type: "textarea", full: true },
     { name: "add_to_calendar", label: "Google Calendar", type: "gcalcheck", kind: "followup", full: true },
   ];

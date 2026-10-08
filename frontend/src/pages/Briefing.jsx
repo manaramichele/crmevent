@@ -115,7 +115,7 @@ function BriefingBody({ data }) {
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
                   Responsabile: {t.responsabile
-                    ? <span className="font-medium text-slate-800">{t.responsabile.nome} {t.responsabile.cognome || ""}{t.responsabile.telefono ? ` · ${t.responsabile.telefono}` : ""}</span>
+                    ? <span className="font-medium text-slate-800">{t.responsabile.cognome || ""} {t.responsabile.nome}{t.responsabile.telefono ? ` · ${t.responsabile.telefono}` : ""}</span>
                     : <span className="text-amber-600 font-medium">non assegnato</span>}
                 </div>
                 {(t.luogo_operativo || t.punto_ritrovo) && (
@@ -132,7 +132,7 @@ function BriefingBody({ data }) {
                   <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 whitespace-pre-wrap" data-testid={`briefing-team-desc-${t.id}`}>{t.descrizione}</div>
                 )}
                 {t.membri.filter((m) => m.categoria !== "volontario").length > 0 && (
-                  <div className="mt-2 text-xs text-slate-600">{t.membri.filter((m) => m.categoria !== "volontario").map((m) => `${m.nome} ${m.cognome || ""}`.trim()).join(", ")}</div>
+                  <div className="mt-2 text-xs text-slate-600">{t.membri.filter((m) => m.categoria !== "volontario").map((m) => `${m.cognome || ""} ${m.nome}`.trim()).join(", ")}</div>
                 )}
               </div>
             ))}
@@ -153,7 +153,7 @@ function BriefingBody({ data }) {
                 {unassignedStaff.map((s) => (
                   <tr key={s.persona_id} className="border-b border-slate-100 align-top" data-testid={`briefing-staff-${s.persona_id}`}>
                     <td className="py-2 pr-3">
-                      <div className="font-medium text-slate-800">{s.nome} {s.cognome || ""}</div>
+                      <div className="font-medium text-slate-800">{s.cognome || ""} {s.nome}</div>
                       <StatusBadge color={CAT_COLOR[s.categoria] || "gray"}>{CAT_LABEL[s.categoria] || s.categoria || "—"}</StatusBadge>
                     </td>
                     <td className="py-2 pr-3 text-slate-600">{s.ruolo || "—"}</td>
@@ -344,7 +344,7 @@ const StaffDeck = ({ staff }) => (
   <div className="grid gap-2 md:grid-cols-2">
     {staff.map((s) => (
       <div key={s.persona_id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2">
-        <span className="font-medium text-slate-800">{s.nome} {s.cognome || ""}</span>
+        <span className="font-medium text-slate-800">{s.cognome || ""} {s.nome}</span>
         <StatusBadge color={CAT_COLOR[s.categoria] || "gray"}>{CAT_LABEL[s.categoria] || s.categoria}</StatusBadge>
       </div>
     ))}
@@ -411,7 +411,7 @@ function MealsList({ days }) {
 
 const Guest = ({ o }) => (
   <div className="text-sm text-slate-700" data-testid="briefing-guest">
-    <span className="font-medium">{`${o.nome || ""} ${o.cognome || ""}`.trim()}</span>
+    <span className="font-medium">{`${o.cognome || ""} ${o.nome || ""}`.trim()}</span>
     <span className="text-slate-500"> · check-in {ddmm(o.check_in)} · check-out {ddmm(o.check_out)}</span>
     {o.esterno && <span className="text-xs text-slate-400"> (esterno)</span>}
   </div>
@@ -475,7 +475,7 @@ const LegacyHosp = ({ hosp }) => (
       <div className="space-y-2">
         {hosp.map((h, i) => (
           <div key={i} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" data-testid={`briefing-hosp-${i}`}>
-            <span className="font-medium text-slate-800">{h.nome} {h.cognome || ""}</span>
+            <span className="font-medium text-slate-800">{h.cognome || ""} {h.nome}</span>
             {h.lodgings.map((l, j) => <div key={j} className="text-xs text-slate-600 mt-1">{l.struttura?.nome || l.struttura_nome || "Struttura"} {l.check_in ? `· ${l.check_in}→${l.check_out || ""}` : ""}</div>)}
             {h.meals.map((m, j) => <div key={`m${j}`} className="text-xs text-slate-600 mt-1">{m.tipo_pasto || "Pasto"} {(m.data_inizio || m.data) ? `· ${formatDateRange(m.data_inizio || m.data, m.data_fine)}` : ""} {m.orario ? `· ${m.orario}` : ""}</div>)}
           </div>

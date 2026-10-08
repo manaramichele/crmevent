@@ -143,7 +143,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
             <div className="flex items-start gap-4">
               <Initials p={p} />
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-bold text-slate-900 font-display" data-testid="person-detail-name">{p.nome} {p.cognome}</h2>
+                <h2 className="text-xl font-bold text-slate-900 font-display" data-testid="person-detail-name">{p.cognome} {p.nome}</h2>
                 <p className="text-sm text-slate-500">{p.ruolo || "—"}</p>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {d.companies.length > 0 && <StatusBadge color="tiffany">Referente</StatusBadge>}

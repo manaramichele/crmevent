@@ -2206,7 +2206,7 @@ async def search(q: str, admin: dict = Depends(require_admin)):
         results.append({"tipo": "azienda", "id": c["id"], "label": c["nome"], "sub": c.get("settore", "")})
     can_p = _can(admin, "anagrafiche") or _can(admin, "staff")
     for p in (await db.persons.find({"org_id": oid, "$or": [{"nome": rx}, {"cognome": rx}, {"email": rx}]}, {"_id": 0}).limit(6).to_list(6) if can_p else []):
-        results.append({"tipo": "persona", "id": p["id"], "label": f"{p['nome']} {p.get('cognome','')}".strip(), "sub": p.get("ruolo", "")})
+        results.append({"tipo": "persona", "id": p["id"], "label": f"{p.get('cognome','')} {p['nome']}".strip(), "sub": p.get("ruolo", "")})
     return {"results": results}
 
 
@@ -2422,7 +2422,7 @@ async def _resolve_org_for_support(request: Request, user: dict):
 
 
 def _fmt_person(p: dict) -> str:
-    return f"{(p.get('nome') or '').strip()} {(p.get('cognome') or '').strip()}".strip()
+    return f"{(p.get('cognome') or '').strip()} {(p.get('nome') or '').strip()}".strip()
 
 
 async def build_org_data_context(org_id: str, question: str = "") -> str:
@@ -3152,7 +3152,7 @@ async def _gcal_record_body(kind: str, rec: dict, ora: Optional[str]):
     ev = await db.events.find_one({"id": rec.get("evento_id"), "org_id": oid}, {"_id": 0, "nome": 1}) if rec.get("evento_id") else None
     az = await db.companies.find_one({"id": rec.get("azienda_id"), "org_id": oid}, {"_id": 0, "nome": 1}) if rec.get("azienda_id") else None
     pe = await db.persons.find_one({"id": rec.get("persona_id"), "org_id": oid}, {"_id": 0, "nome": 1, "cognome": 1}) if rec.get("persona_id") else None
-    ref = (f"{pe.get('nome', '')} {pe.get('cognome', '')}".strip()) if pe else None
+    ref = (f"{pe.get('cognome', '')} {pe.get('nome', '')}".strip()) if pe else None
     parts = [rec.get("note"), f"Evento: {ev['nome']}" if ev else None, f"Azienda: {az['nome']}" if az else None, f"Referente: {ref}" if ref else None]
     if kind == "activity":
         date = rec.get("data")
@@ -3604,9 +3604,10 @@ async def _member_view(m: dict) -> dict:
     u = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0, "password_hash": 0})
     uu = u or {}
     _nm = uu.get("name") or ""
+    per = await db.persons.find_one({"org_id": m["org_id"], "id": m["persona_id"]}, {"_id": 0, "nome": 1, "cognome": 1}) if m.get("persona_id") else None
     return {"user_id": m["user_id"], "email": uu.get("email"), "name": uu.get("name"),
-            "nome": uu.get("nome") or (_nm.split(" ")[0] if _nm else ""),
-            "cognome": uu.get("cognome") or (" ".join(_nm.split(" ")[1:]) if _nm else ""),
+            "nome": (per or {}).get("nome") or uu.get("nome") or (_nm.split(" ")[0] if _nm else ""),
+            "cognome": (per or {}).get("cognome") or uu.get("cognome") or (" ".join(_nm.split(" ")[1:]) if _nm else ""),
             "telefono": (u or {}).get("telefono"),
             "role": m["role"], "role_label": ORG_ROLE_LABELS.get(m["role"], m["role"]),
             "active": m.get("active", True), "account_active": (u or {}).get("active", True),
@@ -5303,7 +5304,7 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
             "area": s.get("area"), "ruolo": s.get("ruolo"),
             "team_nome": team_map.get(s.get("team_id"), {}).get("nome"),
             "luogo": s.get("luogo"), "punto_ritrovo": s.get("punto_ritrovo"),
-            "persona_nome": (f"{p.get('nome', '')} {p.get('cognome') or ''}".strip() if p else None),
+            "persona_nome": (f"{p.get('cognome') or ''} {p.get('nome', '')}".strip() if p else None),
             "coperto": bool(s.get("persona_id")),
         })
 
@@ -5367,7 +5368,7 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
         f"{turni_scoperti} turni scoperti da coprire" if turni_scoperti else "")
     add("mappe", "Mappe / percorsi presenti", len(maps) > 0,
         "Nessuna mappa o percorso caricato" if not maps else "")
-    vol_no_resp = [f"{s['nome']} {s.get('cognome') or ''}".strip() for s in staff_out
+    vol_no_resp = [f"{s.get('cognome') or ''} {s['nome']}".strip() for s in staff_out
                    if not s.get("responsabile") and s.get("categoria") == "volontario"]
     add("referenti", "Volontari con referente", not vol_no_resp,
         (f"{len(vol_no_resp)} volontari senza referente assegnato") if vol_no_resp else "")
@@ -11990,7 +11991,7 @@ async def pipeline_attention(limit: int = 10, user: dict = Depends(require_admin
     cats = await db.pipeline_categories.find({"org_id": org_id, "event_id": {"$in": event_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(10000)
     cat_name = {c["id"]: c["name"] for c in cats}
     persons = await db.persons.find(oq(user), {"_id": 0, "id": 1, "nome": 1, "cognome": 1}).to_list(50000)
-    person_name = {p["id"]: f"{p.get('nome', '')} {p.get('cognome', '')}".strip() for p in persons}
+    person_name = {p["id"]: f"{p.get('cognome', '')} {p.get('nome', '')}".strip() for p in persons}
     today = datetime.now(timezone.utc).date()
     out = []
     for t in tasks:

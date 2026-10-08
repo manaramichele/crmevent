@@ -1,5 +1,6 @@
 import { EntityManager, StatusBadge, useCollection } from "@/components/crm";
 import api, { formatApiError } from "@/lib/api";
+import { personOptions } from "@/lib/names";
 import { toast } from "sonner";
 
 const TIPO_LABEL = { chiamata: "Chiamata", email: "Email", meeting: "Meeting", task: "Task", generica: "Generica" };
@@ -9,7 +10,7 @@ const columns = (events, persons) => [
   { key: "titolo", label: "Attività", render: (r) => <span className="font-medium text-slate-800">{r.titolo}</span> },
   { key: "tipo", label: "Tipo", render: (r) => <StatusBadge color="blue">{TIPO_LABEL[r.tipo] || r.tipo}</StatusBadge> },
   { key: "evento_id", label: "Evento", render: (r) => events.find((e) => e.id === r.evento_id)?.nome || "—" },
-  { key: "persona_id", label: "Referente", render: (r) => { const p = persons.find((x) => x.id === r.persona_id); return p ? `${p.nome} ${p.cognome || ""}` : "—"; } },
+  { key: "persona_id", label: "Referente", render: (r) => { const p = persons.find((x) => x.id === r.persona_id); return p ? `${p.cognome || ""} ${p.nome}`.trim() : "—"; } },
   { key: "data", label: "Data" },
   { key: "stato", label: "Stato", render: (r) => <StatusBadge color={r.stato === "completata" ? "green" : "orange"}>{STATO_LABEL[r.stato] || r.stato}</StatusBadge> },
 ];
@@ -26,7 +27,7 @@ export default function Activities() {
     { name: "ora", label: "Ora (facoltativa)", type: "time" },
     { name: "evento_id", label: "Evento", type: "select", options: events.map((e) => ({ value: e.id, label: e.nome })) },
     { name: "azienda_id", label: "Azienda", type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })) },
-    { name: "persona_id", label: "Referente", type: "select", options: persons.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() })) },
+    { name: "persona_id", label: "Referente", type: "select", options: personOptions(persons) },
     { name: "stato", label: "Stato", keepOrder: true, type: "select", options: Object.keys(STATO_LABEL).map((v) => ({ value: v, label: STATO_LABEL[v] })) },
     { name: "note", label: "Note", type: "textarea", full: true },
     { name: "add_to_calendar", label: "Google Calendar", type: "gcalcheck", kind: "activity", full: true },
