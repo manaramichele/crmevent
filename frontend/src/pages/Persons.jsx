@@ -194,7 +194,8 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
                 {r.cellulare && <a href={`tel:${r.cellulare}`} className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{r.cellulare}</a>}
                 <div>{roleBadges(r)}</div>
                 {isStaffTab ? (<>
-                  {r.teams_nomi?.length > 0 && <div>{teamsCell(r)}</div>}
+                  <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Team</span>{teamsCell(r)}</div>
+                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span><span className="break-words">{r.ruolo || "—"}</span></div>
                   {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
                 </>) : (<>
@@ -221,6 +222,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
                 <Th k="cellulare" label="Cellulare" />
                 <Th k="ruolo_evento" label="Ruolo evento" />
                 <Th k="team" label="Team" />
+                <Th k="qualifica" label="Mansione" />
                 <Th k="evento" label="Evento" />
                 <Th k="accesso" label="Invito" />
                 <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
@@ -234,8 +236,8 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
               </>)}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-                : displayRows.length === 0 ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
+              {loading ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
+                : displayRows.length === 0 ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
                     {onInvite && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
@@ -245,6 +247,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
+                        <td className="px-4 py-3 text-slate-700" data-testid={`mansione-${r.id}`}>{r.ruolo || "—"}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
                         <td className="px-4 py-3" data-testid={`invite-status-${r.id}`}><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
                       </>

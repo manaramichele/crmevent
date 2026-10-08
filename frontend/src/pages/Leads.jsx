@@ -14,6 +14,44 @@ const STOP_LABEL = { trial_started: "prova gratuita avviata", cliente: "diventat
 const inputCls = "h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-tiffany focus:ring-2 focus:ring-tiffany/30";
 const ORIGINE = { demo_sito: { label: "Demo sito", color: "tiffany" }, manuale: { label: "Inserimento manuale", color: "gray" }, lead_finder: { label: "Lead Finder", color: "blue" }, area_personale: { label: "Area personale", color: "gray" } };
 
+const DEMO_ST = { da_confermare: ["orange", "Da confermare"], confermata: ["green", "Confermata"], riprogrammata: ["blue", "Riprogrammata"], annullata: ["gray", "Annullata"] };
+const SYNC_ST = { sincronizzato: ["green", "Sincronizzato"], errore: ["red", "Errore"], non_configurato: ["gray", "Non configurato"] };
+const fmtSlot = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11)}` : "—");
+
+function DemoBox({ lead, onDone }) {
+  const [d, setD] = useState("");
+  const [t, setT] = useState("10:30");
+  const [busy, setBusy] = useState(false);
+  const act = async (action) => {
+    if (action === "cancel" && !window.confirm("Annullare la demo? Verrà inviata l'email di annullamento.")) return;
+    setBusy(true);
+    try { await api.post(`/leads/${lead.id}/demo`, { action, demo_data: d || null, demo_ora: t }); toast.success("Demo aggiornata, email operativa inviata"); onDone(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
+  };
+  const retry = async () => { try { const { data } = await api.post(`/leads/${lead.id}/brevo-sync`); toast[data.status === "sincronizzato" ? "success" : "warning"](`Brevo: ${data.status}${data.error ? ` · ${data.error}` : ""}`); onDone(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  const st = DEMO_ST[lead.demo_status], sy = SYNC_ST[lead.brevo_sync?.status];
+  return (
+    <div className="rounded-lg border border-slate-200 p-4 space-y-3" data-testid="lead-demo-box">
+      <div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-800">Demo: {fmtSlot(lead.demo_slot)}</span>{st && <StatusBadge color={st[0]} data-testid="lead-demo-status">{st[1]}</StatusBadge>}</div>
+      <div className="flex flex-wrap gap-2">
+        {lead.demo_meet_link && lead.demo_status !== "annullata" && <a href={lead.demo_meet_link} target="_blank" rel="noreferrer" className="inline-flex items-center h-8 px-3 rounded-md bg-tiffany text-slate-900 text-xs font-semibold" data-testid="lead-demo-meet">Apri Google Meet{lead.demo_meet_simulated ? " (simulato)" : ""}</a>}
+        {lead.demo_slot && lead.demo_status === "da_confermare" && <Button size="sm" disabled={busy} onClick={() => act("confirm")} className="bg-tiffany text-slate-900" data-testid="lead-demo-confirm">Conferma</Button>}
+        {lead.demo_slot && lead.demo_status !== "annullata" && <Button size="sm" variant="outline" disabled={busy} onClick={() => act("cancel")} data-testid="lead-demo-cancel">Annulla</Button>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="date" className="h-9 rounded-md border border-slate-200 px-2 text-sm" value={d} onChange={(e) => setD(e.target.value)} data-testid="lead-demo-new-date" />
+        <input type="time" className="h-9 rounded-md border border-slate-200 px-2 text-sm" value={t} onChange={(e) => setT(e.target.value)} data-testid="lead-demo-new-time" />
+        <Button size="sm" variant="outline" disabled={busy || !d} onClick={() => act("reschedule")} data-testid="lead-demo-reschedule">{lead.demo_slot ? "Riprogramma" : "Fissa demo"}</Button>
+      </div>
+      <div className="flex items-center justify-between gap-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+        <span data-testid="lead-brevo-sync">Brevo (lista Lead): {sy ? <StatusBadge color={sy[0]}>{sy[1]}</StatusBadge> : "—"}{lead.brevo_sync?.error ? ` · ${lead.brevo_sync.error}` : ""}</span>
+        {lead.brevo_sync?.status !== "sincronizzato" && <Button size="sm" variant="ghost" onClick={retry} data-testid="lead-brevo-retry">Riprova</Button>}
+      </div>
+    </div>
+  );
+}
+
+
 export default function Leads({ embedded = false, initialOrigine = "" }) {
   const [leads, setLeads] = useState([]);
   const [orgs, setOrgs] = useState([]);
@@ -96,7 +134,9 @@ export default function Leads({ embedded = false, initialOrigine = "" }) {
               {sel.lead.organizzazione && <div><span className="text-slate-400">Organizzazione (lead):</span> {sel.lead.organizzazione}</div>}
               <div><span className="text-slate-400">Origine:</span> {(ORIGINE[sel.lead.origine] || ORIGINE.manuale).label}</div>
               {sel.lead.telefono && <div><span className="text-slate-400">Telefono:</span> {sel.lead.telefono}</div>}
+              <div data-testid="lead-marketing-consent"><span className="text-slate-400">Consenso marketing:</span> {sel.lead.marketing_consent ? `sì (${new Date(sel.lead.marketing_consent_at).toLocaleDateString("it-IT")})` : "no"}</div>
             </div>
+            <DemoBox lead={sel.lead} onDone={refresh} />
             <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Stato commerciale</label>
               <select className={`${inputCls} w-full`} value={sel.lead.stato} onChange={(e) => setStato(e.target.value)} data-testid="lead-stato">{Object.keys(STATO_LABEL).map((v) => <option key={v} value={v}>{STATO_LABEL[v]}</option>)}</select>
             </div>

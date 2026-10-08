@@ -90,11 +90,12 @@ async def ensure_attributes():
 
 
 async def upsert_contact(*, email, nome=None, cognome=None, organizzazione=None,
-                         tipologia_eventi=None, source=None, funnel_status=None, list_ids=None):
+                         tipologia_eventi=None, source=None, funnel_status=None, list_ids=None, extra=None):
     """Create or update a Brevo contact by email (no duplicates). Optionally add to lists."""
     attrs = {k: v for k, v in {
         "NOME": nome, "COGNOME": cognome, "ORGANIZZAZIONE": organizzazione,
         "TIPOLOGIA_EVENTI": tipologia_eventi, "SOURCE": source, "FUNNEL_STATUS": funnel_status,
+        **(extra or {}),
     }.items() if v}
     body = {"email": email, "updateEnabled": True, "attributes": attrs}
     if list_ids:

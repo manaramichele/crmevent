@@ -367,6 +367,17 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Prenota una Demo → Brevo lista Lead ID 8 — 2026-10-08 ✅ VERIFICATO (iter 87, backend 11/11)
+- backend/demo_booking.py: sync_lead (upsert per email, updateEnabled, listIds=[BREVO_LEAD_LIST_ID=8], SOURCE "Prenotazione Demo CRMEvent", attributi TELEFONO/DATA_RICHIESTA/DATA_DEMO/STATO_PRENOTAZIONE/CONSENSO_MARKETING/DATA_CONSENSO_MARKETING), stato in lead.brevo_sync; email operative (ricevuta/confermata/riprogrammata/annullata/promemoria); tick nel cron brevo-funnel-tick (retry 1/h max 5, promemoria giorno prima una sola volta).
+- create_lead: demo_slot + demo_status "da_confermare", marketing_consent(+_at); funnel commerciale solo con consenso, mai ripetuto per email, mai se opt-out; nessuna creazione di liste. POST /leads/{id}/demo (SA confirm/reschedule/cancel), POST /leads/{id}/brevo-sync.
+- Form pubblico: data/ora preferite + consenso marketing facoltativo. Leads (SA): DemoBox.
+- PRODUZIONE: aggiungere BREVO_LEAD_LIST_ID=8 ai secret (altrimenti usa l'ID salvato nelle impostazioni).
+
+
+## Colonna "Mansione" in Staff / Volontari — 2026-10-08 ✅ verificato con screenshot (1440/375/430)
+- Persons.jsx (tab Staff/Volontari): colonna Mansione subito dopo Team, valore = campo esistente Qualifica (persons.ruolo) o "—", ordinabile; card mobile con righe etichettate Team e Mansione. Ordinamento predefinito Cognome→Nome invariato.
+
+
 ## Rimossa voce "Assistenza" dal menu laterale — 2026-10-08 ✅ verificato con screenshot (desktop + 390px)
 - ORG_NAV senza /assistenza (desktop e mobile); l'accesso resta dal pulsante Tiffany nell'header. Pagina e route /assistenza invariate.
 

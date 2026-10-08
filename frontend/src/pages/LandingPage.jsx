@@ -115,7 +115,8 @@ const FEATURES = [
 const TARGETS = ["Running", "Triathlon", "Ciclismo", "Trail", "Eventi sportivi", "Festival", "Fiere", "Congressi", "Manifestazioni", "Eventi aziendali", "Associazioni", "Agenzie eventi"];
 
 function DemoForm() {
-  const [f, setF] = useState({ nome: "", cognome: "", organizzazione: "", email: "", telefono: "", tipologia_eventi: "", eventi_anno: "", messaggio: "", privacy: false });
+  const [f, setF] = useState({ nome: "", cognome: "", organizzazione: "", email: "", telefono: "", tipologia_eventi: "", eventi_anno: "", messaggio: "", privacy: false, marketing_consent: false, demo_data: "", demo_ora: "" });
+  const minDay = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const ch = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
@@ -124,7 +125,7 @@ function DemoForm() {
     if (!f.privacy) return toast.error("Accetta la privacy policy per continuare");
     setBusy(true);
     try {
-      const { data } = await api.post("/leads", { ...f, source: "richiedi_demo_form" });
+      const { data } = await api.post("/leads", { ...f, demo_data: f.demo_data || null, demo_ora: f.demo_ora || null, source: "richiedi_demo_form" });
       try { localStorage.setItem("crmevent_lead", JSON.stringify({ id: data.id, email: f.email, nome: f.nome, cognome: f.cognome, ts: Date.now() })); } catch {}
       trackEvent("generate_lead");
       toast.success("Richiesta inviata! Apriamo la demo interattiva…");
@@ -155,10 +156,23 @@ function DemoForm() {
         <option value="">Eventi all'anno</option>
         {["1–2", "3–5", "6–10", "10+"].map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
+      <div className="sm:col-span-2 grid grid-cols-2 gap-4">
+        <label className="text-xs text-slate-500 space-y-1"><span>Giorno preferito per la demo</span>
+          <input className={inp} type="date" min={minDay} value={f.demo_data} onChange={ch("demo_data")} data-testid="lead-demo-data" /></label>
+        <label className="text-xs text-slate-500 space-y-1"><span>Orario preferito</span>
+          <select className={inp} value={f.demo_ora} onChange={ch("demo_ora")} disabled={!f.demo_data} data-testid="lead-demo-ora">
+            <option value="">Scegli</option>{["09:30", "10:30", "11:30", "14:30", "15:30", "16:30", "17:30"].map((o) => <option key={o} value={o}>{o}</option>)}
+          </select></label>
+        {f.demo_data && <p className="col-span-2 text-xs text-slate-400">La data è da confermare: riceverai un'email di conferma dal team CRMEvent.</p>}
+      </div>
       <textarea className="sm:col-span-2 min-h-[90px] p-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm" placeholder="Messaggio" value={f.messaggio} onChange={ch("messaggio")} data-testid="lead-msg" />
       <label className="sm:col-span-2 flex items-start gap-2 text-xs text-slate-500">
         <input type="checkbox" checked={f.privacy} onChange={ch("privacy")} className="mt-0.5 accent-tiffany" data-testid="lead-privacy" />
         Ho letto e accetto la <Link to="/privacy" className="text-tiffany-active underline">Privacy Policy</Link> e acconsento al trattamento dei dati per essere ricontattato.
+      </label>
+      <label className="sm:col-span-2 flex items-start gap-2 text-xs text-slate-500">
+        <input type="checkbox" checked={f.marketing_consent} onChange={ch("marketing_consent")} className="mt-0.5 accent-tiffany" data-testid="lead-marketing" />
+        Acconsento a ricevere comunicazioni commerciali e informative su CRMEvent (facoltativo, revocabile in qualsiasi momento).
       </label>
       <button type="submit" disabled={busy} data-testid="lead-submit" className="sm:col-span-2 h-12 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.99]">
         {busy ? "Invio..." : "Richiedi una demo"}
