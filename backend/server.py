@@ -1420,12 +1420,7 @@ def crud_routes(path, coll, model, org_scoped=True):
             if data.get("team_id") not in _team_ids(user):
                 raise HTTPException(status_code=403, detail="Seleziona uno dei Team a cui hai accesso")
         if coll == "events":
-            await _assert_can_create_event(user["org_id"])
-            if await SAAS["is_saas"](user["org_id"]):
-                data["credit_state"] = "attivo"  # abbonamento: eventi illimitati, nessuna attivazione a crediti
-            data.setdefault("credit_state", "preparazione")
-            if data.get("stato") == "attivo" and data["credit_state"] != "attivo":
-                data["stato"] = "pianificato"  # 'Attivo' si ottiene solo via attivazione a crediti
+            pass  # eventi subito operativi: nessuna attivazione a crediti
         else:
             await _assert_org_operational(user["org_id"])
             if data.get("evento_id"):
@@ -1466,8 +1461,6 @@ def crud_routes(path, coll, model, org_scoped=True):
                     await _assert_event_operational(user["org_id"], existing["evento_id"])
         old_ev = None
         if coll == "events":
-            if clean.get("stato") == "attivo":
-                raise HTTPException(status_code=400, detail="Lo stato 'Attivo' si ottiene solo attivando l'evento a crediti (Attiva evento · crediti).")
             old_ev = await db[coll].find_one(oq(user, id=item_id), {"_id": 0, "data_inizio": 1, "data_fine": 1})
         res = await db[coll].update_one(oq(user, id=item_id), {"$set": clean})
         if res.matched_count == 0:
@@ -11782,6 +11775,7 @@ async def _assert_can_create_event(org_id: str):
 async def _assert_event_operational(org_id: str, event_id: str):
     """Guardia per-evento: le scritture operative legate a un evento sono consentite solo se
     l'evento è attivato (attivo/concluso) o legacy. Blocca gli eventi 'in preparazione'."""
+    return  # attivazione eventi dismessa: tutti gli eventi sono operativi (dati invariati)
     ev = await db.events.find_one({"id": event_id, "org_id": org_id}, {"_id": 0, "credit_state": 1, "nome": 1})
     if not ev:
         return
@@ -11930,9 +11924,10 @@ async def run_event_renewals(now_dt: Optional[datetime] = None) -> dict:
     conclude se la data evento è trascorsa; altrimenti, se è arrivata una scadenza di mantenimento
     (next_maintenance_at <= oggi e < data evento), addebita il mantenimento e sposta la scadenza di
     +1 mese di calendario; se il saldo è insufficiente l'evento passa a 'sospeso'. NESSUN cron collegato."""
+    out = {"renewed": [], "suspended": [], "concluded": [], "disabled": True}
+    return out  # mantenimento eventi a crediti dismesso: nessun addebito
     now_dt = now_dt or datetime.now(timezone.utc)
     today = now_dt.date(); nowiso = now_dt.isoformat()
-    out = {"renewed": [], "suspended": [], "concluded": []}
     rows = await db.events.find({"credit_state": {"$in": ["attivo", "sospeso"]}}, {"_id": 0}).to_list(5000)
     for ev in rows:
         end = _event_end_date(ev)

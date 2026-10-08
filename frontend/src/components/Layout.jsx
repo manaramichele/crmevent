@@ -11,9 +11,8 @@ import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
-import ActivationGate from "@/components/ActivationGate";
 import WelcomeDemo from "@/components/WelcomeDemo";
-import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
+import { TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
 import { NEWS_READ_EVENT } from "@/pages/News";
 
@@ -30,7 +29,7 @@ function NewsButton() {
   }, [pathname]);
   return (
     <button type="button" onClick={() => navigate("/novita")} data-testid="header-news-button" title="Novità" aria-label={count ? `Novità, ${count} non lette` : "Novità"}
-      className="relative h-10 w-10 inline-flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-700 transition-colors">
+      className="relative h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-700 transition-colors">
       <Sparkles className="w-5 h-5 text-tiffany-active" />
       <span className="sr-only">Novità</span>
       {count > 0 && <span className="absolute top-1 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-tiffany text-slate-900 text-[10px] font-bold flex items-center justify-center" data-testid="header-news-count">{count}</span>}
@@ -232,7 +231,7 @@ function Notifications() {
   return (
     <div ref={box} className="relative">
       <button data-testid="notifications-button" onClick={() => setOpen((o) => !o)}
-        className="relative w-10 h-10 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors">
+        className="relative w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors">
         <BellRing className="w-5 h-5 text-slate-600" />
         {data.count > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-tiffany text-slate-900 text-[10px] font-bold flex items-center justify-center ring-2 ring-white">{data.count}</span>
@@ -264,13 +263,11 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [orgs, setOrgs] = useState([]);
   useEffect(() => {
     document.body.classList.add("app-shell");
     return () => document.body.classList.remove("app-shell");
   }, []);
-  useEffect(() => { setSearchOpen(false); }, [location.pathname]);
 
   const isSuper = user?.role === "superadmin";
   const multiOrg = !isSuper && (user?.organizations?.length || 0) > 1;
@@ -388,13 +385,12 @@ export default function Layout({ children }) {
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="sticky top-0 z-40">
         {user?.support && <SupportBanner />}
-        <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 lg:px-6" data-testid="app-header">
+        <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-4 lg:px-6" data-testid="app-header">
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
           {!isSuper && <TrialButton saas={user?.saas} />}
           <div className="flex-1 min-w-0" />
           {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
-          {location.pathname !== "/app" && <button type="button" className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="header-search-button" title="Cerca" aria-label="Cerca"><Search className="w-5 h-5" /></button>}
           {!isSuper && user?.saas?.enabled && user.saas.trial_active ? (
             <button type="button" onClick={() => window.dispatchEvent(new Event("welcome-demo:open"))} data-testid="header-demo-button" aria-label="Prenota una demo"
               className="shrink-0 inline-flex items-center gap-1.5 h-10 w-10 sm:w-auto justify-center sm:px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
@@ -404,14 +400,13 @@ export default function Layout({ children }) {
           <NavLink to="/assistenza" data-testid="header-assistenza-button" className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
             <Headset className="w-4 h-4" aria-hidden="true" /><span className={user?.saas?.enabled && ["trial", "expired", "canceled"].includes(user.saas.mode) && !user.saas.purchased ? "hidden sm:inline" : ""}>Assistenza</span>
           </NavLink>)}
-          {!isSuper && <div className="hidden sm:block"><TutorialLauncher /></div>}
           {!isSuper && <div className="shrink-0"><NewsButton /></div>}
           <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
-            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>
+            className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>
           <div className="shrink-0"><Notifications /></div>
           <div className="relative shrink-0">
-            <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} aria-label="Profilo" aria-expanded={menuOpen} className="flex items-center gap-2 h-10 min-w-10 px-1 sm:px-2 rounded-lg hover:bg-slate-100 transition-colors">
-              {user?.picture ? <img src={user.picture} alt="" className="w-8 h-8 rounded-full object-cover" /> : <CircleUserRound className="w-8 h-8 text-slate-400" />}
+            <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} aria-label="Profilo" aria-expanded={menuOpen} className="flex items-center gap-1.5 h-9 min-w-9 px-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+              {user?.picture ? <img src={user.picture} alt="" className="w-6 h-6 rounded-full object-cover" /> : <CircleUserRound className="w-5 h-5 text-slate-600" />}
               <span className="hidden md:block text-sm font-medium text-slate-700 max-w-[120px] truncate">{user?.name}</span>
             </button>
             {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} data-testid="profile-menu-overlay" />}
@@ -436,7 +431,6 @@ export default function Layout({ children }) {
         </header>
         {!isSuper && user?.saas?.mode === "past_due" && <TrialChip mobile s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
         </div>
-        {searchOpen && location.pathname !== "/app" && <div className="sticky top-[4.5rem] z-30 bg-white border-b border-slate-200 px-3 py-2" data-testid="header-search-row"><div className="max-w-md"><GlobalSearch /></div></div>}
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
         {user?.role !== "superadmin" && <CreditGuardBanner />}
         {isSuper && actingOrgId && !isPlatformRoute && (
@@ -457,7 +451,6 @@ export default function Layout({ children }) {
         </main>
       </div>
       <SupportChat fab={false} />
-      {!user?.saas?.enabled && <ActivationGate />}
       <WelcomeDemo />
     </div>
   );
