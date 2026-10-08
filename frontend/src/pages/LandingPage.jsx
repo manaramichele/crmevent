@@ -222,10 +222,9 @@ export default function LandingPage() {
             <p className="text-lg text-slate-500 mt-6 max-w-xl">Gestisci persone, staff, sponsor, attività, turni e tutte le informazioni operative del tuo evento con <strong className="font-semibold text-slate-700">CRMEvent</strong>.</p>
             <div className="flex flex-wrap gap-3 mt-8">
               <Link to="/registrati" data-testid="hero-cta-start-free" className="h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Registrati gratis <ArrowRight className="w-4 h-4" /></Link>
-              <Link to="/demo" data-testid="hero-cta-demo" className="h-12 px-6 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-800 font-semibold transition-colors inline-flex items-center">Guarda la demo</Link>
             </div>
             <div className="mt-5 flex items-center gap-2 text-sm text-slate-500" data-testid="hero-credits-note">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1.5 font-semibold"><Sparkles className="w-4 h-4" />Prova GOLD gratis per 14 giorni</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1.5 font-semibold"><Sparkles className="w-4 h-4" />14 giorni di prova gratuita</span>
               <span>· Nessuna carta richiesta</span>
             </div>
           </div>
@@ -362,7 +361,7 @@ export default function LandingPage() {
             <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">Organizza il tuo prossimo evento con CRMEvent</h2>
             <p className="mt-4 text-slate-900/80 text-sm sm:text-base max-w-lg mx-auto lg:mx-0">Eventi, staff, volontari, attività e tutte le informazioni operative in un'unica piattaforma. Inizia gratuitamente e scopri quanto può essere semplice organizzare.</p>
             <Link to="/registrati" data-testid="home-register-cta-btn" className="mt-7 inline-flex h-12 items-center gap-2 rounded-xl bg-white px-7 font-semibold text-slate-900 shadow-md transition-[transform,box-shadow] hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98]">Registrati gratis <ArrowRight className="w-4 h-4" /></Link>
-            <p className="mt-3 text-xs sm:text-sm text-slate-900/75" data-testid="home-register-cta-note">14 giorni di prova GOLD. Nessuna carta di credito richiesta.</p>
+            <p className="mt-3 text-xs sm:text-sm text-slate-900/75" data-testid="home-register-cta-note">14 giorni di prova gratuita. Nessuna carta di credito richiesta.</p>
           </div>
           <div className="px-6 pb-6 lg:p-8">
             <img src="/home-cta-eventi.jpg" alt="Team che coordina l'organizzazione di un evento" loading="lazy" className="w-full max-h-56 sm:max-h-72 lg:max-h-none object-cover rounded-2xl shadow-lg" />
@@ -373,7 +372,7 @@ export default function LandingPage() {
 
       {/* Piani e prezzi */}
       <Section id="prezzi" className="py-20 bg-slate-50">
-        <PlansSection />
+        <PlansSection claim="14 giorni di prova gratuita. Nessuna carta di credito richiesta." />
       </Section>
       {/* Footer */}
       <Footer />

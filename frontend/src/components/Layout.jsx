@@ -12,6 +12,7 @@ import SupportChat from "@/components/SupportChat";
 import SupportBanner from "@/components/SupportBanner";
 import ActivationGate from "@/components/ActivationGate";
 import WelcomeDemo from "@/components/WelcomeDemo";
+import TrialButton from "@/components/TrialButton";
 import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
 import { NEWS_READ_EVENT } from "@/pages/News";
@@ -382,11 +383,12 @@ export default function Layout({ children }) {
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
           <div className="flex-1 min-w-0" />
-          {!isSuper && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
+          {!isSuper && <TrialButton saas={user?.saas} />}
+          {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
           <div className="hidden sm:block w-[220px] lg:w-[260px] shrink min-w-0" data-testid="header-search"><GlobalSearch /></div>
           <button type="button" className="sm:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="mobile-search-button" aria-label="Cerca"><Search className="w-5 h-5" /></button>
           <NavLink to="/assistenza" data-testid="header-assistenza-button" className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
-            <Headset className="w-4 h-4" aria-hidden="true" /><span>Assistenza</span>
+            <Headset className="w-4 h-4" aria-hidden="true" /><span className={user?.saas?.enabled && ["trial", "expired", "canceled"].includes(user.saas.mode) && !user.saas.purchased ? "hidden sm:inline" : ""}>Assistenza</span>
           </NavLink>
           {!isSuper && <div className="hidden sm:block"><TutorialLauncher /></div>}
           {!isSuper && <div className="shrink-0"><NewsButton /></div>}
@@ -419,7 +421,7 @@ export default function Layout({ children }) {
             )}
           </div>
         </header>
-        {!isSuper && <TrialChip mobile s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
+        {!isSuper && user?.saas?.mode === "past_due" && <TrialChip mobile s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
         </div>
         {searchOpen && <div className="sm:hidden sticky top-[4.5rem] z-30 bg-white border-b border-slate-200 px-3 py-2" data-testid="mobile-search-row"><GlobalSearch /></div>}
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
