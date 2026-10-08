@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, CalendarDays, Building2, Users, UserCog, Handshake,
+  LayoutDashboard, Headset, CalendarDays, Building2, Users, UserCog, Handshake,
   ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle,
 } from "lucide-react";
 import { can, isOrgAdmin } from "@/lib/perms";
@@ -48,17 +48,19 @@ const ORG_NAV = [
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita", perm: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
+  { to: "/assistenza", label: "Assistenza", icon: Headset, id: "assistenza", perm: "any" },
 ];
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
 const SUPER_ORG_NAV = ORG_NAV;
-const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
+const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "any" ? true : n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")));
 
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
   { to: "/piattaforma/utenti", label: "Gestione Utenti", icon: UserCog, id: "piattaforma-utenti" },
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
+  { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },
@@ -366,9 +368,6 @@ export default function Layout({ children }) {
                 <button onClick={() => { setMenuOpen(false); navigate("/profilo"); }} data-testid="profilo-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
                   <CircleUserRound className="w-4 h-4" />Profilo & Account
                 </button>
-                {can(user, "admin") && <button onClick={() => { setMenuOpen(false); navigate("/impostazioni"); }} data-testid="impostazioni-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
-                  <Settings className="w-4 h-4" />Impostazioni
-                </button>}
                 {!isSuper && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("tutorial:open-index")); }} data-testid="tutorial-menu-link" className="sm:hidden w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <HelpCircle className="w-4 h-4" />Tutorial
                 </button>}

@@ -60,6 +60,8 @@ def _parse(text: str) -> dict:
 async def _generate(area: str, changes: list) -> tuple:
     notes = "\n".join(f"- {c.get('note', '')}" for c in changes)
     fallback = changes[0].get("fallback_title") or f"Novità in {area}", " ".join(c.get("fallback_text", "") for c in changes).strip() or notes
+    if any(c.get("fixed_text") for c in changes):  # testo approvato dal cliente: nessuna riscrittura AI
+        return (*fallback, "fixed")
     key = os.environ.get("EMERGENT_LLM_KEY")
     if not key:
         return (*fallback, "fallback")
@@ -88,6 +90,7 @@ async def create_drafts(db, release: dict, simulated: bool = False) -> int:
             "area": area, "status": "bozza", "titolo": titolo, "descrizione": descr,
             "generated_titolo": titolo, "generated_descrizione": descr, "generator": gen, "edited": False,
             "source_notes": [c.get("note") for c in changes], "simulated": simulated,
+            "requires_service": next((c["requires_service"] for c in changes if c.get("requires_service")), None),
             "created_at": _now(), "approved_by": None, "published_at": None,
         })
         n += 1
@@ -185,6 +188,10 @@ def build_router(db, get_current_user, require_superadmin, record_audit) -> APIR
         doc = await _get(nid)
         if doc["status"] == "pubblicata":
             raise HTTPException(status_code=400, detail="Novità già pubblicata")
+        if doc.get("requires_service"):
+            svc = await db.credit_services.find_one({"key": doc["requires_service"]}, {"_id": 0, "active": 1, "consumo_active": 1})
+            if not (svc and svc.get("active") and svc.get("consumo_active")):
+                raise HTTPException(status_code=400, detail="La funzione descritta non è ancora attiva: attivala prima di pubblicare la Novità")
         upd = {"status": "pubblicata", "approved_by": _actor(admin), "published_at": _now(), "withdrawn_at": None, "withdrawn_by": None}
         await db.news_items.update_one({"id": nid}, {"$set": upd})
         await _audit(admin, "news_published", doc)

@@ -34,6 +34,8 @@ import email_utils
 import permissions as P
 import storage_utils
 import gcal_utils
+import video_support
+import pipeline_seed_sports
 import brevo_funnel
 import social_ai
 import social_creative
@@ -6148,6 +6150,11 @@ AUDIT_ACTION_LABELS = {
     "impersonation_ended": "Termine accesso come utente",
     "impersonation_expired": "Scadenza accesso come utente",
     "impersonation_action": "Operazione in modalità assistenza",
+    "payments_status_refresh": "Aggiornamento stato pagamenti",
+    "video_support_booked": "Prenotazione assistenza video",
+    "video_support_cancelled": "Annullamento assistenza video",
+    "video_support_rescheduled": "Riprogrammazione assistenza video",
+    "video_support_config": "Disponibilità assistenza video",
     "org_switch": "Cambio organizzazione",
     "org_created": "Creazione organizzazione",
     "org_updated": "Modifica organizzazione",
@@ -6623,6 +6630,120 @@ async def platform_subscriptions(admin: dict = Depends(require_superadmin)):
                     "stripe_subscription_id": sub.get("stripe_subscription_id"),
                     "fatturazione": (last_inv or {}).get("fic_stato_sdi", "—") if last_inv else "—"})
     return out
+
+
+ORG_TYPE_LABEL = {"cliente": "Cliente", "test": "Test", "interna": "Interna", "internal": "Interna"}
+
+
+def _is_test_purchase(p: dict) -> bool:
+    return bool(p.get("is_test")) or str(p.get("stripe_session_id") or "").startswith("TEST")
+
+
+@api.get("/platform/payments")
+async def platform_payments(admin: dict = Depends(require_superadmin)):
+    """Pagamenti e Crediti: dati dalle fonti attuali (crediti, acquisti, fatture), separati dal tipo di organizzazione."""
+    orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "type": 1, "subscription.status": 1, "credits": 1}).to_list(5000)
+    out = []
+    for o in orgs:
+        purchases = await db.credit_purchases.find({"org_id": o["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+        paid = [p for p in purchases if p.get("status") == "paid"]
+        last = (paid or purchases or [None])[0]
+        inv = None
+        if last and last.get("invoice_id"):
+            inv = await db.invoices.find_one({"id": last["invoice_id"]}, {"_id": 0})
+        if not inv:
+            inv = await db.invoices.find_one({"org_id": o["id"]}, {"_id": 0}, sort=[("data", -1)])
+        otype = o.get("type") or "cliente"
+        tipo = ORG_TYPE_LABEL.get(otype, otype.capitalize())
+        if otype == "cliente" and not paid and (o.get("subscription") or {}).get("status", "trial") == "trial":
+            tipo = "Trial"
+        sc = (last or {}).get("stripe_check") or {}
+        out.append({
+            "id": o["id"], "nome": o.get("nome"), "tipo": tipo, "balance": (o.get("credits") or {}).get("balance", 0),
+            "purchases_paid": len(paid),
+            "last_purchase": None if not last else {
+                "date": last.get("paid_at") or last.get("created_at"), "amount_gross": last.get("amount_gross"),
+                "credits_total": last.get("credits_total"), "status": last.get("status"), "is_test": _is_test_purchase(last),
+                "stripe_payment_status": sc.get("payment_status"), "stripe_session_status": sc.get("session_status"),
+                "stripe_pi_status": sc.get("pi_status"), "stripe_checked_at": sc.get("checked_at"), "stripe_error": sc.get("error")},
+            "invoice": None if not inv else {
+                "id": inv.get("id"), "numero": inv.get("fic_numero"), "data": inv.get("fic_data") or inv.get("data"),
+                "totale": inv.get("totale"), "is_test": bool(inv.get("is_test")),
+                "stato_documento": inv.get("fic_stato_documento"), "stato_sdi": inv.get("fic_stato_sdi"),
+                "ei_status": inv.get("fic_ei_status"), "fic_checked_at": inv.get("fic_checked_at"), "fic_error": inv.get("fic_error")},
+        })
+    out.sort(key=lambda r: (r["nome"] or "").strip().lower())
+    return out
+
+
+FIC_EI_TO_SDI = {"not_sent": "non_inviato", "attempt": "in_invio", "pending": "in_invio", "processing": "in_consegna",
+                 "sent": "inviato", "delivered": "consegnato", "accepted": "accettato", "manual_accepted": "accettato",
+                 "rejected": "rifiutato", "manual_rejected": "rifiutato", "discarded": "scartato", "not_delivered": "non_consegnato",
+                 "no_response": "decorrenza_termini", "error": "errore", "missing": "mancante"}
+
+
+async def _refresh_org_payment_status(org_id: str) -> dict:
+    """SOLA LETTURA su Stripe/FIC: aggiorna solo i campi di stato. Mai accrediti, pagamenti o fatture."""
+    res = {"stripe_checked": 0, "fic_checked": 0, "errors": []}
+    for p in await db.credit_purchases.find({"org_id": org_id}, {"_id": 0}).sort("created_at", -1).to_list(20):
+        if _is_test_purchase(p) or not p.get("stripe_session_id"):
+            continue
+        chk = {"checked_at": now_iso()}
+        try:
+            s = stripe_sdk.checkout.Session.retrieve(p["stripe_session_id"])
+            chk.update({"session_status": s.get("status"), "payment_status": s.get("payment_status"), "amount_total": s.get("amount_total")})
+            if s.get("payment_intent"):
+                chk["pi_status"] = stripe_sdk.PaymentIntent.retrieve(s["payment_intent"]).get("status")
+        except Exception as e:  # noqa: BLE001
+            chk["error"] = f"{type(e).__name__}"[:120]
+            res["errors"].append(f"Stripe {p['stripe_session_id'][:14]}…: {chk['error']}")
+        await db.credit_purchases.update_one({"stripe_session_id": p["stripe_session_id"]}, {"$set": {"stripe_check": chk}})
+        res["stripe_checked"] += 1
+    invs = await db.invoices.find({"org_id": org_id, "fic_document_id": {"$ne": None}, "is_test": {"$ne": True}}, {"_id": 0}).to_list(50)
+    if invs and fic_configured() and await db.fic_settings.find_one({"provider": "fic"}):
+        try:
+            token, cid = await _fic_token(), await _fic_company_id()
+        except Exception as e:  # noqa: BLE001
+            res["errors"].append(f"Fatture in Cloud: {type(e).__name__}")
+            return res
+        async with httpx.AsyncClient(timeout=30) as c:
+            for inv in invs:
+                upd = {"fic_checked_at": now_iso()}
+                try:
+                    r = await c.get(f"{FIC_BASE}/c/{cid}/issued_documents/{inv['fic_document_id']}", params={"fieldset": "detailed"},
+                                    headers={"Authorization": f"Bearer {token}"})
+                    if r.status_code >= 400:
+                        raise RuntimeError(f"HTTP {r.status_code}")
+                    d = r.json().get("data", {})
+                    ei = d.get("ei_status")
+                    upd.update({"fic_ei_status": ei, "fic_numero": d.get("number") or inv.get("fic_numero"),
+                                "fic_data": d.get("date") or inv.get("fic_data"), "fic_stato_documento": "emessa"})
+                    if ei:
+                        upd["fic_stato_sdi"] = FIC_EI_TO_SDI.get(ei, ei)
+                except Exception as e:  # noqa: BLE001
+                    upd["fic_check_error"] = str(e)[:200]
+                    res["errors"].append(f"FIC documento {inv['fic_document_id']}: {str(e)[:80]}")
+                await db.invoices.update_one({"id": inv["id"]}, {"$set": upd})
+                res["fic_checked"] += 1
+    return res
+
+
+class PaymentsRefreshIn(BaseModel):
+    org_id: Optional[str] = None
+
+
+@api.post("/platform/payments/refresh")
+async def platform_payments_refresh(body: PaymentsRefreshIn, admin: dict = Depends(require_superadmin)):
+    ids = [body.org_id] if body.org_id else await db.organizations.distinct("id")
+    tot = {"orgs": len(ids), "stripe_checked": 0, "fic_checked": 0, "errors": []}
+    for oid in ids:
+        r = await _refresh_org_payment_status(oid)
+        tot["stripe_checked"] += r["stripe_checked"]
+        tot["fic_checked"] += r["fic_checked"]
+        tot["errors"] += r["errors"]
+    await record_audit(admin, "payments_status_refresh", org_id=body.org_id,
+                       meta={k: v for k, v in tot.items() if k != "errors"} | {"errors": len(tot["errors"])})
+    return tot
 
 
 # ---------------- fatture in cloud (e-invoicing) ----------------
@@ -10134,6 +10255,7 @@ CREDIT_SERVICES_SEED = [
     ("automation_run", "Automazioni", "automation", "flat", "esecuzione"),
     ("newsletter_email", "Newsletter / email", "communication", "per_unit", "destinatario"),
     ("google_calendar", "Google Calendar", "integration", None, None),
+    ("video_support", "Assistenza in videochiamata", "support", "flat", "sessione"),
     ("whatsapp_send", "WhatsApp", "communication", "per_unit", "messaggio"),
     ("sms_send", "SMS (futuro)", "communication", "per_unit", "messaggio"),
     ("event_active_period", "Attivazione evento", "event", "flat", "attivazione"),
@@ -10161,7 +10283,7 @@ _credits_indexes_done = False
 
 # Servizi realmente collegati a un addebito nel codice (gli altri restano nascosti nel catalogo Super Admin).
 LINKED_CREDIT_SERVICES = {"ai_assistant", "ai_briefing", "event_activation", "event_maintenance",
-                          "event_pipeline_pro", "google_calendar"}
+                          "event_pipeline_pro", "google_calendar", "video_support"}
 # Descrizioni informative (verificate sul codice di addebito). Applicate una sola volta: poi modificabili dal Super Admin.
 CREDIT_SERVICE_DESCRIPTIONS = {
     "ai_assistant": "Risponde con l'AI alle domande sull'uso di CRMEvent e sui dati della tua organizzazione. Il costo viene scalato per ogni domanda che riceve una risposta utile. Se l'assistente non sa rispondere, oppure la richiesta è un suggerimento di nuova funzione, non viene scalato nulla.",
@@ -10169,6 +10291,7 @@ CREDIT_SERVICE_DESCRIPTIONS = {
     "event_activation": "Rende operativo un evento: staff, team, turni, ospitalità, briefing e tutte le funzioni operative. Il costo viene scalato una sola volta per evento, al momento dell'attivazione, e comprende il primo mese di utilizzo. Dal mese successivo si applica il Mantenimento evento.",
     "event_maintenance": "Mantiene operativo un evento già attivato. Il costo viene scalato in automatico ogni mese di calendario a partire dalla data di attivazione, fino alla data dell'evento: il mese che arriva fino all'evento non viene addebitato di nuovo. Se i crediti non sono sufficienti l'evento viene sospeso; riattivandolo si paga un solo mese di mantenimento e il ciclo riparte.",
     "event_pipeline_pro": "Attiva per un evento la Pipeline di preparazione: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni e tutte le attività da svolgere prima dell'evento. Il costo viene scalato una sola volta per evento, anche quando la Pipeline viene copiata da un'edizione precedente. Dopo l'attivazione modelli, attività e aggiornamenti dello stesso evento sono compresi.",
+    "video_support": "Sessione di assistenza dedicata di 30 minuti tramite Google Meet, con possibilità di condividere lo schermo per ricevere supporto nell'utilizzo di CRMEvent.",
     "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare Attività e Follow-up con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
 }
 
@@ -10427,7 +10550,9 @@ async def credits_service_costs(user: dict = Depends(require_admin)):
     """Riepilogo costi per gli organizzatori: stessi servizi/descrizioni/costi del catalogo Super Admin."""
     await _ensure_credits_setup()
     rows = await db.credit_services.find({"key": {"$in": list(LINKED_CREDIT_SERVICES)}, "visible": {"$ne": False}},
-                                         {"_id": 0, "key": 1, "name": 1, "description": 1, "unit_cost": 1}).to_list(100)
+                                         {"_id": 0, "key": 1, "name": 1, "description": 1, "unit_cost": 1, "active": 1, "consumo_active": 1}).to_list(100)
+    # L'assistenza in videochiamata compare solo quando il Super Admin la attiva
+    rows = [r for r in rows if r["key"] != "video_support" or (r.get("active") and r.get("consumo_active") and r.get("unit_cost") is not None)]
     rows.sort(key=lambda r: (r.get("name") or "").lower())
     return {"services": rows}
 
@@ -11892,7 +12017,7 @@ async def _ensure_pipeline_templates():
         await db.pipeline_templates.create_index([("key", 1)], unique=True)
     except Exception:
         pass
-    for tpl in pipeline_seed.PIPELINE_TEMPLATES_SEED:
+    for tpl in pipeline_seed.PIPELINE_TEMPLATES_SEED + pipeline_seed_sports.SPORT_TEMPLATES_SEED:
         if await db.pipeline_templates.find_one({"key": tpl["key"]}):
             continue
         now = now_iso()
@@ -11957,7 +12082,11 @@ class PipelineTemplateTaskUpd(BaseModel):
 @api.get("/platform/pipeline-templates")
 async def platform_pipeline_templates(admin: dict = Depends(require_superadmin)):
     await _ensure_pipeline_templates()
-    rows = await db.pipeline_templates.find({}, {"_id": 0}).sort("order", 1).to_list(200)
+    rows = await db.pipeline_templates.find({}, {"_id": 0}).to_list(200)
+    rows.sort(key=lambda r: (r.get("name") or "").strip().lower())
+    used = set(await db.event_pipelines.distinct("template_key"))
+    for r in rows:
+        r["in_use"] = r["key"] in used
     counts = {}
     for r in rows:
         counts[r["key"]] = await db.pipeline_template_tasks.count_documents({"template_key": r["key"]})
@@ -12000,6 +12129,8 @@ async def platform_pipeline_template_update(key: str, body: PipelineTemplateUpd,
 async def platform_pipeline_template_delete(key: str, admin: dict = Depends(require_superadmin)):
     if not await db.pipeline_templates.find_one({"key": key}):
         raise HTTPException(status_code=404, detail="Modello non trovato")
+    if await db.event_pipelines.find_one({"template_key": key}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="Modello già utilizzato da uno o più eventi: puoi solo disattivarlo")
     await db.pipeline_template_tasks.delete_many({"template_key": key})
     await db.pipeline_templates.delete_one({"key": key})
     await record_audit(admin, "pipeline_template_delete", meta={"key": key})
@@ -12055,12 +12186,14 @@ async def pipeline_templates_for_event(event_id: str, user: dict = Depends(requi
     ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento non trovato")
-    rows = await db.pipeline_templates.find({"active": True}, {"_id": 0}).sort("order", 1).to_list(200)
+    rows = await db.pipeline_templates.find({"active": True}, {"_id": 0}).to_list(200)
+    rows.sort(key=lambda r: (r.get("name") or "").strip().lower())
     out = []
     for r in rows:
         n = await db.pipeline_template_tasks.count_documents({"template_key": r["key"], "active": True})
         out.append({"key": r["key"], "name": r["name"], "description": r.get("description", ""), "task_count": n})
-    return {"templates": out}
+    sug = pipeline_seed_sports.suggest_template(ev.get("tipologia"))
+    return {"templates": out, "suggested": sug if any(o["key"] == sug for o in out) else None}
 
 
 async def _generate_pipeline_from_template(org_id: str, event_id: str, template_key: str, ev: dict) -> int:
@@ -12781,6 +12914,9 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
 
 app.include_router(api)
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
+app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
+    "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,
+    "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}))
 app.include_router(brevo_org_lists.build_router(db, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],

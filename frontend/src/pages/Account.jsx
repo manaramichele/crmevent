@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Save, ReceiptText, Coins } from "lucide-react";
+import { Building2, Save, ReceiptText, Coins, Calculator } from "lucide-react";
 
 const PAESI = ["IT", "SM", "VA", "FR", "DE", "ES", "CH", "AT", "GB", "US", "Altro"];
 
@@ -18,7 +18,9 @@ const BFIELDS = [
 
 export function ServiceCosts() {
   const [rows, setRows] = useState(null);
+  const [qty, setQty] = useState({});
   useEffect(() => { api.get("/credits/service-costs").then(({ data }) => setRows(data.services || [])).catch(() => setRows([])); }, []);
+  const total = (rows || []).reduce((s, r) => s + (Number(qty[r.key]) || 0) * (r.unit_cost || 0), 0);
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 mb-4" data-testid="service-costs">
       <div className="flex items-center gap-2 mb-1"><Coins className="w-4 h-4 text-tiffany-active" /><h2 className="font-semibold text-slate-800">Costi dei servizi</h2></div>
@@ -32,6 +34,21 @@ export function ServiceCosts() {
               {s.description && <p className="mt-1 text-sm text-slate-600 leading-relaxed">{s.description}</p>}
             </div>
           ))}
+        </div>
+      )}
+      {rows?.length > 0 && (
+        <div className="mt-4 rounded-xl border border-tiffany/30 bg-tiffany-light/40 p-4" data-testid="cost-simulator">
+          <div className="flex items-center gap-2 mb-3"><Calculator className="w-4 h-4 text-tiffany-active" /><h3 className="font-semibold text-slate-800">Simulatore costi</h3></div>
+          <div className="space-y-2">
+            {rows.map((s) => (
+              <div key={s.key} className="flex items-center gap-3" data-testid={`sim-row-${s.key}`}>
+                <span className="flex-1 min-w-0 text-sm text-slate-700">{s.key === "video_support" ? "Sessioni di assistenza" : s.name}</span>
+                <Input type="number" min={0} inputMode="numeric" className="h-10 w-20 bg-white" value={qty[s.key] ?? ""} placeholder="0" onChange={(e) => setQty((q) => ({ ...q, [s.key]: Math.max(0, parseInt(e.target.value || "0", 10)) }))} data-testid={`sim-qty-${s.key}`} />
+                <span className="w-24 text-right text-sm text-slate-500">× {s.unit_cost ?? 0} = <b className="font-semibold text-slate-800">{(Number(qty[s.key]) || 0) * (s.unit_cost || 0)}</b></span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-tiffany/30 flex justify-between font-semibold text-slate-900"><span>Totale stimato</span><span data-testid="sim-total">{total} crediti</span></div>
         </div>
       )}
     </div>

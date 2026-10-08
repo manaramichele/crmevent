@@ -3,12 +3,11 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
+import PaymentsCredits, { LegacySubscriptions } from "@/components/PaymentsCredits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert, Mail } from "lucide-react";
 
-const STATUS_LABEL = { trial: "Trial", active: "Attivo", expired: "Scaduto", canceled: "Cancellato", past_due: "Pag. fallito", suspended: "Sospeso", interna: "Interna", test: "Test" };
-const STATUS_COLOR = { trial: "tiffany", active: "green", expired: "red", canceled: "gray", past_due: "orange", suspended: "orange", interna: "green", test: "orange" };
 const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
 const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
 
@@ -267,36 +266,8 @@ export default function Platform() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-8" data-testid="platform-subscriptions">
-        <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Abbonamenti</div>
-        <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Abbonamenti</div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-slate-200 text-left text-slate-500">
-              <th className="py-2.5 px-4 font-semibold">Organizzazione</th><th className="py-2.5 px-4 font-semibold">Stato</th>
-              <th className="py-2.5 px-4 font-semibold">Ciclo</th><th className="py-2.5 px-4 font-semibold text-right">Importo</th>
-              <th className="py-2.5 px-4 font-semibold">Prossimo rinnovo</th><th className="py-2.5 px-4 font-semibold">Stripe Customer</th>
-              <th className="py-2.5 px-4 font-semibold">Stripe Subscription</th><th className="py-2.5 px-4 font-semibold">Fatturazione</th>
-            </tr></thead>
-            <tbody>
-              {subs.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-slate-400">Nessun abbonamento.</td></tr>
-              ) : subs.map((o) => (
-                <tr key={o.id} className="border-b border-slate-100" data-testid={`platform-sub-${o.id}`}>
-                  <td className="py-2.5 px-4 font-medium text-slate-800">{o.nome}</td>
-                  <td className="py-2.5 px-4"><StatusBadge color={STATUS_COLOR[o.status] || "gray"}>{STATUS_LABEL[o.status] || o.status}</StatusBadge></td>
-                  <td className="py-2.5 px-4 text-slate-600">{o.billing_cycle === "yearly" ? "Annuale" : o.billing_cycle === "monthly" ? "Mensile" : "—"}</td>
-                  <td className="py-2.5 px-4 text-right text-slate-600">{o.amount ? `${o.amount} €` : "—"}</td>
-                  <td className="py-2.5 px-4 text-slate-600">{o.status === "trial" ? `Trial · ${o.days_left} gg` : (o.current_period_end ? new Date(o.current_period_end).toLocaleDateString("it-IT") : "—")}</td>
-                  <td className="py-2.5 px-4 text-slate-400 text-xs font-mono">{o.stripe_customer_id || "—"}</td>
-                  <td className="py-2.5 px-4 text-slate-400 text-xs font-mono">{o.stripe_subscription_id || "—"}</td>
-                  <td className="py-2.5 px-4 text-slate-500 text-xs">{o.fatturazione}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PaymentsCredits />
+      <LegacySubscriptions subs={subs} />
 
       {delUser && (
         <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={() => !working && setDelUser(null)}>

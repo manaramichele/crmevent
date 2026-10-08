@@ -86,6 +86,7 @@ export default function Invite() {
   const loginAndAccept = async () => {
     setBusy(true);
     try {
+      localStorage.removeItem("acting_org_id");
       await api.post("/auth/login", { email: invite.email, password: login.password });
       await api.post(`/invites/${token}/accept`);
       const { data } = await api.get("/auth/me"); setUser(data);

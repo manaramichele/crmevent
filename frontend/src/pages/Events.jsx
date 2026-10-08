@@ -29,7 +29,7 @@ const FASE_EDIT_OPTIONS = [
 ];
 
 const EMPTY = { nome: "", tipologia: "", descrizione: "", immagine_url: "", pdf_url: "", file_url: "", gpx_url: "", distanza: null, url_esterno: "", google_maps_url: "" };
-const STD_TIPOLOGIE = ["Concerto", "Conferenza", "Congresso", "Festival", "Fiera", "Gala", "Workshop", "Running", "Trail", "Triathlon", "Nuoto", "Ciclismo", "Tennis"];
+const STD_TIPOLOGIE = ["Concerto", "Conferenza", "Congresso", "Festival", "Fiera", "Gala", "Workshop", "Running", "Trail", "Triathlon", "Nuoto", "Ciclismo", "Mountain Bike", "Tennis"];
 const mergeStd = (std, extra) => {
   const seen = new Set(std.map((s) => s.trim().toLowerCase()));
   const out = [...std];

@@ -25,6 +25,7 @@ export default function Login() {
         toast.success("Se l'email esiste, riceverai un link per reimpostare la password.");
         setMode("login");
       } else {
+        localStorage.removeItem("acting_org_id");
         const { data } = await api.post("/auth/login", { email: form.email, password: form.password });
         setUser(data);
         trackEvent("login", { method: "email" });

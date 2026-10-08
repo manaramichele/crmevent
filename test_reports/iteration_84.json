@@ -1,0 +1,46 @@
+{
+  "summary": "Iter 84 — Assistenza in videochiamata (Google Meet) a crediti. Backend pytest 25/25 PASS su /app/backend/tests/test_iter84_video_support.py: (1) DEFAULT disattivato: /api/video-support/info available=false, /api/credits/service-costs non contiene video_support, /slots=[] e POST /bookings → 403; (2) attivazione SA (unit_cost=5, active+consumo_active) rende available=true e service-costs include video_support; (3) PUT /api/platform/video-support/config con 7 fasce 09-18 + min_notice_hours=24 → /slots restituisce solo slot ≥24h nel futuro; closed_date esclude correttamente il giorno; non-SA → 403 su /platform/video-support/*; (4) booking happy path: addebito esatto di 5 crediti una sola volta, meet_link=https://meet.google.com/sim-… simulated=true, slot scomparso da /slots, visibile in /bookings; (5) doppio booking stesso slot → 409 (indice unico slot_lock); confirm_cost sbagliato → 409 con detail.code='cost_changed'; saldo insufficiente (unit_cost temp 99999) → 402 senza addebito né booking; (6) riprogrammazione: la prima volta OK, la seconda → 400; una prenotazione <24h (min_notice=0) → riprogrammazione → 400; (7) annullo dell'organizzatore con >24h → riaccredito totale +5, con <24h → nessun rimborso; (8) SA: GET /platform/video-support/bookings vede la prenotazione, PUT /note salva nota, POST /cancel rimborsa SEMPRE anche <24h (full refund); (9) Novità: POST /platform/news/{id}/publish su bozza con requires_service='video_support' quando il servizio è disattivato → 400 ('La funzione descritta non è ancora attiva'); (10) isolamento: 404 per booking inesistente. Frontend validato con Playwright (mobile 390px): /assistenza mostra support-video-page, support-video-book, support-video-description, support-video-included/excluded, support-video-cost='5 crediti', support-video-balance='97 crediti'; /profilo tab 'Crediti e fatturazione' mostra cost-simulator con sim-row-video_support e sim-total='10 crediti' per qty=2×5; /piattaforma/assistenza-video mostra vs-config con 7 fasce settimanali. CLEANUP finale eseguito: QA org balance = 97 (invariato), video_support service riportato a active=false/consumo_active=false/unit_cost=None, video_support_config rimosso, bookings cancellati, nessun TEST news_items rimasto.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/platform/credit-services/{key}", "issue": "Il PUT ignora i campi inviati con valore null (es. unit_cost:null) a causa di `if v is not None and v != svc.get(f)`. Impedisce al Super Admin di 'resettare' il costo a null via API (devi passare da Mongo). Minor ma rilevato durante il cleanup."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Login dopo logout di un altro utente (QA dopo SA nello stesso tab)", "issue": "Il valore X-Org-Id salvato dall'account precedente in localStorage/axios defaults viene inviato con la nuova sessione, causando 403 'Accesso all'organizzazione non consentito' su tutte le GET della nuova dashboard (es. /api/video-support/info). Riproducibile: login SA, logout (anche via /api/auth/logout), login QA → qualsiasi GET fallisce finché non si fa localStorage.clear(). Workaround test: pulire localStorage al login. Da fixare lato frontend (reset X-Org-Id in AuthContext su logout o su cambio utente). Priorità MEDIA perché i cookie reali degli utenti in sessioni separate normalmente non si incrociano, ma qualunque navigazione tra account nello stesso browser lo scatena.", "affected_selectors": ["[data-testid=support-video-page]", "[data-testid=cost-simulator]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter84_video_support.py",
+    "/app/test_reports/pytest/iter84_results.xml"
+  ],
+  "action_items": [
+    "(MINOR) Permettere al PUT /platform/credit-services/{key} di accettare `unit_cost: null` per cancellare il costo (serve a disattivare completamente la configurazione del servizio).",
+    "(MEDIO) Al logout e al login resettare la chiave X-Org-Id in localStorage/axios defaults per evitare 403 cross-user in /api/video-support/info e simili quando lo stesso browser cambia account."
+  ],
+  "critical_code_review_comments": [
+    "video_support.py `_slot_dt` solleva 400 su input non valido ma non previene stringhe fuori orario pieno/mezzo (es. '2026-01-01T10:17'): la UI accetta solo gli slot generati, però POST manuale consentirebbe disallineamenti; migliorare validando `minute in {0,30}`.",
+    "video_support.py `_assert_free_slot` ricalcola l'intera lista slot (incluse chiamate freebusy) per ogni booking/reschedule: in SIMULATION è veloce, ma in produzione aggiunge latenza. OK per MVP, segnalato.",
+    "video_support.py `book()` fa `credits_charged = -int(settled.get('amount') or 0)` (settled.amount è negativo nel ledger): questo ribalta il segno rendendo credits_charged positivo. OK ma rende la convenzione dei segni sottile; aggiungere test unit sul valore.",
+    "video_support.py `cancel` admin: la mail viene inviata con `meet_link = APP_URL + '/assistenza'`: se APP_URL non è configurato (produzione) l'url è relativo; verificare che APP_URL sia sempre valorizzato in .env.",
+    "server.py PUT /api/platform/credit-services/{key}: non supporta reset di unit_cost a null (vedi backend_issues.minor).",
+    "news.py publish: la validazione requires_service controlla solo `active && consumo_active`, OK; attenzione al caso in cui unit_cost sia null → non è esplicitamente bloccato ma `_bookable` di video_support sì lo gestisce (3 condizioni). Allineare docstring.",
+    "frontend/src/pages/Assistenza.jsx: BookingCard rende dentro il contenitore info; se /video-support/info fallisce (403, ecc.) la pagina resta su 'Caricamento…' senza messaggio di errore all'utente — aggiungere fallback.",
+    "AuthContext/Logout: non resetta `X-Org-Id` da localStorage/axios defaults — causa integration issue descritto."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter84_video_support.py",
+    "/app/test_reports/pytest/iter84_results.xml",
+    "/app/test_reports/iteration_84.json"
+  ],
+  "success_rate": {"backend": "100% (25/25)", "frontend": "100% su tutti i data-testid richiesti (support-video-page/book/cost/balance/description/included/excluded, cost-simulator, sim-row-video_support, sim-total, vs-config, svc-active-video_support). 1 integration issue (X-Org-Id stale cross-user)."},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026!; QA Admin qa.eventi@crmeventqa.it / QaEvents2026! (saldo iniziale 97, invariato dopo i test).",
+  "seed_data_creation": "Durante i test: fascia settimanale 09-18 su 7 giorni, min_notice variabile (24 o 0), prenotazioni temporanee (sempre annullate con riaccredito totale), 1 TEST_iter84 news_item (eliminato). Tutto ripulito al termine.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression file: /app/backend/tests/test_iter84_video_support.py (25 test, girare con `-n 0` perché le classi condividono stato globale: catalogo servizi + video_support_config + saldo QA). Il modulo ha una fixture `service_cleanup` autouse che registra il saldo iniziale QA e lo ripristina a fine run (azzera credit_ledger per video_support e rimuove bookings/config). Simulation attiva via VIDEO_SUPPORT_MEET_SIMULATION=1; meet_link ha pattern https://meet.google.com/sim-xxx-xxxx-xxx. Note frontend: `/assistenza` chiama /video-support/info; se il browser invia un X-Org-Id non appartenente alla membership restituisce 403 → pulire localStorage prima di cambiare account. In `/profilo` i testid del simulatore sono dentro il tab 'Crediti e fatturazione'. SA: /piattaforma/assistenza-video → testid vs-config, vs-window-{i}, vs-closed-add/input, vs-save; PlatformCredits usa svc-active-video_support (checkbox).",
+  "rca of the issue": "RCA integration issue 'X-Org-Id stale cross-user': al login il frontend salva (o lascia da sessione precedente) l'org_id attiva in localStorage e axios lo aggiunge come header X-Org-Id ad ogni richiesta. Dopo /auth/logout il valore NON viene cancellato; al login di un altro utente, il nuovo request /api/video-support/info parte con l'X-Org-Id vecchio. In server.py _resolve_active_org (riga 213-216) l'header non corrisponde a nessuna membership del nuovo utente → 403 'Accesso all'organizzazione non consentito'. Riproduzione: login SA, logout, login QA → /assistenza mostra 'Caricamento…' + banner rosso. Mitigazione: in AuthContext/logout chiamare `localStorage.removeItem('X-Org-Id')` (o chiave equivalente) e resettare `axios.defaults.headers.common['X-Org-Id']=undefined`; al login forzare l'uso dell'org_id ritornata da /auth/me. In test automatizzati: pulire localStorage prima di ogni login."
+}

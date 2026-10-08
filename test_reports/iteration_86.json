@@ -1,0 +1,31 @@
+{
+  "summary": "Iter 86 — 5 new sport pipeline templates (Triathlon 92, Nuoto 77, Ciclismo 77, MTB 76, Trail 93) seeded idempotently alongside Running (114) and Evento generico (32). Backend fully verified via 22-test pytest suite — all pass. SA /piattaforma/modelli-pipeline UI renders 7 cards A-Z with correct task counts; delete button correctly disabled for in-use templates. Event pipeline chooser preselects suggested template based on tipologia, 'Consigliato' badge wired via pipeline-tpl-suggested-{key}. Suggested resolution verified for all 6 tipologie (Triathlon, Nuoto, Ciclismo, Mountain Bike, Trail Running, Running). Pipeline generate from triathlon template produces 92 tasks with scadenza = event_date + giorni_offset (sample dates validated). Non-regression: other orgs' pipelines unchanged. 'Mountain Bike' confirmed in STD_TIPOLOGIE on frontend Events.jsx.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/eventi/{id}/pipeline chooser (preview)", "issues": ["Iubenda cookie banner at bottom can intercept clicks on pipeline-create-cta — not a product bug, same as iter85."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter86_pipeline_sports.py",
+    "/app/test_reports/pytest/iter86.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "pipeline_seed_sports.suggest_template matches 'ciclismo' only after excluding 'ciclismo_strada' iteration — intentional to allow 'mountain bike' (contains 'bike' not 'ciclismo') to take precedence; works but ordering is implicit. Consider explicit ordering list for maintainability.",
+    "_ensure_pipeline_templates relies on in-process global _pipeline_templates_seeded flag — after a backend restart the first request re-checks DB (idempotent via find_one on key). Confirmed stable: counts unchanged across repeated calls.",
+    "platform_pipeline_template_delete returns 409 with Italian detail only when event_pipelines references template_key — correct; frontend already disables the button via in_use flag, so 409 only hits on race conditions."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter86_pipeline_sports.py"
+  ],
+  "success_rate": {"backend": "100% (22/22)", "frontend": "90% — chooser preselection/switching/template cards and SA list verified; task-generate click in preview was intermittently intercepted by Iubenda banner but backend generation flow fully covered by pytest (92 tasks + scadenza offset)."},
+  "test_credentials": "SA manara.michele.pro@gmail.com / CrmEvent2026! ; QA qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "No persistent seed. All TEST_ events created during pytest and UI tests were deleted at end. QA credit balance recorded at start (17) and restored to 17 after test adjustments. SA 'test_delete_me' template created and deleted. ledger entries from manual_adjustment (200 + -160) remain but net zero.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The 7 templates persist in db.pipeline_templates (keys: generico, running, triathlon, nuoto_acque_libere, ciclismo_strada, mountain_bike, trail_running). Task counts: 32/114/92/77/77/76/93. Pipeline activation costs 20 credits (service event_pipeline_pro). QA org_id='org_qa_eventi'. In preview env, Iubenda cookie banner can intercept clicks on bottom buttons on the pipeline chooser — dismiss it or use data-testid with force=True from above-the-fold.",
+  "rca of the issue": "N/A — no product issues reproduced."
+}
