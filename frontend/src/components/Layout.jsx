@@ -12,7 +12,6 @@ import SupportChat from "@/components/SupportChat";
 import SupportBanner from "@/components/SupportBanner";
 import ActivationGate from "@/components/ActivationGate";
 import WelcomeDemo from "@/components/WelcomeDemo";
-import TrialButton from "@/components/TrialButton";
 import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
 import { NEWS_READ_EVENT } from "@/pages/News";
@@ -392,7 +391,6 @@ export default function Layout({ children }) {
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
           <div className="flex-1 min-w-0" />
-          {!isSuper && <TrialButton saas={user?.saas} />}
           {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
           {location.pathname !== "/app" && <button type="button" className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="header-search-button" title="Cerca" aria-label="Cerca"><Search className="w-5 h-5" /></button>}
           {!isSuper && user?.saas?.enabled && user.saas.trial_active ? (

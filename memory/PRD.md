@@ -540,6 +540,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Nuovo componente `frontend/src/components/OrgUsers.jsx` montato in `Profile.jsx` come scheda "Utenti e accessi", visibile SOLO se `user.org_role === "admin_org"`. Tabella unica membri+inviti: Nome | Email | Cellulare | Ruolo | Stato (Invito inviato/Attivo/Invito scaduto) | Ultimo accesso | Azioni. "+ Invita utente" (Nome, Cognome, Email, Cellulare con PhoneInput intl, Ruolo). Azioni: Reinvia · Cambia ruolo · Disattiva/Riattiva accesso. Scadenza invito 7gg. Nessun consumo crediti; nessuna modifica a Stripe/wallet/ledger/FIC.
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
+## Pulsante prova in Dashboard + titolo Marketplace — 2026-10-08 ✅ VERIFICATO (screenshot desktop/mobile)
+- TrialButton rimosso dall'header (Layout.jsx) e spostato in Dashboard.jsx accanto al titolo (gap 16px, flex-wrap su mobile). Stile stato normale: bianco, bordo 1.5px #0ABAB5, testo/icona Tiffany. Stati ≤3 giorni (ambra) e prova terminata (rosso) invariati. Logica prova invariata.
+- Marketplace.jsx: titolo "Marketplace" (senza "CRMEvent").
+
+
 ## Popup "Prenota una demo" + Super Admin "Richieste demo" — 2026-10-08 ✅ VERIFICATO (iteration_96)
 - Componente unico `WelcomeDemo.jsx`: auto-apertura al primo accesso (users.welcome_demo=pending → dismissed/requested), pulsante header `header-demo-button` apre la stessa maschera (fix: endpoint ora con dipendenza solo-membership `require_org_member`, nessun redirect a /app alla chiusura).
 - Form: Nome e cognome, Email (bloccata), Organizzazione, Telefono, Data/ora preferite (calendario slot Super Admin → Demo, SOLO preferenza, niente Google Meet), Note. Pulsanti "Richiedi una demo" / "Non ora".

@@ -5,6 +5,8 @@ import { useCollection, SectionCard, formatEUR } from "@/components/crm";
 import PipelineAttention from "@/components/PipelineAttention";
 import OrgMessagesBanner from "@/components/OrgMessagesBanner";
 import MyTeams from "@/components/MyTeams";
+import TrialButton from "@/components/TrialButton";
+import { useAuth } from "@/context/AuthContext";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -51,6 +53,7 @@ function KpiGroup({ title, items, testid, maxCols = 5 }) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { items: events } = useCollection("/events");
   const [eventoId, setEventoId] = useState("all");
   const [data, setData] = useState(null);
@@ -80,7 +83,10 @@ export default function Dashboard() {
     <div className="animate-fade-up space-y-6" data-testid="dashboard">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 font-display">Dashboard</h1>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 font-display">Dashboard</h1>
+            {user?.role !== "superadmin" && <TrialButton saas={user?.saas} />}
+          </div>
           <p className="text-sm text-slate-500 mt-1">Panoramica delle sezioni a cui hai accesso</p>
           <div className="mt-3 w-full sm:w-80" data-testid="dashboard-search"><GlobalSearch /></div>
         </div>

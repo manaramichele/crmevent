@@ -49,7 +49,7 @@ export default function TrialButton({ saas }) {
   const urgent = trial && n <= 3;
   const label = ended ? "Prova terminata" : n === 1 ? "1 giorno rimasto" : `${n} giorni rimasti`;
   const short = ended ? "Terminata" : `${n} gg`;
-  const tone = ended ? "bg-red-600 text-white hover:bg-red-700" : urgent ? "bg-amber-400 text-slate-900 ring-2 ring-amber-500 hover:bg-amber-300" : "bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]";
+  const tone = ended ? "bg-red-600 text-white hover:bg-red-700" : urgent ? "bg-amber-400 text-slate-900 ring-2 ring-amber-500 hover:bg-amber-300" : "bg-white text-[#0ABAB5] border-[1.5px] border-[#0ABAB5] hover:bg-[#0ABAB5]/10";
   const Icon = urgent || ended ? AlertTriangle : CalendarClock;
   const go = () => { setOpen(false); navigate("/profilo?tab=abbonamento"); };
   return (
