@@ -367,6 +367,14 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Permessi e accessi Team Leader — 2026-10-08 ✅ VERIFICATO (iter 82, backend 22/22 + frontend)
+- Nomina automatica da teams.responsabile_id (persona collegata o stessa email), uno o più team, revoca immediata al cambio Team Leader (calcolata a ogni richiesta).
+- permissions.py: `team_leader` {edit_members, manage_shifts} (default off) + TL_RULES/tl_allows. _enforce_perm: se la sezione non concede l'azione ma l'utente guida Team → accesso `via_tl` limitato ai Team guidati (lettura garantita: staff, teams, shifts, disponibilità, persons-enriched, scheda persona, dashboard). Team sempre in sola lettura via nomina.
+- Filtri: Anagrafiche/persone per utenti con ambito Team = componenti dei Team accessibili + contatti non Staff solo con sezione Anagrafiche. Via TL solo componenti già nel team (niente persone senza team). Disponibilità filtrate per team. Inviti: senza sezione Staff solo team guidati.
+- Dashboard: blocco `my_teams` (componenti, staff/volontari, richiesti/assegnati/mancanti, turni/scoperti, disponibilità, inviti inviati, registrati) → components/MyTeams.jsx.
+- UI: blocco "Permessi Team Leader" in Permissions.jsx; perms.js tlCan + pseudo-sezioni teams/turni; colonna "Invito" in Staff/Volontari (etichetta "Registrato"). Attività escluse per scelta utente.
+
+
 ## Permesso "Invio inviti email" — 2026-10-08 ✅ VERIFICATO (iter 81, backend 11/11 + frontend)
 - permissions.py: `send_invites` (default False per tutti; Admin Org sempre abilitato). Toggle Attivo/Disattivo in PermFields (Utenti e Permessi), incluso nello storico.
 - Copre SOLO l'invito area personale (POST /api/persons/{id}/invite, template/link esistenti) con ruolo staff/volunteer. L'invito account CRM (org_invites) resta solo Admin.

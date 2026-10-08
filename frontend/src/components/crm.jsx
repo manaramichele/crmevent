@@ -166,6 +166,7 @@ export function useCollection(endpoint) {
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async (params) => {
+    if (!endpoint) { setLoading(false); return; }
     setLoading(true);
     try {
       const { data } = await api.get(endpoint, { params });

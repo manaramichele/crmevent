@@ -1,0 +1,41 @@
+{
+  "summary": "Iter 82 validated end-to-end 'Permessi e accessi Team Leader'. Backend pytest suite 22/22 PASS covers: (1) GET /auth/me contiene led_team_ids e permissions.team_leader (edit_members/manage_shifts); (2) collaboratore senza sezione Staff ma TL di Team A — GET /teams, /staff, /shifts, /persons-enriched, /events/{eid}/availabilities, /persons/{id}/detail limitati al/i team guidato/i; staff Team B -> 404; staff senza team non visibili (strict); (3) senza flag TL — PUT /staff -> 403, POST /shifts -> 403, PUT /teams -> 403 sempre; (4) con edit_members=True — PUT staff Team A OK (persistenza verificata), staff Team B -> 404; DELETE staff Team B -> 404; (5) con manage_shifts=True — POST /shifts su Team A OK, Team B -> 403/404; PUT/DELETE shift Team B -> 404; DELETE shift Team A OK; (6) TL di 2 team (A+C) -> /dashboard my_teams con 2 voci con tutti i campi (componenti/staff/volontari/volontari_richiesti/assegnati/mancanti/turni_totali/turni_scoperti/disponibilita/inviti_inviati/registrati); Admin /dashboard non contiene my_teams; (7) revoca immediata — Admin cambia responsabile_id -> GET /staff -> 403; (8) PUT /api/org/permissions/{uid} con {team_leader:{edit_members, manage_shifts}} salva e audit detail contiene 'Team Leader'. Frontend validato: dialog permessi non-admin espone perm-team-leader con perm-tl-view-on (disabilitato + checked), perm-tl-edit-members-on/off, perm-tl-manage-shifts-on/off, perm-send-invites-on/off, perm-save; salvataggio OK. TL (login come utente TEST) atterra su /app (HomeRoute -> Dashboard) con dash-my-teams, my-team-{id} e tutte le stat tiles (componenti/split/vol/turni/disp/inviti/registrati). Sidebar mostra 'Staff / Volontari' anche senza sezione staff. /staff-volontari mostra tabella con colonna 'Invito' (invite-status-{id}) e nessun pulsante 'Modifica Team'. Mobile 390px: dash-my-teams visibile e layout a card leggibile. Nessun dato reale invitato/toccato; tutti i TEST_iter82_* ripuliti.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "TL /staff-volontari page load", "issue": "Toast 'Non hai i permessi per questa operazione' appare al caricamento della pagina Staff/Volontari per il TL senza sezione Staff. La tabella carica correttamente, ma una delle fetch secondarie (probabilmente /api/persons?scope=all o endpoint non essenziale) ritorna 403 e genera un toast di errore. Suggerimento: nascondere il toast quando il contenuto principale è disponibile oppure non chiamare l'endpoint se la permission check fallirà.", "affected_selectors": [".error, [class*='error']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter82_team_leader_perms.py",
+    "/app/test_reports/pytest/iter82_results.xml",
+    "/app/scripts/seed_iter82_ui.py"
+  ],
+  "action_items": [
+    "Investigare il toast 403 generico mostrato al TL su /staff-volontari (minor UX)."
+  ],
+  "critical_code_review_comments": [
+    "permissions.py tl_allows(): la regola per '/staff' usa prefix+exact=False, quindi /staff/{id} matcha; per action!='view' richiede edit_members. OK. Ma attenzione: azioni 'create'/'delete' su /staff via TL seguono lo stesso flag edit_members — accettabile da spec, ma nessuna granularità tra create/edit/delete. Documentare nel settings UI.",
+    "server.py _enforce_perm righe 199-213: via_tl viene impostato solo se P.allows fallisce. Con TL che ha anche la sezione Staff (scope=leader), via_tl rimane False e le presenze senza team diventano visibili (regola esistente), come richiesto dalla scelta utente. Logica corretta ma delicata — mantenere test di regressione sulla visibilità delle 'presenze senza team'.",
+    "server.py crud_routes _l (riga 1298): per staff aggiunge [None, ''] a team_ids solo se not strict (via_tl=False). Comportamento coerente con _team_person_ids.",
+    "server.py _my_teams_overview (riga 2390): la count 'disponibilita' usa persona_id in members list; se un volontario è nel team ma NON in rinuncia, viene contato — OK. Nota: list(members) può essere grande se team enorme, considerare index su (org_id, evento_id, persona_id).",
+    "server.py _invite_roles_for (riga 2017-2018): quando l'utente non ha la sezione Staff, si usa led_team_ids come tids. Coerente con la spec 'TL con send_invites senza sezione Staff può invitare solo componenti dei team guidati'.",
+    "frontend/src/lib/perms.js tlCan(): è un mirror client-side ma non applica il flag 'send_invites' per TL (quello passa da canSendInvites). OK — Il backend resta autorità, nessuna leak di dati.",
+    "Permissions.jsx TeamLeaderPerms: perm-tl-view è hardcoded value=true con onChange undefined -> disabled. Chiaro e aderente alla spec.",
+    "Toast 403 generico su /staff-volontari per TL: suggerire di sopprimere i toast per endpoint di contorno non critici (già visto in iterazioni precedenti su endpoint complementari)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter82_team_leader_perms.py",
+    "/app/scripts/seed_iter82_ui.py",
+    "/app/test_reports/iteration_82.json"
+  ],
+  "success_rate": {"backend": "100% (22/22)", "frontend": "~95% (tutti i testid richiesti presenti; funzionalità principali OK; minor toast 403 su /staff-volontari)"},
+  "test_credentials": "QA Admin: qa.eventi@crmeventqa.it / QaEvents2026! ; TEST TL effimero: test_tl_TEST_iter82_<rand>@example.com / TlPwd2026! (pulito al teardown).",
+  "seed_data_creation": "Creati e ripuliti TEST_iter82_* events, teams (A/B/C), persons (leader/pA_s/pA_v/pB/pFree), staff rows (staff/volontario/presenza senza team), shifts, availabilities, user collaboratore + membership con permissions.team_leader. Tutto cancellato nel fixture teardown. Dati UI (seed_iter82_ui.py) cancellati manualmente a fine run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression file: /app/backend/tests/test_iter82_team_leader_perms.py (22 tests, pytest xdist). Chiavi backend: _led_team_ids (match su persons.email case-insensitive + persona_id della membership) in /app/backend/server.py:258; _enforce_perm imposta via_tl quando led>0 e tl_allows matcha, forzando strict=True in _team_person_ids e _link_visible (nessuna presenza senza team). ROUTE_RULES mette '/teams' sotto sezione 'staff' quindi via_tl su PUT /teams fallisce perché tl_allows('/teams', 'edit')=False (regola 'view'). /auth/me usa user_payload che aggiunge led_team_ids. /dashboard aggiunge my_teams solo se perm.led_team_ids. Frontend testids validati: perm-team-leader, perm-tl-view-on (disabled+checked), perm-tl-edit-members-{on,off}, perm-tl-manage-shifts-{on,off}, perm-send-invites-{on,off}, perm-save, dash-my-teams, my-team-{id}, my-team-{componenti|split|vol|turni|disp|inviti|registrati}-{id}, invite-status-{id}. HomeRoute (/app) rende Dashboard quando can(user,'dashboard'); Staff tab a /staff-volontari (Perm s='staff' passa via tlCan). Minor: il TL vede un toast 403 su /staff-volontari — probabilmente da fetch secondario; non blocca la UI.",
+  "rca of the issue": "N/A — implementazione aderente alla spec; segnalato solo un toast 403 cosmetico su /staff-volontari."
+}

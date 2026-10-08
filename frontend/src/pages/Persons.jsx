@@ -285,7 +285,7 @@ function TeamCoverage({ req, n, id }) {
 
 export default function Persons({ mode = "anagrafiche" }) {
   const { user } = useAuth();
-  const { items: companies } = useCollection("/companies");
+  const { items: companies } = useCollection(can(user, "aziende") ? "/companies" : null);
   const { items: events } = useCollection("/events");
   const { staff: staffLinks, persons: rows, loading, reload } = usePeople();
   const { teams } = useTeams();
