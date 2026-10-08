@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StickyNote } from "lucide-react";
 
 export const hasNote = (team) => !!(team?.descrizione || "").trim();
@@ -45,14 +46,21 @@ export function TeamNoteDialog({ team, open, onOpenChange, canEdit, onSave }) {
 export function TeamNoteButton({ team, canEdit, onSave, className = "" }) {
   const [open, setOpen] = useState(false);
   const on = hasNote(team);
+  const label = on ? "Nota" : canEdit ? "Aggiungi nota" : "Nessuna nota";
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        title={on ? "Nota presente" : canEdit ? "Aggiungi nota" : "Nessuna nota"} aria-label={on ? "Nota presente" : "Nessuna nota"}
-        data-testid={`team-note-btn-${team.id}`} data-has-note={on ? "true" : "false"}
-        className={`h-8 px-2.5 text-xs gap-1 ${on ? "bg-tiffany border-tiffany text-slate-900 hover:bg-tiffany-hover hover:text-slate-900" : "bg-white border-slate-200 text-slate-500"} ${className}`}>
-        <StickyNote />Nota
-      </Button>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+              aria-label={label} data-testid={`team-note-btn-${team.id}`} data-has-note={on ? "true" : "false"}
+              className={`h-8 w-8 max-sm:h-10 max-sm:w-10 bg-transparent hover:bg-transparent ${on ? "text-[#0ABAB5] hover:text-[#08938f]" : "text-slate-500 hover:text-slate-700"} ${className}`}>
+              <StickyNote className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="z-[150] max-sm:hidden">{label}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       {open && <TeamNoteDialog team={team} open={open} onOpenChange={setOpen} canEdit={canEdit} onSave={onSave} />}
     </>
   );

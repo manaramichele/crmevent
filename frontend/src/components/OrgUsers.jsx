@@ -9,31 +9,27 @@ import { toast } from "sonner";
 import { UserPlus, RefreshCw, XCircle, Pencil } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
-import { usePermMeta, PermFields, PermissionsDialog, PermAudit, initialPerm, teamAccessLabel, permSummary } from "@/pages/Permissions";
+import { usePermMeta, PermissionsDialog, PermAudit, teamAccessLabel, permSummary } from "@/pages/Permissions";
+import StaffInviteDialog from "@/components/StaffInviteDialog";
 
-const ROLE_OPTS = [{ value: "admin_org", label: "Admin Organizzazione" }, { value: "user", label: "Utente" }, { value: "collaboratore", label: "Collaboratore" }];
 const fmt = (iso) => { if (!iso) return "—"; try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 const STATUS = {
   member_active: ["green", "Attivo"], member_inactive: ["gray", "Accesso disattivato"],
   pending: ["orange", "Invito inviato"], expired: ["red", "Invito scaduto"],
 };
-const emptyForm = { nome: "", cognome: "", email: "", telefono: "", role: "user" };
 
 export default function OrgUsers({ orgId, allowProfileEdit = false }) {
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState(emptyForm);
-  const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState(null);
   const [ef, setEf] = useState({ nome: "", cognome: "", email: "", telefono: "" });
   const [ebusy, setEbusy] = useState(false);
   const { meta, reload: reloadMeta } = usePermMeta(orgId);
   const [permFor, setPermFor] = useState(null);
   const [auditKey, setAuditKey] = useState(0);
-  const [ip, setIp] = useState(null);
-  const [ipPersona, setIpPersona] = useState("");
   const pm = (uid) => meta?.members?.find((x) => x.user_id === uid);
+  const manageExisting = (uid) => { const m = pm(uid); if (m && !m.is_self) setPermFor(m); else toast.info(m?.is_self ? "È il tuo account: non puoi modificare il tuo ruolo" : "Account non gestibile da qui"); };
 
   const load = useCallback(async () => {
     try {
@@ -63,19 +59,6 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
       toast.success("Anagrafica aggiornata");
       setEdit(null); load();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setEbusy(false); }
-  };
-
-  const submitInvite = async () => {
-    if (!f.nome.trim() || !f.cognome.trim()) return toast.error("Nome e cognome sono obbligatori");
-    if (!f.email.trim()) return toast.error("Email obbligatoria");
-    if (!f.telefono || !isValidPhoneNumber(f.telefono)) return toast.error("Inserisci un cellulare valido");
-    setBusy(true);
-    try {
-      const { data } = await api.post(`/platform/organizations/${orgId}/invites`, { nome: f.nome.trim(), cognome: f.cognome.trim(), email: f.email.trim(), telefono: f.telefono, role: f.role,
-        ...(ip && f.role !== "admin_org" ? { permissions: ip } : {}), ...(ipPersona ? { persona_id: ipPersona } : {}) });
-      toast[data.email_sent ? "success" : "warning"](data.email_sent ? "Invito inviato" : "Invito creato (email non inviata)");
-      setOpen(false); setF(emptyForm); setIp(null); setIpPersona(""); load(); reloadMeta();
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
 
   return (
@@ -157,34 +140,7 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
         </table>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="org-invite-dialog">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5 text-tiffany-active" />Invita utente</DialogTitle><DialogDescription>Riceverà un'email con un link per accedere all'organizzazione (valido 7 giorni).</DialogDescription></DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Nome *</Label><Input value={f.nome} onChange={(e) => setF((s) => ({ ...s, nome: e.target.value }))} data-testid="invite-nome" /></div>
-              <div className="space-y-1.5"><Label>Cognome *</Label><Input value={f.cognome} onChange={(e) => setF((s) => ({ ...s, cognome: e.target.value }))} data-testid="invite-cognome" /></div>
-            </div>
-            <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={f.email} onChange={(e) => setF((s) => ({ ...s, email: e.target.value }))} data-testid="invite-email" /></div>
-            <div className="space-y-1.5"><Label>Cellulare *</Label><PhoneInput international defaultCountry="IT" value={f.telefono} onChange={(v) => setF((s) => ({ ...s, telefono: v || "" }))} className="phone-input" data-testid="invite-telefono" /></div>
-            <div className="space-y-1.5"><Label>Ruolo *</Label>
-              <select className="h-10 w-full px-3 rounded-lg border border-slate-200 text-sm bg-white" value={f.role} onChange={(e) => { const r = e.target.value; setF((s) => ({ ...s, role: r })); if (meta && r !== "admin_org") setIp(initialPerm(meta, meta.defaults[r])); }} data-testid="invite-role">{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
-            </div>
-            {meta && (
-              <div className="rounded-xl border border-slate-200 p-3 space-y-2" data-testid="invite-perms">
-                <div className="text-sm font-semibold text-slate-800">Permessi</div>
-                <PermFields meta={meta} role={f.role} perm={ip || initialPerm(meta, meta.defaults[f.role === "collaboratore" ? "collaboratore" : "user"])}
-                  setPerm={(u) => setIp((cur) => (typeof u === "function" ? u(cur || initialPerm(meta, meta.defaults[f.role === "collaboratore" ? "collaboratore" : "user"])) : u))}
-                  personaId={ipPersona} setPersonaId={setIpPersona} />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
-            <Button disabled={busy} onClick={submitInvite} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="invite-submit">Invia invito</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <StaffInviteDialog orgId={orgId} meta={meta} open={open} onOpenChange={setOpen} onSent={() => { load(); reloadMeta(); }} onManageExisting={manageExisting} />
 
       <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
         <DialogContent className="max-w-md" data-testid="user-edit-dialog">

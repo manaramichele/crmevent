@@ -6,6 +6,8 @@ import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Building2, Users, CalendarDays, ScrollText, UserPlus, Mail, Trash2, RefreshCw, XCircle, Save, Database, AlertTriangle } from "lucide-react";
+import StaffInviteDialog from "@/components/StaffInviteDialog";
+import { usePermMeta } from "@/pages/Permissions";
 
 const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
 const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
@@ -36,8 +38,8 @@ export default function OrgDetail() {
   const [invites, setInvites] = useState([]);
   const [events, setEvents] = useState([]);
   const [audit, setAudit] = useState([]);
-  const [addEmail, setAddEmail] = useState(""); const [addRole, setAddRole] = useState("user");
-  const [invEmail, setInvEmail] = useState(""); const [invRole, setInvRole] = useState("user");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const { meta } = usePermMeta(id);
   const [delName, setDelName] = useState(""); const [deleting, setDeleting] = useState(false);
   const [showSeed, setShowSeed] = useState(false); const [seedWipe, setSeedWipe] = useState(false); const [seeding, setSeeding] = useState(false);
   const [delUser, setDelUser] = useState(null); const [working, setWorking] = useState(false); const [cleaning, setCleaning] = useState(false);
@@ -58,11 +60,6 @@ export default function OrgDetail() {
     try { const { data } = await api.patch(`/platform/organizations/${id}`, form); setOrg(data); toast.success("Organizzazione aggiornata"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
-  const addMember = async () => {
-    if (!addEmail) return;
-    try { await api.post(`/platform/organizations/${id}/members`, { email: addEmail, role: addRole }); toast.success("Utente associato"); setAddEmail(""); loadMembers(); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
   const changeRole = async (uid, role) => {
     try { await api.patch(`/platform/organizations/${id}/members/${uid}`, { role }); loadMembers(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -76,11 +73,6 @@ export default function OrgDetail() {
     try { await api.delete(`/platform/users/${delUser.user_id}`); toast.success("Account eliminato definitivamente"); setDelUser(null); loadMembers(); loadInvites(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     finally { setWorking(false); }
-  };
-  const sendInvite = async () => {
-    if (!invEmail) return;
-    try { const { data } = await api.post(`/platform/organizations/${id}/invites`, { email: invEmail, role: invRole }); toast[data.email_sent ? "success" : "warning"](data.email_sent ? "Invito inviato" : "Invito creato (email non inviata)"); setInvEmail(""); loadInvites(); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const resendInvite = async (iid) => { try { await api.post(`/platform/invites/${iid}/resend`); toast.success("Invito reinviato"); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   const revokeInvite = async (iid) => { try { await api.delete(`/platform/invites/${iid}`); toast.success("Invito revocato"); loadInvites(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
@@ -182,13 +174,9 @@ export default function OrgDetail() {
       {tab === "utenti" && (
         <div className="space-y-6" data-testid="org-utenti-tab">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <div className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><UserPlus className="w-4 h-4" />Aggiungi utente esistente</div>
-            <p className="text-xs text-slate-500 mb-3">Associa un account CRMEvent già registrato a questa organizzazione. Per un nuovo utente usa la scheda <span className="font-medium">Inviti</span>.</p>
-            <div className="flex flex-wrap gap-2">
-              <input className={`${inputCls} flex-1 min-w-[200px]`} placeholder="email@utente.it" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} data-testid="member-add-email" />
-              <select className={inputCls} value={addRole} onChange={(e) => setAddRole(e.target.value)} data-testid="member-add-role">{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
-              <Button onClick={addMember} data-testid="member-add-btn" className="bg-slate-900 hover:bg-slate-800 text-white">Associa</Button>
-            </div>
+            <div className="text-sm font-semibold text-slate-800 mb-1 flex items-center gap-2"><UserPlus className="w-4 h-4" />Aggiungi utente</div>
+            <p className="text-xs text-slate-500 mb-3">Ogni account parte da una persona dello Staff di questa organizzazione: cerca la persona, assegna ruolo e permessi e invia l'invito. Un account già registrato altrove accetterà l'invito accedendo.</p>
+            <Button onClick={() => setInviteOpen(true)} data-testid="member-add-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><UserPlus className="w-4 h-4 mr-1.5" />Invita dallo Staff</Button>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -233,12 +221,9 @@ export default function OrgDetail() {
         <div className="space-y-6" data-testid="org-inviti-tab">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
             <div className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><Mail className="w-4 h-4" />Invita nuovo utente</div>
-            <div className="flex flex-wrap gap-2">
-              <input className={`${inputCls} flex-1 min-w-[200px]`} placeholder="email@nuovo.it" value={invEmail} onChange={(e) => setInvEmail(e.target.value)} data-testid="invite-email" />
-              <select className={inputCls} value={invRole} onChange={(e) => setInvRole(e.target.value)} data-testid="invite-role">{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
-              <Button onClick={sendInvite} data-testid="invite-send-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">Invia invito</Button>
-            </div>
+            <Button onClick={() => setInviteOpen(true)} data-testid="invite-send-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><UserPlus className="w-4 h-4 mr-1.5" />Invita dallo Staff</Button>
           </div>
+          <StaffInviteDialog orgId={id} meta={meta} open={inviteOpen} onOpenChange={setInviteOpen} onSent={() => { loadInvites(); loadMembers(); }} onManageExisting={() => { setTab("utenti"); toast.info("Gestisci ruolo e permessi dalla scheda Utenti"); }} />
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800 flex items-center justify-between">

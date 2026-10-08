@@ -53,7 +53,7 @@ function PackageCard({ p, authed }) {
         <span className="text-sm text-slate-500">+ IVA</span>
       </div>
       <div className="text-xs text-slate-400 mt-0.5">IVA 22% € {eur(vat)} · Totale € {eur(gross)}</div>
-      <Link to={authed ? "/account" : "/registrati"} data-testid={`pack-cta-${p.id}`}
+      <Link to={authed ? "/profilo?tab=crediti" : "/registrati"} data-testid={`pack-cta-${p.id}`}
         onClick={() => trackEvent("credits_pack_cta", { package: p.id, authed })}
         className={`mt-5 inline-flex items-center justify-center h-11 px-5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${p.highlight ? "bg-tiffany hover:bg-tiffany-hover text-slate-900" : "bg-slate-900 hover:bg-slate-800 text-white"}`}>
         {authed ? "Ricarica crediti" : "Inizia gratuitamente"}
@@ -130,7 +130,7 @@ export default function Pricing() {
         <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight">Usa CRMEvent gratuitamente.</h1>
         <p className="text-base md:text-lg text-slate-500 mt-4 max-w-xl mx-auto">Paghi solo i servizi avanzati che utilizzi. La gestione ordinaria del tuo evento non consuma crediti.</p>
         <div className="mt-7 flex flex-wrap justify-center gap-3">
-          <Link to={authed ? "/account" : "/registrati"} data-testid="pricing-hero-cta"
+          <Link to={authed ? "/profilo?tab=crediti" : "/registrati"} data-testid="pricing-hero-cta"
             className="inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-tiffany hover:bg-tiffany-hover text-slate-900 text-base font-semibold shadow-sm transition-all active:scale-[0.98]">
             <Sparkles className="w-5 h-5" />{authed ? "Ricarica crediti" : "Inizia gratuitamente"}
           </Link>
@@ -177,7 +177,7 @@ export default function Pricing() {
         <h2 className="font-display text-3xl font-bold">Inizia oggi, senza pensieri.</h2>
         <p className="text-slate-500 mt-3">Registrati gratuitamente e ricevi 100 crediti CRMEvent. Nessuna carta richiesta.</p>
         <div className="mt-7 flex justify-center">
-          <Link to={authed ? "/account" : "/registrati"} data-testid="pricing-cta-bottom"
+          <Link to={authed ? "/profilo?tab=crediti" : "/registrati"} data-testid="pricing-cta-bottom"
             className="inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-tiffany hover:bg-tiffany-hover text-slate-900 text-base font-semibold shadow-sm transition-all active:scale-[0.98]">
             <Sparkles className="w-5 h-5" />{authed ? "Vai all'Area Account" : "Inizia gratuitamente"}
           </Link>

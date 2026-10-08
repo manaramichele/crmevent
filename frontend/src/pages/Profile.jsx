@@ -9,6 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { CalendarCheck2, Link2, Unplug } from "lucide-react";
 import OrgUsers from "@/components/OrgUsers";
+import Account from "@/pages/Account";
+import { isOrgAdmin } from "@/lib/perms";
+import { useSearchParams } from "react-router-dom";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -37,11 +41,27 @@ export default function Profile() {
   };
   const disconnect = async () => { await api.post("/calendar/disconnect"); toast.success("Google Calendar scollegato"); loadCal(); };
   const selectCal = async (id) => { await api.post("/calendar/select", { calendar_id: id }); setCal((c) => ({ ...c, calendar_id: id })); toast.success("Calendario aggiornato"); };
+  const showCredits = isOrgAdmin(user) && !isSuper;
+  const [params, setParams] = useSearchParams();
+  const tabs = ["account", ...(showCredits ? ["crediti"] : []), ...(canManageUsers ? ["utenti"] : [])];
+  const tab = tabs.includes(params.get("tab")) ? params.get("tab") : "account";
 
   return (
     <div className="animate-fade-up space-y-6 max-w-6xl">
-      <PageHeader title="Profilo & Account" subtitle="Gestisci password e integrazioni" />
-
+      <PageHeader title="Profilo & Account" subtitle="Il tuo account, crediti e fatturazione, utenti e permessi" />
+      <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
+        <TabsList className="mb-4 w-full sm:w-auto overflow-x-auto justify-start h-auto flex-nowrap" data-testid="profile-tabs">
+          <TabsTrigger value="account" className="h-9" data-testid="profile-tab-account">Account</TabsTrigger>
+          {showCredits && <TabsTrigger value="crediti" className="h-9" data-testid="profile-tab-crediti">Crediti e fatturazione</TabsTrigger>}
+          {canManageUsers && <TabsTrigger value="utenti" className="h-9" data-testid="profile-tab-utenti">Utenti e Permessi</TabsTrigger>}
+        </TabsList>
+        {showCredits && <TabsContent value="crediti"><div className="max-w-3xl"><Account embedded /></div></TabsContent>}
+        {canManageUsers && <TabsContent value="utenti">
+          <SectionCard title="Utenti e Permessi">
+            {manageOrgId ? <OrgUsers orgId={manageOrgId} /> : <p className="text-sm text-slate-500" data-testid="org-users-no-org">Seleziona un'organizzazione per gestire utenti e accessi.</p>}
+          </SectionCard>
+        </TabsContent>}
+        <TabsContent value="account" className="space-y-6">
       <SectionCard title="Dati account">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div><div className="text-xs uppercase text-slate-400 font-medium">Nome</div><div className="text-slate-800 font-medium">{user?.name}</div></div>
@@ -50,16 +70,6 @@ export default function Profile() {
           <div><div className="text-xs uppercase text-slate-400 font-medium">Accesso</div><div className="text-slate-800 font-medium">{isPw ? "Email / Password" : "Google"}</div></div>
         </div>
       </SectionCard>
-
-      {canManageUsers && (
-        <SectionCard title="Utenti e Permessi">
-          {manageOrgId ? (
-            <OrgUsers orgId={manageOrgId} />
-          ) : (
-            <p className="text-sm text-slate-500" data-testid="org-users-no-org">Seleziona un'organizzazione per gestire utenti e accessi.</p>
-          )}
-        </SectionCard>
-      )}
 
       <SectionCard title="Cambia password">
         {isPw ? (
@@ -96,6 +106,8 @@ export default function Profile() {
           <PrimaryButton onClick={connect} data-testid="calendar-connect"><Link2 className="w-4 h-4 mr-1.5" />Collega Google Calendar</PrimaryButton>
         )}
       </SectionCard>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

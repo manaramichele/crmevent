@@ -17,7 +17,6 @@ import AuthCallback from "@/pages/AuthCallback";
 import ResetPassword from "@/pages/ResetPassword";
 import Activate from "@/pages/Activate";
 import Profile from "@/pages/Profile";
-import Account from "@/pages/Account";
 import Platform from "@/pages/Platform";
 import OrgDetail from "@/pages/OrgDetail";
 import PricingAdmin from "@/pages/PricingAdmin";
@@ -98,6 +97,12 @@ function NoAccess() {
 }
 
 // Guardia UI per sezione (il backend applica comunque i permessi).
+function AccountRedirect() {
+  const { search } = useLocation();
+  const p = new URLSearchParams(search); p.set("tab", "crediti");
+  return <Navigate to={`/profilo?${p.toString()}`} replace />;
+}
+
 function Perm({ s, children }) {
   const { user } = useAuth();
   if (isVol(user)) return <Navigate to="/app" replace />;
@@ -135,7 +140,7 @@ function Shell() {
         <Route path="/invito" element={<Invite />} />
         <Route path="/app" element={<Protected><HomeRoute /></Protected>} />
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
-        <Route path="/account" element={<Protected><Perm s="admin"><Account /></Perm></Protected>} />
+        <Route path="/account" element={<AccountRedirect />} />
         <Route path="/permessi" element={<Navigate to="/profilo" replace />} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />

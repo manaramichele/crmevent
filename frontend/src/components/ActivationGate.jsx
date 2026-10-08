@@ -60,7 +60,7 @@ export default function ActivationGate() {
           <Button variant="outline" onClick={close}>Annulla</Button>
           {sufficient
             ? <Button onClick={activate} disabled={busy} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="activation-gate-confirm"><Rocket className="w-4 h-4 mr-1.5" />{suspended ? `Riattiva · ${cost} crediti` : `Attiva evento · ${cost} crediti`}</Button>
-            : <Button onClick={() => { close(); window.location.href = "/account"; }} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="activation-gate-recharge"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>}
+            : <Button onClick={() => { close(); window.location.href = "/profilo?tab=crediti"; }} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="activation-gate-recharge"><Wallet className="w-4 h-4 mr-1.5" />Ricarica crediti</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

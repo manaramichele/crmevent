@@ -1,0 +1,18 @@
+{
+  "summary": "Iter 75 (Staff-based Invite flow + renewal notice + service-costs + /account→/profilo redirect). Backend: 13/13 pytest tests passed in /app/backend/tests/test_iter75_staff_invite.py covering staff-candidates (list/filter/sort/add/reuse), invites (400 w/o persona, 400 non-staff, email saved on same person without creating new, 409 if membership exists, invite accept via /register creates exactly ONE membership with persona_id), add_org_member requires persona_id of staff, run-renewals notified once + maint_notice_for set + audit maint_low_balance_notice + no re-notify on second call, /credits/service-costs returns 6 services sorted A-Z. Frontend (desktop 1920 + mobile 390): /profilo shows exactly 3 tabs (Account | Crediti e fatturazione | Utenti e Permessi) with correct data-testids; sidebar has NO 'Account e abbonamento'; /account?foo=bar correctly redirects to /profilo?foo=bar&tab=crediti preserving query params; ServiceCosts card renders exactly 6 service-cost-{key} rows (ai_assistant, ai_briefing, event_activation, event_maintenance, event_pipeline_pro, google_calendar); org-invite-btn opens org-invite-dialog with search + add-staff flow (invite-add-staff-btn → invite-add-staff-form with event/nome/cognome/email/save); selecting a card shows invite-selected-person + 3 role buttons + invite-perms + invite-submit; mobile overflow is 0px. OrgDetail (SA) code confirmed: both member-add-btn (Utenti tab) and invite-send-btn (Inviti tab) wire to the same <StaffInviteDialog/> instance.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter75_staff_invite.py", "/app/test_reports/pytest/iter75.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 12k+ lines; consider splitting invites/staff-candidates/renewals/credits into routers.",
+    "create_org_invite relies on body.email even when staff has one; a cleaner contract would make email optional server-side when person already has email (currently frontend always supplies sel.email || typed email, so it works). Low risk."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter75_staff_invite.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Org admin qa.eventi@crmeventqa.it / QaEvents2026! (org_qa_eventi) · SA manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "All TEST_iter75_<rand> data (persons, staff, teams, events, invites, created user+membership) are cleaned up at the end of the test module. QA org balance restored to its pre-test value (97 verified post-run).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests use pymongo (not motor) to seed/cleanup — motor had event-loop conflicts across pytest fixtures/tests. Keep the pymongo pattern for future seeding. Note: /platform/organizations/{id}/invites still *requires* an email in the body (EmailStr) even when the staff person already has one; both frontend and tests supply (person.email || typed email). The qa.eventi org has 0 pre-existing staff rows so tests fully control what staff-candidates returns. Super-Admin OrgDetail UI could not be exercised in a session that was previously 'acting-as' another org (/piattaforma/organizzazioni/... redirected to landing); code inspection confirms member-add-btn and invite-send-btn both open the same StaffInviteDialog component. If needed, clear localStorage.acting_org_id before testing SA deep-links."
+}

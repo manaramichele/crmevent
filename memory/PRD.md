@@ -367,6 +367,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Invita utente dallo Staff + Avviso rinnovo + Riepilogo costi + Profilo unificato — 2026-10-07 ✅ VERIFICATO (iter 75: backend 13/13, frontend OK)
+- Relazione: Persona (persons) → Account (users, solo auth) → membership (role, permissions, persona_id) → accessi Eventi/Team. "Staff" = persone con presenza staff/collaboratore.
+- `GET/POST /api/platform/organizations/{org_id}/staff-candidates` (ricerca A–Z cognome; aggiunta allo Staff con evento). `POST .../invites` richiede persona_id Staff; 409 se esiste già un account; email mancante salvata sulla stessa persona; `POST .../members` richiede persona_id. Componente `StaffInviteDialog.jsx` (OrgUsers + OrgDetail Super Admin).
+- Avviso saldo insufficiente: in run_event_renewals, 7 giorni prima (MAINT_NOTICE_DAYS) email agli Admin org, una volta per scadenza (events.maint_notice_for), audit maint_low_balance_notice.
+- `GET /api/credits/service-costs` + card "Costi dei servizi". "Account e abbonamento" rimosso dal menu: tab "Crediti e fatturazione" in /profilo (/account → redirect con query; Stripe success_url aggiornato).
+- releases.json: aggiunte 2 voci al rilascio 2026-10-08-novita.
+
 ## Costi per servizio semplificati + addebiti reali — 2026-10-07 ✅ VERIFICATO (iter 74)
 - Super Admin → Servizi e crediti → Servizi: solo Servizio | Descrizione completa | Costo in crediti (A–Z, card su mobile). Modalità/unità/flag restano interni (non modificabili da UI). Costo intero ≥0, letto a runtime dal catalogo.
 - Mostrati solo i servizi collegati a un addebito reale (LINKED_CREDIT_SERVICES): Assistente CRMEvent (1/risposta utile), Attivazione evento (30 una tantum), Mantenimento evento (20/mese fino alla data evento), Pipeline Evento Pro (20 una tantum/evento), Google Calendar (20 una tantum/org, ORA dal catalogo), Generazione briefing (30, NUOVO: addebitato alla prima pubblicazione versione per evento, idempotency ai_briefing:{event_id}; org legacy esenti; dialog Pubblica mostra l'addebito). Nascosti finché non collegati: analisi, checklist, contenuti, immagini, automazioni, newsletter, WhatsApp, SMS.
