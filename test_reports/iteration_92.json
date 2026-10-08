@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 92 — Full backend+frontend verification of the new Azioni rapide, Marketplace catalog + checkout, Platform Marketplace admin, and 'Acquisto servizi Marketplace' permission. All 9 backend pytest cases pass (incl. coming_soon→400, SA purchasable without tech_ready→400, coming_soon forces purchasable=false, org admin stripe TEST checkout returns checkout_url, GET /marketplace/my excludes pending, collaborator w/o marketplace_purchase gets 403, catalog isolated by org_id implicitly via require_admin). Frontend: desktop sidebar order is Dashboard → Azioni rapide → Marketplace → Eventi… and all remaining items unchanged; mobile hamburger (390×844) shows the same order with Azioni rapide (Zap) + Marketplace (Store) always visible. Dashboard section renamed to 'To Do List' (verified H2 textContent). Azioni rapide page renders 13 quick-action cards for org admin incl. quick-action-invita, quick-action-assistenza, quick-action-marketplace. Marketplace page shows exactly 6 cards all with status 'Prossimamente' (sito-organizzazione, sito-evento, newsletter, whatsapp, contratti, magazzino); search 'newsletter' narrows to 1, Comunicazione category filter narrows to 2; detail dialog opens with mkt-detail-unavailable visible and 0 buy buttons. Platform Marketplace page at /piattaforma/marketplace renders mkt-admin-page with catalog tab showing 6 rows (mkt-admin-row-*) and Nuovo servizio button; purchases tab shows mkt-admin-purchases-empty. Profile tab 'Servizi aggiuntivi' (profile-tab-servizi) exists for org admin. Permissions editor opens via m-user-perms-btn-* with full set of perm-* testids including perm-marketplace-purchase-on and perm-marketplace-purchase-off, with the label 'Acquisto servizi Marketplace' present.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter92_marketplace.py",
+    "/app/test_reports/pytest/iter92.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "marketplace.py _can_purchase (line 94-96) correctly OR-chains org_role in (admin_org, superadmin), perm.admin, and perm.marketplace_purchase — matches spec. Collaborator w/o the flag → 403 verified by test.",
+    "marketplace.py _clean (line 243-254) enforces (purchasable && !tech_ready) → 400 AND coming_soon forces purchasable=false — both covered by backend tests.",
+    "marketplace.py checkout (line 158-161) uses mode='payment' + invoice_creation for one_time and mode='subscription' for monthly/yearly, success_url carries session_id for /marketplace/checkout-confirmation flow. Correct.",
+    "marketplace.py GET /marketplace/my (line 115-121) correctly filters out status=='pending'. Verified.",
+    "permissions.py default_permissions includes marketplace_purchase=False for both roles and normalize_permissions casts to bool. Good.",
+    "Layout.jsx ORG_NAV (line 42-55): Azioni rapide + Marketplace use perm:'*' so always visible to any authenticated org user (including collaborators). Good.",
+    "QuickActions.jsx (line 7-21): invite requires isOrgAdmin, assistenza & marketplace are always:true; CREATE actions filtered via can(user, sec, 'create'); per-plan gating relies on `can()` returning false when the section is blocked — spot-checked in code, matches spec.",
+    "Marketplace.jsx (line 54-59): mkt-detail-buy only rendered when !active && purchasable_now && canPurchase && price>0 && price_type!='usage'. Non-purchasable shows mkt-detail-unavailable. Spec compliant.",
+    "MarketplaceAdmin.jsx mkt-admin-tech toggle also forces purchasable=false when tech_ready goes false — defensive UI consistent with backend 400."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter92_marketplace.py"
+  ],
+  "success_rate": {"backend": "100% (9/9 passed)", "frontend": "100% — nav order, To Do List rename, Azioni rapide, Marketplace catalog+filters+detail, Platform marketplace, Profile Servizi aggiuntivi tab, Permissions editor toggle"},
+  "test_credentials": "Used provided creds: qa.eventi@crmeventqa.it / QaEvents2026! (org admin) and manara.michele.pro@gmail.com / CrmEvent2026! (super admin). A temporary TEST_mkt_collab@crmeventqa.it collaborator was created via direct Mongo write and deleted at teardown.",
+  "seed_data_creation": "Backend tests created a TEST_mkt_service_one_time marketplace service (available+tech_ready+purchasable, one_time €10), one pending marketplace_purchase, a TEST_coming_soon_svc, a TEST_ collaborator user+membership. All cleaned up at teardown (service hidden+coming_soon+!purchasable+!tech_ready, pending purchase retained is harmless since GET /my filters it; collaborator user+membership deleted; mongosh cleanup ran). PUT /api/account/billing was called on the QA org with TEST_ billing data (needed to pass billing_missing gate before Stripe checkout) — this did overwrite any pre-existing billing on qa.eventi; next tester should re-populate if needed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_iter92_marketplace.py — run with: REACT_APP_BACKEND_URL=<url> pytest backend/tests/test_iter92_marketplace.py -o addopts= -v. The collaborator fixture performs direct Mongo writes against test_database. QA org billing was overwritten with TEST_ data to pass Stripe checkout gate — restore via PUT /api/account/billing if needed. Pending marketplace_purchases from the TEST_ run were cleaned via mongosh (service_name regex ^TEST_). The 6 seeded services were NOT modified. Permissions dialog on utenti tab needs JS-click dispatch (page.evaluate) because Playwright's visibility heuristic falsely returns 0 for buttons rendered inside the table wrapper on desktop viewport — using el.click() in evaluate works."
+}

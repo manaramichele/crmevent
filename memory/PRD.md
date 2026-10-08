@@ -476,6 +476,11 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Rinnovo automatico Mantenimento: POST /api/cron/event-renewals (Bearer WEBHOOK_CRON_SECRET) + `.emergent/crons.yml` ogni giorno 03:00 UTC. Su Aruba serve crontab di sistema equivalente.
 - NB: il briefing NON è generato con AI (è costruito dai dati evento).
 
+## Azioni rapide + Marketplace — 2026-10-08 ✅ VERIFICATO (iter 92: backend 9/9, frontend OK)
+- Menu: Dashboard → Azioni rapide (/azioni-rapide, scorciatoie filtrate per piano e permessi "create") → Marketplace (/marketplace), poi le voci esistenti. "Cosa richiede attenzione" rinominata "To Do List" (resta in Dashboard).
+- `marketplace.py`: catalogo `marketplace_services` (6 servizi iniziali "Prossimamente", non acquistabili), acquisti `marketplace_purchases` per org/evento, checkout Stripe TEST (una tantum con fattura / mensile / annuale), attivazione solo con verifica su Stripe (webhook o conferma lato server), rinnovi, pagamenti falliti e annullamenti, fatture (forfettario, FIC LIVE tramite `_emit_saas_invoice`). Il pagamento a consumo e l'addebito a crediti sono solo configurabili. LIVE bloccato finché non si imposta MARKETPLACE_STRIPE_LIVE_ENABLED=1.
+- Nuovo permesso `marketplace_purchase` ("Acquisto servizi Marketplace"); Super Admin /piattaforma/marketplace (catalogo + acquisti); Profilo → "Servizi aggiuntivi".
+
 ## Home senza "GOLD" nella prova + pulsante prova nell'header — 2026-10-08 ✅ VERIFICATO (iter 91)
 - Home: testi della prova senza "GOLD" ("14 giorni di prova gratuita"), rimosso "Guarda la demo", CTA "Registrati gratis" → /registrati (PlansSection accetta la prop `claim`, usata solo in Home).
 - Header interno: `TrialButton.jsx` ("N giorni rimasti" / "N gg" su mobile, ambra negli ultimi 3 giorni, "Prova terminata"), popup con riepilogo BRONZE/SILVER/GOLD e "Scopri i piani" → /profilo?tab=abbonamento; dati da /api/saas/me (aggiornati al focus della scheda e ogni 15 minuti). Nascosto con abbonamento acquistato, per le org legacy e per il Super Admin. Su mobile durante la prova il pulsante Assistenza mostra solo l'icona. Il vecchio indicatore resta solo per "pagamento non riuscito".
