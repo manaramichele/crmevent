@@ -9,6 +9,7 @@ import {
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
+import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
 import ActivationGate from "@/components/ActivationGate";
 import WelcomeDemo from "@/components/WelcomeDemo";
@@ -390,6 +391,7 @@ export default function Layout({ children }) {
         <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 lg:px-6" data-testid="app-header">
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
+          {!isSuper && <TrialButton saas={user?.saas} />}
           <div className="flex-1 min-w-0" />
           {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
           {location.pathname !== "/app" && <button type="button" className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="header-search-button" title="Cerca" aria-label="Cerca"><Search className="w-5 h-5" /></button>}
@@ -404,6 +406,8 @@ export default function Layout({ children }) {
           </NavLink>)}
           {!isSuper && <div className="hidden sm:block"><TutorialLauncher /></div>}
           {!isSuper && <div className="shrink-0"><NewsButton /></div>}
+          <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
+            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>
           <div className="shrink-0"><Notifications /></div>
           <div className="relative shrink-0">
             <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} aria-label="Profilo" aria-expanded={menuOpen} className="flex items-center gap-2 h-10 min-w-10 px-1 sm:px-2 rounded-lg hover:bg-slate-100 transition-colors">
@@ -452,7 +456,7 @@ export default function Layout({ children }) {
           ) : children}
         </main>
       </div>
-      <SupportChat />
+      <SupportChat fab={false} />
       {!user?.saas?.enabled && <ActivationGate />}
       <WelcomeDemo />
     </div>

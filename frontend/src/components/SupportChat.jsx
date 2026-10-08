@@ -14,7 +14,7 @@ const CTX = {
   "/app": "Area personale — I miei eventi",
 };
 
-export default function SupportChat({ bottomOffset = false }) {
+export default function SupportChat({ bottomOffset = false, fab = true }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);
@@ -26,6 +26,11 @@ export default function SupportChat({ bottomOffset = false }) {
   const pageContext = location.pathname.startsWith("/evento/") ? "Area personale — Dettaglio evento" : (CTX[location.pathname] || "CRMEvent");
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
+  useEffect(() => {
+    const h = () => setOpen(true);
+    window.addEventListener("support-chat:open", h);
+    return () => window.removeEventListener("support-chat:open", h);
+  }, []);
 
   const send = async () => {
     const question = q.trim();
@@ -63,7 +68,7 @@ export default function SupportChat({ bottomOffset = false }) {
 
   return (
     <>
-      {!open && (
+      {!open && fab && (
         <button onClick={() => setOpen(true)} data-testid="support-fab" aria-label="Apri assistente CRMEvent"
           className={`fixed ${bottomOffset ? "bottom-20" : "bottom-5"} right-5 z-50 w-12 h-12 sm:w-[52px] sm:h-[52px] rounded-full bg-slate-900 text-white shadow-xl hover:bg-slate-800 transition-all hover:scale-105 active:scale-95 flex items-center justify-center`}>
           <Sparkles className="w-6 h-6 text-tiffany" />
