@@ -2110,20 +2110,21 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
     if _ev_ids(admin) is not None and not evento_id:
         ev_q["id"] = {"$in": _ev_ids(admin)}
         rel_q.update(_ev_scope(admin))
-    events = await db.events.find(ev_q, {"_id": 0}).to_list(5000)
-    companies = await db.companies.find(oq(admin), {"_id": 0}).to_list(5000) if _can(admin, "aziende") else []
-    persons = await db.persons.find(oq(admin), {"_id": 0}).to_list(5000) if (_can(admin, "anagrafiche") or _can(admin, "staff")) else []
-    deals = await db.deals.find(rel_q, {"_id": 0}).to_list(5000) if _can(admin, "sponsor") else []
-    staff = await db.staff.find(rel_q, {"_id": 0}).to_list(5000)
-    teams = await db.teams.find(rel_q, {"_id": 0}).to_list(5000)
-    shifts = await db.shifts.find(rel_q, {"_id": 0}).to_list(5000)
+    can = {k: _can(admin, k) for k in ("eventi", "aziende", "anagrafiche", "staff", "sponsor", "attivita", "followup", "pipeline", "ospitalita", "briefing")}
+    events = await db.events.find(ev_q, {"_id": 0}).to_list(5000) if can["eventi"] else []
+    companies = await db.companies.find(oq(admin), {"_id": 0}).to_list(5000) if can["aziende"] else []
+    persons = await db.persons.find(oq(admin), {"_id": 0}).to_list(5000) if can["anagrafiche"] else []
+    deals = await db.deals.find(rel_q, {"_id": 0}).to_list(5000) if can["sponsor"] else []
+    staff = await db.staff.find(rel_q, {"_id": 0}).to_list(5000) if can["staff"] else []
+    teams = await db.teams.find(rel_q, {"_id": 0}).to_list(5000) if can["staff"] else []
+    shifts = await db.shifts.find(rel_q, {"_id": 0}).to_list(5000) if can["staff"] else []
     if _team_ids(admin) is not None:
         tids = set(_team_ids(admin))
         staff = [s for s in staff if s.get("team_id") in tids]
         teams = [t for t in teams if t["id"] in tids]
         shifts = [s for s in shifts if s.get("team_id") in tids]
-    activities = await db.activities.find(rel_q, {"_id": 0}).to_list(5000)
-    followups = await db.followups.find(rel_q, {"_id": 0}).to_list(5000)
+    activities = await db.activities.find(rel_q, {"_id": 0}).to_list(5000) if can["attivita"] else []
+    followups = await db.followups.find(rel_q, {"_id": 0}).to_list(5000) if can["followup"] else []
     today = datetime.now(timezone.utc).date().isoformat()
 
     def fut(e):
@@ -2140,7 +2141,8 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
     dacon = {"da_contattare", "disponibilita_richiesta", "disponibile", "da_riconfermare"}
     rinuncia = {"rinunciato", "non_disponibile"}
 
-    return {
+    out = {
+        "sections": can,
         "eventi": {"attivi": len([e for e in events if e.get("stato") == "attivo"]),
                    "prossimi": len([e for e in events if fut(e) and e.get("stato") != "concluso"]),
                    "conclusi": len([e for e in events if e.get("stato") == "concluso"]), "totali": len(events)},
@@ -2171,6 +2173,29 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
         "tipo_chart": [{"tipo": k, "count": len([d for d in deals if d.get("tipo") == k])}
                        for k in sorted(set(d.get("tipo", "sponsor") for d in deals))] if deals else [],
     }
+    # Blocchi di sezioni non autorizzate: rimossi dalla risposta (non solo nascosti in UI)
+    if not can["eventi"]:
+        out.pop("eventi")
+    if not (can["aziende"] or can["anagrafiche"]):
+        out.pop("crm")
+    elif not can["aziende"]:
+        out["crm"] = {"persone": out["crm"]["persone"], "nuovi_contatti": out["crm"]["nuovi_contatti"]}
+    elif not can["anagrafiche"]:
+        out["crm"] = {"aziende": out["crm"]["aziende"], "prospect": out["crm"]["prospect"]}
+    if not can["sponsor"]:
+        for k in ("commerciale", "pipeline_chart", "tipo_chart"):
+            out.pop(k)
+    if not (can["attivita"] or can["followup"]):
+        out.pop("attivita")
+    else:
+        a = out["attivita"]
+        if not can["followup"]:
+            a.pop("followup_oggi"); a.pop("followup_scaduti")
+        if not can["attivita"]:
+            a.pop("prossime")
+    if not can["staff"]:
+        out.pop("staff")
+    return out
 
 
 @api.get("/notifications")
