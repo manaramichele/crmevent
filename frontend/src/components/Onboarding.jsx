@@ -124,6 +124,7 @@ function EventPicker({ events, value, onChange, testid }) {
 
 // ---- Header button + welcome + index drawer ----
 export function TutorialLauncher() {
+  const { user } = useAuth();
   const { info, patch, isSuper } = useTutorial();
   const [open, setOpen] = useState(false);
   const [welcome, setWelcome] = useState(false);
