@@ -1,5 +1,6 @@
 """Demo CRMEvent post-registrazione: disponibilità Super Admin → Demo, prenotazione 30 min con Google Meet (separata dall'Assistenza)."""
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -7,9 +8,9 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from pymongo.errors import DuplicateKeyError
 
 import demo_booking
+import email_utils
 import gcal_utils
 import video_support
 
@@ -31,12 +32,19 @@ class ConfigIn(BaseModel):
     horizon_days: int = 30
 
 
-class BookIn(BaseModel):
+class RequestIn(BaseModel):
     slot_key: str
     nome: str
-    cognome: Optional[str] = None
     telefono: Optional[str] = None
     organizzazione: Optional[str] = None
+    note: Optional[str] = None
+
+
+class StatusIn(BaseModel):
+    status: str
+
+
+REQ_STATUS = {"nuova", "da_confermare", "confermata", "completata", "annullata"}
 
 
 def _now():
@@ -47,7 +55,7 @@ def _iso(d):
     return d.astimezone(timezone.utc).isoformat()
 
 
-def build_router(db, require_admin, require_superadmin, record_audit, app_url: str) -> APIRouter:
+def build_router(db, require_member, require_superadmin, record_audit, app_url: str) -> APIRouter:
     r = APIRouter(prefix="/api")
     st = {"idx": False}
 
@@ -95,55 +103,74 @@ def build_router(db, require_admin, require_superadmin, record_audit, app_url: s
         return sorted({s["slot_key"]: s for s in out}.values(), key=lambda s: s["slot_key"])
 
     @r.get("/demo/welcome")
-    async def welcome_info(user: dict = Depends(require_admin)):
+    async def welcome_info(user: dict = Depends(require_member)):
         u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "welcome_demo": 1})
-        lead = await db.leads.find_one({"user_id": user["user_id"], "demo_status": {"$in": ["confermata", "riprogrammata"]}}, {"_id": 0, "demo_slot": 1, "demo_meet_link": 1})
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "nome": 1})
-        return {"state": (u or {}).get("welcome_demo"), "booking": lead, "duration_min": DURATION_MIN,
-                "prefill": {"nome": user.get("nome") or (user.get("name") or "").split(" ")[0], "cognome": user.get("cognome") or "",
-                            "email": user.get("email"), "telefono": user.get("telefono") or "", "organizzazione": (org or {}).get("nome") or ""}}
+        full = user.get("name") or " ".join(x for x in (user.get("nome"), user.get("cognome")) if x)
+        return {"state": (u or {}).get("welcome_demo"), "duration_min": DURATION_MIN,
+                "prefill": {"nome": full or "", "email": user.get("email"), "telefono": user.get("telefono") or "",
+                            "organizzazione": (org or {}).get("nome") or "", "note": ""}}
 
     @r.get("/demo/slots")
-    async def get_slots(user: dict = Depends(require_admin)):
+    async def get_slots(user: dict = Depends(require_member)):
         return {"slots": await slots()}
 
     @r.post("/demo/welcome/dismiss")
-    async def dismiss(user: dict = Depends(require_admin)):
-        await db.users.update_one({"user_id": user["user_id"], "welcome_demo": "pending"}, {"$set": {"welcome_demo": "dismissed"}})
+    async def dismiss(user: dict = Depends(require_member)):
+        await db.users.update_one({"user_id": user["user_id"], "welcome_demo": "pending"},
+                                  {"$set": {"welcome_demo": "dismissed", "welcome_demo_seen_at": _iso(_now())}})
         return {"ok": True}
 
-    @r.post("/demo/welcome/book")
-    async def book(body: BookIn, user: dict = Depends(require_admin)):
-        await _idx()
+    @r.post("/demo/requests")
+    async def create_request(body: RequestIn, user: dict = Depends(require_member)):
+        if not body.nome.strip():
+            raise HTTPException(status_code=400, detail="Inserisci nome e cognome")
         if body.slot_key not in {s["slot_key"] for s in await slots()}:
-            raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile")
-        email = (user.get("email") or "").lower()
-        if await db.leads.find_one({"email": email, "demo_status": {"$in": ["confermata", "riprogrammata"]}, "demo_slot": {"$gt": datetime.now(ROME).strftime("%Y-%m-%dT%H:%M")}}):
-            raise HTTPException(status_code=400, detail="Hai già una demo prenotata")
-        lid = (await db.leads.find_one({"email": email}, {"_id": 0, "id": 1}) or {}).get("id") or uuid.uuid4().hex
+            raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile, scegline un altro")
+        now, email = _iso(_now()), (user.get("email") or "").lower()
+        nome, _, cognome = body.nome.strip().partition(" ")
+        req = {"id": uuid.uuid4().hex, "user_id": user["user_id"], "org_id": user["org_id"], "nome": body.nome.strip(), "email": email,
+               "telefono": (body.telefono or "").strip(), "organizzazione": (body.organizzazione or "").strip(),
+               "preferred_slot": body.slot_key, "note": (body.note or "").strip()[:2000], "status": "nuova",
+               "created_at": now, "updated_at": now}
+        await db.demo_requests.insert_one(dict(req))
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"welcome_demo": "requested", "welcome_demo_seen_at": now}})
+        prev = await db.leads.find_one({"email": email}, {"_id": 0})
+        lead = {**(prev or {"id": uuid.uuid4().hex, "created_at": now, "source": "richiesta_demo_app", "stato": "nuovo", "note": "",
+                            "funnel_status": "demo_requested", "requested_at": now}),
+                "nome": nome, "cognome": cognome, "email": email, "telefono": req["telefono"], "organizzazione": req["organizzazione"],
+                "user_id": user["user_id"], "org_id": user["org_id"], "demo_slot": body.slot_key, "demo_status": "da_confermare",
+                "demo_source": "richiesta_demo_app", "demo_request_id": req["id"], "updated_at": now}
+        await db.leads.update_one({"id": lead["id"]}, {"$set": lead}, upsert=True)
         try:
-            await db.demo_slot_locks.insert_one({"slot": body.slot_key, "lead_id": lid, "created_at": _iso(_now())})
-        except DuplicateKeyError:
-            raise HTTPException(status_code=409, detail="L'orario selezionato è appena stato prenotato")
-        prev = await db.leads.find_one({"id": lid}, {"_id": 0})
-        fields = {"nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "telefono": (body.telefono or "").strip(),
-                  "organizzazione": (body.organizzazione or "").strip(), "email": email, "user_id": user["user_id"], "org_id": user["org_id"],
-                  "demo_slot": body.slot_key, "demo_status": "confermata", "demo_source": "benvenuto_registrazione", "updated_at": _iso(_now())}
-        lead = {**(prev or {"id": lid, "created_at": _iso(_now()), "source": "benvenuto_registrazione", "funnel_status": "trial_started"}), **fields,
-                "demo_event_id": None, "demo_meet_link": None}
-        meet = await demo_booking.meet_for_demo(db, lead, "create")
-        if not meet.get("demo_meet_link"):
-            await db.demo_slot_locks.delete_one({"slot": body.slot_key, "lead_id": lid})
-            raise HTTPException(status_code=502, detail="Non è stato possibile creare l'appuntamento Google Meet. Riprova più tardi o scegli un altro orario.")
-        lead.update(meet)
-        await db.leads.update_one({"id": lid}, {"$set": lead}, upsert=True)
-        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"welcome_demo": "booked"}})
-        try:
-            await demo_booking.send_operational(lead, "confermata", app_url)
+            await demo_booking.sync_lead(db, lead)
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"demo email failed: {type(e).__name__}")
-        await record_audit(user, "demo_welcome_booked", org_id=user["org_id"], detail=demo_booking.fmt_slot(body.slot_key), meta={"lead_id": lid})
-        return {"ok": True, "slot_key": body.slot_key, "meet_link": lead["demo_meet_link"], "simulated": bool(lead.get("demo_meet_simulated"))}
+            logger.warning(f"demo request brevo sync failed: {type(e).__name__}")
+        await demo_booking.send_operational(lead, "ricevuta", app_url)
+        try:
+            await email_utils.send_email(to=os.environ["ADMIN_EMAIL"], subject="Nuova richiesta demo CRMEvent", html=email_utils.link_email(
+                name="Michele", intro=f"Nuova richiesta demo da {req['nome']} ({req['organizzazione'] or '-'}) — email {email}, tel {req['telefono'] or '-'}. "
+                f"Preferenza: {demo_booking.fmt_slot(body.slot_key)}. Note: {req['note'] or '-'}.",
+                cta_label="Apri Richieste demo", url=f"{app_url}/piattaforma/richieste-demo", footer_note="Gestisci la richiesta nell'area Super Admin."))
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"demo request admin notify failed: {type(e).__name__}")
+        await record_audit(user, "demo_request_created", org_id=user["org_id"], detail=demo_booking.fmt_slot(body.slot_key), meta={"request_id": req["id"]})
+        return {"ok": True, "id": req["id"], "preferred_slot": body.slot_key}
+
+    @r.get("/platform/demo/requests")
+    async def list_requests(status: Optional[str] = None, admin: dict = Depends(require_superadmin)):
+        q = {"status": status} if status in REQ_STATUS else {}
+        return {"items": await db.demo_requests.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)}
+
+    @r.patch("/platform/demo/requests/{rid}")
+    async def set_status(rid: str, body: StatusIn, admin: dict = Depends(require_superadmin)):
+        if body.status not in REQ_STATUS:
+            raise HTTPException(status_code=400, detail="Stato non valido")
+        res = await db.demo_requests.update_one({"id": rid}, {"$set": {"status": body.status, "updated_at": _iso(_now())}})
+        if not res.matched_count:
+            raise HTTPException(status_code=404, detail="Richiesta non trovata")
+        await record_audit(admin, "demo_request_status", detail=body.status, meta={"request_id": rid})
+        return await db.demo_requests.find_one({"id": rid}, {"_id": 0})
 
     @r.get("/platform/demo/config")
     async def get_cfg(admin: dict = Depends(require_superadmin)):

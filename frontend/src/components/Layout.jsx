@@ -69,6 +69,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
   { to: "/piattaforma/demo", label: "Demo", icon: CalendarDays, id: "piattaforma-demo" },
+  { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
   { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },

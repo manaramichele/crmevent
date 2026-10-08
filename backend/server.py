@@ -13151,7 +13151,12 @@ SAAS.update(subscriptions.build(db, {
     "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET}))
 app.include_router(api)
 app.include_router(SAAS["router"])
-app.include_router(demo_slots.build_router(db, require_admin, require_superadmin, record_audit, APP_URL))
+async def require_org_member(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    org_id, org_role = await _resolve_active_org(request, user)
+    return {**user, "org_id": org_id, "org_role": org_role}
+
+
+app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
     "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing, "record_invoice": _record_invoice,
