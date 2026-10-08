@@ -87,6 +87,25 @@ def build_event_body(*, summary, description, location, date_start, date_end, ti
     return body
 
 
+def create_meet_event(tokens: dict, calendar_id: str, body: dict, request_id: str):
+    body = {**body, "conferenceData": {"createRequest": {"requestId": request_id, "conferenceSolutionKey": {"type": "hangoutsMeet"}}}}
+    return service_for(tokens).events().insert(calendarId=calendar_id, body=body, conferenceDataVersion=1, sendUpdates="none").execute()
+
+
+def patch_event(tokens: dict, calendar_id: str, event_id: str, body: dict):
+    return service_for(tokens).events().patch(calendarId=calendar_id, eventId=event_id, body=body, sendUpdates="none").execute()
+
+
+def delete_event(tokens: dict, calendar_id: str, event_id: str):
+    return service_for(tokens).events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="none").execute()
+
+
+def freebusy(tokens: dict, calendar_id: str, time_min: str, time_max: str) -> list:
+    """Solo intervalli occupati [(start, end)], senza dettagli degli appuntamenti."""
+    res = service_for(tokens).freebusy().query(body={"timeMin": time_min, "timeMax": time_max, "items": [{"id": calendar_id}]}).execute()
+    return [(b["start"], b["end"]) for b in (res.get("calendars", {}).get(calendar_id, {}).get("busy") or [])]
+
+
 def upsert_event(tokens: dict, calendar_id: str, body: dict, google_event_id: str | None):
     svc = service_for(tokens)
     if google_event_id:

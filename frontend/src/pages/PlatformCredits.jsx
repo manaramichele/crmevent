@@ -42,7 +42,14 @@ function ServicesTab() {
           const v = (f) => (e[f] !== undefined ? e[f] : s[f]);
           return (
             <div key={s.key} className="py-4 grid grid-cols-1 md:grid-cols-[220px_1fr_150px] gap-3 md:gap-4 md:items-start" data-testid={`svc-row-${s.key}`}>
-              <div className="font-semibold text-slate-900" data-testid={`svc-name-${s.key}`}>{s.name}</div>
+              <div className="font-semibold text-slate-900" data-testid={`svc-name-${s.key}`}>{s.name}
+                {s.key === "video_support" && (
+                  <label className="mt-2 flex items-center gap-2 text-xs font-normal text-slate-600">
+                    <input type="checkbox" className="accent-tiffany w-4 h-4" checked={!!v("active")} onChange={(ev) => { set(s.key, "active", ev.target.checked); set(s.key, "consumo_active", ev.target.checked); }} data-testid="svc-active-video_support" />
+                    Prenotabile dagli organizzatori
+                  </label>
+                )}
+              </div>
               <div>
                 <label className="md:hidden text-[11px] uppercase tracking-wide text-slate-400">Descrizione completa</label>
                 <textarea rows={4} value={v("description") ?? ""} onChange={(ev) => set(s.key, "description", ev.target.value)} data-testid={`svc-desc-${s.key}`}

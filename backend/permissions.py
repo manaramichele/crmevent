@@ -56,6 +56,7 @@ METHOD_ACTION = {"GET": "view", "HEAD": "view", "POST": "create", "PUT": "edit",
 # (prefisso del path template senza /api, sezioni "a|b" | "*" (qualsiasi membro) | None (solo Admin), azione forzata)
 # Il primo prefisso che corrisponde vince. Path non mappati => solo Admin Organizzatore (fail-closed).
 ROUTE_RULES = [
+    ("/video-support", "*", None),
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),
     ("/events/{event_id}/upgrade", None, None),

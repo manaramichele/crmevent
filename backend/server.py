@@ -34,6 +34,7 @@ import email_utils
 import permissions as P
 import storage_utils
 import gcal_utils
+import video_support
 import brevo_funnel
 import social_ai
 import social_creative
@@ -6148,6 +6149,10 @@ AUDIT_ACTION_LABELS = {
     "impersonation_ended": "Termine accesso come utente",
     "impersonation_expired": "Scadenza accesso come utente",
     "impersonation_action": "Operazione in modalità assistenza",
+    "video_support_booked": "Prenotazione assistenza video",
+    "video_support_cancelled": "Annullamento assistenza video",
+    "video_support_rescheduled": "Riprogrammazione assistenza video",
+    "video_support_config": "Disponibilità assistenza video",
     "org_switch": "Cambio organizzazione",
     "org_created": "Creazione organizzazione",
     "org_updated": "Modifica organizzazione",
@@ -10134,6 +10139,7 @@ CREDIT_SERVICES_SEED = [
     ("automation_run", "Automazioni", "automation", "flat", "esecuzione"),
     ("newsletter_email", "Newsletter / email", "communication", "per_unit", "destinatario"),
     ("google_calendar", "Google Calendar", "integration", None, None),
+    ("video_support", "Assistenza in videochiamata", "support", "flat", "sessione"),
     ("whatsapp_send", "WhatsApp", "communication", "per_unit", "messaggio"),
     ("sms_send", "SMS (futuro)", "communication", "per_unit", "messaggio"),
     ("event_active_period", "Attivazione evento", "event", "flat", "attivazione"),
@@ -10161,7 +10167,7 @@ _credits_indexes_done = False
 
 # Servizi realmente collegati a un addebito nel codice (gli altri restano nascosti nel catalogo Super Admin).
 LINKED_CREDIT_SERVICES = {"ai_assistant", "ai_briefing", "event_activation", "event_maintenance",
-                          "event_pipeline_pro", "google_calendar"}
+                          "event_pipeline_pro", "google_calendar", "video_support"}
 # Descrizioni informative (verificate sul codice di addebito). Applicate una sola volta: poi modificabili dal Super Admin.
 CREDIT_SERVICE_DESCRIPTIONS = {
     "ai_assistant": "Risponde con l'AI alle domande sull'uso di CRMEvent e sui dati della tua organizzazione. Il costo viene scalato per ogni domanda che riceve una risposta utile. Se l'assistente non sa rispondere, oppure la richiesta è un suggerimento di nuova funzione, non viene scalato nulla.",
@@ -10169,6 +10175,7 @@ CREDIT_SERVICE_DESCRIPTIONS = {
     "event_activation": "Rende operativo un evento: staff, team, turni, ospitalità, briefing e tutte le funzioni operative. Il costo viene scalato una sola volta per evento, al momento dell'attivazione, e comprende il primo mese di utilizzo. Dal mese successivo si applica il Mantenimento evento.",
     "event_maintenance": "Mantiene operativo un evento già attivato. Il costo viene scalato in automatico ogni mese di calendario a partire dalla data di attivazione, fino alla data dell'evento: il mese che arriva fino all'evento non viene addebitato di nuovo. Se i crediti non sono sufficienti l'evento viene sospeso; riattivandolo si paga un solo mese di mantenimento e il ciclo riparte.",
     "event_pipeline_pro": "Attiva per un evento la Pipeline di preparazione: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni e tutte le attività da svolgere prima dell'evento. Il costo viene scalato una sola volta per evento, anche quando la Pipeline viene copiata da un'edizione precedente. Dopo l'attivazione modelli, attività e aggiornamenti dello stesso evento sono compresi.",
+    "video_support": "Sessione di assistenza dedicata di 30 minuti tramite Google Meet, con possibilità di condividere lo schermo per ricevere supporto nell'utilizzo di CRMEvent.",
     "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare Attività e Follow-up con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
 }
 
@@ -10427,7 +10434,9 @@ async def credits_service_costs(user: dict = Depends(require_admin)):
     """Riepilogo costi per gli organizzatori: stessi servizi/descrizioni/costi del catalogo Super Admin."""
     await _ensure_credits_setup()
     rows = await db.credit_services.find({"key": {"$in": list(LINKED_CREDIT_SERVICES)}, "visible": {"$ne": False}},
-                                         {"_id": 0, "key": 1, "name": 1, "description": 1, "unit_cost": 1}).to_list(100)
+                                         {"_id": 0, "key": 1, "name": 1, "description": 1, "unit_cost": 1, "active": 1, "consumo_active": 1}).to_list(100)
+    # L'assistenza in videochiamata compare solo quando il Super Admin la attiva
+    rows = [r for r in rows if r["key"] != "video_support" or (r.get("active") and r.get("consumo_active") and r.get("unit_cost") is not None)]
     rows.sort(key=lambda r: (r.get("name") or "").lower())
     return {"services": rows}
 
@@ -12781,6 +12790,9 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
 
 app.include_router(api)
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
+app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
+    "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,
+    "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}))
 app.include_router(brevo_org_lists.build_router(db, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],

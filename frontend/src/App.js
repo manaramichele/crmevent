@@ -24,6 +24,8 @@ import PlatformCredits from "@/pages/PlatformCredits";
 import PlatformMessages from "@/pages/PlatformMessages";
 import PlatformNews from "@/pages/PlatformNews";
 import PlatformUsers from "@/pages/PlatformUsers";
+import Assistenza from "@/pages/Assistenza";
+import PlatformVideoSupport from "@/pages/PlatformVideoSupport";
 import SupportBanner from "@/components/SupportBanner";
 import News from "@/pages/News";
 import PipelineTemplates from "@/pages/PipelineTemplates";
@@ -146,6 +148,9 @@ function Shell() {
         <Route path="/permessi" element={<Navigate to="/profilo" replace />} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/utenti" element={<Protected><SuperAdminOnly><PlatformUsers /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/assistenza-video" element={<Protected><SuperAdminOnly><PlatformVideoSupport /></SuperAdminOnly></Protected>} />
+        <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
+        <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />
