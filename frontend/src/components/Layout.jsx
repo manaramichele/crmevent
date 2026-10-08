@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, Headset, Lock, CalendarDays, Building2, Users, UserCog, Handshake,
+  LayoutDashboard, Headset, Lock, Zap, Store, CalendarDays, Building2, Users, UserCog, Handshake,
   ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
@@ -41,6 +41,8 @@ function NewsButton() {
 
 const ORG_NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard", perm: "dashboard" },
+  { to: "/azioni-rapide", label: "Azioni rapide", icon: Zap, id: "azioni-rapide", perm: "*" },
+  { to: "/marketplace", label: "Marketplace", icon: Store, id: "marketplace", perm: "*" },
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi", perm: "eventi" },
   { to: "/staff-volontari", label: "Staff / Volontari", icon: UserCog, id: "staff-volontari", perm: "staff" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende", perm: "aziende" },
@@ -55,6 +57,7 @@ const ORG_NAV = [
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
 const SUPER_ORG_NAV = ORG_NAV;
 const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
+  if (n.perm === "*") return [n];
   if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...n, locked: true }];
   return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [n] : [];
 });
@@ -67,6 +70,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
   { to: "/piattaforma/demo", label: "Demo", icon: CalendarDays, id: "piattaforma-demo" },
+  { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },

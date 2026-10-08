@@ -15,7 +15,7 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", route: () => "/app", steps: [
     { t: "La tua Dashboard", b: "È il punto di partenza: riepiloghi di eventi, contatti, trattative, Staff / Volontari e scadenze.", s: [T("kpi-eventi-attivi")] },
     { t: "Filtra per evento", b: "Con questo selettore scegli l'evento da analizzare: tutti i riepiloghi si aggiornano sull'evento scelto.", s: [T("dashboard-event-filter")] },
-    { t: "Cosa richiede attenzione", b: "Qui trovi le attività in ritardo o critiche della Checklist Evento e i turni ancora scoperti.", s: [T("dashboard-attention"), T("kpi-turni-scoperti")] },
+    { t: "To Do List", b: "Qui trovi le attività in ritardo o critiche della Checklist Evento e i turni ancora scoperti.", s: [T("dashboard-attention"), T("kpi-turni-scoperti")] },
   ]},
   { key: "eventi", label: "Eventi", route: () => "/eventi", steps: [
     { t: "Crea e gestisci gli eventi", b: "Con «Aggiungi» crei un nuovo evento (nome, tipologia, date, logo); dall'elenco gestisci quelli esistenti.", s: [T("add-event-button")] },

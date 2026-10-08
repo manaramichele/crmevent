@@ -39,6 +39,7 @@ import subscriptions
 import pipeline_seed_sports
 import demo_booking
 import demo_slots
+import marketplace
 import brevo_funnel
 import social_ai
 import social_creative
@@ -242,6 +243,7 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
 
 
 SAAS: dict = {}
+MKT: dict = {}
 
 
 async def _enforce_plan(request: Request, org_id: str, org_role: str) -> None:
@@ -292,6 +294,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     team_ids = list(led) if via_tl else await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"), led)
     perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
             "teams": eff.get("teams") or {}, "send_invites": eff.get("send_invites", False),
+            "marketplace_purchase": eff.get("marketplace_purchase", False),
             "team_leader": eff.get("team_leader") or {}, "led_team_ids": led, "via_tl": via_tl}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
@@ -3920,6 +3923,7 @@ class PermUpdateIn(BaseModel):
     events: Optional[Any] = None
     teams: Optional[dict] = None
     send_invites: Optional[bool] = None
+    marketplace_purchase: Optional[bool] = None
     team_leader: Optional[dict] = None
     persona_id: Optional[str] = None  # "" = scollega
     reset: bool = False
@@ -3936,6 +3940,7 @@ def _perm_summary(role: str, perm: dict) -> str:
     tms = {"all": "tutti i Team", "leader": "solo Team di cui è Team Leader"}.get(tp.get("scope"), f"{len(tp.get('ids') or [])} Team selezionati + Team di cui è leader")
     tl = perm.get("team_leader") or {}
     inv = ("inviti email: sì" if perm.get("send_invites") else "inviti email: no") + \
+        (" · acquisti Marketplace: sì" if perm.get("marketplace_purchase") else "") + \
         f" · Team Leader: componenti {'modifica' if tl.get('edit_members') else 'sola lettura'}, turni {'sì' if tl.get('manage_shifts') else 'no'}"
     return f"{P.ROLES.get(role, role)} · {evs} · {tms} · {inv} · " + ("; ".join(parts) or "nessuna sezione")
 
@@ -3985,12 +3990,13 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
         await _guard_last_admin(org, target_id)
     if new_role == "admin_org" or body.reset:
         new_perm = {}
-    elif any(x is not None for x in (body.sections, body.events, body.teams, body.send_invites, body.team_leader)):
+    elif any(x is not None for x in (body.sections, body.events, body.teams, body.send_invites, body.marketplace_purchase, body.team_leader)):
         cur = P.effective({**m, "role": new_role})
         raw = {"sections": body.sections if body.sections is not None else cur["sections"],
                "events": body.events if body.events is not None else cur["events"],
                "teams": body.teams if body.teams is not None else cur.get("teams"),
                "send_invites": body.send_invites if body.send_invites is not None else cur.get("send_invites", False),
+               "marketplace_purchase": body.marketplace_purchase if body.marketplace_purchase is not None else cur.get("marketplace_purchase", False),
                "team_leader": body.team_leader if body.team_leader is not None else cur.get("team_leader")}
         new_perm = P.normalize_permissions(raw, new_role)
         if new_perm["teams"]["ids"]:
@@ -6708,7 +6714,7 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Firma webhook non valida")
     t, obj = event["type"], event["data"]["object"]
-    if await SAAS["handle_webhook"](t, obj):
+    if await SAAS["handle_webhook"](t, obj) or await MKT["handle_webhook"](t, obj):
         return {"received": True}
     if t == "customer.subscription.deleted":
         await db.organizations.update_one({"subscription.stripe_subscription_id": obj["id"]},
@@ -7055,8 +7061,8 @@ async def _fic_vat_forfettario(company_id: str, token: str) -> Optional[int]:
 
 async def _emit_saas_invoice(inv_id: str):
     """Fattura reale abbonamento (FIC LIVE): forfettario N2.2, sezionale dedicato, invio SDI. Idempotente con tentativi."""
-    inv = await db.invoices.find_one({"id": inv_id, "kind": "saas_subscription"}, {"_id": 0})
-    if not inv or inv.get("is_test") or inv.get("payment_status") != "paid" or FIC_MODE != "live":
+    inv = await db.invoices.find_one({"id": inv_id, "kind": {"$in": ["saas_subscription", "marketplace"]}}, {"_id": 0})
+    if not inv or inv.get("is_test") or inv.get("payment_status") != "paid" or FIC_MODE != "live" or inv.get("fic_auto") is False:
         return
     if inv.get("fic_stato_sdi") == "inviato":
         return
@@ -13144,6 +13150,11 @@ SAAS.update(subscriptions.build(db, {
 app.include_router(api)
 app.include_router(SAAS["router"])
 app.include_router(demo_slots.build_router(db, require_admin, require_superadmin, record_audit, APP_URL))
+MKT.update(marketplace.build(db, {
+    "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
+    "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing, "record_invoice": _record_invoice,
+    "emit_invoice": _emit_saas_invoice, "stripe_mode": STRIPE_MODE}))
+app.include_router(MKT["router"])
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
     "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,

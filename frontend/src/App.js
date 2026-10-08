@@ -57,6 +57,9 @@ import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import PlanUpgrade from "@/components/PlanUpgrade";
 import SaasAdmin from "@/pages/SaasAdmin";
 import PlatformDemo from "@/pages/PlatformDemo";
+import QuickActions from "@/pages/QuickActions";
+import Marketplace from "@/pages/Marketplace";
+import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
 const isSuper = (u) => u && u.role === "superadmin";
@@ -153,6 +156,9 @@ function Shell() {
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/utenti" element={<Protected><SuperAdminOnly><PlatformUsers /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/assistenza-video" element={<Protected><SuperAdminOnly><PlatformVideoSupport /></SuperAdminOnly></Protected>} />
+        <Route path="/azioni-rapide" element={<Protected><QuickActions /></Protected>} />
+        <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
+        <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
