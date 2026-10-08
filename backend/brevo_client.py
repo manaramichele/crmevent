@@ -96,6 +96,9 @@ class BrevoClient:
         page = await self._req("GET", "/contacts/folders", params={"limit": limit, "offset": 0})
         return (page or {}).get("folders", [])
 
+    async def create_folder(self, name):
+        return await self._req("POST", "/contacts/folders", json={"name": name})
+
     async def get_contact(self, email):
         """Returns the contact dict, or None on 404 (not a contact yet)."""
         ident = quote(email, safe="")

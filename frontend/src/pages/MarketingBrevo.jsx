@@ -1,5 +1,6 @@
 import { AvailabilityEmailPanel } from "@/components/AvailabilityEmailPanel";
 import { RegisteredUsersPanel } from "@/components/RegisteredUsersPanel";
+import { OrgListsPanel } from "@/components/OrgListsPanel";
 import { MailCheck } from "lucide-react";
 
 export default function MarketingBrevo() {
@@ -11,6 +12,7 @@ export default function MarketingBrevo() {
         <p className="text-slate-500 text-sm mt-1">Utenti registrati e template per la raccolta disponibilità · gestione centralizzata riservata al Super Admin.</p>
       </div>
       <RegisteredUsersPanel />
+      <OrgListsPanel />
       <AvailabilityEmailPanel />
     </div>
   );

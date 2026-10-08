@@ -367,6 +367,13 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Liste Brevo per organizzazione (liste esistenti preservate) — 2026-10-08 ✅ VERIFICATO (iter 76, 10/10 + frontend)
+- Liste esistenti INVARIATE: CRMEvent · Lead (+Funnel Demo), CRMEvent · Utenti registrati, CRMEvent · Disponibilità eventi (ha già attributo ORGANIZZAZIONE), CRMEvent – Prospect.
+- Nuove liste per (org_id, categoria): {OrgSlug}_Staff/_Collaboratori/_Utenti_invitati/_Volontari/_Referenti_Aziendali in cartella "CRMEvent · Organizzazioni"; mappa in `brevo_org_lists` (org_id, category, list_id, list_name); create solo se ci sono contatti; solo aggiunte (add_existing_to_list), mai rimozioni, mai riattivazione dei disiscritti, nessun funnel. Modulo `backend/brevo_org_lists.py`, UI `OrgListsPanel.jsx` in /marketing/brevo.
+- Interruttore Super Admin (`settings.brevo_org_lists_enabled`, default OFF) + anteprima + "Approva e sincronizza" per org; audit brevo_org_lists_toggle/sync.
+- Percorsi: registrazione autonoma → invariato (users.self_registered=True o owner org). Invitati (invite accettato / member_added) → NON più in "Utenti registrati"; vanno in {Org}_Utenti_invitati (solo se interruttore ON). Nessuna migrazione: chi è già in Utenti registrati resta.
+- In preview la chiave Brevo non è valida (401): sync reale da provare in produzione.
+
 ## Invita utente dallo Staff + Avviso rinnovo + Riepilogo costi + Profilo unificato — 2026-10-07 ✅ VERIFICATO (iter 75: backend 13/13, frontend OK)
 - Relazione: Persona (persons) → Account (users, solo auth) → membership (role, permissions, persona_id) → accessi Eventi/Team. "Staff" = persone con presenza staff/collaboratore.
 - `GET/POST /api/platform/organizations/{org_id}/staff-candidates` (ricerca A–Z cognome; aggiunta allo Staff con evento). `POST .../invites` richiede persona_id Staff; 409 se esiste già un account; email mancante salvata sulla stessa persona; `POST .../members` richiede persona_id. Componente `StaffInviteDialog.jsx` (OrgUsers + OrgDetail Super Admin).
