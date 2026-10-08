@@ -1,0 +1,24 @@
+{
+  "summary": "Iter 93 — Frontend-only verification of the '100 crediti → 14 giorni' unification + unified WelcomeDemo post-registration popup. All checks pass. (1) Public pages /, /registrati, /prezzi, /demo on both desktop (1920) and mobile (390) contain NO forbidden strings ('100 crediti', 'crediti inclusi', 'prova GOLD', 'GOLD gratis'); GOLD appears only as a plan name (comparison table + 'BRONZE/SILVER/GOLD' column header on /prezzi). (2) /registrati: H2='Inizia gratuitamente', subtitle='Crea il tuo account organizzatore e prova CRMEvent gratuitamente per 14 giorni.', left dark panel shows '14 giorni di prova gratuita' + 'Nessuna carta di credito richiesta'. (3) Footer: 'Prezzi' link present (data-testid=footer-credits-link now labeled 'Prezzi') and '14 giorni di prova gratuita' present; '100 crediti' NOT present. (4) Registered 3 TEST_ orgs via UI (phone +393331234567). On successful registration the user is navigated to /app and the ONLY popup shown is welcome-demo-dialog with title 'Benvenuto in CRMEvent!' and body 'La tua prova gratuita di 14 giorni è attiva. Vuoi scoprire…' (no GOLD, no '100 crediti'); badges '30 minuti' + 'Google Meet'; buttons welcome-demo-book + welcome-demo-skip. The old welcome-dialog is NOT rendered, no onboarding/tutorial modal auto-opens. (5) welcome-demo-book → calendar (demo-calendar) + available days render immediately in the same dialog; picking a slot (demo-time-2026-10-12T10:00) opens welcome-demo-form prefilled with nome='Test' and email=registered email; welcome-demo-later link text = 'Lo farò in seguito'. (6) 2nd org: clicking welcome-demo-skip returns to dashboard, trial-days-button shows '14 giorni rimasti'; after a full reload the popup does NOT reappear. (7) 3rd org: closing via Escape (= X close, DialogContent onOpenChange handler) persists dismissal, trial-days-button still '14 giorni rimasti', popup does not reappear after reload. Header 'Tutorial' button is present and remains available. (8) Backend-side verification via browser fetch (post-registration session, same cookies): GET /api/credits/balance → {balance:0, lifetime_granted:0, lifetime_spent:0} (no 100-credit signup bonus); GET /api/saas/me → {mode:'trial', plan:'gold', trial_active:true, days_left:14, purchased:false, trial_plan:'gold'}; user.welcome_demo transitions from 'pending' → 'dismissed' after skip/X-close. All 3 TEST_ users, orgs and memberships cleaned up via mongosh.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "WelcomeDemo.jsx eligibility gate (line 90) correctly includes `user.welcome_demo` truthy check, preventing the dialog from re-opening once backend sets user.welcome_demo='dismissed'. Verified end-to-end (skip + X both persist dismissal).",
+    "WelcomeDemo.jsx close() handler always calls /demo/welcome/dismiss when welcome_demo==='pending', so X icon of Radix Dialog produces the same effect as the explicit 'Lo farò in seguito' button — matches spec.",
+    "Register.jsx submit() now navigates straight to /app with no intermediate 100-crediti dialog; local lead cache is cleared. No stale references to welcome-dialog testid in the current codebase.",
+    "Footer.jsx testid 'footer-credits-link' label is now 'Prezzi' and points to /#prezzi — testid name is a mild legacy mismatch (still called credits-link) but functional; not a blocker, consider renaming to 'footer-prezzi-link' in a future cleanup."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% — all 5 requested checks pass"},
+  "test_credentials": "Super admin creds not needed for this run. Three disposable orgs were created via the public /registrati form with password TestPass2026! and phone +393331234567, then deleted.",
+  "seed_data_creation": "Created 3 TEST_ organizations (TEST Unify Org/Org2/Org3) + 3 TEST_ users (test_unify_*, test_unify2_*, test_unify3_*@crmeventqa.it) + their memberships. All deleted via mongosh at teardown (users=3, orgs=3, memberships=3). No demo_slot_locks/demo_bookings/credits_ledger rows were created for these users (confirmed deleteMany returned 0).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Unification is complete and shipping. The data-testid 'footer-credits-link' still exists on the Footer 'Prezzi' link — kept backward compatible so existing playbooks keep working, but the visible text is now 'Prezzi'. Phone input on /registrati requires a full E.164 number (+393331234567); typing just the national digits can trigger the IT country prefix detector to fall through to another default country in some headless runs — pass +39… explicitly."
+}

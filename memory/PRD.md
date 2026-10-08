@@ -476,6 +476,11 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Rinnovo automatico Mantenimento: POST /api/cron/event-renewals (Bearer WEBHOOK_CRON_SECRET) + `.emergent/crons.yml` ogni giorno 03:00 UTC. Su Aruba serve crontab di sistema equivalente.
 - NB: il briefing NON è generato con AI (è costruito dai dati evento).
 
+## Rimozione "100 crediti" + benvenuto unico — 2026-10-08 ✅ VERIFICATO (iter 93)
+- Registrazione: nuovo sottotitolo "prova CRMEvent gratuitamente per 14 giorni", rimosso il popup "Hai ricevuto 100 crediti" (dopo la registrazione si va su /app → unico popup WelcomeDemo). Footer: "Prezzi" e "14 giorni di prova gratuita". Tolto "GOLD" dai testi della prova (/prezzi, /demo, email benvenuto/3 giorni/scadenza, header).
+- WelcomeDemo: "La tua prova gratuita di 14 giorni è attiva", pulsanti "Prenota una demo" / "Lo farò in seguito" (anche il link nel calendario). Per i nuovi organizzatori il tutorial non si apre più da solo (resta disponibile dal pulsante Tutorial).
+- Backend: le nuove org cliente ricevono la prova (init_trial) e NON il bonus di 100 crediti (`_grant_signup_bonus` resta solo per le org non cliente e per lo strumento di migrazione Super Admin). Crediti, saldi, movimenti e fatture storici invariati.
+
 ## Azioni rapide + Marketplace — 2026-10-08 ✅ VERIFICATO (iter 92: backend 9/9, frontend OK)
 - Menu: Dashboard → Azioni rapide (/azioni-rapide, scorciatoie filtrate per piano e permessi "create") → Marketplace (/marketplace), poi le voci esistenti. "Cosa richiede attenzione" rinominata "To Do List" (resta in Dashboard).
 - `marketplace.py`: catalogo `marketplace_services` (6 servizi iniziali "Prossimamente", non acquistabili), acquisti `marketplace_purchases` per org/evento, checkout Stripe TEST (una tantum con fattura / mensile / annuale), attivazione solo con verifica su Stripe (webhook o conferma lato server), rinnovi, pagamenti falliti e annullamenti, fatture (forfettario, FIC LIVE tramite `_emit_saas_invoice`). Il pagamento a consumo e l'addebito a crediti sono solo configurabili. LIVE bloccato finché non si imposta MARKETPLACE_STRIPE_LIVE_ENABLED=1.

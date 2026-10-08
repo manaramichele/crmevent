@@ -110,7 +110,7 @@ function trialInfo(s) {
   if (!s?.enabled) return null;
   if (s.mode === "trial" && !s.purchased) {
     const n = s.days_left;
-    return { urgent: n <= 3, text: `Prova ${s.plan_label || "GOLD"} · ${n === 1 ? "Ti resta 1 giorno" : `Ti restano ${n} giorni`}`, short: `${s.plan_label || "GOLD"} · ${n}g` };
+    return { urgent: n <= 3, text: `Prova gratuita · ${n === 1 ? "Ti resta 1 giorno" : `Ti restano ${n} giorni`}`, short: `${n}g` };
   }
   if (s.mode === "expired" || s.mode === "canceled") return { expired: true, urgent: true, text: s.mode === "expired" ? "Prova terminata – Scegli il tuo piano" : "Abbonamento terminato – Scegli il tuo piano", short: "Prova terminata" };
   if (s.mode === "past_due") return { urgent: true, text: "Pagamento non riuscito – Aggiorna il metodo di pagamento", short: "Pagamento" };
