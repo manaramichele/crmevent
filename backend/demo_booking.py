@@ -64,6 +64,44 @@ async def sync_lead(db, lead: dict) -> dict:
     return state
 
 
+async def meet_for_demo(db, lead: dict, action: str):
+    """Link Google Meet per le demo confermate (stesso calendario e stessa simulazione dell'assistenza video)."""
+    import gcal_utils
+    import video_support
+    eid = lead.get("demo_event_id")
+    if video_support.simulation():
+        if action == "cancel":
+            return {"demo_meet_link": None, "demo_event_id": None}
+        return {"demo_event_id": eid or f"sim-demo-{lead['id'][:10]}", "demo_meet_simulated": True,
+                "demo_meet_link": lead.get("demo_meet_link") or f"https://meet.google.com/sim-{lead['id'][:3]}-{lead['id'][3:7]}-{lead['id'][7:10]}"}
+    cfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0}) or {}
+    conn = await db.calendar_connections.find_one({"user_id": cfg.get("calendar_user_id")}, {"_id": 0}) if cfg.get("calendar_user_id") else None
+    if not (conn and gcal_utils.is_configured()):
+        logger.warning("demo meet: calendario Super Admin non collegato")
+        return {}
+    cal = conn.get("calendar_id") or "primary"
+    try:
+        if action == "cancel":
+            if eid:
+                gcal_utils.delete_event(conn["tokens"], cal, eid)
+            return {"demo_meet_link": None, "demo_event_id": None}
+        start = datetime.strptime(lead["demo_slot"], "%Y-%m-%dT%H:%M")
+        end = start + timedelta(minutes=30)
+        times = {"start": {"dateTime": start.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": "Europe/Rome"},
+                 "end": {"dateTime": end.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": "Europe/Rome"}}
+        if eid:
+            gcal_utils.patch_event(conn["tokens"], cal, eid, times)
+            return {}
+        body = {"summary": f"Demo CRMEvent · {lead.get('organizzazione') or lead.get('nome')}", **times,
+                "description": f"Demo CRMEvent\n{lead.get('nome') or ''} {lead.get('cognome') or ''} ({lead['email']})",
+                "attendees": [{"email": lead["email"]}]}
+        ev = gcal_utils.create_meet_event(conn["tokens"], cal, body, f"demo-{lead['id']}")
+        return {"demo_event_id": ev["id"], "demo_meet_link": ev.get("hangoutLink"), "demo_meet_simulated": False}
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"demo meet {action} failed: {type(e).__name__}")
+        return {}
+
+
 async def send_operational(lead: dict, kind: str, app_url: str):
     """Email operative della prenotazione (indipendenti dal consenso marketing)."""
     slot = fmt_slot(lead.get("demo_slot"))
@@ -76,9 +114,13 @@ async def send_operational(lead: dict, kind: str, app_url: str):
         "promemoria": ("Promemoria: domani la tua demo CRMEvent", f"Ti ricordiamo la demo di CRMEvent del {slot}."),
     }
     subject, intro = texts[kind]
+    meet = lead.get("demo_meet_link") if kind in ("confermata", "riprogrammata", "promemoria") else None
+    if meet:
+        intro += " Al momento dell'appuntamento collegati con il link Google Meet qui sotto."
     try:
         await email_utils.send_email(to=lead["email"], subject=subject, html=email_utils.link_email(
-            name=lead.get("nome") or "", intro=intro, cta_label="Guarda la demo interattiva", url=f"{app_url}/demo",
+            name=lead.get("nome") or "", intro=intro, cta_label="Apri Google Meet" if meet else "Guarda la demo interattiva",
+            url=meet or f"{app_url}/demo",
             footer_note="Hai ricevuto questa email perché hai richiesto una demo su crmevent.it."))
         return True
     except Exception as e:  # noqa: BLE001

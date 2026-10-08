@@ -2279,6 +2279,60 @@ async def download(file_id: str, user: dict = Depends(get_current_user)):
     return Response(content=data, media_type=rec.get("content_type", ctype))
 
 
+MAP_FILE_FIELDS = [("gpx_url", "gpx"), ("pdf_url", "pdf"), ("immagine_url", "image"), ("file_url", "file")]
+
+
+async def _resolve_attachment(url: str, org_id: str) -> Optional[dict]:
+    """Solo allegati realmente esistenti: file CRMEvent (privati o con token) o link esterni (archivio precedente)."""
+    if not url:
+        return None
+    m = re.search(r"/api/files/public/([A-Za-z0-9_\-]+)", url)
+    if m:
+        rec = await db.files.find_one({"public_token": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1})
+    else:
+        m = re.search(r"/api/files/([A-Za-z0-9_\-]+)$", url)
+        rec = await db.files.find_one({"id": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1}) if m else None
+    if m:
+        if not rec or rec.get("org_id") not in (None, org_id):
+            return None
+        return {"url": url, "name": rec.get("original_filename"), "content_type": rec.get("content_type")}
+    if url.startswith("http"):
+        return {"url": url, "name": url.rsplit("/", 1)[-1].split("?")[0] or None, "content_type": None}
+    return None
+
+
+def _attachment_kind(field_kind: str, a: dict) -> str:
+    name, ct = (a.get("name") or "").lower(), (a.get("content_type") or "").lower()
+    if name.endswith(".gpx") or "gpx" in ct:
+        return "gpx"
+    if name.endswith(".pdf") or ct == "application/pdf":
+        return "pdf"
+    if ct.startswith("image/") or re.search(r"\.(png|jpe?g|webp|gif|heic)$", name):
+        return "image"
+    return field_kind if field_kind in ("gpx", "pdf", "image") and not name else "file"
+
+
+@api.get("/maps-attachments")
+async def maps_attachments(evento_id: str, user: dict = Depends(require_admin)):
+    """Allegati esistenti per ogni percorso dell'evento (GPX, PDF, immagini, altri file), senza link non funzionanti."""
+    q = oq(user, evento_id=evento_id)
+    if _team_ids(user) is not None:
+        q["$or"] = [{"team_id": {"$in": _team_ids(user)}}, {"team_id": {"$in": [None, ""]}}]
+    out = {}
+    for mp in await db.event_maps.find(q, {"_id": 0}).to_list(500):
+        items, seen = [], set()
+        for field, kind in MAP_FILE_FIELDS:
+            url = mp.get(field)
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            a = await _resolve_attachment(url, user["org_id"])
+            if a:
+                items.append({**a, "field": field, "kind": _attachment_kind(kind, a)})
+        out[mp["id"]] = items
+    return out
+
+
 @api.get("/files/public/{token}")
 async def file_public(token: str):
     """Serve pubblicamente (senza cookie) un file tramite token imprevedibile. Solo file con public_token."""
@@ -3756,12 +3810,13 @@ async def lead_demo_action(lead_id: str, body: DemoActionIn, admin: dict = Depen
     else:
         raise HTTPException(status_code=400, detail="Azione non valida")
     upd["updated_at"] = now_iso()
+    upd.update(await demo_booking.meet_for_demo(db, {**lead, **upd}, body.action))
     await db.leads.update_one({"id": lead_id}, {"$set": upd})
     lead.update(upd)
     sent = await demo_booking.send_operational(lead, kind, APP_URL)
     sync = await demo_booking.sync_lead(db, lead)
     await record_audit(admin, "lead_demo_" + body.action, target_email=lead.get("email"), detail=demo_booking.fmt_slot(lead.get("demo_slot")))
-    return {"ok": True, "demo_status": lead["demo_status"], "demo_slot": lead.get("demo_slot"), "email_sent": sent, "brevo_sync": sync}
+    return {"ok": True, "demo_status": lead["demo_status"], "demo_slot": lead.get("demo_slot"), "demo_meet_link": lead.get("demo_meet_link"), "email_sent": sent, "brevo_sync": sync}
 
 
 @api.post("/leads/{lead_id}/brevo-sync")

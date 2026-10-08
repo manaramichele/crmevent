@@ -34,6 +34,7 @@ function DemoBox({ lead, onDone }) {
     <div className="rounded-lg border border-slate-200 p-4 space-y-3" data-testid="lead-demo-box">
       <div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-800">Demo: {fmtSlot(lead.demo_slot)}</span>{st && <StatusBadge color={st[0]} data-testid="lead-demo-status">{st[1]}</StatusBadge>}</div>
       <div className="flex flex-wrap gap-2">
+        {lead.demo_meet_link && lead.demo_status !== "annullata" && <a href={lead.demo_meet_link} target="_blank" rel="noreferrer" className="inline-flex items-center h-8 px-3 rounded-md bg-tiffany text-slate-900 text-xs font-semibold" data-testid="lead-demo-meet">Apri Google Meet{lead.demo_meet_simulated ? " (simulato)" : ""}</a>}
         {lead.demo_slot && lead.demo_status === "da_confermare" && <Button size="sm" disabled={busy} onClick={() => act("confirm")} className="bg-tiffany text-slate-900" data-testid="lead-demo-confirm">Conferma</Button>}
         {lead.demo_slot && lead.demo_status !== "annullata" && <Button size="sm" variant="outline" disabled={busy} onClick={() => act("cancel")} data-testid="lead-demo-cancel">Annulla</Button>}
       </div>

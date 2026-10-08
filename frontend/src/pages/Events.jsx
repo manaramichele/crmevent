@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { EventCreditDialog } from "@/components/EventCreditDialog";
-import { Coins, Rocket } from "lucide-react";
+import { Coins, Rocket, Image as ImageIcon, Paperclip } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -57,6 +57,25 @@ function parseGpx(text) {
   return { points, distanceKm: Math.round(d * 100) / 100 };
 }
 
+const ATT_META = { gpx: ["Apri GPX", MapIcon], pdf: ["Apri PDF", FileText], image: ["Apri immagine", ImageIcon], file: ["Apri file", Paperclip] };
+
+function AttachmentButtons({ items, mapId, onGpx }) {
+  if (!items.length) return null;
+  const counts = items.reduce((c, a) => ({ ...c, [a.kind]: (c[a.kind] || 0) + 1 }), {});
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2" data-testid={`map-attachments-${mapId}`}>
+      {items.map((a) => {
+        const [label, Icon] = ATT_META[a.kind] || ATT_META.file;
+        const text = counts[a.kind] > 1 && a.name ? `${label} · ${a.name}` : label;
+        const cls = "inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-tiffany hover:text-tiffany-active transition-colors max-w-full";
+        const tid = `map-att-${a.kind}-${mapId}-${a.field}`;
+        if (a.kind === "gpx") return <button key={a.field} type="button" onClick={() => onGpx(a)} className={cls} data-testid={tid}><Icon className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{text}</span></button>;
+        return <a key={a.field} href={fileUrl(a.url)} target="_blank" rel="noreferrer" {...(a.kind === "file" ? { download: a.name || true } : {})} className={cls} data-testid={tid}><Icon className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{text}</span></a>;
+      })}
+    </div>
+  );
+}
+
 function GpxMap({ gpxUrl }) {
   const boxRef = useRef(null);
   const mapRef = useRef(null);
@@ -97,6 +116,8 @@ function GpxMap({ gpxUrl }) {
 
 function MapsDialog({ eventId, open, onOpenChange }) {
   const [maps, setMaps] = useState([]);
+  const [atts, setAtts] = useState({});
+  const [gpxView, setGpxView] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -106,6 +127,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
   const load = async () => {
     const { data } = await api.get("/maps", { params: { evento_id: eventId } });
     setMaps(data);
+    api.get("/maps-attachments", { params: { evento_id: eventId } }).then((r) => setAtts(r.data || {})).catch(() => setAtts({}));
   };
   useEffect(() => { if (open) { load(); resetNew(); } /* eslint-disable-next-line */ }, [open, eventId]);
 
@@ -160,6 +182,15 @@ function MapsDialog({ eventId, open, onOpenChange }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto" data-testid="maps-dialog">
+        {gpxView && (
+          <Dialog open onOpenChange={(o) => !o && setGpxView(null)}>
+            <DialogContent className="max-w-2xl" data-testid="gpx-viewer">
+              <DialogHeader><DialogTitle className="font-display">{gpxView.nome}</DialogTitle><DialogDescription>{gpxView.name || "Tracciato GPX"}</DialogDescription></DialogHeader>
+              <GpxMap gpxUrl={gpxView.url} />
+              <a href={fileUrl(gpxView.url)} download className="inline-flex items-center gap-1 text-sm font-semibold text-tiffany-active hover:underline" data-testid="gpx-viewer-download"><Download className="w-4 h-4" />Scarica GPX</a>
+            </DialogContent>
+          </Dialog>
+        )}
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2"><Route className="w-5 h-5 text-tiffany-active" />Mappe & Percorsi</DialogTitle>
           <DialogDescription className="sr-only">Gestisci i percorsi dell'evento</DialogDescription>
@@ -177,8 +208,8 @@ function MapsDialog({ eventId, open, onOpenChange }) {
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
                     {m.tipologia && <StatusBadge color="gray">{m.tipologia}</StatusBadge>}
                     {m.distanza != null && m.distanza !== "" && <StatusBadge color="tiffany">{m.distanza} km</StatusBadge>}
-                    <StatusBadge color={m.gpx_url ? "green" : "gray"}>{m.gpx_url ? "GPX presente" : "GPX assente"}</StatusBadge>
                   </div>
+                  <AttachmentButtons items={atts[m.id] || []} mapId={m.id} onGpx={(a) => setGpxView({ ...a, nome: m.nome })} />
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Visualizza" onClick={() => loadForEdit(m)} data-testid={`view-map-${m.id}`}><Eye className="w-4 h-4" /></Button>
