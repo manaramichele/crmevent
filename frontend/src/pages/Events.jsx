@@ -310,7 +310,7 @@ function EventRowActions({ row, navigate, setCreditFor, setAvailFor, setMapsFor,
   ];
   const byKey = (k) => all.find((a) => a.key === k);
   const primary = ["availability", "pipeline", "maps", "calsync"].map(byKey);
-  const secondary = ["event-credits", "briefing"].map(byKey);
+  const secondary = ["event-credits", "briefing"].map(byKey).filter(Boolean);
 
   return (
     <>

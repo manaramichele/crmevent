@@ -476,6 +476,10 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Rinnovo automatico Mantenimento: POST /api/cron/event-renewals (Bearer WEBHOOK_CRON_SECRET) + `.emergent/crons.yml` ogni giorno 03:00 UTC. Su Aruba serve crontab di sistema equivalente.
 - NB: il briefing NON è generato con AI (è costruito dai dati evento).
 
+## Prova automatica alla registrazione + niente "Attiva evento" — 2026-10-08 ✅ VERIFICATO (iter 95 + fix)
+- La prova parte alla registrazione (organizations.saas.trial_start/trial_end). Per le org ad abbonamento: eventi creati già operativi (credit_state attivo), nessuna colonna o badge crediti, nessuna azione "Crediti", nessun ActivationGate né dialog "crediti insufficienti"; POST /events/{id}/activate → 400. Org legacy a crediti invariate.
+- Fix: crash del menu "Altre" in Eventi (azione undefined filtrata). Header mobile: "Prenota una demo" solo icona sotto i 640px, così il profilo resta visibile a 375px.
+
 ## Header interno riorganizzato + tipografia −10% — 2026-10-08 ✅ VERIFICATO (iter 94)
 - Pulsante unico: "Prenota una demo" (`header-demo-button`, apre WelcomeDemo sul calendario) finché `saas.trial_active`, poi "Assistenza" (regole del piano). Tolta la voce Demo dal menu profilo; la Demo è prenotabile da qualsiasi membro dell'organizzazione in prova.
 - Ricerca: GlobalSearch in alto a sinistra nella Dashboard; nelle altre pagine icona Cerca nell'header che apre la stessa ricerca.

@@ -396,8 +396,8 @@ export default function Layout({ children }) {
           {location.pathname !== "/app" && <button type="button" className="w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="header-search-button" title="Cerca" aria-label="Cerca"><Search className="w-5 h-5" /></button>}
           {!isSuper && user?.saas?.enabled && user.saas.trial_active ? (
             <button type="button" onClick={() => window.dispatchEvent(new Event("welcome-demo:open"))} data-testid="header-demo-button" aria-label="Prenota una demo"
-              className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
-              <Video className="w-4 h-4" aria-hidden="true" /><span className="hidden sm:inline">Prenota una demo</span><span className="sm:hidden">Demo</span>
+              className="shrink-0 inline-flex items-center gap-1.5 h-10 w-10 sm:w-auto justify-center sm:px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
+              <Video className="w-4 h-4" aria-hidden="true" /><span className="hidden sm:inline">Prenota una demo</span>
             </button>
           ) : (
           <NavLink to="/assistenza" data-testid="header-assistenza-button" className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
