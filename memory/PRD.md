@@ -367,6 +367,11 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Percorsi: pulsanti allegati + Meet per demo confermate — 2026-10-08 ✅ VERIFICATO (iter 88 UI 5/5; regex query-string corretta e riverificata)
+- GET /api/maps-attachments?evento_id= (sezione mappe, org + team): allegati da gpx_url/pdf_url/immagine_url/file_url solo se esistenti in db.files (stessa org, non cancellati; query string ignorata) o link esterni http. Events.jsx: rimosse etichette GPX presente/assente; AttachmentButtons (Apri GPX → gpx-viewer con mappa e Scarica; Apri PDF/immagine nuova scheda; Apri file download).
+- demo_booking.meet_for_demo: confirm/reschedule crea/aggiorna Meet sul calendario dell'assistenza (SIMULATO in preview), cancel lo rimuove; link nelle email operative e nel DemoBox (lead-demo-meet).
+
+
 ## Prenota una Demo → Brevo lista Lead ID 8 — 2026-10-08 ✅ VERIFICATO (iter 87, backend 11/11)
 - backend/demo_booking.py: sync_lead (upsert per email, updateEnabled, listIds=[BREVO_LEAD_LIST_ID=8], SOURCE "Prenotazione Demo CRMEvent", attributi TELEFONO/DATA_RICHIESTA/DATA_DEMO/STATO_PRENOTAZIONE/CONSENSO_MARKETING/DATA_CONSENSO_MARKETING), stato in lead.brevo_sync; email operative (ricevuta/confermata/riprogrammata/annullata/promemoria); tick nel cron brevo-funnel-tick (retry 1/h max 5, promemoria giorno prima una sola volta).
 - create_lead: demo_slot + demo_status "da_confermare", marketing_consent(+_at); funnel commerciale solo con consenso, mai ripetuto per email, mai se opt-out; nessuna creazione di liste. POST /leads/{id}/demo (SA confirm/reschedule/cancel), POST /leads/{id}/brevo-sync.

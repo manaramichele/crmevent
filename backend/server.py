@@ -2286,11 +2286,12 @@ async def _resolve_attachment(url: str, org_id: str) -> Optional[dict]:
     """Solo allegati realmente esistenti: file CRMEvent (privati o con token) o link esterni (archivio precedente)."""
     if not url:
         return None
-    m = re.search(r"/api/files/public/([A-Za-z0-9_\-]+)", url)
+    url_path = url.split("?", 1)[0].split("#", 1)[0]
+    m = re.search(r"/api/files/public/([A-Za-z0-9_\-]+)$", url_path)
     if m:
         rec = await db.files.find_one({"public_token": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1})
     else:
-        m = re.search(r"/api/files/([A-Za-z0-9_\-]+)$", url)
+        m = re.search(r"/api/files/([A-Za-z0-9_\-]+)$", url_path)
         rec = await db.files.find_one({"id": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1}) if m else None
     if m:
         if not rec or rec.get("org_id") not in (None, org_id):
