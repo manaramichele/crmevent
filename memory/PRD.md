@@ -367,6 +367,9 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Automazioni email centralizzate in Email & Brevo — 2026-10-08 ✅ VERIFICATO (iter 77)
+- Rimossi FunnelPanel e AvailabilityEmailPanel dalla Dashboard Amministrazione (Platform.jsx). /marketing/brevo a schede: Funnel CRMEvent (FunnelPanel) | Staff & Volontari (AvailabilityEmailPanel, unica istanza, card su mobile) | Liste e contatti (RegisteredUsersPanel + OrgListsPanel). Deep link ?tab=funnel|staff|liste. Solo spostamento UI: API, stato, trigger, webhook, liste e template invariati.
+
 ## Liste Brevo per organizzazione (liste esistenti preservate) — 2026-10-08 ✅ VERIFICATO (iter 76, 10/10 + frontend)
 - Liste esistenti INVARIATE: CRMEvent · Lead (+Funnel Demo), CRMEvent · Utenti registrati, CRMEvent · Disponibilità eventi (ha già attributo ORGANIZZAZIONE), CRMEvent – Prospect.
 - Nuove liste per (org_id, categoria): {OrgSlug}_Staff/_Collaboratori/_Utenti_invitati/_Volontari/_Referenti_Aziendali in cartella "CRMEvent · Organizzazioni"; mappa in `brevo_org_lists` (org_id, category, list_id, list_name); create solo se ci sono contatti; solo aggiunte (add_existing_to_list), mai rimozioni, mai riattivazione dei disiscritti, nessun funnel. Modulo `backend/brevo_org_lists.py`, UI `OrgListsPanel.jsx` in /marketing/brevo.
