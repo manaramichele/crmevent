@@ -13,15 +13,15 @@ const DAYS = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Saba
 const STATUS = { confermata: ["green", "Confermata"], annullata: ["gray", "Annullata"], errore: ["red", "Errore"] };
 const when = (k) => `${k.slice(8, 10)}/${k.slice(5, 7)}/${k.slice(0, 4)} ${k.slice(11)}`;
 
-function Availability() {
+export function Availability({ base = "/platform/video-support/config", testid = "vs" }) {
   const [cfg, setCfg] = useState(null);
   const [closed, setClosed] = useState("");
-  const load = useCallback(() => api.get("/platform/video-support/config").then(({ data }) => setCfg(data)), []);
+  const load = useCallback(() => api.get(base).then(({ data }) => setCfg(data)), [base]);
   useEffect(() => { load(); }, [load]);
   if (!cfg) return null;
   const setW = (i, k, v) => setCfg((c) => ({ ...c, weekly: c.weekly.map((w, j) => (j === i ? { ...w, [k]: v } : w)) }));
   const save = async () => {
-    try { const { data } = await api.put("/platform/video-support/config", { weekly: cfg.weekly, closed_dates: cfg.closed_dates, min_notice_hours: Number(cfg.min_notice_hours), horizon_days: Number(cfg.horizon_days) }); setCfg(data); toast.success("Disponibilità salvate"); }
+    try { const { data } = await api.put(base, { weekly: cfg.weekly, closed_dates: cfg.closed_dates, min_notice_hours: Number(cfg.min_notice_hours), horizon_days: Number(cfg.horizon_days) }); setCfg(data); toast.success("Disponibilità salvate"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   return (

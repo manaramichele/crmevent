@@ -124,6 +124,7 @@ function EventPicker({ events, value, onChange, testid }) {
 
 // ---- Header button + welcome + index drawer ----
 export function TutorialLauncher() {
+  const { user } = useAuth();
   const { info, patch, isSuper } = useTutorial();
   const [open, setOpen] = useState(false);
   const [welcome, setWelcome] = useState(false);
@@ -139,9 +140,10 @@ export function TutorialLauncher() {
   useEffect(() => { if (info?.events) setEid(pickEvent(info.events)); }, [info?.events]);
   useEffect(() => {
     if (!info || info.superadmin) return;
+    if (user?.welcome_demo === "pending") return; // prima la schermata di benvenuto Demo, poi il tutorial
     if (!info.state?.seen) { setWelcome(true); patch({ seen: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [info?.state?.seen, info?.superadmin]);
+  }, [info?.state?.seen, info?.superadmin, user?.welcome_demo]);
 
   if (!info || info.superadmin || isSuper) return null;
 

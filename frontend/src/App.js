@@ -56,6 +56,7 @@ import VolunteerEvent from "@/pages/VolunteerEvent";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import PlanUpgrade from "@/components/PlanUpgrade";
 import SaasAdmin from "@/pages/SaasAdmin";
+import PlatformDemo from "@/pages/PlatformDemo";
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
 const isSuper = (u) => u && u.role === "superadmin";
@@ -155,6 +156,7 @@ function Shell() {
         <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/demo" element={<Protected><SuperAdminOnly><PlatformDemo /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/abbonamenti" element={<Protected><SuperAdminOnly><SaasAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />

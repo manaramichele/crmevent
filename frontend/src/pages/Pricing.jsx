@@ -23,7 +23,7 @@ export default function Pricing() {
           </nav>
           <div className="hidden lg:flex items-center gap-3">
             <Link to="/login" className="text-sm font-semibold text-slate-700 hover:text-slate-900">Accedi</Link>
-            <Link to={cta} data-testid="pricing-header-cta" className="h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center">{authed ? "Il mio abbonamento" : "Prova GOLD gratis"}</Link>
+            <Link to={cta} data-testid="pricing-header-cta" className="h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center">{authed ? "Il mio abbonamento" : "Registrati gratis"}</Link>
           </div>
           <button className="lg:hidden" onClick={() => setOpen((o) => !o)} data-testid="pricing-menu">{open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
         </div>
@@ -33,7 +33,7 @@ export default function Pricing() {
             <Link to="/prezzi" className="block text-sm font-semibold text-slate-900">Prezzi</Link>
             <div className="flex gap-3 pt-2">
               <Link to="/login" className="flex-1 h-10 rounded-lg border border-slate-200 flex items-center justify-center text-sm font-semibold">Accedi</Link>
-              <Link to={cta} className="flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">{authed ? "Abbonamento" : "Prova gratis"}</Link>
+              <Link to={cta} className="flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">{authed ? "Abbonamento" : "Registrati gratis"}</Link>
             </div>
           </div>
         )}

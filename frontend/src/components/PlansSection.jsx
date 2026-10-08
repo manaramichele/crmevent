@@ -24,7 +24,7 @@ export function CycleToggle({ cycle, setCycle }) {
   );
   return (
     <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm" data-testid="cycle-toggle">
-      {btn("monthly", "Mensile")}{btn("yearly", <>Annuale <span className="ml-1 rounded-full bg-[#0ABAB5] text-slate-900 px-2 py-0.5 text-[11px]">Risparmia il 20%</span></>)}
+      {btn("monthly", "Mensile")}{btn("yearly", <>Annuale <span className="ml-1 rounded-full bg-[#0ABAB5] text-slate-900 px-2 py-0.5 text-[11px]">−20%</span></>)}
     </div>
   );
 }
@@ -43,7 +43,7 @@ export function PlanCard({ p, cycle, features, cta, current }) {
         <span className="font-display text-4xl font-bold text-slate-900" data-testid={`plan-price-${p.key}`}>€{eur(perMonth)}</span>
         <span className="text-sm text-slate-500">/mese</span>
       </div>
-      <div className="text-xs text-slate-500 h-4" data-testid={`plan-billed-${p.key}`}>{yearly ? `€${eur(p.yearly)} addebitati ogni anno` : "Fatturazione mensile"}</div>
+      <div className="text-xs text-slate-500 h-4" data-testid={`plan-billed-${p.key}`}>{yearly ? `Totale annuale addebitato: €${eur(p.yearly)}` : "Fatturazione mensile"}</div>
       <ul className="mt-5 space-y-2 text-sm flex-1">
         <li className="flex gap-2 text-slate-800 font-medium"><InfinityIcon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />Eventi e utenti illimitati</li>
         <li className="flex gap-2 text-slate-800 font-medium"><sup.icon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{sup.text}</li>
@@ -81,7 +81,7 @@ export function ComparisonTable({ plans, features }) {
   );
 }
 
-export default function PlansSection({ authed }) {
+export default function PlansSection({ authed, claim }) {
   const data = usePlans();
   const [cycle, setCycle] = useState("monthly");
   if (!data) return <p className="text-center text-sm text-slate-400">Caricamento piani…</p>;
@@ -89,7 +89,7 @@ export default function PlansSection({ authed }) {
     <div className="space-y-10" data-testid="plans-section">
       <div className="text-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-[#0ABAB5]/10 text-slate-800 px-3 py-1 text-xs font-semibold mb-4" data-testid="plans-trial-claim">
-          <Gift className="w-3.5 h-3.5 text-[#0ABAB5]" />Prova GOLD gratis per {data.trial_days || 14} giorni. Nessuna carta di credito richiesta.
+          <Gift className="w-3.5 h-3.5 text-[#0ABAB5]" />{claim || `Prova GOLD gratis per ${data.trial_days || 14} giorni. Nessuna carta di credito richiesta.`}
         </div>
         <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Scegli il piano per il tuo evento</h2>
         <p className="text-slate-500 mt-3 text-sm md:text-base">Tutti i piani includono eventi, utenti, staff e volontari illimitati.</p>
@@ -99,13 +99,12 @@ export default function PlansSection({ authed }) {
         {data.plans.map((p) => (
           <PlanCard key={p.key} p={p} cycle={cycle} features={data.features}
             cta={<Link to={authed ? "/profilo?tab=abbonamento" : "/registrati"} data-testid={`plan-cta-${p.key}`}
-              className="flex h-11 items-center justify-center rounded-xl bg-[#0ABAB5] text-sm font-semibold text-slate-900 transition-[background-color,transform] hover:bg-[#09A8A3] active:scale-[0.98]">Scegli piano</Link>} />
+              className="flex h-11 items-center justify-center rounded-xl bg-[#0ABAB5] text-sm font-semibold text-slate-900 transition-[background-color,transform] hover:bg-[#09A8A3] active:scale-[0.98]">{authed ? "Scegli piano" : "Registrati gratis"}</Link>} />
         ))}
       </div>
       <div>
         <h3 className="font-display text-xl font-bold mb-4">Confronta i piani</h3>
         <ComparisonTable plans={data.plans} features={data.features} />
-        <p className="text-xs text-slate-400 mt-3">Prezzi in euro. Operazione in regime forfettario: nessuna IVA aggiunta. Il pagamento annuale prevede uno sconto del 20% rispetto a 12 mensilità.</p>
       </div>
     </div>
   );
