@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { EventCreditDialog } from "@/components/EventCreditDialog";
 import { Coins, Rocket, Image as ImageIcon, Paperclip } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import L from "leaflet";
@@ -298,9 +299,9 @@ function eventDisplayState(r) {
   return "preparazione";
 }
 
-function EventRowActions({ row, navigate, setCreditFor, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete }) {
+function EventRowActions({ row, navigate, setCreditFor, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, saas }) {
   const all = [
-    { key: "event-credits", label: "Crediti", Icon: Coins, run: () => setCreditFor(row.id), title: "Crediti evento (attiva / stato)" },
+    ...(saas ? [] : [{ key: "event-credits", label: "Crediti", Icon: Coins, run: () => setCreditFor(row.id), title: "Crediti evento (attiva / stato)" }]),
     { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
     { key: "briefing", label: "Briefing", Icon: FileText, run: () => navigate(`/eventi/${row.id}/briefing`), title: "Briefing evento" },
     { key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" },
@@ -386,12 +387,16 @@ export default function Events() {
   const [recharge, setRecharge] = useState(false);
   const [noCredits, setNoCredits] = useState(false);
   const [delRow, setDelRow] = useState(null);
+  const { user } = useAuth();
+  const saas = !!user?.saas?.enabled;  // abbonamento: eventi subito operativi, nessuna attivazione a crediti
   const balRef = useRef({ balance: null });
   const refreshBalance = async () => {
+    if (saas) return null;
     try { const { data } = await api.get("/credits/balance"); balRef.current = data; return data; } catch { return null; }
   };
-  useEffect(() => { refreshBalance(); }, []);
+  useEffect(() => { refreshBalance(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const guardCreate = async () => {
+    if (saas) return true;
     const b = await refreshBalance();
     if (b && b.balance < 1) { setNoCredits(true); return false; }
     return true;
@@ -443,7 +448,7 @@ export default function Events() {
       );
     } },
     { key: "stato", label: "Fase", render: (r) => <StatusBadge color={STATO[r.stato] || "gray"}>{STATO_LABEL[r.stato] || r.stato}</StatusBadge> },
-    { key: "credit_state", label: "CRMEvent", render: (r) => {
+    ...(saas ? [] : [{ key: "credit_state", label: "CRMEvent", render: (r) => {
       const s = eventDisplayState(r);
       const [lbl, cls] = EV_STATE[s] || EV_STATE.preparazione;
       const end = r.data_fine || r.data_inizio;
@@ -453,7 +458,7 @@ export default function Events() {
           {s === "attivo" && end ? `Attivo · fino al ${dmyEv(end)}` : lbl}
         </button>
       );
-    } },
+    } }]),
   ];
 
   const syncCal = async (row) => {
@@ -468,7 +473,7 @@ export default function Events() {
         searchKeys={["nome", "citta", "tipologia"]} guardCreate={guardCreate} fullActions
         rowActions={(row, helpers) => (
           <EventRowActions row={row} navigate={navigate}
-            setCreditFor={setCreditFor} setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal}
+            setCreditFor={setCreditFor} setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal} saas={saas}
             openEdit={helpers.openEdit} onRequestDelete={() => setDelRow({ row, del: helpers.onDelete })} />
         )} />
       {mapsFor && <MapsDialog eventId={mapsFor} open={!!mapsFor} onOpenChange={(o) => !o && setMapsFor(null)} />}

@@ -11863,6 +11863,8 @@ async def event_activate(event_id: str, user: dict = Depends(require_admin)):
     ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento non trovato")
+    if await SAAS["is_saas"](user["org_id"]):
+        raise HTTPException(status_code=400, detail="Con l'abbonamento gli eventi sono già operativi: nessuna attivazione necessaria")
     st = ev.get("credit_state")
     if st == "attivo":
         return await _event_credit_status(ev)

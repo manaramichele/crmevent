@@ -454,7 +454,7 @@ export default function Layout({ children }) {
         </main>
       </div>
       <SupportChat />
-      <ActivationGate />
+      {!user?.saas?.enabled && <ActivationGate />}
       <WelcomeDemo />
     </div>
   );

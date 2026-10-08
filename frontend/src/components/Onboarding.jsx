@@ -19,7 +19,7 @@ const SECTIONS = [
   ]},
   { key: "eventi", label: "Eventi", route: () => "/eventi", steps: [
     { t: "Crea e gestisci gli eventi", b: "Con «Aggiungi» crei un nuovo evento (nome, tipologia, date, logo); dall'elenco gestisci quelli esistenti.", s: [T("add-event-button")] },
-    { t: "Stato e attivazione", b: "Il badge CRMEvent mostra se l'evento è in preparazione, attivo, sospeso o concluso. L'attivazione sblocca le funzioni operative e può utilizzare crediti.", s: (e) => [T(`event-credit-badge-${e}`), P("event-credit-badge-")] },
+    { t: "Stato dell'evento", b: "La colonna «Fase» mostra se l'evento è pianificato, in corso, concluso o annullato. Con l'abbonamento ogni evento è subito operativo, senza attivazioni.", s: (e) => [T(`event-credit-badge-${e}`), P("event-credit-badge-")] },
     { t: "Raccolta disponibilità", b: "Da «Disponibilità» puoi preparare un link pubblico per raccogliere giorni e orari di Staff / Volontari.", s: (e) => [T(`availability-${e}`), T(`actions-menu-${e}`), P("availability-"), P("actions-menu-")] },
     { t: "Altre azioni dell'evento", b: "Da qui accedi anche a Briefing, Pipeline, Percorsi, Calendario, modifica ed eliminazione dell'evento.", s: (e) => [T(`more-actions-${e}`), T(`actions-menu-${e}`), P("more-actions-"), P("actions-menu-")] },
   ]},
