@@ -6323,7 +6323,6 @@ AUDIT_ACTION_LABELS = {
     "news_withdrawn": "Novità ritirata",
     "news_deleted": "Novità eliminata",
     "news_simulated": "Simulazione rilascio (test)",
-    "maint_low_balance_notice": "Avviso saldo insufficiente per mantenimento",
     "brevo_org_lists_toggle": "Liste Brevo per organizzazione",
     "brevo_org_lists_sync": "Sincronizzazione liste Brevo organizzazione",
 }
@@ -10508,8 +10507,8 @@ FASE_E_INITIAL = {
 _credits_indexes_done = False
 
 # Servizi realmente collegati a un addebito nel codice (gli altri restano nascosti nel catalogo Super Admin).
-LINKED_CREDIT_SERVICES = {"ai_assistant", "ai_briefing", "event_activation", "event_maintenance",
-                          "event_pipeline_pro", "google_calendar", "video_support"}
+LINKED_CREDIT_SERVICES = {"ai_assistant", "ai_briefing", "event_pipeline_pro", "google_calendar", "video_support"}
+DISMISSED_EVENT_SERVICES = {"event_active_period", "event_activation", "event_maintenance"}
 # Descrizioni informative (verificate sul codice di addebito). Applicate una sola volta: poi modificabili dal Super Admin.
 CREDIT_SERVICE_DESCRIPTIONS = {
     "ai_assistant": "Risponde con l'AI alle domande sull'uso di CRMEvent e sui dati della tua organizzazione. Il costo viene scalato per ogni domanda che riceve una risposta utile. Se l'assistente non sa rispondere, oppure la richiesta è un suggerimento di nuova funzione, non viene scalato nulla.",
@@ -10553,7 +10552,8 @@ async def _ensure_credits_setup():
                 "active": True, "consumo_active": True, "updated_at": now_iso()}})
     # FASE E.2b: il vecchio servizio unico 'event_active_period' è sostituito da due servizi distinti
     # event_activation (30, una tantum) + event_maintenance (20, mensile). Dismetti il vecchio.
-    await db.credit_services.update_one({"key": "event_active_period"}, {"$set": {
+    # Attivazione/mantenimento evento a crediti dismessi: eventi sempre operativi.
+    await db.credit_services.update_many({"key": {"$in": list(DISMISSED_EVENT_SERVICES)}, "visible": {"$ne": False}}, {"$set": {
         "active": False, "consumo_active": False, "visible": False, "updated_at": now_iso()}})
     # Backfill del campo consumo_active (distinto da active=disponibilità). Retrocompat: se assente,
     # un servizio configurato+attivo consumava già -> consumo_active=True. Google Calendar: disponibile
@@ -10787,7 +10787,7 @@ async def credits_service_costs(user: dict = Depends(require_admin)):
 @api.get("/platform/credit-services")
 async def platform_credit_services(admin: dict = Depends(require_superadmin)):
     await _ensure_credits_setup()
-    rows = await db.credit_services.find({}, {"_id": 0}).to_list(100)
+    rows = await db.credit_services.find({"key": {"$nin": list(DISMISSED_EVENT_SERVICES)}}, {"_id": 0}).to_list(100)
     return {"services": [{**r, "linked": r["key"] in LINKED_CREDIT_SERVICES} for r in rows]}
 
 
