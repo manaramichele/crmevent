@@ -45,7 +45,7 @@ function ConfigTab() {
   };
   return (
     <div className="space-y-4">
-      <div className="text-xs text-slate-500" data-testid="saas-stripe-mode">Stripe: <b>{cfg.stripe_mode?.toUpperCase()}</b>{cfg.stripe_mode === "live" && !cfg.live_enabled ? " · abbonamenti LIVE disattivati (SAAS_STRIPE_LIVE_ENABLED)" : ""} · versione {cfg.version}</div>
+      <div className="text-xs text-slate-500" data-testid="saas-stripe-mode">Stripe: <b>{cfg.stripe_mode?.toUpperCase()}</b>{cfg.stripe_mode === "live" && !cfg.live_enabled ? " · abbonamenti LIVE disattivati (SAAS_STRIPE_LIVE_ENABLED=0)" : ""} · versione {cfg.version}</div>
       <div className="grid grid-cols-2 gap-3 max-w-md text-xs">
         <label>Durata prova (giorni)<Input type="number" value={cfg.trial_days} onChange={(e) => setCfg({ ...cfg, trial_days: parseInt(e.target.value, 10) })} data-testid="saas-trial-days" /></label>
         <label>Videochiamate in prova<Input type="number" value={cfg.trial_video_quota} onChange={(e) => setCfg({ ...cfg, trial_video_quota: parseInt(e.target.value, 10) })} data-testid="saas-trial-video" /></label>

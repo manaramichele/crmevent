@@ -42,6 +42,11 @@ DEFAULT_CONFIG = {
                  "monthly": 79.0, "yearly": 758.40, "features": _GOLD, "video_quota": -1, "active": True},
     },
 }
+def _live_enabled() -> bool:
+    """Abbonamenti LIVE attivi (interruttore di emergenza: SAAS_STRIPE_LIVE_ENABLED=0)."""
+    return os.environ.get("SAAS_STRIPE_LIVE_ENABLED", "1").strip() != "0"
+
+
 WRITE_EXEMPT = ("/saas", "/account", "/auth", "/notifications", "/my/", "/support", "/news")
 SAFE = ("GET", "HEAD", "OPTIONS")
 GOLD_NOTICE_HOURS = 4
@@ -264,7 +269,7 @@ def build(db, deps: dict):
 
     # ---------------- Stripe ----------------
     def _assert_stripe():
-        if deps["stripe_mode"] == "live" and os.environ.get("SAAS_STRIPE_LIVE_ENABLED", "").strip() != "1":
+        if deps["stripe_mode"] == "live" and not _live_enabled():
             raise HTTPException(status_code=503, detail="Gli abbonamenti non sono ancora attivi per i pagamenti reali. Riprova più tardi.")
 
     async def ensure_price(cfg: dict, plan: str, cycle: str) -> str:
@@ -378,6 +383,10 @@ def build(db, deps: dict):
         if test:
             upd.update({"fic_stato_documento": "test_non_inviata", "fic_stato_sdi": "non_inviato"})
         await db.invoices.update_one({"stripe_invoice_id": inv.get("id"), "fic_document_id": None}, {"$set": upd})
+        if status == "paid" and not test:
+            row = await db.invoices.find_one({"stripe_invoice_id": inv.get("id")}, {"_id": 0, "id": 1})
+            if row:
+                asyncio.create_task(deps["emit_invoice"](row["id"]))
         reason = inv.get("billing_reason")
         if status == "payment_failed":
             await db.organizations.update_one({"id": org["id"]}, {"$set": {"saas.stripe_status": "past_due"}})
@@ -657,13 +666,14 @@ def build(db, deps: dict):
         if not sec or not _s.compare_digest(authorization or "", f"Bearer {sec}"):
             raise HTTPException(status_code=401, detail="unauthorized")
         asyncio.create_task(run_trial_notices())
+        asyncio.create_task(deps["retry_invoices"]())  # nuovi tentativi fatture FIC non riuscite
         return {"accepted": True}
 
     # ---------------- Super Admin ----------------
     @r.get("/platform/saas/config")
     async def admin_config(admin: dict = Depends(deps["require_superadmin"])):
         return {**(await get_config()), "feature_catalog": [{"key": k, "label": l} for k, l in FEATURES],
-                "stripe_mode": deps["stripe_mode"], "live_enabled": os.environ.get("SAAS_STRIPE_LIVE_ENABLED", "").strip() == "1"}
+                "stripe_mode": deps["stripe_mode"], "live_enabled": _live_enabled()}
 
     @r.put("/platform/saas/config")
     async def admin_put_config(body: ConfigIn, admin: dict = Depends(deps["require_superadmin"])):
