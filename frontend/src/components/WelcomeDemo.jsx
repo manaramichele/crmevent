@@ -97,9 +97,8 @@ export default function WelcomeDemo() {
   const autoOpen = eligible && user.welcome_demo === "pending";
 
   const start = useCallback(async () => {
-    setDone(false); setOpen(true);
     const [w, s] = await Promise.all([api.get("/demo/welcome"), api.get("/demo/slots").catch(() => ({ data: { slots: [] } }))]);
-    setF(w.data.prefill); setSlots(s.data.slots || []);
+    setF(w.data.prefill); setSlots(s.data.slots || []); setDone(false); setOpen(true);
   }, []);
   useEffect(() => { if (autoOpen) start().catch(() => {}); }, [autoOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

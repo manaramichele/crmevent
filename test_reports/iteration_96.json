@@ -1,0 +1,34 @@
+{
+  "summary": "End-to-end testing of the new WelcomeDemo (post-registration 'Prenota una demo') flow and Super Admin 'Richieste demo' area. Backend: created /app/backend/tests/test_iter96_demo_requests.py — 10/10 pytest cases pass. Covers: register-organization sets welcome_demo='pending', /api/demo/welcome prefill (email lowercased & disabled, nome/organizzazione prefilled), /api/demo/slots returns slots per SA config (Mon-Fri 10-12), /api/demo/requests creates request (persists in demo_requests, flips welcome_demo→'requested', upserts Lead with demo_status='da_confermare'), invalid slot_key → 409, empty name → 400, /demo/welcome/dismiss sets welcome_demo='dismissed' (idempotent), /api/platform/demo/requests list+filter+PATCH status (valid=200, invalid=400, missing=404), non-superadmin → 401/403. Frontend (Playwright, https://manage-events-12.preview.emergentagent.com): (1) auto-registration via /registrati redirects to /app and welcome-demo-dialog opens automatically with correct title 'Scopri CRMEvent con una demo gratuita', prefills nome='Mario Rossi', email disabled & lowercased, organizzazione prefilled; (2) 'Richiedi una demo' button is disabled without slot + nome, enabled once both set; selecting demo-day-YYYY-MM-DD + demo-time-… + typing note works; submit transitions to welcome-demo-done ('Richiesta inviata!…'); (3) after submit, reload does NOT auto-reopen the dialog (welcome_demo=='requested'); (4) header-demo-button is visible for trial orgs, opens the SAME WelcomeDemo dialog without navigation, on /app and on /eventi (url unchanged); (5) 'Non ora' dismisses, backend persists welcome_demo='dismissed', reload confirms no auto-reopen; (6) mobile 390x844: dialog fits (width=390, computed max-h, overflow-y=auto, scrollHeight>clientHeight), both buttons visible/usable; (7) Super Admin /piattaforma/richieste-demo renders demo-requests-page with 2 rows (name, org, email+phone, preferred date/time, sent date, note, status select), demo-req-filter switches to empty state when filtering 'annullata'; status select demo-req-status-{id} successfully PATCHes status to 'completata' / 'confermata'. All TEST_* orgs/users/leads/demo_requests cleaned from DB.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Reopen WelcomeDemo via header-demo-button after a successful request", "issue": "On second open (post-submit) the dialog sometimes renders with empty prefill (nome/email blank) and 'Al momento non ci sono orari disponibili' even though /api/demo/slots still returns slots in pytest. Possibly a stale state issue in WelcomeDemo start(): when the user is in state 'requested' and reopens via the event listener, the previously-filled `f` is reset and the slot the user already picked is still being filtered. Non-blocking — the primary flow (auto-open → submit → done) works. Observed on /eventi.", "affected_selectors": ["welcome-demo-dialog","welcome-demo-nome","welcome-demo-email","demo-no-slots"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter96_demo_requests.py",
+    "/app/test_reports/pytest/iter96_demo_requests.xml"
+  ],
+  "action_items": [
+    "(Minor) In WelcomeDemo.jsx, consider refetching slots and resetting prefill explicitly inside the 'welcome-demo:open' handler so that subsequent header-triggered openings always render with up-to-date prefill and slot list — avoid relying on previous component state."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/demo_slots.py line 128: slot validation re-runs _cfg()+freebusy on every POST — fine for low volume but note Google freebusy call cost; acceptable.",
+    "/app/backend/demo_slots.py line 149 send_operational uses user lead; if Brevo misconfigured the HTTP call still returns 200 (good — wrapped in try/except).",
+    "/app/frontend/src/components/WelcomeDemo.jsx eligibility check `user.role !== 'superadmin' && !user.support && !!user.org_id` is correct per brief (superadmin & assistenza-only users don't see dialog or header button). Trial-only visibility of header-demo-button is enforced in Layout.jsx — verified from UI (QA non-trial admin sees 'Assistenza' instead).",
+    "No ObjectID leaks observed in demo endpoints — all projections use `{_id: 0}`."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter96_demo_requests.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10 pytest)", "frontend": "100% core flows (register auto-open, prefill, submit, done, header reopen, mobile, dismiss persistence, SA list/filter/status change)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! used; QA admin qa.eventi@crmeventqa.it not needed (not in trial — correctly shows 'Assistenza' header button, which is the pre-existing behavior).",
+  "seed_data_creation": "Created ephemeral TEST_ orgs via /api/auth/register-organization (TEST_DemoUI_6b2d97, TEST_Mob_efe787, plus 4 generated by pytest fixtures). All of them, their users, leads, demo_requests, memberships and saas_subscriptions were deleted at the end of the run (6 orgs, 4 users). Status: DB is clean.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend regression file is /app/backend/tests/test_iter96_demo_requests.py (replaces test_iter90_welcome_demo.py which still references the removed /demo/welcome/book endpoint — main agent should mark that older test file as obsolete). The main user-facing flow is confirmed working on both desktop and mobile. One minor UX note: reopening the dialog via header-demo-button after a successful submit may render with empty prefill/empty slot list; worth a small follow-up fix in WelcomeDemo.jsx start() handler but not a blocker.",
+  "rca of the issue": "Minor reopen glitch RCA (frontend only): In /app/frontend/src/components/WelcomeDemo.jsx the 'welcome-demo:open' handler calls start(), which does Promise.all([/demo/welcome, /demo/slots]) and setF(w.data.prefill). If the user already submitted (welcome_demo='requested'), the API still returns a valid prefill, but the local `f` state previously contained an obsolete slot_key, and `done` flag may not be reset in a timely manner. Mitigation: inside start() explicitly `setF({})` first OR add a dependency on user.welcome_demo so the handler re-fires. Also, in the 'no slots' case we rely on silently-caught catch in start() — adding a toast would make failure visible."
+}
