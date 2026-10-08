@@ -367,6 +367,10 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Dashboard dinamica per permessi — 2026-10-08 ✅ VERIFICATO (iter 80, backend 9/9 + frontend)
+- GET /api/dashboard: restituisce `sections` (permessi effettivi letti a ogni richiesta) e rimuove i blocchi non autorizzati (eventi, crm parziale aziende/anagrafiche, commerciale+grafici senza sponsor, attività/follow-up separati, staff con scope Team/eventi). Nessuna query sulle sezioni non autorizzate.
+- Dashboard.jsx: KpiGroup mostra solo i blocchi presenti, griglia adattiva (niente spazi vuoti), PipelineAttention solo con permesso pipeline, filtro eventi solo con eventi, messaggio "dashboard-empty"; ricarica al ritorno sulla scheda (permessi aggiornati senza nuovo login).
+
 ## Ospitalità & Pasti: filtro Ruolo predefinito "Staff" — 2026-10-08 ✅ verificato (screenshot)
 - Hospitality.jsx: fRuolo iniziale "staff" (tutte le org); "Tutti i ruoli"/Volontario ecc. restano selezionabili. Altri filtri invariati.
 
