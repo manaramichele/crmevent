@@ -56,6 +56,7 @@ export default function EventPipeline() {
   // FASE 3
   const [templates, setTemplates] = useState([]);
   const [selectedTpl, setSelectedTpl] = useState(null);
+  const [suggestedTpl, setSuggestedTpl] = useState(null);
   const [changeMode, setChangeMode] = useState(false); // chooser aperto per cambio modello
   const [genBusy, setGenBusy] = useState(false);
   const [dateDlg, setDateDlg] = useState(false);
@@ -71,7 +72,10 @@ export default function EventPipeline() {
   }, [id]);
 
   const loadTemplates = useCallback(async () => {
-    try { const { data } = await api.get(`/events/${id}/pipeline/templates`); setTemplates(data.templates); }
+    try {
+      const { data } = await api.get(`/events/${id}/pipeline/templates`); setTemplates(data.templates);
+      if (data.suggested) { setSuggestedTpl(data.suggested); setSelectedTpl((cur) => cur || data.suggested); }
+    }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   }, [id]);
 
@@ -305,8 +309,9 @@ export default function EventPipeline() {
           <div className="grid gap-4 sm:grid-cols-2 mt-6">
             {templates.map((t) => (
               <button key={t.key} onClick={() => setSelectedTpl(t.key)} className={`text-left rounded-2xl border p-5 transition-all ${selectedTpl === t.key ? "border-tiffany-active ring-2 ring-tiffany-active/30 bg-tiffany-light/10" : "border-slate-200 hover:border-slate-300"}`} data-testid={`pipeline-tpl-${t.key}`}>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 className="font-bold text-slate-900 text-lg">{t.name}</h3>
+                  {suggestedTpl === t.key && <span className="rounded-full bg-tiffany-light text-tiffany-fg px-2 py-0.5 text-xs font-semibold" data-testid={`pipeline-tpl-suggested-${t.key}`}>Consigliato</span>}
                   {selectedTpl === t.key && <CheckCircle2 className="w-5 h-5 text-tiffany-active" />}
                 </div>
                 <p className="text-sm text-slate-500 mt-1">{t.description}</p>

@@ -177,7 +177,7 @@ export default function PipelineTemplates() {
                     <h2 className="font-bold text-slate-900 text-lg">{t.name}</h2>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${t.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{t.active ? "Attivo" : "Disattivo"}</span>
                   </div>
-                  <div className="text-xs text-slate-400 mt-0.5">codice: {t.key} · ordine {t.order}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">codice: {t.key}{t.in_use ? " · in uso" : ""}</div>
                 </div>
                 <Switch checked={t.active} onCheckedChange={() => toggleTpl(t)} data-testid={`tpl-toggle-${t.key}`} />
               </div>
@@ -185,8 +185,8 @@ export default function PipelineTemplates() {
               <div className="flex items-center gap-1.5 text-sm text-slate-600 mt-3"><ListChecks className="w-4 h-4 text-tiffany-active" />{t.task_count} attività</div>
               <div className="flex gap-2 mt-4">
                 <Button variant="outline" size="sm" onClick={() => setSelected(t.key)} data-testid={`tpl-manage-${t.key}`}><ListChecks className="w-4 h-4 mr-1" />Gestisci attività</Button>
-                <Button variant="outline" size="sm" onClick={() => setTplDlg({ ...t })}><Pencil className="w-4 h-4" /></Button>
-                <Button variant="outline" size="sm" onClick={() => delTpl(t)} className="text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                <Button variant="outline" size="sm" onClick={() => setTplDlg({ ...t })} data-testid={`tpl-edit-${t.key}`}><Pencil className="w-4 h-4" /></Button>
+                <Button variant="outline" size="sm" disabled={t.in_use} title={t.in_use ? "Modello utilizzato da eventi: puoi solo disattivarlo" : "Elimina"} onClick={() => delTpl(t)} className="text-red-600 hover:bg-red-50" data-testid={`tpl-delete-${t.key}`}><Trash2 className="w-4 h-4" /></Button>
               </div>
             </div>
           ))}

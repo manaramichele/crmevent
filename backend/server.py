@@ -35,6 +35,7 @@ import permissions as P
 import storage_utils
 import gcal_utils
 import video_support
+import pipeline_seed_sports
 import brevo_funnel
 import social_ai
 import social_creative
@@ -12016,7 +12017,7 @@ async def _ensure_pipeline_templates():
         await db.pipeline_templates.create_index([("key", 1)], unique=True)
     except Exception:
         pass
-    for tpl in pipeline_seed.PIPELINE_TEMPLATES_SEED:
+    for tpl in pipeline_seed.PIPELINE_TEMPLATES_SEED + pipeline_seed_sports.SPORT_TEMPLATES_SEED:
         if await db.pipeline_templates.find_one({"key": tpl["key"]}):
             continue
         now = now_iso()
@@ -12081,7 +12082,11 @@ class PipelineTemplateTaskUpd(BaseModel):
 @api.get("/platform/pipeline-templates")
 async def platform_pipeline_templates(admin: dict = Depends(require_superadmin)):
     await _ensure_pipeline_templates()
-    rows = await db.pipeline_templates.find({}, {"_id": 0}).sort("order", 1).to_list(200)
+    rows = await db.pipeline_templates.find({}, {"_id": 0}).to_list(200)
+    rows.sort(key=lambda r: (r.get("name") or "").strip().lower())
+    used = set(await db.event_pipelines.distinct("template_key"))
+    for r in rows:
+        r["in_use"] = r["key"] in used
     counts = {}
     for r in rows:
         counts[r["key"]] = await db.pipeline_template_tasks.count_documents({"template_key": r["key"]})
@@ -12124,6 +12129,8 @@ async def platform_pipeline_template_update(key: str, body: PipelineTemplateUpd,
 async def platform_pipeline_template_delete(key: str, admin: dict = Depends(require_superadmin)):
     if not await db.pipeline_templates.find_one({"key": key}):
         raise HTTPException(status_code=404, detail="Modello non trovato")
+    if await db.event_pipelines.find_one({"template_key": key}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="Modello già utilizzato da uno o più eventi: puoi solo disattivarlo")
     await db.pipeline_template_tasks.delete_many({"template_key": key})
     await db.pipeline_templates.delete_one({"key": key})
     await record_audit(admin, "pipeline_template_delete", meta={"key": key})
@@ -12179,12 +12186,14 @@ async def pipeline_templates_for_event(event_id: str, user: dict = Depends(requi
     ev = await db.events.find_one(oq(user, id=event_id), {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento non trovato")
-    rows = await db.pipeline_templates.find({"active": True}, {"_id": 0}).sort("order", 1).to_list(200)
+    rows = await db.pipeline_templates.find({"active": True}, {"_id": 0}).to_list(200)
+    rows.sort(key=lambda r: (r.get("name") or "").strip().lower())
     out = []
     for r in rows:
         n = await db.pipeline_template_tasks.count_documents({"template_key": r["key"], "active": True})
         out.append({"key": r["key"], "name": r["name"], "description": r.get("description", ""), "task_count": n})
-    return {"templates": out}
+    sug = pipeline_seed_sports.suggest_template(ev.get("tipologia"))
+    return {"templates": out, "suggested": sug if any(o["key"] == sug for o in out) else None}
 
 
 async def _generate_pipeline_from_template(org_id: str, event_id: str, template_key: str, ev: dict) -> int:
