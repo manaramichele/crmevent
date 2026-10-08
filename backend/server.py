@@ -114,7 +114,63 @@ async def resolve_user_from_token(token: str) -> Optional[dict]:
     return None
 
 
+SUPPORT_COOKIE = "support_session"
+SUPPORT_MINUTES = 30
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def _sha(v: str) -> str:
+    return hashlib.sha256(v.encode()).hexdigest()
+
+
+async def _end_support(sa: dict, s: dict, action: str) -> None:
+    res = await db.support_sessions.update_one({"id": s["id"], "active": True},
+                                               {"$set": {"active": False, "ended_at": now_iso(), "end_reason": action}})
+    if res.modified_count:
+        await record_audit(sa, action, org_id=s["org_id"], org_name=s.get("org_name"), target_email=s.get("target_email"),
+                           target_name=s.get("target_name"), meta={"support_session_id": s["id"], "target_user_id": s["target_user_id"]})
+
+
+async def _active_support(request: Request, base: dict) -> Optional[dict]:
+    """Sessione di assistenza attiva del Super Admin (cookie httpOnly, token salvato solo come hash)."""
+    tok = request.cookies.get(SUPPORT_COOKIE)
+    if not tok or base.get("role") != "superadmin":
+        return None
+    s = await db.support_sessions.find_one({"token_hash": _sha(tok), "superadmin_id": base["user_id"], "active": True}, {"_id": 0})
+    if not s:
+        return None
+    if datetime.fromisoformat(s["expires_at"]) <= datetime.now(timezone.utc):
+        await _end_support(base, s, "impersonation_expired")
+        return None
+    return s
+
+
 async def get_current_user(request: Request) -> dict:
+    user = await _get_base_user(request)
+    s = await _active_support(request, user)
+    if s:
+        target = await db.users.find_one({"user_id": s["target_user_id"]}, {"_id": 0, "password_hash": 0})
+        if target and target.get("role") != "superadmin":
+            if request.method not in SAFE_METHODS:
+                path = request.url.path
+                if s.get("read_only"):
+                    raise HTTPException(status_code=403, detail="Modalità assistenza: account disabilitato, sola lettura")
+                if path.startswith("/api/auth/"):
+                    raise HTTPException(status_code=403, detail="Modalità assistenza: operazione sull'account non consentita")
+                await record_audit(user, "impersonation_action", org_id=s["org_id"], org_name=s.get("org_name"),
+                                   target_email=s.get("target_email"), target_name=s.get("target_name"),
+                                   detail=f"{request.method} {path}", meta={"support_session_id": s["id"]})
+            return {**target, "support": {"session_id": s["id"], "org_id": s["org_id"], "org_name": s.get("org_name"),
+                                           "target_user_id": s["target_user_id"],
+                                           "read_only": bool(s.get("read_only")), "expires_at": s["expires_at"],
+                                           "target_name": s.get("target_name"), "orgs": s.get("orgs") or [],
+                                           "superadmin_name": user.get("name") or user.get("email")}}
+    if user.get("active") is False:
+        raise HTTPException(status_code=403, detail="Accesso disabilitato")
+    return user
+
+
+async def _get_base_user(request: Request) -> dict:
     token = request.cookies.get("session_token") or request.cookies.get("access_token")
     if not token:
         auth = request.headers.get("Authorization", "")
@@ -125,8 +181,6 @@ async def get_current_user(request: Request) -> dict:
     user = await resolve_user_from_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Sessione non valida o scaduta")
-    if user.get("active") is False:
-        raise HTTPException(status_code=403, detail="Accesso disabilitato")
     return user
 
 
@@ -136,6 +190,12 @@ async def _resolve_active_org(request: Request, user: dict):
     - Operational user: only an org for which an ACTIVE membership exists; the optional
       X-Org-Id header must match one of those memberships, else 403. Defaults to primary.
     Data always stays org-scoped through oq() — no cross-tenant bypass."""
+    sup = user.get("support")
+    if sup:  # assistenza: contesto fissato dalla sessione, ruolo reale dell'utente (X-Org-Id ignorato)
+        m = await db.memberships.find_one({"user_id": user["user_id"], "org_id": sup["org_id"]}, {"_id": 0, "role": 1})
+        if not m:
+            raise HTTPException(status_code=403, detail="Nessuna organizzazione associata all'account")
+        return sup["org_id"], m["role"]
     if user.get("role") == "superadmin":
         acting = request.headers.get("X-Org-Id")
         if not acting:
@@ -187,8 +247,8 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     """Unico punto di controllo permessi per sezione/azione/evento (server-side, fail-closed)."""
     if org_role in ("admin_org", "superadmin"):
         return {"admin": True, "event_ids": None}
-    mem = await db.memberships.find_one({"user_id": user["user_id"], "org_id": org_id, "active": True},
-                                        {"_id": 0, "role": 1, "permissions": 1, "persona_id": 1}) or {"role": org_role}
+    mq = {"user_id": user["user_id"], "org_id": org_id} if user.get("support") else {"user_id": user["user_id"], "org_id": org_id, "active": True}
+    mem = await db.memberships.find_one(mq, {"_id": 0, "role": 1, "permissions": 1, "persona_id": 1}) or {"role": org_role}
     eff = P.effective(mem)
     if eff.get("admin"):
         return {"admin": True, "event_ids": None}
@@ -762,7 +822,11 @@ async def google_session(request: Request, response: Response):
 
 @api.get("/auth/me")
 async def me(request: Request, user: dict = Depends(get_current_user)):
-    return await user_payload(user, request.headers.get("X-Org-Id"))
+    sup = user.get("support")
+    out = await user_payload(user, sup["org_id"] if sup else request.headers.get("X-Org-Id"))
+    if sup:
+        out["support"] = sup
+    return out
 
 
 @api.post("/auth/logout")
@@ -772,6 +836,13 @@ async def logout(request: Request, response: Response):
         await db.user_sessions.delete_one({"session_token": token})
     response.delete_cookie("session_token", path="/")
     response.delete_cookie("access_token", path="/")
+    sup = request.cookies.get(SUPPORT_COOKIE)
+    if sup:
+        s = await db.support_sessions.find_one({"token_hash": _sha(sup), "active": True}, {"_id": 0})
+        if s:
+            sa = await db.users.find_one({"user_id": s["superadmin_id"]}, {"_id": 0, "password_hash": 0}) or {}
+            await _end_support(sa, s, "impersonation_ended")
+        response.delete_cookie(SUPPORT_COOKIE, path="/", secure=True, samesite="none")
     return {"ok": True}
 
 
@@ -4056,13 +4127,83 @@ async def _user_row(u: dict) -> dict:
     if u.get("org_id"):
         po = await db.organizations.find_one({"id": u["org_id"]}, {"_id": 0, "nome": 1, "id": 1})
         primary = {"id": u["org_id"], "nome": (po or {}).get("nome")} if po else None
-    return {"user_id": u["user_id"], "name": u.get("name"), "email": u.get("email"),
+    nome, cognome = _split_name(u)
+    return {"user_id": u["user_id"], "name": u.get("name"), "email": u.get("email"), "nome": nome, "cognome": cognome,
             "role": u.get("role"), "role_label": ROLE_LABELS_USER.get(u.get("role"), u.get("role")),
             "active": u.get("active", True), "created_at": u.get("created_at"),
             "last_login_at": u.get("last_login_at"), "auth_provider": u.get("auth_provider"),
             "person_id": u.get("person_id"), "primary_org": primary,
             "org_names": sorted(set(n for n in org_names if n)), "memberships": memberships,
             "is_superadmin": u.get("role") == "superadmin"}
+
+
+def _split_name(u: dict):
+    nm = (u.get("name") or "").strip()
+    return (u.get("nome") or (nm.split(" ")[0] if nm else ""),
+            u.get("cognome") or (" ".join(nm.split(" ")[1:]) if nm else ""))
+
+
+async def require_base_superadmin(request: Request) -> dict:
+    """Super Admin reale (ignora un'eventuale sessione di assistenza attiva)."""
+    u = await _get_base_user(request)
+    if u.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Accesso riservato al Super Admin CRMEvent")
+    return u
+
+
+class SupportStartIn(BaseModel):
+    user_id: str
+    org_id: Optional[str] = None
+
+
+@api.post("/platform/impersonate")
+async def support_start(body: SupportStartIn, request: Request, response: Response, sa: dict = Depends(require_base_superadmin)):
+    t = await db.users.find_one({"user_id": body.user_id}, {"_id": 0, "password_hash": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Account non trovato")
+    if t.get("role") == "superadmin":
+        raise HTTPException(status_code=400, detail="Non è possibile accedere come Super Admin")
+    mems = {m["org_id"]: m for m in await db.memberships.find({"user_id": t["user_id"]}, {"_id": 0}).to_list(200)}
+    opts = list(mems) or ([t["org_id"]] if t.get("org_id") else [])
+    orgs = [{"org_id": o["id"], "nome": o.get("nome")} for o in await db.organizations.find({"id": {"$in": opts}}, {"_id": 0, "id": 1, "nome": 1}).to_list(200)]
+    orgs.sort(key=lambda o: (o["nome"] or "").lower())
+    if not orgs:
+        raise HTTPException(status_code=400, detail="L'utente non appartiene a nessuna organizzazione")
+    org_id = body.org_id or (orgs[0]["org_id"] if len(orgs) == 1 else None)
+    if not org_id:
+        raise HTTPException(status_code=409, detail={"code": "choose_org", "orgs": orgs, "message": "Scegli l'organizzazione da visualizzare"})
+    org = next((o for o in orgs if o["org_id"] == org_id), None)
+    if not org:
+        raise HTTPException(status_code=400, detail="L'utente non appartiene all'organizzazione selezionata")
+    prev = request.cookies.get(SUPPORT_COOKIE)
+    if prev:
+        ps = await db.support_sessions.find_one({"token_hash": _sha(prev), "superadmin_id": sa["user_id"], "active": True}, {"_id": 0})
+        if ps:
+            await _end_support(sa, ps, "impersonation_ended")
+    nome, cognome = _split_name(t)
+    read_only = t.get("active") is False or (org_id in mems and mems[org_id].get("active", True) is False)
+    tok = secrets.token_urlsafe(32)
+    s = {"id": new_id(), "token_hash": _sha(tok), "superadmin_id": sa["user_id"], "target_user_id": t["user_id"],
+         "target_email": t.get("email"), "target_name": f"{cognome} {nome}".strip() or t.get("email"),
+         "org_id": org_id, "org_name": org["nome"], "orgs": orgs, "read_only": read_only, "active": True,
+         "started_at": now_iso(), "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=SUPPORT_MINUTES)).isoformat()}
+    await db.support_sessions.insert_one({**s})
+    set_auth_cookie(response, SUPPORT_COOKIE, tok, SUPPORT_MINUTES * 60)
+    await record_audit(sa, "impersonation_started", org_id=org_id, org_name=org["nome"], target_email=s["target_email"],
+                       target_name=s["target_name"], detail="Sola lettura (account disabilitato)" if read_only else None,
+                       meta={"support_session_id": s["id"], "target_user_id": t["user_id"], "expires_at": s["expires_at"]})
+    return {"ok": True, "expires_at": s["expires_at"], "read_only": read_only, "org_id": org_id}
+
+
+@api.post("/platform/impersonate/stop")
+async def support_stop(request: Request, response: Response, sa: dict = Depends(require_base_superadmin)):
+    tok = request.cookies.get(SUPPORT_COOKIE)
+    if tok:
+        s = await db.support_sessions.find_one({"token_hash": _sha(tok), "superadmin_id": sa["user_id"], "active": True}, {"_id": 0})
+        if s:
+            await _end_support(sa, s, "impersonation_ended")
+    response.delete_cookie(SUPPORT_COOKIE, path="/", secure=True, samesite="none")
+    return {"ok": True}
 
 
 @api.get("/platform/users")
@@ -6003,6 +6144,10 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 AUDIT_ACTION_LABELS = {
     "permissions_changed": "Modifica permessi",
     "org_access": "Accesso organizzazione",
+    "impersonation_started": "Avvio accesso come utente",
+    "impersonation_ended": "Termine accesso come utente",
+    "impersonation_expired": "Scadenza accesso come utente",
+    "impersonation_action": "Operazione in modalità assistenza",
     "org_switch": "Cambio organizzazione",
     "org_created": "Creazione organizzazione",
     "org_updated": "Modifica organizzazione",

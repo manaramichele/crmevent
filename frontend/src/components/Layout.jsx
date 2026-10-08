@@ -9,6 +9,7 @@ import {
 import { can, isOrgAdmin } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
+import SupportBanner from "@/components/SupportBanner";
 import ActivationGate from "@/components/ActivationGate";
 import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
@@ -56,6 +57,7 @@ const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
+  { to: "/piattaforma/utenti", label: "Gestione Utenti", icon: UserCog, id: "piattaforma-utenti" },
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
@@ -338,7 +340,9 @@ export default function Layout({ children }) {
         </div>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 lg:px-6" data-testid="app-header">
+        <div className="sticky top-0 z-40">
+        {user?.support && <SupportBanner />}
+        <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 lg:px-6" data-testid="app-header">
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
           {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
           <div className="hidden sm:block flex-1 min-w-0"><GlobalSearch /></div>
@@ -375,6 +379,7 @@ export default function Layout({ children }) {
             )}
           </div>
         </header>
+        </div>
         {searchOpen && <div className="sm:hidden sticky top-[4.5rem] z-30 bg-white border-b border-slate-200 px-3 py-2" data-testid="mobile-search-row"><GlobalSearch /></div>}
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
         {user?.role !== "superadmin" && <CreditGuardBanner />}

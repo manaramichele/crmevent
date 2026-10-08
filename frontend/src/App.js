@@ -23,6 +23,8 @@ import PricingAdmin from "@/pages/PricingAdmin";
 import PlatformCredits from "@/pages/PlatformCredits";
 import PlatformMessages from "@/pages/PlatformMessages";
 import PlatformNews from "@/pages/PlatformNews";
+import PlatformUsers from "@/pages/PlatformUsers";
+import SupportBanner from "@/components/SupportBanner";
 import News from "@/pages/News";
 import PipelineTemplates from "@/pages/PipelineTemplates";
 import PipelineAttentionPage from "@/pages/PipelineAttentionPage";
@@ -70,7 +72,7 @@ function Protected({ children }) {
   if (!user) return <Navigate to="/login" replace />;
   if (!isSuper(user) && user.needs_org) return <Navigate to="/completa-organizzazione" replace />;
   if (!isSuper(user) && !user.needs_org && user.needs_phone) return <Navigate to="/completa-profilo" replace />;
-  if (isVol(user)) return <VolunteerLayout>{children}</VolunteerLayout>;
+  if (isVol(user)) return <VolunteerLayout>{user.support && <div className="sticky top-0 z-40 -mx-4 -mt-4 mb-3 sm:mx-0 sm:mt-0"><SupportBanner /></div>}{children}</VolunteerLayout>;
   return <Layout>{children}</Layout>;
 }
 
@@ -143,6 +145,7 @@ function Shell() {
         <Route path="/account" element={<AccountRedirect />} />
         <Route path="/permessi" element={<Navigate to="/profilo" replace />} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/utenti" element={<Protected><SuperAdminOnly><PlatformUsers /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/crediti" element={<Protected><SuperAdminOnly><PlatformCredits /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import api from "@/lib/api";
+import api, { formatApiError } from "@/lib/api";
+import { toast } from "sonner";
 
 const AuthContext = createContext(null);
 
@@ -37,7 +38,29 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, [checkAuth]);
 
+  const startSupport = useCallback(async (userId, orgId) => {
+    try {
+      await api.post("/platform/impersonate", { user_id: userId, org_id: orgId || null });
+      if (!sessionStorage.getItem("support_return")) sessionStorage.setItem("support_return", window.location.pathname + window.location.search);
+      window.location.href = "/app";
+      return { ok: true };
+    } catch (e) {
+      const d = e.response?.data?.detail;
+      if (d?.code === "choose_org") return { choose: d.orgs };
+      toast.error(formatApiError(d));
+      return null;
+    }
+  }, []);
+
+  const stopSupport = useCallback(async () => {
+    try { await api.post("/platform/impersonate/stop"); } catch {}
+    const back = sessionStorage.getItem("support_return") || "/piattaforma/utenti";
+    sessionStorage.removeItem("support_return");
+    window.location.href = back;
+  }, []);
+
   const logout = async () => {
+    if (user?.support) return stopSupport();
     try { await api.post("/auth/logout"); } catch {}
     localStorage.removeItem("acting_org_id");
     setActingOrgId("");
@@ -46,7 +69,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, checkAuth, logout, actingOrgId, setActingOrg }}>
+    <AuthContext.Provider value={{ user, setUser, loading, checkAuth, logout, actingOrgId, setActingOrg, startSupport, stopSupport }}>
       {children}
     </AuthContext.Provider>
   );
