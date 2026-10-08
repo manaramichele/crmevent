@@ -540,6 +540,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Nuovo componente `frontend/src/components/OrgUsers.jsx` montato in `Profile.jsx` come scheda "Utenti e accessi", visibile SOLO se `user.org_role === "admin_org"`. Tabella unica membri+inviti: Nome | Email | Cellulare | Ruolo | Stato (Invito inviato/Attivo/Invito scaduto) | Ultimo accesso | Azioni. "+ Invita utente" (Nome, Cognome, Email, Cellulare con PhoneInput intl, Ruolo). Azioni: Reinvia · Cambia ruolo · Disattiva/Riattiva accesso. Scadenza invito 7gg. Nessun consumo crediti; nessuna modifica a Stripe/wallet/ledger/FIC.
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
+## Assistente IA senza crediti per abbonamenti — 2026-10-08 ✅ VERIFICATO (curl)
+- server.py /support/chat: se org.saas enabled → nessun ai_charge; se abbonamento non attivo (prova scaduta/annullata) → 402 "scegli un piano". Org legacy invariate (crediti).
+- SupportChat.jsx: per org con abbonamento niente "Crediti insufficienti"/"Ricarica crediti"; eventuale 402 mostra "Scopri i piani" → /profilo?tab=abbonamento.
+
 ## Header: pulsante prova + "?" Assistente IA; Dashboard senza Cerca — 2026-10-08 ✅ VERIFICATO (screenshot desktop/mobile)
 - TrialButton riportato nell'header (Layout.jsx) subito dopo menu/OrgSwitcher, a sinistra; rimosso da Dashboard. Campo Cerca rimosso dalla Dashboard (il pulsante Cerca dell'header resta nascosto su /app come prima).
 - FAB Assistente rimosso nel Layout principale (SupportChat fab={false}); nuovo pulsante header `header-assistant-button` (icona ?) accanto alla campanella → evento `support-chat:open`. VolunteerLayout invariato (mantiene FAB). Logica assistente invariata.
