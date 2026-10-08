@@ -1,0 +1,23 @@
+{
+  "summary": "Iter 79 — Frontend-only verification of mobile portrait header & profile menu refactor on /app. Tested with Super Admin (manara.michele.pro) and Org Admin QA (qa.eventi) on viewports 320/360/375/390/414/430 portrait and 667x375 / 844x390 landscape + Desktop 1920. All checks pass:\n(1) Header (data-testid=app-header): no horizontal overflow at any width (document.scrollWidth === window.innerWidth for all 8 widths). profile-button fully inside viewport (right<=vw). mobile-menu-button + mobile-search-button + header-news-button present. org-switcher NOT rendered in header on mobile.\n(2) Profile menu @390 (QA admin): panel rect left=142 right=382 vw=390 — fully inside viewport. profilo-link ✓, impostazioni-link ✓ (admin), tutorial-menu-link ✓ (mobile non-super), logout-button ✓. Tapping profile-menu-overlay closes the menu.\n(3) Super Admin profile menu @390: profilo ✓, impostazioni ✓, tutorial-menu-link = ABSENT (correct, hidden for isSuper), logout ✓.\n(4) Mobile search: mobile-search-button toggles mobile-search-row. Typing 'Rossi' returns 1 result ('personaRossi Marco'), fully inside viewport (row.right=390 vw=390).\n(5) Super Admin multi-org: org-switcher absent from header on mobile; mobile-org-switcher present inside drawer with populated <select data-testid=org-switcher-select> (5+ TEST orgs enumerated). On desktop 1920 the header org-switcher is visible again.\n(6) Desktop 1920 header: global-search-input visible, org-switcher visible, profile menu shows Profilo & Account / Impostazioni / Esci (tutorial-menu-link hidden by sm:hidden on desktop).\n(7) /profilo @390: profile-tab-account, profile-tab-crediti, profile-tab-utenti all render without horizontal overflow. Invita utente dialog opens inside viewport (left=0, right=390, inside=true).\n(8) Notifications panel @390 fits inside viewport (uses max-sm:fixed left-2 right-2 top-[4.75rem]).\n(9) News button visible on mobile for QA admin (non-superadmin) at all tested widths.\n\nNot executed (no credentials available): login as Utente / Collaboratore to visually confirm impostazioni-link is hidden. Code review confirms gating via `can(user, 'admin') && <impostazioni-link>` so Utente/Collaboratore (without admin permission) will NOT see Impostazioni — logic is correct. No fixes applied.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Layout.jsx (402 lines) correctly guards: impostazioni-link via can(user,'admin'); tutorial-menu-link via !isSuper + sm:hidden; mobile-org-switcher via showSwitcher inside drawer with sm:hidden. All data-testid attributes requested by the spec are present (app-header, profile-button, profile-menu, profile-menu-overlay, profilo-link, impostazioni-link, tutorial-menu-link, logout-button, mobile-search-button, mobile-search-row, mobile-org-switcher, mobile-menu-button, mobile-drawer, notifications-panel).",
+    "QA org Utenti list shows an active row with an empty displayed name (just '—') / role Utente — likely a user record without nome/cognome. Not part of this task but worth cleaning up seed data."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% on 9 verified surfaces"},
+  "test_credentials": "Super Admin: manara.michele.pro@gmail.com / CrmEvent2026! · Org Admin: qa.eventi@crmeventqa.it / QaEvents2026! · No Utente/Collaboratore passwords available in /app/memory/test_credentials.md",
+  "seed_data_creation": "None. No TEST_ records created. No writes performed. Dialogs closed with Escape.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Mobile header refactor is live on /app. Key testids: app-header, profile-button, profile-menu, profile-menu-overlay, profilo-link, impostazioni-link (admin-only), tutorial-menu-link (mobile+!isSuper), logout-button, mobile-search-button, mobile-search-row, mobile-org-switcher (inside mobile-drawer), notifications-panel. The desktop global-search-input element also exists in DOM (hidden sm:block) alongside the mobile one — Playwright locator for 'global-search-input' resolves to 2 elements on mobile; scope to [data-testid=mobile-search-row] when needed. To test Utente/Collaboratore impostazioni-link hiding, invite a user from /profilo → Utenti e Permessi (needs email+accept inbox) or ask main agent to seed a non-admin password.",
+  "rca of the issue": "N/A — refactor is working as specified across all tested viewports and roles."
+}

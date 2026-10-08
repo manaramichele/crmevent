@@ -367,6 +367,10 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Header mobile + menu profilo — 2026-10-08 ✅ VERIFICATO (iter 79)
+- Layout.jsx: su <640px la ricerca diventa icona (riga di ricerca sotto l'header), lo switcher org si sposta nel drawer (mobile-org-switcher), il Tutorial va nel menu profilo; profilo sempre visibile a destra (shrink-0). Menu profilo: Profilo & Account · Impostazioni (solo se can(user,"admin")) · Tutorial (mobile, non superadmin) · Esci; chiusura toccando fuori. Pannello notifiche a larghezza schermo su mobile. Desktop invariato.
+- Ruoli Utente/Collaboratore non testati con login reale (nessun account di prova): logica verificata nel codice.
+
 ## REGOLA PERMANENTE: persone "Cognome Nome" + ordinamento A–Z per cognome — 2026-10-08 ✅ VERIFICATO (iter 78)
 - Helper `frontend/src/lib/names.js` (personName, sortPersons, personOptions) da usare in ogni nuovo elenco/dropdown di persone. Backend: `_fmt_person`, persona_nome briefing, label ricerca, _member_view (preferisce persona collegata) in formato Cognome Nome.
 - Applicato a Staff/Volontari/Da classificare/Anagrafiche (header "Cognome e Nome"), Team, Turni (colonna Persona ordinabile; default turni resta cronologico), Utenti (OrgUsers), Invito, Ospitalità, Briefing, Lead, Disponibilità, Aziende, dropdown Referente (Attività, Follow-up, Sponsor), StaffAssignSelect, Pipeline. Solo visualizzazione: nessun dato DB modificato.
