@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useWheelScroll } from "@/lib/useWheelScroll";
 import { ChevronsUpDown, UserPlus, ArrowLeft } from "lucide-react";
 
-const pname = (p) => (p ? (`${p.nome || ""} ${p.cognome || ""}`.trim() || p.email || p.id) : "");
+const pname = (p) => (p ? (`${p.cognome || ""} ${p.nome || ""}`.trim() || p.email || p.id) : "");
 
 // Selettore Staff condiviso tra Pipeline (campo Responsabile) e Checklist (Assegna).
 // Mostra SOLO lo Staff dell'evento + "Aggiungi nuovo Staff" (quick-add con dedup).
@@ -103,7 +103,7 @@ export function StaffAssignSelect({
             </div>
             <div className="space-y-1"><Label className="text-xs">Cellulare</Label><Input value={quick.cellulare} onChange={(e) => setQuick((s) => ({ ...s, cellulare: e.target.value }))} className="h-8" placeholder="+39..." data-testid="qs-cellulare" /></div>
             <div className="space-y-1"><Label className="text-xs">Email</Label><Input type="email" value={quick.email} onChange={(e) => setQuick((s) => ({ ...s, email: e.target.value }))} className="h-8" data-testid="qs-email" /></div>
-            {existing && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Esiste già un'anagrafica con questi contatti: <b>{existing.nome} {existing.cognome}</b>. Usarla come Staff di questo evento?</div>}
+            {existing && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Esiste già un'anagrafica con questi contatti: <b>{existing.cognome} {existing.nome}</b>. Usarla come Staff di questo evento?</div>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => { setQuick(null); setExisting(null); }}>Annulla</Button>
               {existing

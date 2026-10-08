@@ -1,0 +1,28 @@
+{
+  "summary": "Validated Dashboard RBAC (iter 80): GET /api/dashboard strips blocks for sections the user cannot view; UI reflows without empty gaps on desktop (1920) and mobile (390); permission changes applied without re-login (page reload / visibilitychange). Backend: 9/9 pytest cases pass. Frontend: verified restricted user shows only Eventi+Staff groups, then after DB membership change (grant sponsor, remove staff) the Commerciale block + Pipeline/Tipo charts appear and Staff disappears, sidebar updates accordingly. Direct access to /api/deals, /api/pipeline/attention, /api/companies returns 403 for restricted user. Collaboratore defaults correctly hide sponsor & pipeline. Dashboard-only user: no blocks present in response (frontend would show 'dashboard-empty').",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter80_dashboard_rbac.py",
+    "/app/test_reports/pytest/iter80_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py dashboard(): staff block fields (staff_totale, volontari_totali, confermati, da_confermare, rinunce) do NOT match the keys the frontend Dashboard.jsx reads (st.staff_confermati, st.volontari_confermati, st.da_riconfermare, st.volontari_richiesti/assegnati/mancanti/esubero). The frontend relies on _team_coverage() to supply those; verify consistency and consider aligning naming to avoid 'undefined' KPI cards. Not a blocker for RBAC but a UX inconsistency worth cleaning up.",
+    "Dashboard.jsx line 75 computes 'nothing' without considering S.ospitalita / S.briefing; empty-state message test case (dashboard-only perm) should still render because ev/crm/com/att/st are undefined - looks correct, but S.pipeline alone drives PipelineAttention visibility; good.",
+    "server.py: pipeline_chart and tipo_chart are always populated then popped if not can['sponsor'] - fine, but computation cost is small."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter80_dashboard_rbac.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Super Admin: manara.michele.pro@gmail.com/CrmEvent2026! ; Org Admin: qa.eventi@crmeventqa.it/QaEvents2026!",
+  "seed_data_creation": "Created & deleted ephemeral TEST_ users (test_dash_user_*, test_collab_*, test_dashonly_*, test_dash_ui) in org 'org_qa_eventi' during fixtures; UI test user cleaned at end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_iter80_dashboard_rbac.py (9 cases, all pass). Fixtures create TEST_ users directly in mongo with bcrypt password_hash and matching membership permissions, then clean up. Frontend route /app renders Dashboard; after login, user may be prompted for phone (set users.telefono directly in DB to bypass). Dashboard reload triggered by document visibilitychange or page reload; both verified to pick up new membership permissions without logout."
+}

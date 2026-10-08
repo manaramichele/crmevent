@@ -4,11 +4,12 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, CalendarDays, Building2, Users, UserCog, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle,
 } from "lucide-react";
 import { can, isOrgAdmin } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
+import SupportBanner from "@/components/SupportBanner";
 import ActivationGate from "@/components/ActivationGate";
 import { TutorialLauncher, TutorialHint } from "@/components/Onboarding";
 import { RechargeDialog } from "@/components/CreditsSection";
@@ -56,6 +57,7 @@ const orgNavFor = (u) => ORG_NAV.filter((n) => (n.perm === "admin" ? isOrgAdmin(
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
+  { to: "/piattaforma/utenti", label: "Gestione Utenti", icon: UserCog, id: "piattaforma-utenti" },
   { to: "/piattaforma/crediti", label: "Servizi e crediti", icon: Coins, id: "crediti" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
@@ -197,7 +199,7 @@ function Notifications() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-80 max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-[4.75rem] max-sm:w-auto max-sm:max-h-[70dvh] max-sm:overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden" data-testid="notifications-panel">
           <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Notifiche</div>
           <div className="max-h-80 overflow-y-auto">
             {data.items.length === 0 ? (
@@ -222,6 +224,7 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [orgs, setOrgs] = useState([]);
 
   const isSuper = user?.role === "superadmin";
@@ -324,6 +327,7 @@ export default function Layout({ children }) {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} data-testid="mobile-drawer-overlay" />
           <aside className="absolute left-0 top-0 h-[100dvh] max-h-[100dvh] w-64 bg-white shadow-xl flex flex-col" data-testid="mobile-drawer">
             <div className="h-14 flex items-center justify-between px-3 shrink-0 border-b border-slate-100"><button onClick={() => { setMobileOpen(false); navigate("/"); }} data-testid="mobile-logo-home" className="flex items-center"><Logo /></button><button onClick={() => setMobileOpen(false)} data-testid="mobile-menu-close"><X className="w-6 h-6" /></button></div>
+            {showSwitcher && <div className="sm:hidden px-3 pt-3 [&_select]:max-w-[150px]" data-testid="mobile-org-switcher"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => { setActingOrg(id, true, actingOrgId); setMobileOpen(false); }} /></div>}
             <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-3 py-3 space-y-1 pb-[calc(env(safe-area-inset-bottom)+24px)]" data-testid="mobile-drawer-nav">
               {navGroups.map((g, gi) => (
                 <div key={gi} className={gi > 0 ? "pt-3 mt-2 border-t border-slate-100" : ""}>
@@ -336,34 +340,47 @@ export default function Layout({ children }) {
         </div>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 px-4 lg:px-6">
-          <button className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button"><Menu className="w-5 h-5" /></button>
-          {showSwitcher && <OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} />}
-          <div className="flex-1"><GlobalSearch /></div>
-          {!isSuper && <TutorialLauncher />}
-          {!isSuper && <NewsButton />}
-          <Notifications />
-          <div className="relative">
-            <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} className="flex items-center gap-2 h-10 px-2 rounded-lg hover:bg-slate-100 transition-colors">
+        <div className="sticky top-0 z-40">
+        {user?.support && <SupportBanner />}
+        <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 lg:px-6" data-testid="app-header">
+          <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
+          {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
+          <div className="hidden sm:block flex-1 min-w-0"><GlobalSearch /></div>
+          <div className="flex-1 sm:hidden" />
+          <button type="button" className="sm:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600" onClick={() => setSearchOpen((o) => !o)} data-testid="mobile-search-button" aria-label="Cerca"><Search className="w-5 h-5" /></button>
+          {!isSuper && <div className="hidden sm:block"><TutorialLauncher /></div>}
+          {!isSuper && <div className="shrink-0"><NewsButton /></div>}
+          <div className="shrink-0"><Notifications /></div>
+          <div className="relative shrink-0">
+            <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} aria-label="Profilo" aria-expanded={menuOpen} className="flex items-center gap-2 h-10 min-w-10 px-1 sm:px-2 rounded-lg hover:bg-slate-100 transition-colors">
               {user?.picture ? <img src={user.picture} alt="" className="w-8 h-8 rounded-full object-cover" /> : <CircleUserRound className="w-8 h-8 text-slate-400" />}
-              <span className="hidden sm:block text-sm font-medium text-slate-700 max-w-[120px] truncate">{user?.name}</span>
+              <span className="hidden md:block text-sm font-medium text-slate-700 max-w-[120px] truncate">{user?.name}</span>
             </button>
+            {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} data-testid="profile-menu-overlay" />}
             {menuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1rem)] bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden" data-testid="profile-menu">
                 <div className="px-4 py-3 border-b border-slate-100">
                   <div className="text-sm font-semibold text-slate-800 truncate">{user?.name}</div>
                   <div className="text-xs text-slate-400 truncate">{user?.email}</div>
                 </div>
-                <button onClick={() => { setMenuOpen(false); navigate("/profilo"); }} data-testid="profilo-link" className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                <button onClick={() => { setMenuOpen(false); navigate("/profilo"); }} data-testid="profilo-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
                   <CircleUserRound className="w-4 h-4" />Profilo & Account
                 </button>
-                <button onClick={logout} data-testid="logout-button" className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
+                {can(user, "admin") && <button onClick={() => { setMenuOpen(false); navigate("/impostazioni"); }} data-testid="impostazioni-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
+                  <Settings className="w-4 h-4" />Impostazioni
+                </button>}
+                {!isSuper && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("tutorial:open-index")); }} data-testid="tutorial-menu-link" className="sm:hidden w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
+                  <HelpCircle className="w-4 h-4" />Tutorial
+                </button>}
+                <button onClick={logout} data-testid="logout-button" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <LogOut className="w-4 h-4" />Esci
                 </button>
               </div>
             )}
           </div>
         </header>
+        </div>
+        {searchOpen && <div className="sm:hidden sticky top-[4.5rem] z-30 bg-white border-b border-slate-200 px-3 py-2" data-testid="mobile-search-row"><GlobalSearch /></div>}
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=crediti")} />}
         {user?.role !== "superadmin" && <CreditGuardBanner />}
         {isSuper && actingOrgId && !isPlatformRoute && (

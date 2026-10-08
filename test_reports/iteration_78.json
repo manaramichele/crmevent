@@ -1,0 +1,26 @@
+{
+  "summary": "Iter 78 — Verified platform-wide 'Cognome Nome' display rule and A–Z-by-cognome default sort as per feature spec. Login QA admin (qa.eventi@crmeventqa.it). Verified: (1) Staff/Volontari page: header 'Cognome e Nome' with sort arrow, rows render 'Cognome Nome' in A–Z by cognome [Bianchi Anna, Blu Elena, Mora Davide, Neri Sara, Rossi Marco]; Volontari tab [Gialli Paolo, Verdi Luca, Viola Giulia]; Da classificare [Bianchi Luca, Verdi Giulia]; clicking header toggles DESC [Rossi, Neri, Mora, Blu, Bianchi]; mobile 390px cards also 'Cognome Nome' in same order. (2) Anagrafiche /persone header 'Cognome e Nome' (table empty for QA org, header+format correct). (3) Team detail dialog on Team Pacer: Team Leader 'Neri Sara'; Staff section header 'Cognome e Nome', member 'Neri Sara'; Volontari del Team 'Gialli Paolo'. Team main table: Team Leader column shows 'Neri Sara', 'Bianchi Anna', 'Blu Elena'. (4) Turni tab Persona column 'Bianchi Anna', 'Neri Sara' in 'Cognome Nome' (default chronological by date per product rule); Nuovo turno dialog Persona dropdown returns 10 persons sorted A–Z by cognome in 'Cognome Nome'. (5) Attività Referente, Follow-up Referente, and Sponsor 'Nuova trattativa' Referente dropdowns all return identical 10-person list sorted A–Z by cognome: [Bianchi Anna, Bianchi Luca, Blu Elena, Gialli Paolo, Mora Davide, Neri Sara, Rossi Marco, Verdi Giulia, Verdi Luca, Viola Giulia]. (6) Profilo & Account → Utenti e Permessi: members shown as 'Cognome Nome' (Eventi QA, Invite Test×3, Rossi Marco) sorted by cognome; pending invite 'Bianchi Lucia' rendered after members (sorted separately) — behavior matches code (two groups: members, then pendingInvites). (7) Person detail dialog (data-testid=person-detail-name) shows 'Bianchi Anna' (Cognome Nome). (8) Briefing accessed at /eventi/{id}/briefing (both Regressione Fase QA and Maratona QA): page renders correctly; however both events have 0 persons collegate so no name strings available to verify in body — non-blocking. (9) Ospitalità /ospitalita with event filter: 'Nessuna persona collegata a questo evento' — no persona rows to verify; non-blocking. No data writes performed; no POSTs issued (dialogs were closed with Escape). Backend testing skipped per display-only nature of change (per request).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Nuovo turno dialog (Turni → Aggiungi)", "issues": ["Date input uses browser-default picker (mm/dd/yyyy) instead of shadcn calendar — unrelated to current task but noted"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "names.js is centralised and correctly uses it-locale compare with sensitivity 'base'; good.",
+    "OrgUsers.jsx renders members first then pendingInvites (each independently sorted). Spec says 'list sorted by cognome'; current behavior is sort within each group — acceptable UX since invites are visually distinct (amber row). If a single unified sort is desired, consider sorting [...members, ...pendingInvites] together.",
+    "Briefing and Ospitalità could not be exercised against actual data in QA org (0 persone collegate to all events). Suggest seeding at least one persona linked to an event for future regression coverage of these screens."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per display-only change)", "frontend": "100% on exercised flows (12/12 testable surfaces)"},
+  "test_credentials": "QA admin: qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "None. No TEST_ records created. All dialogs closed without saving.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Routes: /staff-volontari (tabs Staff|Volontari|Da classificare|Team|Turni), /persone (Anagrafiche), /profilo (tab 'Utenti e Permessi', testid=profile-tab-utenti), /ospitalita, /eventi/{id}/briefing, /sponsor (button 'Nuova trattativa'), /attivita, /followup. Person dialog has data-testid=person-detail-name showing 'Cognome Nome'. Dropdown Referente options are rendered as [role=option]. Seed events in QA org: Regressione Fase QA (cbee6996...), Maratona QA 2027 (36226833...), Triathlon QA (ev_qa_3). Maratona QA has staff/volontari linked; the other events have 0 persons.",
+  "rca of the issue": "N/A — no issues found."
+}

@@ -44,7 +44,7 @@ function eachDay(start, end) {
   while (d <= e && out.length < 60) { out.push(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1); }
   return out;
 }
-const fullName = (p) => `${p.nome || ""} ${p.cognome || ""}`.trim();
+const fullName = (p) => `${p.cognome || ""} ${p.nome || ""}`.trim();
 const migrateLod = (l) => (l.occupanti || !l.compagni_camera) ? l : { ...l, occupanti: l.compagni_camera.split(",").map((s) => s.trim()).filter(Boolean).map((n) => ({ persona_id: null, nome: n })) };
 
 function Field({ label, children, full }) {
@@ -617,7 +617,7 @@ export default function Hospitality() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [structOpen, setStructOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [fRuolo, setFRuolo] = useState("");
+  const [fRuolo, setFRuolo] = useState("staff");
   const [fStato, setFStato] = useState("");
   const [fEsig, setFEsig] = useState("");
   const [day, setDay] = useState("");
@@ -643,7 +643,7 @@ export default function Hospitality() {
   }, [events, eventId, data]);
   useEffect(() => { if (days.length && !days.includes(day)) setDay(days[0]); }, [days, day]);
 
-  const persons = useMemo(() => data?.persons || [], [data]);
+  const persons = useMemo(() => [...(data?.persons || [])].sort((a, b) => fullName(a).localeCompare(fullName(b), "it", { sensitivity: "base" })), [data]);
   const filteredPersons = persons.filter((p) => {
     if (q && !fullName(p).toLowerCase().includes(q.toLowerCase())) return false;
     if (fRuolo && p.categoria !== fRuolo) return false;

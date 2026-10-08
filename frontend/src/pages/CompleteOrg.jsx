@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
+import SupportBanner from "@/components/SupportBanner";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 
@@ -37,6 +38,8 @@ export default function CompleteOrg() {
   };
 
   return (
+    <>
+    <div className="sticky top-0 z-40"><SupportBanner /></div>
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
       <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8">
         <Link to="/"><img src="/logo-crmevent.png?v=5" alt="CRMEvent" className="h-12 w-auto mb-6" /></Link>
@@ -54,5 +57,6 @@ export default function CompleteOrg() {
         </form>
       </div>
     </div>
+    </>
   );
 }

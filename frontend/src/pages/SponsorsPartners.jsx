@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useCollection, EntityDialog, PageHeader, PrimaryButton, StatusBadge, formatEUR, useSettings, toOptions } from "@/components/crm";
 import { formatApiError } from "@/lib/api";
+import { personOptions } from "@/lib/names";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -42,7 +43,7 @@ export default function SponsorsPartners() {
     { name: "valore", label: "Valore (€)", type: "number" },
     { name: "valore_confermato", label: "Valore confermato (€)", type: "number" },
     { name: "livello", label: "Livello sponsorship", keepOrder: true, type: "select", options: toOptions(settings?.livelli_sponsorship) },
-    { name: "referente_id", label: "Referente", type: "select", options: persons.map((p) => ({ value: p.id, label: `${p.nome} ${p.cognome || ""}`.trim() })) },
+    { name: "referente_id", label: "Referente", type: "select", options: personOptions(persons) },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];
 

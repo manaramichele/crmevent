@@ -218,7 +218,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
                 <SelectContent className="z-[300]"><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent>
               </Select>
             </div>
-            {existing && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Esiste già un'anagrafica con questi contatti: <b>{existing.nome} {existing.cognome}</b>. Usarla per questo Team?</div>}
+            {existing && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Esiste già un'anagrafica con questi contatti: <b>{existing.cognome} {existing.nome}</b>. Usarla per questo Team?</div>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => { setCreating(false); setExisting(null); }}>Annulla</Button>
               {existing
@@ -316,7 +316,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
         <Section title="Team Leader" testid="team-card-leader-section">
           {leader ? (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span className="font-semibold text-slate-900" data-testid="team-card-leader">{`${leader.nome || ""} ${leader.cognome || ""}`.trim()}</span>
+              <span className="font-semibold text-slate-900" data-testid="team-card-leader">{`${leader.cognome || ""} ${leader.nome || ""}`.trim()}</span>
               <Tel n={leader.cellulare} />
             </div>
           ) : <span className="text-sm font-semibold text-amber-700" data-testid="team-card-leader">Da assegnare</span>}

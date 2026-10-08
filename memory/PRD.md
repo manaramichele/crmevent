@@ -367,6 +367,45 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Super Admin: Accedi come utente (assistenza) — 2026-10-08 ✅ VERIFICATO (iter 83, backend 13/13 + frontend)
+- /piattaforma/utenti (PlatformUsers.jsx, nav "Gestione Utenti"): Cognome e Nome, Email, Org, Ruolo, Stato, Ultimo accesso, "Accedi come". Ordine Cognome→Nome; ricerca SOLO cognome/nome (scelta utente); filtri org/ruolo/stato; card su mobile.
+- Backend: POST /api/platform/impersonate {user_id, org_id} (require_base_superadmin) → support_sessions (token solo hash, cookie httpOnly `support_session`, 30 min). get_current_user restituisce l'utente target con `support`; _resolve_active_org usa l'org della sessione e il ruolo reale (X-Org-Id ignorato); nessun privilegio SA. Multi-org: 409 choose_org + cambio dal banner. POST /api/platform/impersonate/stop; logout chiude anche l'assistenza.
+- Scelta utente: NON sola lettura per account attivi (ogni scrittura → audit impersonation_action; /api/auth/* bloccato); sola lettura per account/membership disabilitati.
+- Audit: impersonation_started / ended / expired / action.
+- UI: SupportBanner (sticky sopra l'header, anche in VolunteerLayout e CompleteProfile/CompleteOrg) con tempo rimanente, cambio org, Anteprima mobile (iframe 390px), Torna a Super Admin (ripristina pagina di partenza via sessionStorage).
+
+
+## Permessi e accessi Team Leader — 2026-10-08 ✅ VERIFICATO (iter 82, backend 22/22 + frontend)
+- Nomina automatica da teams.responsabile_id (persona collegata o stessa email), uno o più team, revoca immediata al cambio Team Leader (calcolata a ogni richiesta).
+- permissions.py: `team_leader` {edit_members, manage_shifts} (default off) + TL_RULES/tl_allows. _enforce_perm: se la sezione non concede l'azione ma l'utente guida Team → accesso `via_tl` limitato ai Team guidati (lettura garantita: staff, teams, shifts, disponibilità, persons-enriched, scheda persona, dashboard). Team sempre in sola lettura via nomina.
+- Filtri: Anagrafiche/persone per utenti con ambito Team = componenti dei Team accessibili + contatti non Staff solo con sezione Anagrafiche. Via TL solo componenti già nel team (niente persone senza team). Disponibilità filtrate per team. Inviti: senza sezione Staff solo team guidati.
+- Dashboard: blocco `my_teams` (componenti, staff/volontari, richiesti/assegnati/mancanti, turni/scoperti, disponibilità, inviti inviati, registrati) → components/MyTeams.jsx.
+- UI: blocco "Permessi Team Leader" in Permissions.jsx; perms.js tlCan + pseudo-sezioni teams/turni; colonna "Invito" in Staff/Volontari (etichetta "Registrato"). Attività escluse per scelta utente.
+
+
+## Permesso "Invio inviti email" — 2026-10-08 ✅ VERIFICATO (iter 81, backend 11/11 + frontend)
+- permissions.py: `send_invites` (default False per tutti; Admin Org sempre abilitato). Toggle Attivo/Disattivo in PermFields (Utenti e Permessi), incluso nello storico.
+- Copre SOLO l'invito area personale (POST /api/persons/{id}/invite, template/link esistenti) con ruolo staff/volunteer. L'invito account CRM (org_invites) resta solo Admin.
+- Destinatari verificati server-side: presenze staff in Team/eventi accessibili + flag manage_staff/manage_volunteers. Non-admin bloccati su accesso disabilitato e su email con account CRM esistente.
+- Anti-doppione 24h: singolo 409 `recent_invite` salvo `force` dopo conferma; multiplo POST /api/person-invites/bulk salta e segnala. Tracciati last_invite_at / last_invite_by / invite_count + audit `person_invite_sent`.
+- UI: components/PersonInvites.jsx (dialog con conferma + Reinvia + ultimo invito; barra invio multiplo con checkbox). Pulsanti nascosti senza permesso (canSendInvites).
+
+
+## Dashboard dinamica per permessi — 2026-10-08 ✅ VERIFICATO (iter 80, backend 9/9 + frontend)
+- GET /api/dashboard: restituisce `sections` (permessi effettivi letti a ogni richiesta) e rimuove i blocchi non autorizzati (eventi, crm parziale aziende/anagrafiche, commerciale+grafici senza sponsor, attività/follow-up separati, staff con scope Team/eventi). Nessuna query sulle sezioni non autorizzate.
+- Dashboard.jsx: KpiGroup mostra solo i blocchi presenti, griglia adattiva (niente spazi vuoti), PipelineAttention solo con permesso pipeline, filtro eventi solo con eventi, messaggio "dashboard-empty"; ricarica al ritorno sulla scheda (permessi aggiornati senza nuovo login).
+
+## Ospitalità & Pasti: filtro Ruolo predefinito "Staff" — 2026-10-08 ✅ verificato (screenshot)
+- Hospitality.jsx: fRuolo iniziale "staff" (tutte le org); "Tutti i ruoli"/Volontario ecc. restano selezionabili. Altri filtri invariati.
+
+## Header mobile + menu profilo — 2026-10-08 ✅ VERIFICATO (iter 79)
+- Layout.jsx: su <640px la ricerca diventa icona (riga di ricerca sotto l'header), lo switcher org si sposta nel drawer (mobile-org-switcher), il Tutorial va nel menu profilo; profilo sempre visibile a destra (shrink-0). Menu profilo: Profilo & Account · Impostazioni (solo se can(user,"admin")) · Tutorial (mobile, non superadmin) · Esci; chiusura toccando fuori. Pannello notifiche a larghezza schermo su mobile. Desktop invariato.
+- Ruoli Utente/Collaboratore non testati con login reale (nessun account di prova): logica verificata nel codice.
+
+## REGOLA PERMANENTE: persone "Cognome Nome" + ordinamento A–Z per cognome — 2026-10-08 ✅ VERIFICATO (iter 78)
+- Helper `frontend/src/lib/names.js` (personName, sortPersons, personOptions) da usare in ogni nuovo elenco/dropdown di persone. Backend: `_fmt_person`, persona_nome briefing, label ricerca, _member_view (preferisce persona collegata) in formato Cognome Nome.
+- Applicato a Staff/Volontari/Da classificare/Anagrafiche (header "Cognome e Nome"), Team, Turni (colonna Persona ordinabile; default turni resta cronologico), Utenti (OrgUsers), Invito, Ospitalità, Briefing, Lead, Disponibilità, Aziende, dropdown Referente (Attività, Follow-up, Sponsor), StaffAssignSelect, Pipeline. Solo visualizzazione: nessun dato DB modificato.
+
 ## Automazioni email centralizzate in Email & Brevo — 2026-10-08 ✅ VERIFICATO (iter 77)
 - Rimossi FunnelPanel e AvailabilityEmailPanel dalla Dashboard Amministrazione (Platform.jsx). /marketing/brevo a schede: Funnel CRMEvent (FunnelPanel) | Staff & Volontari (AvailabilityEmailPanel, unica istanza, card su mobile) | Liste e contatti (RegisteredUsersPanel + OrgListsPanel). Deep link ?tab=funnel|staff|liste. Solo spostamento UI: API, stato, trigger, webhook, liste e template invariati.
 

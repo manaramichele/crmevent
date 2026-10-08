@@ -69,7 +69,7 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
                 <h2 className="text-xl font-bold text-slate-900 font-display" data-testid="company-detail-name">{c.nome}</h2>
                 <div className="text-sm text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
                   {c.settore && <span>{c.settore}</span>}
-                  {principale && <span>· Referente: {principale.person.nome} {principale.person.cognome}</span>}
+                  {principale && <span>· Referente: {principale.person.cognome} {principale.person.nome}</span>}
                   {c.email && <span>· {c.email}</span>}{c.telefono && <span>· {c.telefono}</span>}
                   {c.sito_web && <span>· {c.sito_web}</span>}{c.responsabile_interno && <span>· Resp.: {c.responsabile_interno}</span>}
                 </div>
@@ -117,7 +117,7 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
                         <p className="text-xs text-amber-700 font-medium">Trovate persone simili. Collega una persona esistente:</p>
                         {matches.map((m) => (
                           <div key={m.id} className="flex items-center justify-between text-sm">
-                            <span>{m.nome} {m.cognome} — {m.email || m.cellulare || m.telefono || "—"}</span>
+                            <span>{m.cognome} {m.nome} — {m.email || m.cellulare || m.telefono || "—"}</span>
                             <Button size="sm" variant="outline" onClick={() => linkExisting(m.id)} data-testid={`link-person-${m.id}`}><UserCheck className="w-3.5 h-3.5 mr-1" />Collega</Button>
                           </div>
                         ))}
@@ -132,7 +132,7 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
                 {d.contacts.length === 0 ? <p className="text-sm text-slate-400 py-2">Nessun referente collegato.</p> :
                   d.contacts.map((x, i) => (
                     <div key={x.relation.id || i} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-3">
-                      <div><div className="font-medium text-slate-800 flex items-center gap-2">{x.person.nome} {x.person.cognome}{x.relation.referente_principale && <StatusBadge color="tiffany">Principale</StatusBadge>}</div>
+                      <div><div className="font-medium text-slate-800 flex items-center gap-2">{x.person.cognome} {x.person.nome}{x.relation.referente_principale && <StatusBadge color="tiffany">Principale</StatusBadge>}</div>
                         <div className="text-xs text-slate-500">{x.relation.qualifica || x.person.ruolo || "—"} · {x.person.email || x.person.cellulare || x.person.telefono || "—"}</div></div>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => removeContact(x.relation)} data-testid={`ref-del-${x.person.id}`}><Trash2 className="w-4 h-4" /></Button>
                     </div>

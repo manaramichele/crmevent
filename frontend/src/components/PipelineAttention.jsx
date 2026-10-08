@@ -9,7 +9,7 @@ import { usePeople, invalidatePeople } from "@/lib/peopleStore";
 import { AlertTriangle, Flame, Clock, UserX, CheckCircle2, ChevronRight, CalendarClock, Check, UserPlus } from "lucide-react";
 
 const dmy = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
-const pname = (p) => `${p.nome || ""} ${p.cognome || ""}`.trim() || p.email || p.id;
+const pname = (p) => `${p.cognome || ""} ${p.nome || ""}`.trim() || p.email || p.id;
 
 const REASON = {
   late: { label: "In ritardo", cls: "bg-red-50 text-red-700", icon: AlertTriangle },

@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import { useCollection, SectionCard, formatEUR } from "@/components/crm";
 import PipelineAttention from "@/components/PipelineAttention";
 import OrgMessagesBanner from "@/components/OrgMessagesBanner";
+import MyTeams from "@/components/MyTeams";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -33,34 +34,55 @@ function Kpi({ icon: Icon, label, value, color = "tiffany", testid }) {
   );
 }
 
+const LG_COLS = { 1: "lg:grid-cols-1", 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "lg:grid-cols-4", 5: "lg:grid-cols-5" };
+
+function KpiGroup({ title, items, testid, maxCols = 5 }) {
+  const shown = items.filter((k) => k.value !== undefined);
+  if (!shown.length) return null;
+  return (
+    <div data-testid={testid}>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{title}</h2>
+      <div className={`grid grid-cols-2 ${LG_COLS[Math.min(shown.length, maxCols)]} gap-3 sm:gap-4`}>
+        {shown.map((k) => <Kpi key={k.testid} {...k} />)}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { items: events } = useCollection("/events");
   const [eventoId, setEventoId] = useState("all");
   const [data, setData] = useState(null);
 
+  // Dashboard costruita dai permessi effettivi restituiti dal backend a ogni caricamento (anche al ritorno sulla scheda)
   useEffect(() => {
     const load = async () => {
       const params = eventoId !== "all" ? { evento_id: eventoId } : {};
-      const { data } = await api.get("/dashboard", { params });
-      setData(data);
+      try { const { data } = await api.get("/dashboard", { params }); setData(data); } catch { setData((d) => d || { sections: {} }); }
     };
     load();
+    const onFocus = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onFocus);
+    return () => document.removeEventListener("visibilitychange", onFocus);
   }, [eventoId]);
 
   if (!data) return <div className="text-slate-400">Caricamento dashboard...</div>;
 
-  const pipeline = data.pipeline_chart.map((p) => ({ ...p, name: FASE_LABEL[p.fase] || p.fase }));
+  const S = data.sections || {};
+  const pipeline = (data.pipeline_chart || []).map((p) => ({ ...p, name: FASE_LABEL[p.fase] || p.fase }));
   const FASE_COLORS = { prospect: "#94A3B8", contattato: "#0EA5E9", proposta_inviata: "#F59E0B", in_trattativa: "#0ABAB5", confermato: "#10B981", perso: "#EF4444" };
   const PIE_COLORS = ["#0ABAB5", "#0EA5E9", "#F59E0B", "#10B981", "#94A3B8"];
+  const ev = data.eventi, crm = data.crm, com = data.commerciale, att = data.attivita, st = data.staff;
+  const nothing = !ev && !crm && !com && !att && !st && !S.pipeline && !data.my_teams?.length;
 
   return (
-    <div className="animate-fade-up space-y-6">
+    <div className="animate-fade-up space-y-6" data-testid="dashboard">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 font-display">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-1">Panoramica operativa e commerciale</p>
+          <p className="text-sm text-slate-500 mt-1">Panoramica delle sezioni a cui hai accesso</p>
         </div>
-        <div className="w-full sm:w-64">
+        {S.eventi && <div className="w-full sm:w-64">
           <Select value={eventoId} onValueChange={setEventoId}>
             <SelectTrigger data-testid="dashboard-event-filter"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -68,45 +90,40 @@ export default function Dashboard() {
               {events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
             </SelectContent>
           </Select>
-        </div>
+        </div>}
       </div>
 
       <OrgMessagesBanner />
 
-      <PipelineAttention />
+      <MyTeams teams={data.my_teams} />
 
-      <div>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Eventi</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={CalendarDays} label="Eventi attivi" value={data.eventi.attivi} testid="kpi-eventi-attivi" />
-          <Kpi icon={Clock} label="Prossimi eventi" value={data.eventi.prossimi} color="blue" testid="kpi-eventi-prossimi" />
-          <Kpi icon={CheckCircle2} label="Eventi conclusi" value={data.eventi.conclusi} color="green" testid="kpi-eventi-conclusi" />
-          <Kpi icon={CalendarDays} label="Totale eventi" value={data.eventi.totali} testid="kpi-eventi-totali" />
-        </div>
-      </div>
+      {S.pipeline && <PipelineAttention />}
 
-      <div>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">CRM</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Kpi icon={Building2} label="Aziende totali" value={data.crm.aziende} testid="kpi-aziende" />
-          <Kpi icon={Users} label="Anagrafiche totali" value={data.crm.persone} testid="kpi-persone" />
-          <Kpi icon={UserCheck} label="Nuovi contatti" value={data.crm.nuovi_contatti} color="blue" testid="kpi-nuovi-contatti" />
-          <Kpi icon={Target} label="Prospect" value={data.crm.prospect} color="orange" testid="kpi-prospect" />
-        </div>
-      </div>
+      {nothing && <div className="bg-white border border-slate-200 rounded-xl p-6 text-sm text-slate-500" data-testid="dashboard-empty">Non ci sono riepiloghi disponibili per le sezioni a cui hai accesso.</div>}
 
-      <div>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Commerciale</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <Kpi icon={Handshake} label="Trattative aperte" value={data.commerciale.trattative_aperte} testid="kpi-trattative" />
-          <Kpi icon={TrendingUp} label="Proposte inviate" value={data.commerciale.proposte_inviate} color="orange" testid="kpi-proposte" />
-          <Kpi icon={CheckCircle2} label="Sponsor confermati" value={data.commerciale.sponsor_confermati} color="green" testid="kpi-sponsor-confermati" />
-          <Kpi icon={Wallet} label="Valore pipeline" value={formatEUR(data.commerciale.valore_pipeline)} testid="kpi-valore-pipeline" />
-          <Kpi icon={Wallet} label="Valore confermato" value={formatEUR(data.commerciale.valore_confermato)} color="green" testid="kpi-valore-confermato" />
-        </div>
-      </div>
+      {ev && <KpiGroup title="Eventi" testid="dash-group-eventi" items={[
+        { icon: CalendarDays, label: "Eventi attivi", value: ev.attivi, testid: "kpi-eventi-attivi" },
+        { icon: Clock, label: "Prossimi eventi", value: ev.prossimi, color: "blue", testid: "kpi-eventi-prossimi" },
+        { icon: CheckCircle2, label: "Eventi conclusi", value: ev.conclusi, color: "green", testid: "kpi-eventi-conclusi" },
+        { icon: CalendarDays, label: "Totale eventi", value: ev.totali, testid: "kpi-eventi-totali" },
+      ]} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {crm && <KpiGroup title="CRM" testid="dash-group-crm" items={[
+        { icon: Building2, label: "Aziende totali", value: crm.aziende, testid: "kpi-aziende" },
+        { icon: Users, label: "Anagrafiche totali", value: crm.persone, testid: "kpi-persone" },
+        { icon: UserCheck, label: "Nuovi contatti", value: crm.nuovi_contatti, color: "blue", testid: "kpi-nuovi-contatti" },
+        { icon: Target, label: "Prospect", value: crm.prospect, color: "orange", testid: "kpi-prospect" },
+      ]} />}
+
+      {com && <KpiGroup title="Commerciale" testid="dash-group-commerciale" items={[
+        { icon: Handshake, label: "Trattative aperte", value: com.trattative_aperte, testid: "kpi-trattative" },
+        { icon: TrendingUp, label: "Proposte inviate", value: com.proposte_inviate, color: "orange", testid: "kpi-proposte" },
+        { icon: CheckCircle2, label: "Sponsor confermati", value: com.sponsor_confermati, color: "green", testid: "kpi-sponsor-confermati" },
+        { icon: Wallet, label: "Valore pipeline", value: formatEUR(com.valore_pipeline), testid: "kpi-valore-pipeline" },
+        { icon: Wallet, label: "Valore confermato", value: formatEUR(com.valore_confermato), color: "green", testid: "kpi-valore-confermato" },
+      ]} />}
+
+      {com && <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" data-testid="dash-commercial-charts">
         <SectionCard title="Pipeline commerciale" className="lg:col-span-8">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={pipeline} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -131,31 +148,25 @@ export default function Dashboard() {
             </PieChart>
           </ResponsiveContainer>
         </SectionCard>
-      </div>
+      </div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Attività</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <Kpi icon={Clock} label="Follow-up di oggi" value={data.attivita.followup_oggi} color="orange" testid="kpi-fu-oggi" />
-            <Kpi icon={AlertTriangle} label="Follow-up scaduti" value={data.attivita.followup_scaduti} color="red" testid="kpi-fu-scaduti" />
-            <Kpi icon={ListIcon} label="Prossime attività" value={data.attivita.prossime} testid="kpi-att-prossime" />
-            <Kpi icon={CheckCircle2} label="Completate" value={data.attivita.completate} color="green" testid="kpi-att-completate" />
-          </div>
-        </div>
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Staff & Volontari</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <Kpi icon={UserCog} label="Staff confermati" value={data.staff.staff_confermati} color="green" testid="kpi-staff-confermati" />
-            <Kpi icon={Users} label="Volontari confermati" value={data.staff.volontari_confermati} color="green" testid="kpi-volontari" />
-            <Kpi icon={AlertTriangle} label="Da riconfermare" value={data.staff.da_riconfermare} color="orange" testid="kpi-da-riconfermare" />
-            <Kpi icon={AlertTriangle} label="Turni scoperti" value={data.staff.turni_scoperti} color="red" testid="kpi-turni-scoperti" />
-            <Kpi icon={Users} label="Volontari richiesti (Team)" value={data.staff.volontari_richiesti} testid="kpi-vol-richiesti" />
-            <Kpi icon={CheckCircle2} label="Volontari assegnati" value={data.staff.volontari_assegnati} color="green" testid="kpi-vol-assegnati" />
-            <Kpi icon={AlertTriangle} label={data.staff.volontari_esubero ? `Volontari mancanti (+${data.staff.volontari_esubero} esubero)` : "Volontari mancanti"} value={data.staff.volontari_mancanti} color={data.staff.volontari_mancanti ? "red" : "green"} testid="kpi-vol-mancanti" />
-          </div>
-        </div>
-      </div>
+      {(att || st) && <div className={`grid grid-cols-1 ${att && st ? "lg:grid-cols-2" : ""} gap-6`}>
+        {att && <KpiGroup title="Attività" testid="dash-group-attivita" maxCols={st ? 2 : 4} items={[
+          { icon: Clock, label: "Follow-up di oggi", value: att.followup_oggi, color: "orange", testid: "kpi-fu-oggi" },
+          { icon: AlertTriangle, label: "Follow-up scaduti", value: att.followup_scaduti, color: "red", testid: "kpi-fu-scaduti" },
+          { icon: ListIcon, label: "Prossime attività", value: att.prossime, testid: "kpi-att-prossime" },
+          { icon: CheckCircle2, label: "Completate", value: att.completate, color: "green", testid: "kpi-att-completate" },
+        ]} />}
+        {st && <KpiGroup title="Staff & Volontari" testid="dash-group-staff" maxCols={att ? 2 : 4} items={[
+          { icon: UserCog, label: "Staff confermati", value: st.staff_confermati, color: "green", testid: "kpi-staff-confermati" },
+          { icon: Users, label: "Volontari confermati", value: st.volontari_confermati, color: "green", testid: "kpi-volontari" },
+          { icon: AlertTriangle, label: "Da riconfermare", value: st.da_riconfermare, color: "orange", testid: "kpi-da-riconfermare" },
+          { icon: AlertTriangle, label: "Turni scoperti", value: st.turni_scoperti, color: "red", testid: "kpi-turni-scoperti" },
+          { icon: Users, label: "Volontari richiesti (Team)", value: st.volontari_richiesti, testid: "kpi-vol-richiesti" },
+          { icon: CheckCircle2, label: "Volontari assegnati", value: st.volontari_assegnati, color: "green", testid: "kpi-vol-assegnati" },
+          { icon: AlertTriangle, label: st.volontari_esubero ? `Volontari mancanti (+${st.volontari_esubero} esubero)` : "Volontari mancanti", value: st.volontari_mancanti, color: st.volontari_mancanti ? "red" : "green", testid: "kpi-vol-mancanti" },
+        ]} />}
+      </div>}
     </div>
   );
 }

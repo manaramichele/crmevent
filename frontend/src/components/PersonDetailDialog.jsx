@@ -143,7 +143,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
             <div className="flex items-start gap-4">
               <Initials p={p} />
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-bold text-slate-900 font-display" data-testid="person-detail-name">{p.nome} {p.cognome}</h2>
+                <h2 className="text-xl font-bold text-slate-900 font-display" data-testid="person-detail-name">{p.cognome} {p.nome}</h2>
                 <p className="text-sm text-slate-500">{p.ruolo || "—"}</p>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {d.companies.length > 0 && <StatusBadge color="tiffany">Referente</StatusBadge>}
@@ -371,8 +371,9 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                         {p.invite_accepted_at ? ` · ${new Date(p.invite_accepted_at).toLocaleDateString("it-IT")}` : ""}
                       </div>
                     )}</div>
-                  <Button variant="outline" onClick={() => onInvite && onInvite(p)} disabled={!p.email} data-testid="person-detail-invite"><UserPlus className="w-4 h-4 mr-1" />Gestisci accesso</Button>
+                  {onInvite && <Button variant="outline" onClick={() => onInvite(p)} disabled={!p.email} data-testid="person-detail-invite"><UserPlus className="w-4 h-4 mr-1" />Gestisci accesso</Button>}
                 </div>
+                {p.last_invite_at && <p className="text-xs text-slate-500 mt-2" data-testid="person-detail-last-invite">Ultimo invito: {new Date(p.last_invite_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
                 {!p.email && <p className="text-xs text-amber-600 mt-2">Aggiungi un'email per poter invitare questa persona.</p>}
               </TabsContent>
             </Tabs>

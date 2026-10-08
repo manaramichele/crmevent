@@ -112,7 +112,7 @@ export default function VolunteerEvent() {
           <Row icon={UserCog} label="Ruolo" value={presence.ruolo} />
           <Row icon={MapIcon} label="Area" value={presence.area} />
           <Row icon={Users} label="Team" value={team?.nome} />
-          <Row icon={UserCog} label="Team Leader" value={team_leader ? `${team_leader.nome} ${team_leader.cognome || ""}`.trim() : null} />
+          <Row icon={UserCog} label="Team Leader" value={team_leader ? `${team_leader.cognome || ""} ${team_leader.nome}`.trim() : null} />
           <Row icon={UserCog} label="Referente" value={presence.responsabile} />
           <Row icon={MapPin} label="Luogo" value={presence.luogo_operativo || team?.luogo_operativo} />
           <Row icon={Navigation} label="Ritrovo" value={presence.punto_ritrovo || team?.punto_ritrovo} />
@@ -241,7 +241,7 @@ export default function VolunteerEvent() {
               <div key={i} className="flex items-center gap-3 border border-slate-200 rounded-xl p-3">
                 {c.foto_url ? <img src={fileUrl(c.foto_url)} alt="" className="w-10 h-10 rounded-full object-cover" /> : <div className="w-10 h-10 rounded-full bg-tiffany-light flex items-center justify-center text-tiffany-fg font-bold">{(c.nome || "?")[0]}</div>}
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-800 truncate">{c.nome} {c.cognome}</div>
+                  <div className="text-sm font-medium text-slate-800 truncate">{c.cognome} {c.nome}</div>
                   <div className="text-xs text-slate-500">{c.ruolo}{c.is_leader ? " · Team Leader" : ""}</div>
                 </div>
               </div>
