@@ -35,7 +35,7 @@ function Summary({ s, features }) {
         <Field label="Prezzo" value={s.price_amount ? `€${eur(s.price_amount)}/${s.billing_cycle === "yearly" ? "anno" : "mese"}` : "—"} testid="sub-price" />
         <Field label="Data attivazione" value={d(s.activated_at)} testid="sub-activated" />
         <Field label="Prossimo rinnovo" value={s.cancel_at_period_end ? `Termina il ${d(s.current_period_end)}` : d(s.current_period_end)} testid="sub-renewal" />
-        <Field label="Scadenza prova" value={s.trial_active ? `${d(s.trial_end)} (${s.days_left} gg)` : d(s.trial_end)} testid="sub-trial-end" />
+        {(s.trial_active || !s.purchased) && <Field label="Scadenza prova" value={s.trial_active ? `${d(s.trial_end)} (${s.days_left} gg)` : d(s.trial_end)} testid="sub-trial-end" />}
         {s.purchased && s.trial_active && <Field label="Piano acquistato" value={`${s.paid_plan_label} dal ${d(s.trial_end)}`} testid="sub-purchased" />}
       </div>
       {s.pending_change && <p className="text-sm rounded-lg bg-amber-50 text-amber-900 px-3 py-2" data-testid="sub-pending">Dal {d(s.pending_change.effective_at)} passerai a {s.pending_change.plan.toUpperCase()} {CYC[s.pending_change.cycle]?.toLowerCase()}.</p>}
