@@ -9,6 +9,7 @@ const inFrame = () => { try { return window.self !== window.top; } catch { retur
 function useRemaining(expiresAt, onExpire) {
   const [left, setLeft] = useState(() => new Date(expiresAt).getTime() - Date.now());
   useEffect(() => {
+    if (!expiresAt) return undefined;
     const t = setInterval(() => {
       const l = new Date(expiresAt).getTime() - Date.now();
       setLeft(l);
@@ -44,13 +45,13 @@ export default function SupportBanner() {
   return (
     <div className="bg-amber-400 text-slate-900 border-b border-amber-500 px-3 sm:px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm" data-testid="support-banner">
       <LifeBuoy className="w-4 h-4 shrink-0" />
-      <span className="min-w-0 flex-1" data-testid="support-banner-text">
+      <span className="min-w-0 flex-1 basis-[calc(100%-2rem)] sm:basis-auto leading-snug" data-testid="support-banner-text">
         <b className="font-semibold">Modalità assistenza</b> – Stai visualizzando l'account di <b className="font-semibold">{sup.target_name}</b>
         <span className="text-slate-800"> · {sup.org_name}</span>
         {sup.read_only && <span className="inline-flex items-center gap-1 ml-1 font-semibold" data-testid="support-read-only"><Lock className="w-3.5 h-3.5" />sola lettura</span>}
       </span>
       {!framed && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-end gap-2">
           <span className="text-xs tabular-nums" data-testid="support-remaining">Scade tra {left}</span>
           {(sup.orgs || []).length > 1 && (
             <select className="h-8 rounded-md border border-amber-600 bg-white/80 px-2 text-xs max-w-[10rem]" value={sup.org_id}

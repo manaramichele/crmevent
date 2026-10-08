@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Phone } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
+import SupportBanner from "@/components/SupportBanner";
 
 export default function CompleteProfile() {
   const { user, setUser, loading } = useAuth();
@@ -33,6 +34,8 @@ export default function CompleteProfile() {
   };
 
   return (
+    <>
+    <div className="sticky top-0 z-40"><SupportBanner /></div>
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
       <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8">
         <img src="/logo-crmevent.png?v=5" alt="CRMEvent" className="h-12 w-auto mb-6" />
@@ -48,5 +51,6 @@ export default function CompleteProfile() {
         </form>
       </div>
     </div>
+    </>
   );
 }

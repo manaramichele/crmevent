@@ -367,6 +367,14 @@ PIANI DEFINITIVI: STARTER / PROFESSIONAL / PREMIUM (nessun FREE). Trial Premium 
 - Mancano per LIVE: switch LIVE/TEST da secret; secrets Stripe LIVE (SECRET/PUBLISHABLE/WEBHOOK_SECRET); nell'account LIVE webhook + TaxRate 22% + dominio crmevent.it; OAuth FIC produzione + flusso emissione reale.
 - NESSUNA modifica effettuata in questa fase. In attesa secrets/decisioni utente prima della FASE 2.
 
+## Super Admin: Accedi come utente (assistenza) — 2026-10-08 ✅ VERIFICATO (iter 83, backend 13/13 + frontend)
+- /piattaforma/utenti (PlatformUsers.jsx, nav "Gestione Utenti"): Cognome e Nome, Email, Org, Ruolo, Stato, Ultimo accesso, "Accedi come". Ordine Cognome→Nome; ricerca SOLO cognome/nome (scelta utente); filtri org/ruolo/stato; card su mobile.
+- Backend: POST /api/platform/impersonate {user_id, org_id} (require_base_superadmin) → support_sessions (token solo hash, cookie httpOnly `support_session`, 30 min). get_current_user restituisce l'utente target con `support`; _resolve_active_org usa l'org della sessione e il ruolo reale (X-Org-Id ignorato); nessun privilegio SA. Multi-org: 409 choose_org + cambio dal banner. POST /api/platform/impersonate/stop; logout chiude anche l'assistenza.
+- Scelta utente: NON sola lettura per account attivi (ogni scrittura → audit impersonation_action; /api/auth/* bloccato); sola lettura per account/membership disabilitati.
+- Audit: impersonation_started / ended / expired / action.
+- UI: SupportBanner (sticky sopra l'header, anche in VolunteerLayout e CompleteProfile/CompleteOrg) con tempo rimanente, cambio org, Anteprima mobile (iframe 390px), Torna a Super Admin (ripristina pagina di partenza via sessionStorage).
+
+
 ## Permessi e accessi Team Leader — 2026-10-08 ✅ VERIFICATO (iter 82, backend 22/22 + frontend)
 - Nomina automatica da teams.responsabile_id (persona collegata o stessa email), uno o più team, revoca immediata al cambio Team Leader (calcolata a ogni richiesta).
 - permissions.py: `team_leader` {edit_members, manage_shifts} (default off) + TL_RULES/tl_allows. _enforce_perm: se la sezione non concede l'azione ma l'utente guida Team → accesso `via_tl` limitato ai Team guidati (lettura garantita: staff, teams, shifts, disponibilità, persons-enriched, scheda persona, dashboard). Team sempre in sola lettura via nomina.
