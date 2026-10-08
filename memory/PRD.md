@@ -541,7 +541,7 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
 ## Pulsante prova in Dashboard + titolo Marketplace — 2026-10-08 ✅ VERIFICATO (screenshot desktop/mobile)
-- TrialButton rimosso dall'header (Layout.jsx) e spostato in Dashboard.jsx accanto al titolo (gap 16px, flex-wrap su mobile). Stile stato normale: bianco, bordo 1.5px #0ABAB5, testo/icona Tiffany. Stati ≤3 giorni (ambra) e prova terminata (rosso) invariati. Logica prova invariata.
+- TrialButton rimosso dall'header (Layout.jsx) e spostato in Dashboard.jsx accanto al titolo (gap 16px, flex-wrap su mobile). Stile stato normale: bianco, bordo 1.5px #0ABAB5, testo/icona Tiffany. Stati ultimi 3 giorni: stesso stile bianco/Tiffany (ambra rimosso); rosso solo a prova terminata. Logica prova invariata.
 - Marketplace.jsx: titolo "Marketplace" (senza "CRMEvent").
 
 
