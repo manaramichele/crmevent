@@ -1061,3 +1061,9 @@ Task 2 — Creatività manuale:
 - Proposta: cartella `partner-frontend/` (CRA+craco+Tailwind+shadcn copiati), build indipendente, workflow GitHub `partner-deploy.yml` con filtro `paths: partner-frontend/**`, backend condiviso con router `/api/partner/*`, cookie separato `partner_token`, ruolo/collection `partners` isolati. In attesa di conferma utente su regole commissioni, approvazione partner, anteprima.
 
 
+
+## 2026-10-09 — Portale CRMEvent Partner (MVP) ✅ (iteration_125: backend 21/21, frontend 100%)
+- `partner-frontend/` (React separato): landing Diventa Partner + simulatore, registrazione (profilo fiscale privato/professionista/azienda), login email/password + Google (intent=partner), completa profilo, dashboard (link referral, clienti, commissioni). Anteprima: `/api/partner-preview/` (solo con PARTNER_PREVIEW_DIR). Template workflow: `partner-frontend/deploy/partner-deploy.yml.example`.
+- Backend `partner_portal.py`: cookie `partner_token` isolato, approvazione manuale SA, brute-force 5/15min, referral `?ref=` (Register/CompleteOrg), commissione 10% × 12 mesi su incassato abbonamento imposte escluse (hook `on_paid` in subscriptions.record_payment), storni su `charge.refunded`, snapshot regime CRMEvent + profilo fiscale partner.
+- Super Admin `/piattaforma?sezione=partner`: impostazioni (%, mesi, regime fiscale CRMEvent forfettario/ordinario), approva/rifiuta/sospendi, commissioni "Segna pagata".
+
