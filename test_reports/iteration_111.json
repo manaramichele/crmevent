@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 111: Verified people-based plan limit (Staff e Volontari) for CRMEvent. Backend: 7/7 pytest passed (test_iter111_people_limit.py). Validated: GET /api/saas/me usage has 'people' (14), silver max_users=14 forces 403 plan_limit kind=people on POST /api/staff for a NEW person; EXISTING counted person adding another staff link allowed (unique counting); POST /api/staff/quick-add with new name returns 403 WITHOUT creating orphan person; POST /api/public/availability/{code} returns 409 generic message for a NEW person while an EXISTING counted person submission is accepted; raising max_users=19 allows a new person; plan=gold (no override) is unlimited (max_users=-1); POST /api/platform/organizations/{org}/invites with low max_users is NOT blocked by plan_limit code (expected other validation failure like persona_id required). Frontend: /prezzi shows single row 'Staff e Volontari' with Fino a 10 / Fino a 30 / Illimitati; no deprecated 'Utenti registrati' or 'senza accesso' row; plan cards show 'Fino a 10/30 Staff e Volontari' and 'Staff e Volontari illimitati'. /profilo?tab=abbonamento shows [data-testid=usage-people-value]='14 · Illimitati' and [data-testid=usage-events-value]='5 · Illimitati' labeled 'Staff e Volontari'. Restored QA org saas doc to clean trial state (removed admin silver/14 override), cleaned created persons/staff/avail submissions, and set saas_usage.events_created=5.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "GET /api/saas/me usage.people": "PASS (people=14 included)",
+    "POST /api/staff NEW person blocked at silver 14": "PASS (403 plan_limit kind=people)",
+    "POST /api/staff EXISTING counted person on other event": "PASS (allowed)",
+    "POST /api/staff/quick-add new name": "PASS (403, no orphan person persisted)",
+    "POST /api/public/availability new person": "PASS (409 generic message)",
+    "POST /api/public/availability existing counted person": "PASS (200 OK)",
+    "Raise max_users then new person allowed": "PASS",
+    "plan=gold unlimited": "PASS (limits.max_users=-1)",
+    "POST /api/platform/.../invites not plan-limited": "PASS (returns 400 persona_id required; no plan_limit code)",
+    "Pricing /prezzi copy": "PASS (single 'Staff e Volontari' comparison row with Fino a 10/30/Illimitati; plan cards correct)",
+    "Profilo abbonamento usage": "PASS (usage-people-value='14 · Illimitati', usage-events-value='5 · Illimitati')",
+    "PlanLimitDialog title and SaasAdmin table column": "VERIFIED by code: title 'Limite Staff e Volontari raggiunto' (PlanLimitDialog.jsx), SaasAdmin table has 'Staff e Volontari' column and saas-users-{id} with people_count/limit"
+  },
+  "test_report_links": ["/app/backend/tests/test_iter111_people_limit.py", "/app/test_reports/pytest/iter111.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/subscriptions.py people_ids uses db.staff ∪ db.availabilities distinct persona_id with None filtered — correct unique counting across org regardless of event/team.",
+    "server.py staff_quick_add calls check_people BEFORE insert_one for a new person — correctly prevents orphan creation when at limit.",
+    "pub_avail_submit calls check_people with lookup-by-email/cellulare/CF before creating any availability — correct public gating with 409 generic message.",
+    "Orphan staff rows exist in QA org referencing deleted person docs (persona_id with no matching persons row). Not caused by this feature; purely data hygiene from past tests."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter111_people_limit.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (verified pages)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026!; QA admin qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "Created and cleaned up: TEST_Iter111 persons + staff links + 1 anna.bianchi.qa availability submission. Final state: saas.admin override removed (trial unlimited), saas_usage.events_created=5, no TEST_Iter111 artifacts remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "People-based plan limit is enforced server-side via SAAS.check_people(org_id, persona_id, public?) in subscriptions.py. Unique count = db.staff.persona_id ∪ db.availabilities.persona_id. 403 payload: detail.code='plan_limit', kind='people'. Public endpoint returns 409 with generic message. Frontend UI testids: usage-people-value, usage-events-value, plan-users-{bronze|silver|gold}, saas-users-{org_id}, PlanLimitDialog title string. Login invites are NOT plan-limited anymore."
+}

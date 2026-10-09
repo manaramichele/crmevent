@@ -1,0 +1,33 @@
+{
+  "summary": "Full backend + frontend testing for CRMEvent Google Login (iteration 113). 16/16 pytest cases pass covering /oauth/google/config, /start, /callback (error/state/single-use/exchange fail), /link (missing cookie, wrong pw lockout, success), resolve_identity unit (all 9 branches: unverified, by sub, by email auto-link, superadmin link, conflict with/without pw, inactive, no_account, create register/invite), plus regressions (SA password login, legacy /auth/session 400, calendar callback not 404). Frontend verified: /login google-login-button, /registrati register-google-button, /invito invite-google-btn all redirect to accounts.google.com (NOT auth.emergentagent.com) with intent=login|register|invite and correct dummy client_id; /login?google_error=no_account toast shown; /login?google_link=1 GoogleLinkPrompt + password + submit visible, submit without cookie shows 410 error toast. Mobile 390px /login renders correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/oauth/google/start", "issue": "Cookie g_oauth_state is set with SameSite=Lax in code (spec), but preview ingress rewrites to SameSite=None; Partitioned. Production Aruba deployment should re-verify this behavior since real Google OAuth consent requires the cookie to survive the top-level redirect from accounts.google.com back to our callback. Lax works fine for top-level nav; None+Secure is also acceptable. Not a blocker."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_google_login_crmevent.py", "/app/test_reports/pytest/iter113.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "google_login.py uses samesite='lax' for g_oauth_state (correct per spec). On production Aruba verify the cookie reaches /api/oauth/google/callback after the Google round-trip (should: top-level nav from accounts.google.com back to backend domain is Lax-compatible).",
+    "g_oauth_link cookie uses samesite='none' which is required because the POST /oauth/google/link is called from the SPA with credentials; good.",
+    "resolve_identity returns conflict only when user has NO password_hash AND different google_sub+same email. Rule: if same email + different google_sub + has password_hash => 'link'. This matches spec but is a subtle re-link path; make sure Aruba logs this operation for audit (currently only 'google account linked' log — consider recording an audit event in server.py when link succeeds).",
+    "google_login.py line 60: `user.get('role') == 'superadmin'` triggers 'link' flow regardless of whether superadmin already has a google_sub matching ident['sub']. Because the google_sub match in the preceding query already returns the user before falling through, this is only reached when the current ident sub doesn't match the stored sub — correct behavior.",
+    "Callback redirects to /registrati on error only when intent=='register'; invite intent falls back to /login — consider also redirecting invite failures back to /invito?token=... for better UX (current spec allows this, not tested as a failure case).",
+    "No rate limiting on /oauth/google/start — a bot could flood db.oauth_login_states; TTL index mitigates (10min) but consider IP throttle on Aruba.",
+    "/api/oauth/google/link only increments attempts on wrong password but does NOT delete the link on 5 attempts explicitly — relies on the guard `attempts >= 5 => 410`. Correct, but once reached user must restart the Google flow (no manual reset). OK."
+  ],
+  "updated_files": ["/app/backend/tests/test_google_login_crmevent.py"],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (all 6 UI checks)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! verified working via /api/auth/login.",
+  "seed_data_creation": "Transient TEST_ users and oauth_login_links docs created inside test fixtures and fully cleaned up at teardown. Verified post-run: 0 TEST_ users, 0 oauth_login_links, 9 stale oauth_login_states (from UI tests) cleaned.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter113: CRMEvent Google Login replaced Emergent one. GOOGLE_LOGIN_PROVIDER=crmevent is set in preview with DUMMY client_id 'preview-test-client.apps.googleusercontent.com'. Real Google round-trip NOT testable in preview (Google rejects with invalid_client as expected). All 16 pytests in /app/backend/tests/test_google_login_crmevent.py pass. Frontend buttons on /login, /registrati, /invito correctly redirect to accounts.google.com. The feature is production-ready pending real Google credentials on Aruba.",
+  "rca of the issue": "N/A - no critical issues found. One cosmetic note: preview ingress rewrites SameSite=Lax to SameSite=None; Partitioned for all cookies; this is environment behavior, not a code bug."
+}

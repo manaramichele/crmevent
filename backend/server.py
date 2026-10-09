@@ -41,6 +41,7 @@ import demo_booking
 import demo_slots
 import text_normalize as TN
 import home_widgets
+import google_login
 import marketplace
 import brevo_funnel
 import social_ai
@@ -716,6 +717,12 @@ class CompleteOrgIn(BaseModel):
     org_name: str
     telefono: Optional[str] = None
     accept_terms: bool = False
+    nome: Optional[str] = None
+    cognome: Optional[str] = None
+    marketing_consent: bool = False
+
+
+TERMS_VERSION = "2026-10"
 
 
 @api.post("/auth/register-organization")
@@ -770,14 +777,34 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
         raise HTTPException(status_code=400, detail="Devi accettare le condizioni per continuare")
     if not body.org_name.strip():
         raise HTTPException(status_code=400, detail="Il nome dell'organizzazione è obbligatorio")
+    nome, cognome = TN.person_name((body.nome or "").strip()), TN.person_name((body.cognome or "").strip())
+    if body.nome is not None and not nome:
+        raise HTTPException(status_code=400, detail="Il nome è obbligatorio")
     phone = _normalize_phone(body.telefono)
-    org = await _create_organization(body.org_name.strip(), user["user_id"])
-    await db.users.update_one({"user_id": user["user_id"]},
-                              {"$set": {"org_id": org["id"], "role": "admin", "telefono": phone, "self_registered": True,
-                                        "registered_at": now_iso(), "accepted_terms_at": now_iso()}})
+    if await db.memberships.find_one({"user_id": user["user_id"], "active": True}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail="Il tuo account è già collegato a un'organizzazione")
+    # Blocco atomico anti doppio clic: una sola creazione organizzazione per utente.
+    locked = await db.users.find_one_and_update(
+        {"user_id": user["user_id"], "$or": [{"org_id": {"$exists": False}}, {"org_id": None}, {"org_id": ""}], "org_onboarding_lock": {"$ne": True}},
+        {"$set": {"org_onboarding_lock": True}})
+    if not locked:
+        raise HTTPException(status_code=409, detail="Registrazione già in corso o completata. Ricarica la pagina.")
+    try:
+        org = await _create_organization(body.org_name.strip(), user["user_id"])
+    except Exception:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$unset": {"org_onboarding_lock": ""}})
+        raise
+    now = now_iso()
+    upd = {"org_id": org["id"], "role": "admin", "telefono": phone, "self_registered": True, "registered_at": now,
+           "accepted_terms_at": now, "terms_version": TERMS_VERSION, "privacy_version": TERMS_VERSION,
+           "marketing_consent": bool(body.marketing_consent), "marketing_consent_at": now if body.marketing_consent else None,
+           "welcome_demo": "pending"}
+    if nome:
+        upd.update({"nome": nome, "cognome": cognome or None, "name": f"{nome} {cognome}".strip()})
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd, "$unset": {"org_onboarding_lock": ""}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
     try:
-        await sync_registered_user(user["user_id"], org["id"], source="registration")
+        await sync_registered_user(user["user_id"], org["id"], nome=nome or None, cognome=cognome or None, source="registration")
     except Exception as e:
         logger.error(f"registered-user sync error: {e}")
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -1432,6 +1459,8 @@ def crud_routes(path, coll, model, org_scoped=True):
             await _assert_org_operational(user["org_id"])
             if data.get("evento_id"):
                 await _assert_event_operational(user["org_id"], data["evento_id"])
+            if coll == "staff":
+                await SAAS["check_people"](user["org_id"], data.get("persona_id"))
         return await _create(coll, data)
 
     @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
@@ -1928,6 +1957,7 @@ async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_a
         if existing and not body.confirm_existing:
             return {"status": "exists", "person": {"id": existing["id"], "nome": existing.get("nome"), "cognome": existing.get("cognome"), "email": existing.get("email"), "cellulare": existing.get("cellulare")}}
         person = existing
+    await SAAS["check_people"](admin["org_id"], (person or {}).get("id"))
     if not person:
         person = TN.normalize_fields("persons", {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()})
         await db.persons.insert_one({**person})
@@ -5412,6 +5442,7 @@ async def add_staff_candidate(org_id: str, body: StaffCandidateIn, user: dict = 
     tel = _normalize_phone(body.cellulare) if (body.cellulare or "").strip() else ""
     conds = ([{"email": email}] if email else []) + ([{"cellulare": tel}] if tel else [])
     person = await db.persons.find_one({"org_id": org_id, "$or": conds}, {"_id": 0}) if conds else None
+    await SAAS["check_people"](org_id, (person or {}).get("id"))
     if not person:
         person = TN.normalize_fields("persons", {"id": new_id(), "org_id": org_id, "nome": body.nome.strip(), "cognome": body.cognome.strip(),
                   "email": email, "cellulare": tel, "created_at": now_iso()})
@@ -10323,6 +10354,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         person = await db.persons.find_one({"org_id": org_id, "cellulare": cell}, {"_id": 0})
     if not person and cf_norm:
         person = await db.persons.find_one({"org_id": org_id, "codice_fiscale": cf_norm}, {"_id": 0})
+    await SAAS["check_people"](org_id, (person or {}).get("id"), public=True)
     mismatch = {}
     if person:
         fill = {}
@@ -13193,7 +13225,10 @@ async def require_org_member(request: Request, user: dict = Depends(get_current_
 
 
 app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
-app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS), prefix="/api")
+app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
+app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
+                                                   "verify_password": verify_password, "user_payload": user_payload,
+                                                   "person_name": TN.person_name, "now_iso": now_iso}), prefix="/api")
 app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,

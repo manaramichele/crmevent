@@ -979,3 +979,31 @@ Task 2 — Creatività manuale:
 - Stessa regola di `_team_coverage`/`teamCounts`: volontari non rinunciatari, unici per team, staff esclusi; mancanti = MAX(0, richiesti − assegnati) per team; team senza fabbisogno esclusi da Necessari/Mancanti.
 - Rispetta il filtro evento; aggiornamento automatico tramite store condivisi people/teams. Nessuna nuova API.
 
+
+## 2026-10-09 — Limite piani su Staff e Volontari (non più account) ✅ (iteration_111: backend 7/7, frontend 100%)
+- `max_users` ora = persone Staff/Volontari uniche (db.staff ∪ db.availabilities), con o senza account. Limite sugli account di accesso rimosso (check_limit gestisce solo eventi).
+- `check_people` blocca solo nuove persone: POST /staff, /staff/quick-add (nessuna anagrafica orfana), staff-candidates, modulo pubblico disponibilità (409 generico). Persone esistenti sempre gestibili. Nessun import Excel Staff presente nell'app.
+- Tabella Piani: riga unica "Staff e Volontari" 10/30/Illimitati; Il mio abbonamento, popup, Super Admin, avviso 80% aggiornati.
+
+
+## 2026-10-09 — Fix contesto organizzazione Super Admin in Dashboard ✅ (iteration_112: backend 7/7, frontend 11/11)
+- Causa: Layout impostava l'org attiva "in silenzio" (prima della lista) e non validava l'id salvato: con id assente/non valido la select mostrava la prima org mentre le API usavano l'id vecchio (404 → pannelli vuoti). Le note erano solo per utente, non per organizzazione.
+- Layout: validazione org attiva prima di montare i contenuti (id salvato → `last_org:{user_id}` → prima org), stato "Caricamento organizzazione…", contenuti ri-montati al cambio org, persistenza ultima org anche dopo logout.
+- TodoPanel/NotesPanel: stato di errore con "Riprova" invece di lista vuota.
+- Note: salvate con org_id e filtrate per (utente, org); note precedenti senza org restano visibili al proprietario.
+
+
+## 2026-10-09 — Login Google proprietario CRMEvent (non attivo) ✅ (iteration_113: backend 16/16, frontend 100%)
+- Nuovo `backend/google_login.py`: /oauth/google/config|start|callback|link (Code Flow + PKCE + state monouso + nonce, verifica id_token Google, cookie JWT esistente). Flag `GOOGLE_LOGIN_PROVIDER` (default emergent) per attivazione/rollback.
+- Abbinamento: google_sub → email verificata (auto) → Super Admin/conflitto con conferma password. Nuovi account solo da Registrazione/Invito.
+- Frontend: `lib/googleAuth.js`, `GoogleLinkPrompt.jsx`; Login/Registrati/Invito aggiornati. Report: `/app/memory/GOOGLE_LOGIN_IMPLEMENTATION.md`.
+
+
+## 2026-10-09 — Popup "Completa la registrazione" per Google ✅ (iteration_114: backend 8/8, frontend 100%)
+- `CompleteOrg.jsx` ora popup obbligatorio (nome/cognome precompilati, email verificata, org, cellulare, Termini+Privacy obbligatori, marketing facoltativo, solo "Esci e completa più tardi").
+- `/auth/complete-organization`: blocco atomico anti doppio clic (409), rifiuto se già membro di un'organizzazione, salva nome/cognome, terms/privacy_version `2026-10`, marketing_consent, welcome_demo pending; trial 14 gg via `_create_organization`.
+
+
+## 2026-10-09 — Riepilogo volontari solo nella scheda Volontari ✅
+- `Persons.jsx`: VolunteerSummary mostrato solo con tab === "volontari" (non più in Staff/Da classificare). Verificato: assente in Staff, Dashboard, Eventi, Team.
+

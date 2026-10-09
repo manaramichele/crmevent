@@ -88,7 +88,7 @@ function ChangeDialog({ pv, onClose, onConfirm, busy }) {
               : <>Il nuovo piano entrerà in vigore alla scadenza del periodo già pagato ({d(pv.current_period_end)}). I dati dei moduli non inclusi restano conservati.</>}
         </div>
         {pv.over_limits?.length > 0 && <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900" data-testid="change-plan-over-limits">
-          Con il nuovo piano superi i limiti: {pv.over_limits.map((o) => `${o.kind === "events" ? "eventi" : "utenti"} ${o.used} su ${o.limit}`).join(", ")}. Nessun dato verrà eliminato, ma non potrai creare nuovi eventi o invitare utenti finché non rientri nei limiti.
+          Con il nuovo piano superi i limiti: {pv.over_limits.map((o) => `${o.kind === "events" ? "eventi" : "Staff e Volontari"} ${o.used} su ${o.limit}`).join(", ")}. Nessun dato verrà eliminato, ma non potrai creare nuovi eventi o registrare nuove persone Staff e Volontari finché non rientri nei limiti.
         </div>}
         <DialogFooter className="gap-2"><Button variant="outline" onClick={onClose}>Annulla</Button>
           <Button disabled={busy} onClick={onConfirm} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="change-plan-confirm">{busy ? "Attendi..." : "Conferma"}</Button></DialogFooter>

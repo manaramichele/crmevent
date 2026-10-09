@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 const TABS = [["formula", "Formula"], ["date", "Date e rinnovi"], ["stato", "Stato"], ["custom", "Personalizzazioni"], ["storico", "Storico"]];
-const PLANS = [["bronze", "BRONZE – €19/mese · 1 evento · 10 utenti"], ["silver", "SILVER – €49/mese · fino a 5 eventi · 30 utenti"], ["gold", "GOLD – €79/mese · eventi e utenti illimitati"]];
+const PLANS = [["bronze", "BRONZE – €19/mese · 1 evento · 10 Staff e Volontari"], ["silver", "SILVER – €49/mese · fino a 5 eventi · 30 Staff e Volontari"], ["gold", "GOLD – €79/mese · eventi e Staff/Volontari illimitati"]];
 const STATUS = [["auto", "Automatico (Stripe / prova)"], ["trial", "Prova gratuita"], ["active", "Attivo"], ["expired", "Scaduto"], ["suspended", "Sospeso"]];
-const LABEL = { plan: "Formula", status: "Stato", billing_cycle: "Periodicità", access_start: "Inizio abbonamento", access_end: "Scadenza abbonamento", renewal_date: "Prossimo rinnovo", trial_start: "Inizio prova", trial_end: "Fine prova", comp: "Piano omaggio", max_events: "Limite eventi", max_users: "Limite utenti", notes: "Note interne" };
+const LABEL = { plan: "Formula", status: "Stato", billing_cycle: "Periodicità", access_start: "Inizio abbonamento", access_end: "Scadenza abbonamento", renewal_date: "Prossimo rinnovo", trial_start: "Inizio prova", trial_end: "Fine prova", comp: "Piano omaggio", max_events: "Limite eventi", max_users: "Limite Staff e Volontari", notes: "Note interne" };
 const END = new Set(["access_end", "renewal_date", "trial_end"]);
 const day = (s) => (s ? String(s).slice(0, 10) : "");
 const toIso = (k, v) => (v ? `${v}T${END.has(k) ? "23:59:59" : "00:00:00"}Z` : null);
@@ -73,7 +73,7 @@ export default function SubscriptionEditDialog({ row, onClose, onSaved }) {
           {tab === "formula" && <>
             <F label="Formula"><select value={f.plan} onChange={set("plan")} className={sel} data-testid="sub-plan"><option value="">—</option>{PLANS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></F>
             <F label="Periodicità"><select value={f.billing_cycle} onChange={set("billing_cycle")} className={sel} data-testid="sub-cycle"><option value="">—</option><option value="monthly">Mensile</option><option value="yearly">Annuale</option></select></F>
-            <p className="text-xs text-slate-500">La formula si applica quando lo stato è "Attivo". Limiti standard: BRONZE 1 evento/10 utenti, SILVER 5 eventi/30 utenti, GOLD illimitati. Le eccezioni di limite valgono anche durante la prova.</p>
+            <p className="text-xs text-slate-500">La formula si applica quando lo stato è "Attivo". Limiti standard: BRONZE 1 evento/10 Staff e Volontari, SILVER 5 eventi/30 Staff e Volontari, GOLD illimitati. Le eccezioni di limite valgono anche durante la prova.</p>
           </>}
           {tab === "date" && <div className="grid sm:grid-cols-2 gap-3">
             {[["access_start", "Inizio abbonamento"], ["access_end", "Scadenza abbonamento"], ["renewal_date", "Prossimo rinnovo (interno)"], ["trial_start", "Inizio prova gratuita"], ["trial_end", "Fine prova gratuita"]].filter(([k]) => !internal || !k.startsWith("trial")).map(([k, l]) =>
@@ -94,7 +94,7 @@ export default function SubscriptionEditDialog({ row, onClose, onSaved }) {
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.comp} onChange={(e) => setF((s) => ({ ...s, comp: e.target.checked, status: e.target.checked ? "active" : s.status }))} data-testid="sub-comp" />Piano omaggio (accesso senza addebito)</label>
             <div className="grid grid-cols-2 gap-3">
               <F label="Eccezione limite eventi (-1 = illimitati)"><Input type="number" value={f.max_events} onChange={set("max_events")} placeholder="Standard" data-testid="sub-max-events" /></F>
-              <F label="Eccezione limite utenti (-1 = illimitati)"><Input type="number" value={f.max_users} onChange={set("max_users")} placeholder="Standard" data-testid="sub-max-users" /></F>
+              <F label="Eccezione limite Staff e Volontari (-1 = illimitati)"><Input type="number" value={f.max_users} onChange={set("max_users")} placeholder="Standard" data-testid="sub-max-users" /></F>
             </div>
             <F label="Note amministrative interne"><Textarea rows={3} value={f.notes} onChange={set("notes")} data-testid="sub-notes" /></F>
           </div>}

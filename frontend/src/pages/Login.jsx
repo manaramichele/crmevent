@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiError } from "@/lib/api";
@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { startGoogle, googleErrorText } from "@/lib/googleAuth";
+import GoogleLinkPrompt from "@/components/GoogleLinkPrompt";
 
 export default function Login() {
   const { setUser } = useAuth();
@@ -15,6 +17,10 @@ export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const qs = new URLSearchParams(window.location.search);
+  const linkPending = qs.get("google_link") === "1";
+  useEffect(() => { const t = googleErrorText(qs.get("google_error")); if (t) toast.error(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const linked = (data) => { setUser(data); localStorage.removeItem("acting_org_id"); window.location.href = data.dest || (data.needs_org ? "/completa-organizzazione" : "/app"); };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -37,8 +43,7 @@ export default function Login() {
 
   const googleLogin = () => {
     // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    startGoogle({ intent: "login", legacyRedirect: window.location.origin + "/" });
   };
 
   return (
@@ -68,6 +73,7 @@ export default function Login() {
             {mode === "forgot" ? "Inserisci la tua email per ricevere il link di reset." : "Entra nel tuo gestionale eventi."}
           </p>
 
+          {linkPending && mode !== "forgot" && <GoogleLinkPrompt onDone={linked} />}
           {mode !== "forgot" && (
             <>
               <button onClick={googleLogin} data-testid="google-login-button"

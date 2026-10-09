@@ -61,7 +61,8 @@ export default function TodoPanel() {
   const [items, setItems] = useState(null);
   const [tipo, setTipo] = useState("all");
   const [ev, setEv] = useState("all");
-  const load = () => api.get("/my/todo").then(({ data }) => setItems(data.items)).catch(() => setItems([]));
+  const [err, setErr] = useState(false);
+  const load = () => { setErr(false); setItems(null); api.get("/my/todo").then(({ data }) => setItems(data.items)).catch(() => { setErr(true); setItems([]); }); };
   useEffect(() => { load(); }, []);
   const assigned = (it, pid, name) => setItems((l) => l.map((x) => (x.id === it.id && x.tipo === it.tipo ? { ...x, responsabile_id: pid, responsabile: name } : x)));
   const done = async (i) => {
@@ -78,7 +79,8 @@ export default function TodoPanel() {
       </header>
       {items?.length > 0 && <TodoFilters items={items} tipo={tipo} setTipo={setTipo} ev={ev} setEv={setEv} />}
       <div className="flex-1 overflow-y-auto" data-testid="todo-list">
-        {items === null ? <p className="p-4 text-sm text-slate-400">Caricamento...</p>
+        {items === null ? <p className="p-4 text-sm text-slate-400" data-testid="todo-loading">Caricamento...</p>
+          : err ? <p className="p-4 text-sm text-red-600" data-testid="todo-error">Impossibile caricare le attività. <button type="button" onClick={load} className="underline font-semibold" data-testid="todo-retry">Riprova</button></p>
           : !items.length ? <p className="p-4 text-sm text-slate-500" data-testid="todo-empty">Nessuna attività da completare.</p>
           : !shown.length ? <p className="p-4 text-sm text-slate-500" data-testid="todo-filter-empty">Nessuna attività con i filtri selezionati.</p>
           : groups.map(([b, l]) => (

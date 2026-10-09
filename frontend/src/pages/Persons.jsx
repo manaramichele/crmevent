@@ -184,7 +184,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
           </div>
         )}
       </div>
-      {isStaffTab && <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={evFilter} />}
+      {tab === "volontari" && <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={evFilter} />}
       <div className="md:hidden space-y-2.5" data-testid={`people-mobile-list-${tab}`}>
         {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
           : displayRows.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessuna persona trovata.</div>

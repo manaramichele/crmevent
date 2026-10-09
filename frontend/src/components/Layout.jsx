@@ -243,6 +243,7 @@ export default function Layout({ children }) {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [orgs, setOrgs] = useState([]);
+  const [orgsLoaded, setOrgsLoaded] = useState(false);
   useEffect(() => {
     document.body.classList.add("app-shell");
     return () => document.body.classList.remove("app-shell");
@@ -254,10 +255,15 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     if (isSuper) {
+      // Ripristina e valida l'org attiva PRIMA di montare i contenuti: id non valido → ultima usata da questo utente → prima disponibile.
       api.get("/platform/organizations").then(({ data }) => {
         setOrgs(data);
-        if (!actingOrgId && data.length) setActingOrg(data[0].id, false);
-      }).catch(() => {});
+        const ids = new Set(data.map((o) => o.id));
+        if (!ids.has(actingOrgId)) {
+          const last = localStorage.getItem(`last_org:${user.user_id}`);
+          setActingOrg(ids.has(last) ? last : data[0]?.id || "", false, actingOrgId);
+        }
+      }).catch(() => {}).finally(() => setOrgsLoaded(true));
     } else if (multiOrg) {
       api.get("/my/organizations").then(({ data }) => {
         setOrgs(data);
@@ -266,6 +272,11 @@ export default function Layout({ children }) {
       }).catch(() => {});
     }
   }, [isSuper, multiOrg]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const validActing = orgs.some((o) => o.id === actingOrgId);
+  useEffect(() => {
+    if (isSuper && validActing) localStorage.setItem(`last_org:${user.user_id}`, actingOrgId);
+  }, [isSuper, validActing, actingOrgId, user?.user_id]);
 
   // Lock the underlying page (touch + normal scroll) while the mobile drawer is open,
   // iOS/Safari-safe, and restore the exact scroll position on close.
@@ -299,7 +310,7 @@ export default function Layout({ children }) {
     : [{ items: orgNavFor(user) }];
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
-  const gateForOrg = isSuper && !actingOrgId && !isPlatformRoute;
+  const gateForOrg = isSuper && !isPlatformRoute && (!orgsLoaded || !validActing);
   const activeOrgName = orgs.find((o) => o.id === actingOrgId)?.nome || user?.org_name;
 
   const renderLink = (n, onClick) => (
@@ -412,7 +423,7 @@ export default function Layout({ children }) {
         {!isSuper && <UsageNotice s={user?.saas} usage={user?.saas_usage} orgId={user?.org_id} />}
         </div>
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=abbonamento")} />}
-        {isSuper && actingOrgId && !isPlatformRoute && (
+        {isSuper && validActing && !isPlatformRoute && (
           <div className="px-4 lg:px-8 py-2.5 flex items-center gap-2 text-sm bg-amber-100 text-amber-900 border-b border-amber-300" data-testid="super-acting-banner">
             <ShieldCheck className="w-4 h-4 shrink-0" />
             <span className="font-semibold">Stai operando come Super Admin in: {activeOrgName || "…"}</span>
@@ -422,11 +433,13 @@ export default function Layout({ children }) {
         <main className="flex-1 p-4 lg:p-8 bg-slate-50/40">
           {gateForOrg ? (
             <div className="text-center text-slate-500 py-24" data-testid="no-org-selected">
-              {orgs.length === 0
+              {!orgsLoaded
+                ? "Caricamento organizzazione…"
+                : orgs.length === 0
                 ? "Nessuna organizzazione presente sulla piattaforma."
                 : "Seleziona un'organizzazione attiva dal menu in alto per continuare."}
             </div>
-          ) : children}
+          ) : <div key={actingOrgId || "default"} className="contents">{children}</div>}
         </main>
       </div>
       <SupportChat fab={false} />

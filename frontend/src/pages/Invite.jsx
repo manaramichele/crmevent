@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { personName } from "@/lib/textCase";
 import { useAuth } from "@/context/AuthContext";
+import { startGoogle, googleErrorText } from "@/lib/googleAuth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -47,6 +48,11 @@ export default function Invite() {
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", password: "", telefono: "" });
   const [login, setLogin] = useState({ password: "" });
+
+  useEffect(() => {
+    const t = googleErrorText(new URLSearchParams(window.location.search).get("google_error"));
+    if (t) toast.error(t);
+  }, []);
 
   useEffect(() => {
     if (done.current) return; done.current = true;
@@ -95,9 +101,16 @@ export default function Invite() {
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
   const googleAccept = () => {
-    const redirectUrl = `${window.location.origin}/invito?token=${token}`;
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    startGoogle({ intent: "invite", invite: token, legacyRedirect: `${window.location.origin}/invito?token=${token}` });
   };
+  const autoAccept = useRef(false);
+  useEffect(() => {
+    // Ritorno dal login Google CRMEvent: accetta automaticamente se l'email coincide.
+    if (autoAccept.current || !emailMatches || invite?.status !== "pending" || new URLSearchParams(window.location.search).get("google") !== "ok") return;
+    autoAccept.current = true;
+    acceptLoggedIn();
+  }, [emailMatches, invite]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error && !invite) return <Card><div className="text-center"><AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" /><h1 className="text-xl font-bold text-slate-900">Invito non valido</h1><p className="text-sm text-slate-500 mt-2" data-testid="invite-error">{error}</p><Button className="mt-6" variant="outline" onClick={() => nav("/login")}>Vai al login</Button></div></Card>;
   if (!invite) return <Card><div className="text-center text-slate-400">Caricamento invito…</div></Card>;

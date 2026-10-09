@@ -13,7 +13,7 @@ export function supportLabel(p) {
 
 export function limitsLabel(p) {
   const ev = p.max_events < 0 ? "Eventi illimitati" : p.max_events === 1 ? "1 evento incluso" : `Fino a ${p.max_events} eventi`;
-  const us = p.max_users < 0 ? "Utenti registrati illimitati" : `Fino a ${p.max_users} utenti registrati`;
+  const us = p.max_users < 0 ? "Staff e Volontari illimitati" : `Fino a ${p.max_users} Staff e Volontari`;
   return { ev, us };
 }
 
@@ -69,8 +69,7 @@ export function ComparisonTable({ plans, features }) {
   const rows = [
     ...features.map((f) => [f.label, plans.map((p) => p.features.includes(f.key))]),
     ["Eventi", plans.map((p) => (p.max_events < 0 ? "Illimitati" : p.max_events === 1 ? "1" : `Fino a ${p.max_events}`))],
-    ["Utenti registrati", plans.map((p) => (p.max_users < 0 ? "Illimitati" : `Fino a ${p.max_users}`))],
-    ["Staff e volontari (senza accesso)", plans.map(() => "Illimitati")],
+    ["Staff e Volontari", plans.map((p) => (p.max_users < 0 ? "Illimitati" : `Fino a ${p.max_users}`))],
     ["Assistenza email", plans.map(() => true)],
     ["Videochiamate Google Meet", plans.map((p) => (p.video_quota === 0 ? false : p.video_quota < 0 ? "Illimitate e prioritarie" : `${p.video_quota}/mese`))],
   ];
@@ -103,7 +102,7 @@ export default function PlansSection({ authed, claim }) {
           <Gift className="w-3.5 h-3.5 text-[#0ABAB5]" />{claim || `${data.trial_days || 14} giorni di prova gratuita. Nessuna carta di credito richiesta.`}
         </div>
         <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Scegli il piano per il tuo evento</h2>
-        <p className="text-slate-500 mt-3 text-sm md:text-base">Staff e volontari illimitati in tutti i piani. Durante la prova gratuita hai accesso completo.</p>
+        <p className="text-slate-500 mt-3 text-sm md:text-base">Staff e Volontari conteggiati come persone uniche. Durante la prova gratuita hai accesso completo.</p>
         <div className="mt-6"><CycleToggle cycle={cycle} setCycle={setCycle} /></div>
       </div>
       <div className="grid gap-5 md:grid-cols-3">
