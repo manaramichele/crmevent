@@ -30,7 +30,7 @@ export function CycleToggle({ cycle, setCycle }) {
   );
   return (
     <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm" data-testid="cycle-toggle">
-      {btn("monthly", "Mensile")}{btn("yearly", <>Annuale <span className="ml-1 rounded-full bg-[#0ABAB5] text-slate-900 px-2 py-0.5 text-[11px]">−20%</span></>)}
+      {btn("semester", "6 mesi")}{btn("yearly", <>12 mesi <span className="ml-1 rounded-full bg-[#0ABAB5] text-slate-900 px-2 py-0.5 text-[11px]">−20%</span></>)}
     </div>
   );
 }
@@ -38,6 +38,8 @@ export function CycleToggle({ cycle, setCycle }) {
 export function PlanCard({ p, cycle, features, cta, current }) {
   const yearly = cycle === "yearly";
   const perMonth = yearly ? p.yearly / 12 : p.monthly;
+  const total = yearly ? p.yearly : p.semester ?? p.monthly * 6;
+  const saving = Math.round((p.monthly * 12 - p.yearly) * 100) / 100;
   const sup = supportLabel(p);
   const lim = limitsLabel(p);
   return (
@@ -46,11 +48,14 @@ export function PlanCard({ p, cycle, features, cta, current }) {
       {current && <span className="absolute -top-3 right-4 rounded-full bg-[#0ABAB5] px-3 py-1 text-[11px] font-bold text-slate-900">Piano attuale</span>}
       <div className="font-display text-2xl font-extrabold tracking-wide" style={{ color: p.color }}>{p.label}</div>
       <p className="text-sm text-slate-500 mt-1 min-h-[40px]">{p.tagline}</p>
-      <div className="mt-4 flex items-baseline gap-1">
-        <span className="font-display text-4xl font-bold text-slate-900" data-testid={`plan-price-${p.key}`}>€{eur(perMonth)}</span>
-        <span className="text-sm text-slate-500">/mese</span>
+      <div className="mt-4 h-4 text-sm text-slate-400">{yearly && <s data-testid={`plan-price-orig-${p.key}`}>{eur(p.monthly)} €/mese</s>}</div>
+      <div className="flex items-baseline gap-1">
+        <span className="font-display text-4xl font-bold text-slate-900" data-testid={`plan-price-${p.key}`}>{eur(perMonth)} €</span>
+        <span className="text-sm text-slate-500">/mese*</span>
       </div>
-      <div className="text-xs text-slate-500 h-4" data-testid={`plan-billed-${p.key}`}>{yearly ? `Totale annuale addebitato: €${eur(p.yearly)}` : "Fatturazione mensile"}</div>
+      <div className="text-xs text-slate-600 mt-1" data-testid={`plan-billed-${p.key}`}>Durata {yearly ? "12 mesi" : "6 mesi"} · totale anticipato <b>{eur(total)} €</b></div>
+      <div className="text-xs h-4 mt-0.5 font-semibold text-emerald-700" data-testid={`plan-saving-${p.key}`}>{yearly && saving > 0 ? `Risparmi ${eur(saving)} € all'anno` : ""}</div>
+      <p className="text-[11px] text-slate-400 mt-1">*Prezzo mensile equivalente: il pagamento è anticipato per l'intera durata, non mensile.</p>
       <ul className="mt-5 space-y-2 text-sm flex-1">
         <li className="flex gap-2 text-slate-800 font-medium" data-testid={`plan-events-${p.key}`}><InfinityIcon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{lim.ev}</li>
         <li className="flex gap-2 text-slate-800 font-medium" data-testid={`plan-users-${p.key}`}><Users className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{lim.us}</li>
@@ -93,7 +98,7 @@ export function ComparisonTable({ plans, features }) {
 
 export default function PlansSection({ authed, claim }) {
   const data = usePlans();
-  const [cycle, setCycle] = useState("monthly");
+  const [cycle, setCycle] = useState("semester");
   if (!data) return <p className="text-center text-sm text-slate-400">Caricamento piani…</p>;
   return (
     <div className="space-y-10" data-testid="plans-section">

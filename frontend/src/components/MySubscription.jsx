@@ -11,7 +11,7 @@ import PlanBadge, { BILLING } from "@/components/PlanBadge";
 import { UsageBars } from "@/components/UsageMeter";
 
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
-const CYC = { monthly: "Mensile", yearly: "Annuale" };
+const CYC = { monthly: "Mensile", semester: "6 mesi", yearly: "12 mesi" };
 const MODE = { trial: "Prova gratuita", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Annullato", expired: "Scaduto", suspended: "Sospeso" };
 
 function Field({ label, value, testid }) {
@@ -39,7 +39,8 @@ function Summary({ s, features }) {
         <Field label="Stato" value={MODE[s.mode] || s.mode} testid="sub-status" />
         <Field label="Condizione economica" value={BILLING[s.billing] || "—"} testid="sub-billing" />
         {!free && <><Field label="Periodicità" value={CYC[s.billing_cycle] || "—"} testid="sub-cycle" />
-        <Field label="Prezzo" value={s.price_amount ? `€${eur(s.price_amount)}/${s.billing_cycle === "yearly" ? "anno" : "mese"}` : "—"} testid="sub-price" />
+        <Field label="Importo pagato" value={s.price_amount ? `€${eur(s.price_amount)}/${({ yearly: "12 mesi", semester: "6 mesi" })[s.billing_cycle] || "mese"}` : "—"} testid="sub-price" />
+        <Field label="Rinnovo automatico" value={s.cancel_at_period_end ? "Disattivato" : s.stripe_status ? "Attivo" : "—"} testid="sub-autorenew" />
         <Field label="Data attivazione" value={d(s.activated_at)} testid="sub-activated" />
         <Field label="Prossimo rinnovo" value={s.cancel_at_period_end ? `Termina il ${d(s.current_period_end)}` : d(s.admin?.renewal_date || s.current_period_end)} testid="sub-renewal" /></>}
         {s.purchased && isTrial && <Field label="Piano acquistato" value={`${s.paid_plan_label} dal ${d(s.trial_end)}`} testid="sub-purchased" />}
@@ -84,7 +85,7 @@ function ChangeDialog({ pv, onClose, onConfirm, busy }) {
           <DialogDescription>{pv.plan.toUpperCase()} {CYC[pv.cycle].toLowerCase()} · €{eur(pv.price)}</DialogDescription></DialogHeader>
         <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm" data-testid="change-plan-detail">
           {pv.trialing ? "Il cambio è immediato: nessun addebito fino alla fine della prova gratuita."
-            : up ? <>Il nuovo piano è attivo subito. Conguaglio addebitato ora: <b data-testid="change-plan-amount">€{eur(pv.amount_due)}</b>.</>
+            : up ? <>Il nuovo piano è attivo subito.{pv.credit > 0 && <> Credito riconosciuto per il periodo già pagato: <b data-testid="change-plan-credit">€{eur(pv.credit)}</b>.</>} Da pagare ora: <b data-testid="change-plan-amount">€{eur(pv.amount_due)}</b>.{pv.new_period_end && <> Nuova scadenza: <b data-testid="change-plan-new-end">{d(pv.new_period_end)}</b>.</>}</>
               : <>Il nuovo piano entrerà in vigore alla scadenza del periodo già pagato ({d(pv.current_period_end)}). I dati dei moduli non inclusi restano conservati.</>}
         </div>
         {pv.over_limits?.length > 0 && <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900" data-testid="change-plan-over-limits">
@@ -101,11 +102,11 @@ export default function MySubscription() {
   const { checkAuth } = useAuth();
   const plans = usePlans();
   const [s, setS] = useState(null);
-  const [cycle, setCycle] = useState("monthly");
+  const [cycle, setCycle] = useState("semester");
   const [pv, setPv] = useState(null);
   const [busy, setBusy] = useState(false);
   const [params, setParams] = useSearchParams();
-  const load = useCallback(() => api.get("/saas/me").then(({ data }) => { setS(data); if (data.billing_cycle) setCycle(data.billing_cycle); }).catch(() => {}), []);
+  const load = useCallback(() => api.get("/saas/me").then(({ data }) => { setS(data); if (data.billing_cycle && data.billing_cycle !== "monthly") setCycle(data.billing_cycle); }).catch(() => {}), []);
   const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 
   useEffect(() => {
