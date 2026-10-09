@@ -1057,3 +1057,7 @@ Task 2 — Creatività manuale:
 - Causa: `acting_org_id` in localStorage da accessi precedenti inviato come X-Org-Id → 403 "Accesso all'organizzazione non consentito" (il flusso Google a redirect non lo puliva).
 - Fix: `googleAuth.startGoogle` pulisce acting_org_id; `AuthContext.checkAuth` lo scarta se non è tra le organizzazioni dell'utente (no Super Admin/assistenza); `_get_base_user` prova session_token → access_token → Bearer; login password/Google cancellano vecchio cookie session_token; Eventi mostra errore + Riprova. Controlli 403 invariati.
 
+## 2026-10-09 — Piano tecnico portale partner.crmevent.it (solo analisi, nessuna modifica al codice)
+- Proposta: cartella `partner-frontend/` (CRA+craco+Tailwind+shadcn copiati), build indipendente, workflow GitHub `partner-deploy.yml` con filtro `paths: partner-frontend/**`, backend condiviso con router `/api/partner/*`, cookie separato `partner_token`, ruolo/collection `partners` isolati. In attesa di conferma utente su regole commissioni, approvazione partner, anteprima.
+
+
