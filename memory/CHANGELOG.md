@@ -1075,3 +1075,8 @@ Task 2 — Creatività manuale:
 - Super Admin: menu "Partner" (/piattaforma/partner) con Anagrafiche, Statistiche, Organizzatori (attribuzione manuale con registro), Commissioni, Configurazione (+ materiali). Footer crmevent.it: "Diventa Partner" (REACT_APP_PARTNER_URL).
 - Workflow: `partner-frontend/deploy/partner-deploy.yml.example` (paths partner-frontend/**, release versionate, symlink atomico, rollback via workflow_dispatch).
 
+
+
+## 2026-10-09 — Fix CI "Lockfile mancante" partner-frontend ✅
+- `partner-frontend/yarn.lock` presente ma non tracciato da git: verificato `yarn install --frozen-lockfile` (up-to-date) e `yarn build` con Node 20.20.2 (ok sia CI=false che CI=true). Da salvare su GitHub tramite "Save to GitHub".
+
