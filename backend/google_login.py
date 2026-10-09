@@ -44,6 +44,12 @@ def _safe_next(n: Optional[str]) -> str:
     return n if n and n.startswith("/") and not n.startswith("//") and "\\" not in n else ""
 
 
+def _lang(request: Request) -> str:
+    """Italiano di default; se il browser preferisce un'altra lingua, Google usa quella dell'utente."""
+    first = (request.headers.get("accept-language") or "").split(",")[0].split(";")[0].strip()
+    return first if first and not first.lower().startswith("it") and len(first) <= 10 else "it"
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -93,7 +99,7 @@ def build_router(db, deps: dict) -> APIRouter:
         return {"provider": "crmevent" if config()["enabled"] else "emergent"}
 
     @r.get("/oauth/google/start")
-    async def google_start(intent: str = "login", next: str = "", invite: str = ""):
+    async def google_start(request: Request, intent: str = "login", next: str = "", invite: str = ""):
         c = config()
         if not c["enabled"]:
             raise HTTPException(status_code=404, detail="Login Google CRMEvent non attivo")
@@ -105,7 +111,7 @@ def build_router(db, deps: dict) -> APIRouter:
                                                 "invite": invite[:200], "expires_at": _now() + TTL})
         q = urlencode({"response_type": "code", "client_id": c["client_id"], "redirect_uri": c["redirect"], "scope": "openid email profile",
                        "state": state, "nonce": nonce, "code_challenge": _b64(hashlib.sha256(verifier.encode()).digest()),
-                       "code_challenge_method": "S256", "prompt": "select_account", "access_type": "online"})
+                       "code_challenge_method": "S256", "prompt": "select_account", "access_type": "online", "hl": _lang(request)})
         resp = RedirectResponse(f"{AUTH_URL}?{q}", status_code=302)
         resp.set_cookie(STATE_COOKIE, state, max_age=int(TTL.total_seconds()), httponly=True, secure=True, samesite="lax", path="/api/oauth/google")
         return resp

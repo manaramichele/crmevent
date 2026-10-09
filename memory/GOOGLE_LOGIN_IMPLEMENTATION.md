@@ -1,3 +1,10 @@
+# Aggiornamento 2026-10-09
+- Logo consenso Google: `frontend/public/google-oauth-logo-120.png` (120×120 PNG, ricavato senza modifiche dal logo quadrato calendario su Tiffany `favicon-512.png`). URL: https://crmevent.it/google-oauth-logo-120.png
+- Lingua: parametro `hl` nella richiesta a Google = `it` di default; se il browser dell'utente preferisce un'altra lingua, viene passata quella.
+- Cellulare obbligatorio al primo accesso: popup "Completa la registrazione" (nuovi organizzatori) / "Completa profilo" (invitati). Brevo "Utenti registrati": sync in complete-organization e complete-profile.
+- Provider in produzione: NON attivo finché non confermato (GOOGLE_LOGIN_PROVIDER assente/emergent).
+
+
 # CRMEvent – Login Google proprietario: report implementazione (2026-10-09)
 Stato: implementato e testato in anteprima (iteration_113: backend 16/16, frontend 100%). **Non attivo** (GOOGLE_LOGIN_PROVIDER=emergent). Nessun deploy.
 
