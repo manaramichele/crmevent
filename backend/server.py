@@ -1161,6 +1161,7 @@ class Activity(BaseModel):
     data: Optional[str] = None
     stato: Optional[str] = "da_fare"
     note: Optional[str] = None
+    responsabile_id: Optional[str] = None
 
 
 class Followup(BaseModel):
@@ -1172,6 +1173,7 @@ class Followup(BaseModel):
     priorita: Optional[str] = "media"
     stato: Optional[str] = "aperto"
     note: Optional[str] = None
+    responsabile_id: Optional[str] = None
 
 
 class Lodging(BaseModel):  # collection: lodgings — pernottamento (persona <-> evento)

@@ -1,7 +1,7 @@
 """Dashboard: To Do List (attività esistenti: Pipeline, CRM, Follow-up) e Note personali dell'utente."""
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -17,6 +17,10 @@ DATE_FIELD = {"pipeline": "scadenza", "attivita": "data", "followup": "scadenza"
 class CompleteIn(BaseModel):
     tipo: Literal["pipeline", "attivita", "followup"]
     id: str
+
+
+class AssignIn(CompleteIn):
+    responsabile_id: Optional[str] = None
 
 
 class NoteIn(BaseModel):
@@ -46,7 +50,7 @@ def build_router(db, require_admin, get_current_user, saas: dict) -> APIRouter:
         q = {"org_id": org_id, "stato": {"$ne": DONE[tipo]}}
         if sc["ev_ids"] is not None:
             q[EV_FIELD[tipo]] = {"$in": sc["ev_ids"] + ([None, ""] if tipo != "pipeline" else [])}
-        if tipo == "pipeline" and not sc["perm"].get("admin"):
+        if not sc["perm"].get("admin"):
             q["responsabile_id"] = {"$in": ([sc["persona"]] if sc["persona"] else []) + [None, ""]}
         return q
 
@@ -70,12 +74,33 @@ def build_router(db, require_admin, get_current_user, saas: dict) -> APIRouter:
             bucket = "ritardo" if due and due < today.isoformat() else "scadenza" if due and due <= soon else "da_fare"
             ev = d.get(EV_FIELD[tipo])
             items.append({"tipo": tipo, "id": d["id"], "titolo": d.get("titolo"), "stato": d.get("stato"), "priorita": d.get("priorita"),
-                          "scadenza": due, "bucket": bucket, "responsabile": persons.get(d.get("responsabile_id")),
+                          "scadenza": due, "bucket": bucket, "responsabile": persons.get(d.get("responsabile_id")), "responsabile_id": d.get("responsabile_id") or None,
                           "evento": events.get(ev), "evento_id": ev,
                           "can_edit": P.allows(sc["perm"], (tipo,), "edit")})
         order = {"ritardo": 0, "scadenza": 1, "da_fare": 2}
         items.sort(key=lambda i: (order[i["bucket"]], i["scadenza"] or "9999", (i["titolo"] or "").lower()))
         return {"items": items, "types": sc["types"]}
+
+    @r.get("/my/todo/assignees")
+    async def assignees(user: dict = Depends(require_admin)):
+        rows = await db.persons.find({"org_id": user["org_id"]}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1}).to_list(5000)
+        rows.sort(key=lambda p: ((p.get("cognome") or "").lower(), (p.get("nome") or "").lower()))
+        return {"items": rows}
+
+    @r.post("/my/todo/assign")
+    async def assign(body: AssignIn, user: dict = Depends(require_admin)):
+        sc = await _scope(user)
+        if body.tipo not in sc["types"] or not P.allows(sc["perm"], (body.tipo,), "edit"):
+            raise HTTPException(status_code=403, detail="Non hai i permessi per assegnare questa attività")
+        if body.responsabile_id and not await db.persons.find_one({"org_id": user["org_id"], "id": body.responsabile_id}, {"_id": 1}):
+            raise HTTPException(status_code=400, detail="Persona non valida")
+        q = {**_query(sc, body.tipo, user["org_id"]), "id": body.id}
+        q.pop("stato")
+        res = await db[COLL[body.tipo]].update_one(q, {"$set": {"responsabile_id": body.responsabile_id or None, "updated_at": _now()}})
+        if not res.matched_count:
+            raise HTTPException(status_code=404, detail="Attività non trovata")
+        p = await db.persons.find_one({"id": body.responsabile_id}, {"_id": 0, "nome": 1, "cognome": 1}) if body.responsabile_id else None
+        return {"ok": True, "responsabile": f"{p.get('nome') or ''} {p.get('cognome') or ''}".strip() if p else None}
 
     @r.post("/my/todo/complete")
     async def complete(body: CompleteIn, user: dict = Depends(require_admin)):
