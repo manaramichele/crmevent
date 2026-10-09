@@ -531,6 +531,8 @@ async def _create_organization(name: str, owner_user_id: Optional[str] = None,
 
 
 async def _ensure_membership(user_id: str, org_id: str, role: str, added_by: Optional[str] = None):
+    if await db.users.find_one({"user_id": user_id, "role": "superadmin"}, {"_id": 1}):
+        return None, False  # il Super Admin opera sulle organizzazioni senza diventarne membro
     existing = await db.memberships.find_one({"user_id": user_id, "org_id": org_id})
     if existing:
         return existing, False
@@ -2277,7 +2279,8 @@ async def set_access(person_id: str, body: AccessIn, admin: dict = Depends(requi
 
 # ---------------- file upload ----------------
 MIME = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif",
-        "webp": "image/webp", "pdf": "application/pdf", "csv": "text/csv", "txt": "text/plain"}
+        "webp": "image/webp", "pdf": "application/pdf", "csv": "text/csv", "txt": "text/plain",
+        "kml": "application/vnd.google-earth.kml+xml", "kmz": "application/vnd.google-earth.kmz"}
 
 
 async def _read_file_rec(rec: dict):
@@ -2330,7 +2333,7 @@ async def upload(file: UploadFile = File(...), admin: dict = Depends(require_adm
 
 @api.get("/files/{file_id}")
 async def download(file_id: str, user: dict = Depends(get_current_user)):
-    rec = await db.files.find_one({"id": file_id, "is_deleted": False}, {"_id": 0})
+    rec = await db.files.find_one({"id": file_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="File non trovato")
     if user.get("role") != "superadmin" and rec.get("org_id") not in (None, user.get("org_id")):
@@ -2348,17 +2351,20 @@ async def _resolve_attachment(url: str, org_id: str) -> Optional[dict]:
         return None
     url_path = url.split("?", 1)[0].split("#", 1)[0]
     m = re.search(r"/api/files/public/([A-Za-z0-9_\-]+)$", url_path)
+    proj = {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1, "storage_path": 1}
+    alive = {"is_deleted": {"$ne": True}}  # i file migrati possono non avere il campo is_deleted
     if m:
-        rec = await db.files.find_one({"public_token": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1})
+        rec = await db.files.find_one({"public_token": m.group(1), **alive}, proj)
     else:
         m = re.search(r"/api/files/([A-Za-z0-9_\-]+)$", url_path)
-        rec = await db.files.find_one({"id": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1}) if m else None
+        rec = await db.files.find_one({"id": m.group(1), **alive}, proj) if m else None
     if m:
         if not rec or rec.get("org_id") not in (None, org_id):
             return None
-        return {"url": url, "name": rec.get("original_filename"), "content_type": rec.get("content_type")}
-    if url.startswith("http"):
-        return {"url": url, "name": url.rsplit("/", 1)[-1].split("?")[0] or None, "content_type": None}
+        name = rec.get("original_filename") or (rec.get("storage_path") or "").rsplit("/", 1)[-1] or None
+        return {"url": url, "name": name, "content_type": rec.get("content_type")}
+    if url.startswith("http") or url.startswith("/"):
+        return {"url": url, "name": url_path.rsplit("/", 1)[-1] or None, "content_type": None}
     return None
 
 
@@ -2370,6 +2376,8 @@ def _attachment_kind(field_kind: str, a: dict) -> str:
         return "pdf"
     if ct.startswith("image/") or re.search(r"\.(png|jpe?g|webp|gif|heic)$", name):
         return "image"
+    if re.search(r"\.(kml|kmz|zip|docx?|xlsx?|csv|txt)$", name):
+        return "file"
     return field_kind if field_kind in ("gpx", "pdf", "image") and not name else "file"
 
 
@@ -2397,7 +2405,7 @@ async def maps_attachments(evento_id: str, user: dict = Depends(require_admin)):
 @api.get("/files/public/{token}")
 async def file_public(token: str):
     """Serve pubblicamente (senza cookie) un file tramite token imprevedibile. Solo file con public_token."""
-    rec = await db.files.find_one({"public_token": token, "is_deleted": False}, {"_id": 0})
+    rec = await db.files.find_one({"public_token": token, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Not found")
     data, ctype = await _read_file_rec(rec)
@@ -4068,7 +4076,18 @@ async def org_permissions_audit(admin: dict = Depends(require_org_admin)):
     rows = await db.audit_logs.find(
         {"org_id": admin["org_id"], "action": {"$in": ["permissions_changed", "member_role_changed"]}},
         {"_id": 0, "meta": 0}).sort("created_at", -1).to_list(200)
-    return {"items": rows}
+    return {"items": [_org_visible_audit(r) for r in rows]}
+
+
+ADMIN_DISPLAY_NAME = "Assistenza CRMEvent"
+
+
+def _org_visible_audit(r: dict) -> dict:
+    """Vista per l'organizzazione: le operazioni del Super Admin non appaiono come attività di un collaboratore.
+    L'identità reale resta nel registro tecnico (/platform/audit, solo Super Admin)."""
+    if r.get("actor_role") == "superadmin" or r.get("scope") == "platform_admin":
+        return {**r, "actor_name": ADMIN_DISPLAY_NAME, "actor_email": None, "actor_user_id": None, "actor_role": "platform_admin"}
+    return r
 
 
 async def _org_or_404(org_id: str) -> dict:
@@ -6385,6 +6404,7 @@ async def record_audit(actor: dict, action: str, org_id: Optional[str] = None,
     doc = {"id": new_id(), "created_at": now_iso(),
            "actor_user_id": actor.get("user_id"), "actor_email": actor.get("email"),
            "actor_name": actor.get("name"), "actor_role": actor.get("role"),
+           "scope": "platform_admin" if actor.get("role") == "superadmin" else "org",
            "action": action, "action_label": AUDIT_ACTION_LABELS.get(action, action),
            "org_id": org_id, "org_name": org_name,
            "target_email": target_email, "target_name": target_name, "detail": detail,
@@ -9443,6 +9463,15 @@ async def migrate_memberships():
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
+    try:  # classificazione storica (non distruttiva): accessi/operazioni Super Admin = registro tecnico amministrativo
+        sa_ids = [u["user_id"] for u in await db.users.find({"role": "superadmin"}, {"_id": 0, "user_id": 1}).to_list(50)]
+        await db.audit_logs.update_many({"scope": {"$exists": False}, "$or": [{"actor_role": "superadmin"}, {"actor_user_id": {"$in": sa_ids}}]},
+                                        {"$set": {"scope": "platform_admin"}})
+        await db.audit_logs.update_many({"scope": {"$exists": False}}, {"$set": {"scope": "org"}})
+        # Il Super Admin non è mai membro delle organizzazioni che consulta: disattiva eventuali membership create per errore (senza cancellarle).
+        await db.memberships.update_many({"user_id": {"$in": sa_ids}, "active": True}, {"$set": {"active": False, "deactivated_reason": "platform_admin"}})
+    except Exception as e:
+        logger.error(f"audit scope migration: {e}")
     try:
         await db.memberships.create_index([("user_id", 1), ("org_id", 1)], unique=True)
         await db.memberships.create_index("org_id")

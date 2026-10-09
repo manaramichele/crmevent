@@ -1,0 +1,37 @@
+{
+  "summary": "Iter117 full backend+frontend test of GET /api/maps-attachments and Mappe & Percorsi attachment buttons. 6/6 backend pytest cases PASS. Frontend verified end-to-end: dialog shows correct per-kind buttons under each map name (gpx=button opening gpx-viewer, pdf/image=<a target=_blank>, file=<a target=_blank download>), labels match 'Apri GPX / Apri PDF / Apri immagine / Scarica file', empty map has no map-attachments container, data-testid pattern map-att-{kind}-{mapId}-{field} is correct, map-attachments-{mapId} container present only when items exist. GPX click opens gpx-viewer dialog unchanged. Migration scenarios (file record without is_deleted, without original_filename but storage_path .kml, legacy external http .pdf, legacy relative /uploads/old.png) all resolve correctly, and cross-org isolation is enforced.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/upload", "issue": "KML/KMZ files are rejected with 400 'Tipo di file non supportato' (storage_utils.classify_and_validate has no kml/kmz branch). The MapsDialog 'File' FileUpload has no accept restriction so a user selecting a .kml/.kmz is blocked at upload time. The backend /api/maps-attachments correctly returns kind=file for such attachments if they exist (seeded/migrated), but new users cannot create them via the standard upload path. Consider adding kml/kmz (+ zip/doc/xls/csv already allowed as 'data' only for csv/txt) to storage_utils._EXT or route them through a 'generic/attachment' kind."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter117_maps_attachments.py"
+  ],
+  "action_items": [
+    "Optional (not blocking the acceptance criteria): expand /api/upload to accept .kml/.kmz (and perhaps generic office/zip) so Mappe > File input can actually save a non-image/non-pdf file; currently the 'Scarica file' path works end-to-end only for files that are already in db.files from legacy data or external URLs. Backend _attachment_kind + MapsDialog UI are already ready."
+  ],
+  "critical_code_review_comments": [
+    "server.py _resolve_attachment: correctly uses {\"is_deleted\": {\"$ne\": True}} to include legacy docs without the is_deleted field — verified by test_migrated_file_no_is_deleted_field.",
+    "server.py _attachment_kind: good fallback cascade (ext → content_type → field hint); last-resort returns 'file' which keeps the UI safe when a legacy URL has no filename/extension (e.g. external links without extension).",
+    "server.py /maps-attachments: filters by evento_id + oq() + team scope — org isolation verified. Uses a 'seen' set to avoid duplicate buttons if two fields point to the same URL (good).",
+    "Events.jsx AttachmentButtons L60-75: fine. GPX is a <button>, others are <a target=_blank> with download attribute for 'file' kind. data-testid map-att-{kind}-{mapId}-{field} and container map-attachments-{mapId}. No attachment container when items.length===0.",
+    "components/crm.jsx FileUpload (used for 'File' input in map form) posts to /api/upload with no accept restriction, but /api/upload rejects kml/kmz — see minor backend issue."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter117_maps_attachments.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (all acceptance criteria met)"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! (cookie auth) - working.",
+  "seed_data_creation": "All TEST_ITER117_* / TEST_FE117_* events, maps, and db.files rows were cleaned up at end of each test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter117 feature works end-to-end. Backend GET /api/maps-attachments returns a dict keyed by map_id -> list of {url,name,content_type,field,kind}. Kind resolution matrix fully covered: gpx/pdf/image/file. Legacy & migrated records handled. One real-world limitation: POST /api/upload rejects kml/kmz uploads (storage_utils only knows image/pdf/gpx/data=csv/txt), so creating new KML/KMZ via the UI's 'File' FileUpload is blocked by the upload endpoint, even though both backend attachment resolver and frontend 'Scarica file' button are ready for them. Not an acceptance-criteria regression but worth flagging to main agent if the product wants real kml/kmz user uploads.",
+  "rca of the issue": "N/A"
+}

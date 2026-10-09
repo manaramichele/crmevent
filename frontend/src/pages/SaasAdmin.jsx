@@ -98,7 +98,7 @@ function OrgsTab() {
     {edit && <SubscriptionEditDialog row={edit} onClose={() => setEdit(null)} onSaved={load} />}
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="saas-orgs-table">
       <table className="w-full min-w-[1100px] text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Tipo", "Formula", "Stato", "Condizione", "Periodicità", "Data inizio", "Data scadenza", "Prossimo rinnovo", "Staff e Volontari", "Eventi", "Pagamenti", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Tipo", "Formula", "Stato", "Condizione", "Periodicità", "Importo", "Pagamento", "Data inizio", "Data scadenza", "Prossimo rinnovo", "Staff e Volontari", "Eventi", "Pagamenti", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
         <tbody>{shown.map((r) => (
           <tr key={r.id} className="border-t border-slate-100" data-testid={`saas-org-${r.id}`}>
             <td className="px-3 py-2 font-medium">{r.nome}{r.admin?.comp ? <span className="ml-1 text-[10px] rounded bg-emerald-50 text-emerald-700 px-1">Omaggio</span> : null}</td>
@@ -106,10 +106,12 @@ function OrgsTab() {
             <td className="px-3 py-2">{r.model === "abbonamento" ? <FormulaBadge plan={formulaOf(r)} testid={`saas-badge-${r.id}`} /> : "—"}{r.pending_change ? ` → ${r.pending_change.plan.toUpperCase()}` : ""}</td>
             <td className="px-3 py-2" data-testid={`saas-status-${r.id}`}>{r.mode ? MODE[r.mode] : r.model === "abbonamento" ? "Accesso completo" : "—"}{r.mode === "trial" ? ` (${r.days_left} gg)` : ""}{r.cancel_at_period_end ? " · annullato a fine periodo" : ""}</td>
             <td className="px-3 py-2" data-testid={`saas-billing-${r.id}`}>{BILLING[r.billing] || "—"}</td>
-            <td className="px-3 py-2">{(r.admin?.billing_cycle || r.billing_cycle) === "yearly" ? "Annuale" : (r.admin?.billing_cycle || r.billing_cycle) === "monthly" ? "Mensile" : "—"}</td>
+            <td className="px-3 py-2">{({ yearly: "12 mesi", semester: "6 mesi", monthly: "Mensile" })[r.admin?.billing_cycle || r.billing_cycle] || "—"}</td>
+            <td className="px-3 py-2 whitespace-nowrap" data-testid={`saas-amount-${r.id}`}>{r.billing === "free" ? "—" : r.price_amount ? `€${r.price_amount.toFixed(2).replace(".", ",")}` : "—"}</td>
+            <td className="px-3 py-2" data-testid={`saas-paystatus-${r.id}`}>{({ active: "Pagato", trialing: "In prova", past_due: "Insoluto", unpaid: "Insoluto", canceled: "Annullato", incomplete: "In attesa" })[r.stripe_status] || (r.billing === "free" ? "Gratuito" : "—")}</td>
             <td className="px-3 py-2">{d(r.mode === "trial" ? r.trial_start : r.admin?.access_start || r.current_period_start || r.activated_at)}</td>
             <td className="px-3 py-2" data-testid={`saas-expiry-${r.id}`}>{endOf(r) ? d(endOf(r)) : r.billing === "free" ? "Nessuna scadenza" : "—"}</td>
-            <td className="px-3 py-2">{r.billing === "free" ? "Nessun addebito" : d(r.admin?.renewal_date || (r.stripe_status === "active" ? r.current_period_end : null))}</td>
+            <td className="px-3 py-2" data-testid={`saas-renew-${r.id}`}>{r.billing === "free" ? "Nessun addebito" : d(r.admin?.renewal_date || (r.stripe_status === "active" ? r.current_period_end : null))}{r.stripe_status ? <div className="text-[11px] text-slate-500">Rinnovo auto: {r.cancel_at_period_end ? "disattivato" : "attivo"}</div> : null}</td>
             <td className="px-3 py-2"><span data-testid={`saas-users-${r.id}`}>{r.people_count ?? "—"} / {r.limits?.max_users > 0 ? r.limits.max_users : "∞"}</span></td>
             <td className="px-3 py-2"><span data-testid={`saas-events-${r.id}`} title="Eventi creati (inclusi eliminati)">{r.events_count ?? "—"} / {r.limits?.max_events > 0 ? r.limits.max_events : "∞"}</span></td>
             <td className="px-3 py-2">{r.payments_count ?? "—"}{r.payments_total ? ` · €${r.payments_total}` : ""}</td>

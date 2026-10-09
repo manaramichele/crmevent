@@ -1017,3 +1017,26 @@ Task 2 — Creatività manuale:
 - `EntityManager` (crm.jsx): nuova prop `belowFilters(filterVals)`; scheda Team mostra lo stesso `VolunteerSummary` col filtro evento del Team.
 - Team Leader (team.responsabile_id): corona dorata a sinistra dei badge ruolo in tabella (rispetta filtro evento) e badge "👑 Team Leader" accanto al nome nella scheda persona (`PersonDetailDialog`, store teams condiviso).
 
+
+## 2026-10-09 — Pulsanti allegati Mappe & Percorsi (tutti i formati) ✅ (iteration_117: backend 6/6, frontend 100%)
+- `_resolve_attachment`: file migrati senza `is_deleted`/`original_filename` (nome da storage_path), URL legacy relativi; `_attachment_kind`: kml/kmz/zip/doc/xls → "file".
+- Etichette: Apri GPX / Apri PDF / Apri immagine / Scarica file (download).
+- Upload: nuovo tipo `map` (KML/KMZ, max 20 MB) in storage_utils; download `/api/files/{id}` e pubblico accettano file senza `is_deleted`.
+
+
+## 2026-10-09 — Abbonamenti 6 mesi / 12 mesi (−20%) ✅ (iteration_118: backend 7/7, frontend 100%)
+- `subscriptions.py`: CYCLES = semester|yearly (nuove sottoscrizioni; "monthly" solo legacy), `cycle_amount` (semestre = mensile×6), prezzi Stripe semestrali `interval=month, interval_count=6`, mapping sync_sub, etichette CYCLE_LABEL, change-preview con `credit` e `new_period_end` (6→12 mesi), plans-public espone `semester`.
+- UI: selettore "6 mesi | 12 mesi −20%" (default 6 mesi), prezzo equivalente mensile, totale anticipato, prezzo barrato e risparmio annuale, nota "equivalente". Il mio abbonamento: Importo pagato, Rinnovo automatico, credito nel cambio piano. Super Admin: colonne Importo, Pagamento, Rinnovo auto.
+- Prezzi: BRONZE 114 € / 182,40 € · SILVER 294 € / 470,40 € · GOLD 474 € / 758,40 €.
+
+
+## 2026-10-09 — Riservatezza accessi Super Admin ✅ (iteration_119: backend 8/8)
+- `record_audit`: campo `scope` (platform_admin | org). Migrazione all'avvio non distruttiva: tutti i log classificati, nessuna cancellazione.
+- `/org/permissions/audit`: le operazioni del Super Admin appaiono come "Assistenza CRMEvent" (senza email/ID); identità reale solo in `/platform/audit` (Super Admin).
+- `_ensure_membership`: il Super Admin non diventa mai membro di un'organizzazione; eventuali membership attive vengono disattivate (non cancellate) all'avvio.
+
+
+## 2026-10-09 — Cambia piano in Il mio abbonamento + badge header ✅ (iteration_120: frontend 7/7)
+- `MySubscription.jsx`: pulsante Tiffany "Cambia piano" in alto a destra del riepilogo → `PlanPickerDialog` (3 piani, 6/12 mesi, piano attuale evidenziato, `recommendPlan` su eventi + Staff/Volontari reali, conferma esplicita per formule gratuite). Riusa checkout / change-preview / change Stripe esistenti. `?upgrade=1` apre il dialog (usato da PlanLimitDialog). Interne/Test: nessun pulsante.
+- Header: `PlanBadge size="lg"` (+20%) con effetto `.cta-shimmer .cta-shimmer-5` (5 s, prefers-reduced-motion rispettato), apre Il mio abbonamento.
+

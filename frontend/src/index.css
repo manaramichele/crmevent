@@ -83,5 +83,6 @@ h1, h2, h3, h4, .font-display {
   background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.18) 30%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.18) 70%,rgba(255,255,255,0) 100%);
   transform:translateX(-160%) skewX(-20deg);animation:cta-sweep 4.5s cubic-bezier(.4,0,.2,1) 1.2s infinite;}
 @keyframes cta-sweep{0%{transform:translateX(-160%) skewX(-20deg);}28%,100%{transform:translateX(320%) skewX(-20deg);}}
+.cta-shimmer-5::before{animation-duration:5s;}
 @media (prefers-reduced-motion:reduce){.cta-shimmer::before{animation:none;display:none;}}
 

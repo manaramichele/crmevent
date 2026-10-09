@@ -10,7 +10,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Rocket, Image as ImageIcon, Paperclip } from "lucide-react";
+import { Rocket, Image as ImageIcon } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -55,7 +55,7 @@ function parseGpx(text) {
   return { points, distanceKm: Math.round(d * 100) / 100 };
 }
 
-const ATT_META = { gpx: ["Apri GPX", MapIcon], pdf: ["Apri PDF", FileText], image: ["Apri immagine", ImageIcon], file: ["Apri file", Paperclip] };
+const ATT_META = { gpx: ["Apri GPX", MapIcon], pdf: ["Apri PDF", FileText], image: ["Apri immagine", ImageIcon], file: ["Scarica file", Download] };
 
 function AttachmentButtons({ items, mapId, onGpx }) {
   if (!items.length) return null;

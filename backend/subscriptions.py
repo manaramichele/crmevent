@@ -20,7 +20,16 @@ from email_utils import link_email, send_email
 logger = logging.getLogger("subscriptions")
 PLAN_KEYS = ("bronze", "silver", "gold")
 PLAN_RANK = {"bronze": 1, "silver": 2, "gold": 3}
-CYCLES = ("monthly", "yearly")
+CYCLES = ("semester", "yearly")  # nuove sottoscrizioni: 6 o 12 mesi anticipati
+CYCLE_LABEL = {"monthly": "mensile", "semester": "semestrale", "yearly": "annuale"}  # "monthly" solo per abbonamenti esistenti
+
+
+def cycle_amount(cfg: dict, plan: str, cycle: str) -> float:
+    """Semestrale = mensile × 6; annuale = prezzo annuale configurato (mensile × 12 × 0,80)."""
+    p = cfg["plans"][plan]
+    if cycle == "semester":
+        return round(float(p["monthly"]) * 6, 2)
+    return round(float(p["yearly" if cycle == "yearly" else "monthly"]), 2)
 FEATURES = [  # (chiave, etichetta) — chiavi = sezioni permessi + funzioni trasversali
     ("dashboard", "Dashboard"), ("eventi", "Eventi"), ("staff", "Staff / Volontari"), ("pipeline", "Pipeline evento"),
     ("calendar", "Google Calendar"), ("aziende", "Aziende"), ("anagrafiche", "Anagrafiche"), ("attivita", "Attività"),
@@ -425,7 +434,7 @@ def build(db, deps: dict):
     async def ensure_price(cfg: dict, plan: str, cycle: str) -> str:
         await _indexes()
         mode = deps["stripe_mode"]
-        cents = int(round(float(cfg["plans"][plan][cycle]) * 100))
+        cents = int(round(cycle_amount(cfg, plan, cycle) * 100))
         row = await db.saas_stripe_prices.find_one({"plan": plan, "cycle": cycle, "amount_cents": cents, "mode": mode}, {"_id": 0})
         if row:
             return row["price_id"]
@@ -436,7 +445,7 @@ def build(db, deps: dict):
             prod = {"kind": "product", "plan": plan, "mode": mode, "product_id": p.id}
             await db.saas_stripe_prices.insert_one({**prod})
         price = stripe_sdk.Price.create(product=prod["product_id"], unit_amount=cents, currency="eur",
-                                        recurring={"interval": "month" if cycle == "monthly" else "year"},
+                                        recurring={"interval": "year"} if cycle == "yearly" else {"interval": "month", "interval_count": 6 if cycle == "semester" else 1},
                                         metadata={"saas_plan": plan, "saas_cycle": cycle, "config_version": str(cfg.get("version", 1))})
         await db.saas_stripe_prices.insert_one({"kind": "price", "plan": plan, "cycle": cycle, "amount_cents": cents, "mode": mode,
                                                 "price_id": price.id, "product_id": prod["product_id"], "created_at": _iso(_now())})
@@ -459,7 +468,8 @@ def build(db, deps: dict):
         price = it["price"]
         pmd = price.get("metadata") or {}
         plan = pmd.get("saas_plan") or md.get("plan")
-        cycle = "yearly" if (price.get("recurring") or {}).get("interval") == "year" else "monthly"
+        rec = price.get("recurring") or {}
+        cycle = "yearly" if rec.get("interval") == "year" else "semester" if int(rec.get("interval_count") or 1) == 6 else "monthly"
         cps = sub.get("current_period_start") or it.get("current_period_start")
         cpe = sub.get("current_period_end") or it.get("current_period_end")
         status = sub.get("status")
@@ -479,7 +489,7 @@ def build(db, deps: dict):
             upd["saas.trial_status"] = "converted" if prev.get("trial_status") == "active" else prev.get("trial_status")
         await db.organizations.update_one({"id": org_id}, {"$set": upd})
         cfg = await get_config()
-        label = f"{plan_label(cfg, plan)} {'annuale' if cycle == 'yearly' else 'mensile'}"
+        label = f"{plan_label(cfg, plan)} {CYCLE_LABEL.get(cycle, cycle)}"
         if prev.get("plan") and (prev.get("plan"), prev.get("billing_cycle")) != (plan, cycle) and status != "canceled":
             asyncio.create_task(notify(org_id, "plan_changed", f"plan:{sub.get('id')}:{plan}:{cycle}:{cps}", f"nuovo piano {label}"))
         if status == "canceled":
@@ -525,7 +535,7 @@ def build(db, deps: dict):
         await deps["record_invoice"](inv, status)
         cfg = await get_config()
         s = org.get("saas") or {}
-        label = f"{plan_label(cfg, s.get('plan'))} {'annuale' if s.get('billing_cycle') == 'yearly' else 'mensile'}"
+        label = f"{plan_label(cfg, s.get('plan'))} {CYCLE_LABEL.get(s.get('billing_cycle'), '')}"
         test = deps["stripe_mode"] != "live"
         upd = {"kind": "saas_subscription", "saas_plan": s.get("plan"), "saas_cycle": s.get("billing_cycle"),
                "descrizione": f"Abbonamento CRMEvent {label}", "regime_fiscale": "forfettario",
@@ -556,7 +566,7 @@ def build(db, deps: dict):
     def _kind(cur_plan, cur_cycle, plan, cycle) -> str:
         if (cur_plan, cur_cycle) == (plan, cycle):
             return "same"
-        if PLAN_RANK[plan] > PLAN_RANK[cur_plan] or (plan == cur_plan and cycle == "yearly"):
+        if PLAN_RANK[plan] > PLAN_RANK[cur_plan] or (plan == cur_plan and cycle == "yearly" and cur_cycle != "yearly"):
             return "upgrade"
         return "downgrade"
 
@@ -573,7 +583,7 @@ def build(db, deps: dict):
         return {"trial_days": cfg.get("trial_days"), "trial_plan": cfg.get("trial_plan"), "trial_video_quota": cfg.get("trial_video_quota"),
                 "features": [{"key": k, "label": l} for k, l in FEATURES],
                 "plans": [{"key": k, **{f: cfg["plans"][k].get(f) for f in ("label", "color", "tagline", "monthly", "yearly", "features", "video_quota")},
-                           **plan_limits(cfg, k)}
+                           "semester": cycle_amount(cfg, k, "semester"), **plan_limits(cfg, k)}
                           for k in PLAN_KEYS if cfg["plans"][k].get("active", True)]}
 
     # ---------------- Organizzazione ----------------
@@ -651,7 +661,7 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="Nessun abbonamento attivo: scegli un piano")
         s = org["saas"]
         kind = _kind(s.get("plan"), s.get("billing_cycle"), plan, cycle)
-        out = {"kind": kind, "plan": plan, "cycle": cycle, "price": cfg["plans"][plan][cycle],
+        out = {"kind": kind, "plan": plan, "cycle": cycle, "price": cycle_amount(cfg, plan, cycle), "credit": 0.0, "new_period_end": None,
                "current_period_end": s.get("current_period_end"), "trialing": sub.get("status") == "trialing", "amount_due": 0.0}
         adm = s.get("admin") or {}
         lim = {k: int(adm[k]) if adm.get(k) is not None else v for k, v in plan_limits(cfg, plan).items()}
@@ -663,6 +673,10 @@ def build(db, deps: dict):
             pv = stripe_sdk.Invoice.create_preview(customer=sub["customer"], subscription=sub["id"], subscription_details={
                 "items": [{"id": _item(sub)["id"], "price": price_id}], "proration_behavior": "always_invoice"})
             out["amount_due"] = round((pv.get("amount_due") or 0) / 100, 2)
+            # Credito per il periodo già pagato e non goduto (righe di proration negative)
+            out["credit"] = round(-sum(l.get("amount", 0) for l in ((pv.get("lines") or {}).get("data") or []) if (l.get("amount") or 0) < 0) / 100, 2)
+            if cycle != s.get("billing_cycle"):
+                out["new_period_end"] = _iso(_now() + timedelta(days=365 if cycle == "yearly" else 182))
         return out
 
     @r.post("/saas/change")
@@ -708,7 +722,7 @@ def build(db, deps: dict):
         await deps["record_audit"](user, "saas_plan_downgrade_scheduled", org_id=org["id"],
                                    detail=f"{s.get('plan')}/{s.get('billing_cycle')} → {body.plan}/{body.cycle} dal {s.get('current_period_end', '')[:10]}")
         asyncio.create_task(notify(org["id"], "plan_changed", f"sched:{sch['id']}:{body.plan}:{body.cycle}",
-                                   f"dal {(_parse(s.get('current_period_end')) or _now()).strftime('%d/%m/%Y')} passerai a {plan_label(cfg, body.plan)} {'annuale' if body.cycle == 'yearly' else 'mensile'}"))
+                                   f"dal {(_parse(s.get('current_period_end')) or _now()).strftime('%d/%m/%Y')} passerai a {plan_label(cfg, body.plan)} {CYCLE_LABEL.get(body.cycle, body.cycle)}"))
         return {"ok": True, "kind": "downgrade", "immediate": False, "pending_change": pc}
 
     @r.post("/saas/change/cancel-pending")
@@ -846,7 +860,7 @@ def build(db, deps: dict):
                     or p.max_events == 0 or p.max_users == 0:
                 raise HTTPException(status_code=400, detail=f"Valori non validi per {k.upper()}")
             plans[k] = {**p.model_dump(), **plan_limits({"plans": {k: p.model_dump()}}, k), "features": [f for f in FEATURE_KEYS if f in p.features]}
-        price_changed = any(round(plans[k][c], 2) != round(float(cur["plans"][k][c]), 2) for k in PLAN_KEYS for c in CYCLES)
+        price_changed = any(round(plans[k][c], 2) != round(float(cur["plans"][k][c]), 2) for k in PLAN_KEYS for c in ("monthly", "yearly"))
         doc = {"trial_days": body.trial_days, "trial_video_quota": body.trial_video_quota, "plans": plans,
                "version": int(cur.get("version", 1)) + 1, "updated_at": _iso(_now()), "updated_by": admin.get("email")}
         await db.saas_config.update_one({"id": "config"}, {"$set": doc})
@@ -919,7 +933,7 @@ def build(db, deps: dict):
             raise HTTPException(status_code=404, detail="Organizzazione con abbonamento non trovata")
         if internal and (body.status == "trial" or body.trial_start or body.trial_end):
             raise HTTPException(status_code=400, detail="La prova gratuita non si applica alle organizzazioni Interne o Test")
-        if body.status not in ADMIN_STATUS or (body.plan and body.plan not in PLAN_KEYS) or body.billing_cycle not in (None, "monthly", "yearly"):
+        if body.status not in ADMIN_STATUS or (body.plan and body.plan not in PLAN_KEYS) or body.billing_cycle not in (None, "monthly", "semester", "yearly"):
             raise HTTPException(status_code=400, detail="Valori non validi")
         for k in ("max_events", "max_users"):
             v = getattr(body, k)

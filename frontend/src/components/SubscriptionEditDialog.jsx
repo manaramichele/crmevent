@@ -72,7 +72,7 @@ export default function SubscriptionEditDialog({ row, onClose, onSaved }) {
         <div className="space-y-3 min-h-[200px]">
           {tab === "formula" && <>
             <F label="Formula"><select value={f.plan} onChange={set("plan")} className={sel} data-testid="sub-plan"><option value="">—</option>{PLANS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></F>
-            <F label="Periodicità"><select value={f.billing_cycle} onChange={set("billing_cycle")} className={sel} data-testid="sub-cycle"><option value="">—</option><option value="monthly">Mensile</option><option value="yearly">Annuale</option></select></F>
+            <F label="Periodicità"><select value={f.billing_cycle} onChange={set("billing_cycle")} className={sel} data-testid="sub-cycle"><option value="">—</option><option value="semester">6 mesi</option><option value="yearly">12 mesi</option><option value="monthly">Mensile (precedente)</option></select></F>
             <p className="text-xs text-slate-500">La formula si applica quando lo stato è "Attivo". Limiti standard: BRONZE 1 evento/10 Staff e Volontari, SILVER 5 eventi/30 Staff e Volontari, GOLD illimitati. Le eccezioni di limite valgono anche durante la prova.</p>
           </>}
           {tab === "date" && <div className="grid sm:grid-cols-2 gap-3">
