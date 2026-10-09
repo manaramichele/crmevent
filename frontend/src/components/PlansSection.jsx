@@ -86,8 +86,8 @@ export function ComparisonTable({ plans, features }) {
           <th className="px-2 py-2 sm:px-3 sm:py-2.5 text-left font-semibold text-slate-700">Funzionalità</th>
           {plans.map((p) => <th key={p.key} className="px-1 py-2 sm:px-2 sm:py-2.5 text-[11px] sm:text-sm font-extrabold tracking-wide text-center" style={{ color: p.color }} data-testid={`comparison-head-${p.key}`}>{p.label}</th>)}
         </tr></thead>
-        <tbody>{rows.map(([label, vals]) => (
-          <tr key={label} className="border-b border-slate-100 last:border-0">
+        <tbody>{rows.map(([label, vals], ri) => (
+          <tr key={`${ri}-${label}`} className="border-b border-slate-100 last:border-0">
             <td className="px-2 py-1.5 sm:px-3 sm:py-2 text-slate-700 leading-snug break-words">{label}</td>{vals.map((v, i) => cell(v, i))}
           </tr>
         ))}</tbody>

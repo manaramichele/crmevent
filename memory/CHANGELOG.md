@@ -1023,3 +1023,9 @@ Task 2 — Creatività manuale:
 - Etichette: Apri GPX / Apri PDF / Apri immagine / Scarica file (download).
 - Upload: nuovo tipo `map` (KML/KMZ, max 20 MB) in storage_utils; download `/api/files/{id}` e pubblico accettano file senza `is_deleted`.
 
+
+## 2026-10-09 — Abbonamenti 6 mesi / 12 mesi (−20%) ✅ (iteration_118: backend 7/7, frontend 100%)
+- `subscriptions.py`: CYCLES = semester|yearly (nuove sottoscrizioni; "monthly" solo legacy), `cycle_amount` (semestre = mensile×6), prezzi Stripe semestrali `interval=month, interval_count=6`, mapping sync_sub, etichette CYCLE_LABEL, change-preview con `credit` e `new_period_end` (6→12 mesi), plans-public espone `semester`.
+- UI: selettore "6 mesi | 12 mesi −20%" (default 6 mesi), prezzo equivalente mensile, totale anticipato, prezzo barrato e risparmio annuale, nota "equivalente". Il mio abbonamento: Importo pagato, Rinnovo automatico, credito nel cambio piano. Super Admin: colonne Importo, Pagamento, Rinnovo auto.
+- Prezzi: BRONZE 114 € / 182,40 € · SILVER 294 € / 470,40 € · GOLD 474 € / 758,40 €.
+

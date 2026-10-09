@@ -1,0 +1,27 @@
+{
+  "summary": "Iter118 — Replaced monthly/annual with 6 mesi (semester = monthly×6) and 12 mesi (yearly = monthly×12×0.8). All 7 backend pytest cases pass; /prezzi UI shows exact expected values; Stripe TEST price rows created for semester/yearly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/prezzi (and features list)", "issues": ["React console warning: 'Encountered two children with the same key, Eventi' — duplicate key when rendering feature list. Non-blocking but should be fixed by using an index or unique key."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter118_subscription_cycles.py", "/app/test_reports/pytest/iter118.xml"],
+  "action_items": ["(minor) Fix duplicate React key warning in features list render on /prezzi"],
+  "critical_code_review_comments": [
+    "subscriptions.py is 1048 lines — exceeds 700-line guideline; consider splitting (plan config / stripe / super admin / cron) into modules.",
+    "cycle_amount, _kind, _validate, sync_sub mapping all correctly implement semester semantics (interval=month, interval_count=6) and yearly (interval=year). Legacy monthly supported via sync only, blocked at checkout — matches spec.",
+    "plans_public exposes semester price via cycle_amount — PASS.",
+    "Admin PUT accepts billing_cycle in (monthly, semester, yearly) and SubscriptionEditDialog shows 'Mensile (precedente)' which matches 'legacy only' behaviour."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (public /prezzi flow)"},
+  "test_credentials": "QA org admin qa.eventi@crmeventqa.it / QaEvents2026! and Super Admin manara.michele.pro@gmail.com / CrmEvent2026! — both working.",
+  "seed_data_creation": "Stripe TEST price row for silver/semester (29400 cents) and gold/yearly (75840 cents) created in db.saas_stripe_prices during checkout tests — persistent artifact (acceptable, used for caching).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_iter118_subscription_cycles.py covers plans-public values, cycle_amount unit, sync_sub mapping logic, checkout validation (monthly rejected, semester/yearly accepted or billing_missing), and super-admin billing_cycle update with restore. Frontend verified /prezzi default='6 mesi', toggle to 12 mesi shows struck-through monthly, correct equivalent monthly prices, totals and savings, no mobile overflow at 390px. My Subscription and SaasAdmin inspected via code: cycle options semester/yearly in picker, 'Mensile (precedente)' available only in admin dialog for legacy subs. Public billing_missing path for QA org returned 200 (so QA org has billing data; semester checkout returned a Stripe TEST checkout_url).",
+  "rca of the issue": "No bugs — feature works end-to-end."
+}
