@@ -6,6 +6,21 @@ import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert, Mail } from "lucide-react";
+import PlatformUsers from "@/pages/PlatformUsers";
+import SaasAdmin from "@/pages/SaasAdmin";
+
+const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"]];
+
+function SectionSwitch({ value, onChange }) {
+  return (
+    <div role="tablist" className="inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-1 gap-1 mb-6" data-testid="platform-section-switch">
+      {SEZIONI.map(([k, l]) => (
+        <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)} data-testid={`platform-section-${k}`}
+          className={`h-8 px-3.5 shrink-0 rounded-md text-sm font-medium transition-[background-color,color,box-shadow] ${value === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{l}</button>
+      ))}
+    </div>
+  );
+}
 
 const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
 const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
@@ -32,6 +47,8 @@ export default function Platform() {
   const [testTo, setTestTo] = useState(""); const [testSender, setTestSender] = useState("");
   const [testBusy, setTestBusy] = useState(false); const [testResult, setTestResult] = useState(null);
   const [params, setParams] = useSearchParams();
+  const sez = SEZIONI.some(([k]) => k === params.get("sezione")) ? params.get("sezione") : (sessionStorage.getItem("platform_section") || "organizzazioni");
+  const setSez = (k) => { sessionStorage.setItem("platform_section", k); const p = new URLSearchParams(params); p.set("sezione", k); setParams(p, { replace: true }); };
   const [showCreate, setShowCreate] = useState(false);
   const [nf, setNf] = useState({ nome: "", type: "cliente", status: "active" });
   const [creating, setCreating] = useState(false);
@@ -93,11 +110,14 @@ export default function Platform() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="font-display text-3xl font-bold text-slate-900">Piattaforma CRMEvent</h1>
-          <p className="text-slate-500 mt-1 mb-6">Panoramica delle organizzazioni registrate e dello stato degli abbonamenti.</p>
+          <p className="text-slate-500 mt-1 mb-4">Panoramica delle organizzazioni registrate e dello stato degli abbonamenti.</p>
         </div>
-        <Button onClick={() => setShowCreate(true)} data-testid="new-org-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Plus className="w-4 h-4 mr-1.5" />Nuova organizzazione</Button>
+        {sez === "organizzazioni" && <Button onClick={() => setShowCreate(true)} data-testid="new-org-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Plus className="w-4 h-4 mr-1.5" />Nuova organizzazione</Button>}
       </div>
+      <SectionSwitch value={sez} onChange={setSez} />
 
+      {sez === "abbonamenti" && <SaasAdmin embedded />}
+      {sez === "organizzazioni" && <>
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-8">
           <Stat icon={Building2} label="Organizzazioni" value={stats.organizations} tone="tiffany" />
@@ -227,7 +247,10 @@ export default function Platform() {
           </table>
         </div>
       </div>
+      </>}
 
+      {sez === "utenti" && <>
+      <PlatformUsers embedded />
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-8" data-testid="platform-accounts">
         <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800 flex items-center gap-2"><Users className="w-4 h-4" />Account utenti <span className="text-slate-400 font-normal">({users.length})</span></div>
         <div className="overflow-x-auto">
@@ -264,6 +287,7 @@ export default function Platform() {
           </table>
         </div>
       </div>
+      </>}
 
 
       {delUser && (

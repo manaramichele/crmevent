@@ -120,10 +120,10 @@ function MigrationTab() {
   );
 }
 
-export default function SaasAdmin() {
+export default function SaasAdmin({ embedded = false }) {
   return (
     <div className="animate-fade-up space-y-4" data-testid="saas-admin-page">
-      <PageHeader title="Abbonamenti" subtitle="Piani BRONZE, SILVER e GOLD: prezzi, funzionalità, prova gratuita e stato delle organizzazioni" />
+      {!embedded && <PageHeader title="Abbonamenti" subtitle="Piani BRONZE, SILVER e GOLD: prezzi, funzionalità, prova gratuita e stato delle organizzazioni" />}
       <Tabs defaultValue="orgs">
         <TabsList className="mb-4 w-full sm:w-auto overflow-x-auto justify-start h-auto flex-nowrap">
           <TabsTrigger value="orgs" data-testid="saas-tab-orgs">Organizzazioni</TabsTrigger>
