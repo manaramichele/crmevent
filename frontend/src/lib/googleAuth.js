@@ -15,6 +15,7 @@ export const googleErrorText = (code) => (code ? ERRORS[code] || "Accesso con Go
 // Login Google: flusso CRMEvent (backend) se attivo, altrimenti quello precedente.
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 export async function startGoogle({ intent, next = "", invite = "", legacyRedirect }) {
+  localStorage.removeItem("acting_org_id");
   let provider = "emergent";
   try { provider = (await api.get("/oauth/google/config")).data.provider; } catch { /* resta il flusso precedente */ }
   if (provider === "crmevent") {

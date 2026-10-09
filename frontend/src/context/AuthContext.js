@@ -22,6 +22,11 @@ export function AuthProvider({ children }) {
   const checkAuth = useCallback(async () => {
     try {
       const { data } = await api.get("/auth/me");
+      const stored = localStorage.getItem("acting_org_id");
+      if (stored && data.role !== "superadmin" && !data.support && !(data.organizations || []).some((o) => o.org_id === stored)) {
+        localStorage.removeItem("acting_org_id");
+        setActingOrgId("");
+      }
       setUser(data);
     } catch {
       setUser(false);

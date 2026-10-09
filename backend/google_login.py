@@ -90,6 +90,7 @@ def build_router(db, deps: dict) -> APIRouter:
             dest = "/completa-organizzazione" if p.get("needs_org") else "/completa-profilo" if p.get("needs_phone") else "/app"
         resp = RedirectResponse(_front(dest), status_code=302)
         deps["set_auth_cookie"](resp, "access_token", deps["create_access_token"](user["user_id"], user["email"]), 7 * 24 * 3600)
+        resp.delete_cookie("session_token", path="/", secure=True, samesite="none")
         resp.delete_cookie(STATE_COOKIE, path="/api/oauth/google")
         log.info("google login ok user=%s", user["user_id"])
         return resp
@@ -181,6 +182,7 @@ def build_router(db, deps: dict) -> APIRouter:
         await db.oauth_login_links.delete_one({"id": lid})
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"google_sub": doc["sub"], "last_login_at": deps["now_iso"]()}})
         deps["set_auth_cookie"](response, "access_token", deps["create_access_token"](user["user_id"], user["email"]), 7 * 24 * 3600)
+        response.delete_cookie("session_token", path="/", secure=True, samesite="none")
         response.delete_cookie(LINK_COOKIE, path="/api/oauth/google")
         log.info("google account linked user=%s", user["user_id"])
         return {**await deps["user_payload"](user), "dest": doc.get("dest") or ""}

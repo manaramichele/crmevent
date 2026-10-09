@@ -96,7 +96,7 @@ export const sortOptions = (opts, keepOrder = false) => {
 
 export function useSettings() {
   const [settings, setSettings] = useState(null);
-  useEffect(() => { api.get("/settings").then(({ data }) => setSettings(data)).catch(() => {}); }, []);
+  useEffect(() => { api.get("/settings").then(({ data }) => setSettings(data)).catch(() => setSettings(false)); }, []);
   return settings;
 }
 
