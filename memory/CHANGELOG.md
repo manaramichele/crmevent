@@ -979,3 +979,9 @@ Task 2 — Creatività manuale:
 - Stessa regola di `_team_coverage`/`teamCounts`: volontari non rinunciatari, unici per team, staff esclusi; mancanti = MAX(0, richiesti − assegnati) per team; team senza fabbisogno esclusi da Necessari/Mancanti.
 - Rispetta il filtro evento; aggiornamento automatico tramite store condivisi people/teams. Nessuna nuova API.
 
+
+## 2026-10-09 — Limite piani su Staff e Volontari (non più account) ✅ (iteration_111: backend 7/7, frontend 100%)
+- `max_users` ora = persone Staff/Volontari uniche (db.staff ∪ db.availabilities), con o senza account. Limite sugli account di accesso rimosso (check_limit gestisce solo eventi).
+- `check_people` blocca solo nuove persone: POST /staff, /staff/quick-add (nessuna anagrafica orfana), staff-candidates, modulo pubblico disponibilità (409 generico). Persone esistenti sempre gestibili. Nessun import Excel Staff presente nell'app.
+- Tabella Piani: riga unica "Staff e Volontari" 10/30/Illimitati; Il mio abbonamento, popup, Super Admin, avviso 80% aggiornati.
+
