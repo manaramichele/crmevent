@@ -1003,3 +1003,7 @@ Task 2 — Creatività manuale:
 - `CompleteOrg.jsx` ora popup obbligatorio (nome/cognome precompilati, email verificata, org, cellulare, Termini+Privacy obbligatori, marketing facoltativo, solo "Esci e completa più tardi").
 - `/auth/complete-organization`: blocco atomico anti doppio clic (409), rifiuto se già membro di un'organizzazione, salva nome/cognome, terms/privacy_version `2026-10`, marketing_consent, welcome_demo pending; trial 14 gg via `_create_organization`.
 
+
+## 2026-10-09 — Riepilogo volontari solo nella scheda Volontari ✅
+- `Persons.jsx`: VolunteerSummary mostrato solo con tab === "volontari" (non più in Staff/Da classificare). Verificato: assente in Staff, Dashboard, Eventi, Team.
+
