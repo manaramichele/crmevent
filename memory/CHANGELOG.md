@@ -1052,3 +1052,8 @@ Task 2 — Creatività manuale:
 - Fix BRONZE (iteration_123 ✅): mailto non sostituisce più la scheda CRMEvent — desktop `target=_blank rel=noopener`, mobile `window.location.href` (app Mail nativa). Pagina e sessione restano invariate.
 
 
+
+## 2026-10-09 — Fix nuovo account Google: org attiva obsoleta ✅ (iteration_124: backend 11/11, frontend 100%)
+- Causa: `acting_org_id` in localStorage da accessi precedenti inviato come X-Org-Id → 403 "Accesso all'organizzazione non consentito" (il flusso Google a redirect non lo puliva).
+- Fix: `googleAuth.startGoogle` pulisce acting_org_id; `AuthContext.checkAuth` lo scarta se non è tra le organizzazioni dell'utente (no Super Admin/assistenza); `_get_base_user` prova session_token → access_token → Bearer; login password/Google cancellano vecchio cookie session_token; Eventi mostra errore + Riprova. Controlli 403 invariati.
+

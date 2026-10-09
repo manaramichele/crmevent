@@ -180,17 +180,16 @@ async def get_current_user(request: Request) -> dict:
 
 
 async def _get_base_user(request: Request) -> dict:
-    token = request.cookies.get("session_token") or request.cookies.get("access_token")
-    if not token:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth[7:]
-    if not token:
+    auth = request.headers.get("Authorization", "")
+    tokens = [t for t in (request.cookies.get("session_token"), request.cookies.get("access_token"),
+                          auth[7:] if auth.startswith("Bearer ") else None) if t]
+    if not tokens:
         raise HTTPException(status_code=401, detail="Non autenticato")
-    user = await resolve_user_from_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Sessione non valida o scaduta")
-    return user
+    for token in tokens:  # un cookie di sessione scaduto non deve oscurare un token valido
+        user = await resolve_user_from_token(token)
+        if user:
+            return user
+    raise HTTPException(status_code=401, detail="Sessione non valida o scaduta")
 
 
 async def _resolve_active_org(request: Request, user: dict):
@@ -851,6 +850,7 @@ async def login(body: LoginIn, response: Response):
         raise HTTPException(status_code=403, detail="Accesso disabilitato")
     token = create_access_token(user["user_id"], email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
+    response.delete_cookie("session_token", path="/", secure=True, samesite="none")
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login_at": now_iso()}})
     return await user_payload(user)
 

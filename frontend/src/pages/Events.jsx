@@ -363,7 +363,8 @@ export default function Events() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [availFor, setAvailFor] = useState(null);
   const [delRow, setDelRow] = useState(null);
-  if (!settings) return <div className="text-slate-400">Caricamento...</div>;
+  if (settings === false) return <p className="text-sm text-red-600" data-testid="events-load-error">Impossibile caricare gli eventi. <button type="button" onClick={() => window.location.reload()} className="underline font-semibold" data-testid="events-retry">Riprova</button></p>;
+  if (!settings) return <div className="text-slate-400" data-testid="events-loading">Caricamento...</div>;
 
   const fields = [
     { name: "nome", label: "Nome evento", required: true, full: true },
