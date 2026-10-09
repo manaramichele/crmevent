@@ -985,3 +985,10 @@ Task 2 — Creatività manuale:
 - `check_people` blocca solo nuove persone: POST /staff, /staff/quick-add (nessuna anagrafica orfana), staff-candidates, modulo pubblico disponibilità (409 generico). Persone esistenti sempre gestibili. Nessun import Excel Staff presente nell'app.
 - Tabella Piani: riga unica "Staff e Volontari" 10/30/Illimitati; Il mio abbonamento, popup, Super Admin, avviso 80% aggiornati.
 
+
+## 2026-10-09 — Fix contesto organizzazione Super Admin in Dashboard ✅ (iteration_112: backend 7/7, frontend 11/11)
+- Causa: Layout impostava l'org attiva "in silenzio" (prima della lista) e non validava l'id salvato: con id assente/non valido la select mostrava la prima org mentre le API usavano l'id vecchio (404 → pannelli vuoti). Le note erano solo per utente, non per organizzazione.
+- Layout: validazione org attiva prima di montare i contenuti (id salvato → `last_org:{user_id}` → prima org), stato "Caricamento organizzazione…", contenuti ri-montati al cambio org, persistenza ultima org anche dopo logout.
+- TodoPanel/NotesPanel: stato di errore con "Riprova" invece di lista vuota.
+- Note: salvate con org_id e filtrate per (utente, org); note precedenti senza org restano visibili al proprietario.
+

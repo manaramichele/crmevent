@@ -1,0 +1,41 @@
+{
+  "summary": "Iter 112: Verified Super Admin dashboard org-aware To Do List + per-user/per-org Note e appunti. Backend 7/7 pass (test_iter112_dashboard_org_notes.py): /my/todo without X-Org-Id -> 428, with 'nonexistent123' -> 404, with org_qa_eventi -> 311 items; /my/notes correctly scoped per (user, org): note created in org A invisible from org B and delete from wrong org returns 404; legacy notes without org_id remain visible to their owner in any org context; QA org admin /my/todo and /my/notes work without X-Org-Id. Frontend (super admin manara.michele.pro, Playwright): stale localStorage acting_org_id='nonexistent-stale-xyz' is replaced on mount (resolved to a valid org before dashboard renders, 0 mismatched X-Org-Id headers on /my/* calls, no 'Nessuna attività' flash from 404); setting acting_org_id=org_qa_eventi shows todo-count=311 and 6 /my/* calls all with X-Org-Id=org_qa_eventi; switching header select to another org reloads page, note TEST_iter112_fe_<ts> created in org A is absent in org B and reappears when switching back; F5 preserves acting_org_id; logout+relogin restores last_org via localStorage last_org:{user_id}; delete-note while acting in B returns 404 (no cross-tenant). QA org admin dashboard shows todo-count=311 without X-Org-Id header. TEST_ note cleaned up.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "GET /api/my/todo (super, no header)": "PASS 428",
+    "GET /api/my/todo (super, X-Org-Id=invalid)": "PASS 404",
+    "GET /api/my/todo (super, X-Org-Id=org_qa_eventi)": "PASS 200, items=311",
+    "Notes per-user per-org scoping (create A, invisible B, visible A)": "PASS",
+    "DELETE /my/notes/{id} with wrong X-Org-Id": "PASS 404",
+    "Legacy notes without org_id visible across orgs to owner": "PASS",
+    "QA admin /my/todo and /my/notes without X-Org-Id": "PASS 200",
+    "FE: stale acting_org_id replaced before mount, header consistent with API X-Org-Id": "PASS (0/6 mismatched)",
+    "FE: dashboard todo-count=311 at first render for data org": "PASS",
+    "FE: header select switch reloads and swaps notes/todo for new org": "PASS",
+    "FE: F5 keeps selected org": "PASS",
+    "FE: logout+relogin restores last_org:{user_id}": "PASS",
+    "FE: QA org admin dashboard loads todo and notes without X-Org-Id": "PASS",
+    "FE: TodoPanel error state (todo-error/todo-retry) and loading (todo-loading) present in JSX": "VERIFIED by code (TodoPanel.jsx lines 82-85, NotesPanel.jsx 65-67)",
+    "FE: gate 'Caricamento organizzazione…' when !orgsLoaded (Layout.jsx 434-442)": "VERIFIED by code"
+  },
+  "test_report_links": ["/app/backend/tests/test_iter112_dashboard_org_notes.py", "/app/test_reports/pytest/iter112.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Layout.jsx effect deps are [isSuper, multiOrg] with eslint-disable; actingOrgId intentionally omitted to avoid re-fetching orgs on every switch — OK, validation uses post-fetch snapshot. Correct.",
+    "home_widgets.py _note_q uses $or with {org_id: null-ish} AND {org_id: {$exists: false}} — legacy notes handled; new notes always get org_id (can be None for platform scope). Super admin without X-Org-Id would 428 in _resolve_active_org before reaching _note_org since resolve_org is awaited; good.",
+    "server.py _resolve_active_org for superadmin returns 428 without header and 404 for invalid org — frontend relies on this to detect stale acting_org_id. Correct.",
+    "AuthContext.setActingOrg clears localStorage when id is falsy and does POST /platform/audit/org-access on each change — audit log is fire-and-forget (caught). OK.",
+    "Minor: localStorage.setItem(acting_org_id) happens inside setActingOrg, but when Layout's super-init effect calls setActingOrg(empty, false) (no valid org and no first org), localStorage is cleared, which is correct.",
+    "File sizes OK; Layout.jsx is ~450 LOC with clear sections. No DRY violations observed in reviewed scope.",
+    "All interactive elements in TodoPanel/NotesPanel/OrgSwitcher have data-testid; super-acting-banner has data-testid for banner validation."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter112_dashboard_org_notes.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (11/11 critical scenarios)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026!; QA admin qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "Created 1 TEST_iter112_fe_<ts> note in org_qa_eventi; cleaned up via API DELETE after test. Legacy test note inserted in test_super_notes_legacy_without_org_visible also cleaned up in fixture teardown. No org data modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Super Admin dashboard flow is: Layout mount -> GET /api/platform/organizations -> if actingOrgId not in orgs, pick last_org:{user_id} else data[0]; gateForOrg shows 'Caricamento organizzazione…' until (orgsLoaded && validActing). All /api/* calls carry X-Org-Id from localStorage via api.js interceptor; backend validates server-side (404 for invalid org, 428 if missing). Notes schema: user_notes {id, user_id, org_id (nullable), text, created_at, updated_at}. Scoping is {user_id, $or:[{org_id:X},{org_id:{$exists:false}}]}. test_testids: org-switcher-select, mobile-org-switcher, super-acting-banner, todo-count, todo-error, todo-retry, todo-loading, notes-loading, notes-error, notes-retry, note-input, note-item-{id}, note-delete-{id}, no-org-selected (gate).",
+  "rca of the issue": "Previous behaviour: when localStorage acting_org_id was missing, server fell back to data[0] (first org by created_at desc) and silently rendered empty widgets; when stale, header select rendered 'first option' (default DOM) while the X-Org-Id header still carried the stale id -> API 404 -> catch-swallowed -> 'Nessuna attività'. Fix: Layout.super-init effect now validates actingOrgId ∈ orgs, else restores last_org:{user_id} or first org via setActingOrg; the gate blocks dashboard mount until (orgsLoaded && validActing); the main child wrapper is keyed by actingOrgId so TodoPanel/NotesPanel remount and refetch on org switch; backend home_widgets.notes is now per (user_id, org_id) with legacy fallback. Verified end-to-end."
+}
