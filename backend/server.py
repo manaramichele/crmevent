@@ -1444,7 +1444,7 @@ def crud_routes(path, coll, model, org_scoped=True):
 
     @api.put(f"/{path}/{{item_id}}", name=f"update_{path}")
     async def _u(item_id: str, body: upd_model, user: dict = Depends(require_admin)):
-        clean = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+        clean = {k: v for k, v in TN.normalize_fields(coll, body.model_dump(exclude_unset=True)).items() if v is not None}
         clean["updated_at"] = now_iso()
         await _assert_org_operational(user["org_id"])
         _assert_ev_allowed(user, clean.get("evento_id"))

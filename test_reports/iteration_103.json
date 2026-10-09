@@ -1,0 +1,33 @@
+{
+  "summary": "Tested text-case normalization across backend (persons/companies/teams/register-organization/platform preview+apply) and frontend (Super Admin sidebar label, /piattaforma/demo title, normalize card on /piattaforma Organizzazioni tab, EntityDialog on-blur normalization on /staff-volontari, mobile 390px). 7/8 backend assertions pass, 1 confirmed bug: PUT /api/persons/{id} (and all crud_routes PUT endpoints) do NOT normalize fields on update — spec requires ALWAYS normalize before save. Frontend acceptance OK: sidebar shows 'Prenotazioni demo', page H1 is 'Prenotazioni demo', normalize-card + normalize-analyze testid present, Analizza returns 27 proposals, on-blur in person dialog converts 'mARIO'→'Mario' and \"d'amico\"→\"D'Amico\". No apply was executed against non-test data. All created TEST_ records cleaned up.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/persons/{id} (and all crud_routes PUT: companies, teams, deals, staff, events, maps, activities, followups, lodgings, meals)", "issue": "Update path does NOT call TN.normalize_fields — sending cognome='DE LUCA' stores 'DE LUCA' instead of 'De Luca'. server.py line 1447 uses body.model_dump(exclude_unset=True) directly, bypassing normalization used only in generic _update helper (line 582). Spec requires ALWAYS normalize backend-side on save.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/piattaforma Organizzazioni normalize card", "issues": ["All proposed rows are pre-checked by default; 'Applica selezionate (9)' is clickable immediately. Request wording ('only on confirm') is honoured since a click is still required, but defaulting all to checked could cause accidental mass updates — consider defaulting to unchecked."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter103_normalize.py", "/app/test_reports/pytest/iter103.xml"],
+  "action_items": [
+    "Fix PUT normalization: in crud_routes (server.py ~L1446-L1448) wrap clean through TN.normalize_fields(coll, clean) before $set. Same gap likely in any other PUT handlers that build $set manually (verify companies/teams/structures/users PUTs and leads/organization PUT at L4127 — organization PUT does normalize nome but doesn't normalize citta/regione/nazione if those get added)."
+  ],
+  "critical_code_review_comments": [
+    "crud_routes _u skips TN.normalize_fields while _c uses _create which normalizes — asymmetric; collapse to _update helper.",
+    "text_normalize.business_name treats any token containing a digit as untouched (line 42: 'any(c.isdigit() for c in w)'), so 'via roma 10' → 'Via Roma 10' works (connector 'roma' is capitalized, '10' kept) but a token like 'asd2024' would be fully untouched which may be intended.",
+    "FIELD_RULES.users maps both 'name' and 'nome' — the duplicate 'nome' key is correct for consistency but confirm db schema actually stores 'name' for users (seen in /auth/me)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter103_normalize.py"],
+  "success_rate": {"backend": "87% (7/8 passing, 1 skipped is informational)", "frontend": "100% on acceptance checks"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026!; Super Admin manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Created & deleted inside test_zzz_cleanup: 1 TEST_ person, 2 TEST_ companies, 1 TEST_ team, 1 TEST_norm_<rand>@example.com user + its organization 'Test Associazione Sportiva di Milano'. Platform apply endpoint was NOT invoked on any non-test record.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent patches PUT to go through TN.normalize_fields, re-run /app/backend/tests/test_iter103_normalize.py::test_person_update_normalizes. Also consider adding a similar PUT-normalize assertion for companies/teams/structures. The platform preview endpoint currently shows 27 real proposals including 'Org Social b 1790602402935'→'Org Social B 1790602402935' — looks correct.",
+  "rca of the issue": "PUT in generic crud_routes (server.py L1413-L1480) was written before text_normalize integration. _create at L1432 calls _create() which includes TN.normalize_fields. _u at L1446 builds its own clean dict with body.model_dump(exclude_unset=True) and never passes through TN.normalize_fields, so edits bypass the global rule. Fix: insert `clean = TN.normalize_fields(coll, clean)` right after line 1447."
+}

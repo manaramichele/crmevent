@@ -540,6 +540,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Nuovo componente `frontend/src/components/OrgUsers.jsx` montato in `Profile.jsx` come scheda "Utenti e accessi", visibile SOLO se `user.org_role === "admin_org"`. Tabella unica membri+inviti: Nome | Email | Cellulare | Ruolo | Stato (Invito inviato/Attivo/Invito scaduto) | Ultimo accesso | Azioni. "+ Invita utente" (Nome, Cognome, Email, Cellulare con PhoneInput intl, Ruolo). Azioni: Reinvia · Cambia ruolo · Disattiva/Riattiva accesso. Scadenza invito 7gg. Nessun consumo crediti; nessuna modifica a Stripe/wallet/ledger/FIC.
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
+## Prenotazioni demo + formattazione automatica anagrafiche — 2026-10-09 ✅ VERIFICATO (iteration_103 + fix PUT + build)
+- "Demo" → "Prenotazioni demo" (sidebar + titolo PlatformDemo).
+- backend/text_normalize.py: person_name (tutto maiuscolo → Capitalizzato, D'Amico, De Luca, McDonald), business_name (sigle/marchi conservati, connettori minuscoli), FIELD_RULES per persons/companies/structures/teams/organizations/users/leads/demo_requests/billing; hook in _create/_update e PUT CRUD generici, registrazione organizzatore, Google, invito, staff/Partecipa, profilo Super Admin, fatturazione, demo request, disponibilità pubblica.
+- Super Admin: GET/POST /api/platform/normalize/preview|apply + card "Formattazione anagrafiche esistenti" (righe deselezionate di default).
+- Frontend lib/textCase.js (stessa logica) on blur: EntityDialog caseRules (Persone/Staff), CompanyDialog, Registrazione, Partecipa, Invito. Team/Strutture: normalizzati dal backend al salvataggio.
+
 ## Dashboard Piattaforma a pulsanti — 2026-10-09 ✅ VERIFICATO (iteration_102 + build)
 - Platform.jsx: SectionSwitch "Organizzazioni | Utenti | Abbonamenti" (?sezione= + sessionStorage). Utenti = PlatformUsers embedded + tabella account; Abbonamenti = SaasAdmin embedded. /piattaforma/utenti e /piattaforma/abbonamenti → redirect; voci sidebar rimosse.
 

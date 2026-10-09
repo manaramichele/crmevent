@@ -13,7 +13,7 @@ export default function NormalizePreview() {
   const [busy, setBusy] = useState(false);
   const analyze = async () => {
     setBusy(true);
-    try { const { data } = await api.get("/platform/normalize/preview"); setItems(data.items); setSel(new Set(data.items.map(key))); }
+    try { const { data } = await api.get("/platform/normalize/preview"); setItems(data.items); setSel(new Set()); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
   const apply = async () => {
