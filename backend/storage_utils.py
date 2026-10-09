@@ -32,9 +32,10 @@ _EXT = {
     "pdf": {"pdf"},
     "gpx": {"gpx", "xml"},
     "data": {"csv", "txt"},
+    "map": {"kml", "kmz"},
 }
-_DEFAULT_EXT = {"image": "jpg", "pdf": "pdf", "gpx": "gpx", "data": "txt"}
-_LIMIT = {"image": MAX_IMAGE, "pdf": MAX_PDF, "gpx": MAX_GPX, "data": MAX_DATA}
+_DEFAULT_EXT = {"image": "jpg", "pdf": "pdf", "gpx": "gpx", "data": "txt", "map": "kml"}
+_LIMIT = {"image": MAX_IMAGE, "pdf": MAX_PDF, "gpx": MAX_GPX, "data": MAX_DATA, "map": MAX_GPX}
 # Solo le immagini ricevono di default un URL pubblico tokenizzato.
 PUBLIC_KINDS = {"image"}
 
@@ -51,6 +52,8 @@ def classify_and_validate(filename: str, content_type: str, size: int):
         kind = "image"
     elif ext in _EXT["pdf"] or ct == "application/pdf":
         kind = "pdf"
+    elif ext in _EXT["map"] or ct in ("application/vnd.google-earth.kml+xml", "application/vnd.google-earth.kmz"):
+        kind = "map"
     elif ext in _EXT["gpx"] or ct in ("application/gpx+xml", "application/xml", "text/xml"):
         kind = "gpx"
     elif ext in _EXT["data"] or ct in ("text/csv", "text/plain", "application/csv"):

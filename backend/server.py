@@ -2277,7 +2277,8 @@ async def set_access(person_id: str, body: AccessIn, admin: dict = Depends(requi
 
 # ---------------- file upload ----------------
 MIME = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif",
-        "webp": "image/webp", "pdf": "application/pdf", "csv": "text/csv", "txt": "text/plain"}
+        "webp": "image/webp", "pdf": "application/pdf", "csv": "text/csv", "txt": "text/plain",
+        "kml": "application/vnd.google-earth.kml+xml", "kmz": "application/vnd.google-earth.kmz"}
 
 
 async def _read_file_rec(rec: dict):
@@ -2330,7 +2331,7 @@ async def upload(file: UploadFile = File(...), admin: dict = Depends(require_adm
 
 @api.get("/files/{file_id}")
 async def download(file_id: str, user: dict = Depends(get_current_user)):
-    rec = await db.files.find_one({"id": file_id, "is_deleted": False}, {"_id": 0})
+    rec = await db.files.find_one({"id": file_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="File non trovato")
     if user.get("role") != "superadmin" and rec.get("org_id") not in (None, user.get("org_id")):
@@ -2402,7 +2403,7 @@ async def maps_attachments(evento_id: str, user: dict = Depends(require_admin)):
 @api.get("/files/public/{token}")
 async def file_public(token: str):
     """Serve pubblicamente (senza cookie) un file tramite token imprevedibile. Solo file con public_token."""
-    rec = await db.files.find_one({"public_token": token, "is_deleted": False}, {"_id": 0})
+    rec = await db.files.find_one({"public_token": token, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Not found")
     data, ctype = await _read_file_rec(rec)

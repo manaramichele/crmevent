@@ -1017,3 +1017,9 @@ Task 2 — Creatività manuale:
 - `EntityManager` (crm.jsx): nuova prop `belowFilters(filterVals)`; scheda Team mostra lo stesso `VolunteerSummary` col filtro evento del Team.
 - Team Leader (team.responsabile_id): corona dorata a sinistra dei badge ruolo in tabella (rispetta filtro evento) e badge "👑 Team Leader" accanto al nome nella scheda persona (`PersonDetailDialog`, store teams condiviso).
 
+
+## 2026-10-09 — Pulsanti allegati Mappe & Percorsi (tutti i formati) ✅ (iteration_117: backend 6/6, frontend 100%)
+- `_resolve_attachment`: file migrati senza `is_deleted`/`original_filename` (nome da storage_path), URL legacy relativi; `_attachment_kind`: kml/kmz/zip/doc/xls → "file".
+- Etichette: Apri GPX / Apri PDF / Apri immagine / Scarica file (download).
+- Upload: nuovo tipo `map` (KML/KMZ, max 20 MB) in storage_utils; download `/api/files/{id}` e pubblico accettano file senza `is_deleted`.
+
