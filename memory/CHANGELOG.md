@@ -1067,3 +1067,11 @@ Task 2 — Creatività manuale:
 - Backend `partner_portal.py`: cookie `partner_token` isolato, approvazione manuale SA, brute-force 5/15min, referral `?ref=` (Register/CompleteOrg), commissione 10% × 12 mesi su incassato abbonamento imposte escluse (hook `on_paid` in subscriptions.record_payment), storni su `charge.refunded`, snapshot regime CRMEvent + profilo fiscale partner.
 - Super Admin `/piattaforma?sezione=partner`: impostazioni (%, mesi, regime fiscale CRMEvent forfettario/ordinario), approva/rifiuta/sospendi, commissioni "Segna pagata".
 
+
+## 2026-10-09 — CRMEvent Partner completo ✅ (iteration_126: backend 25/25, frontend 100%)
+- Regole: 10% × 24 mesi dal primo pagamento (prima sottoscrizione, rinnovi, upgrade BRONZE/SILVER/GOLD), base = incassato Stripe al netto imposte/rimborsi, idempotenza (indice univoco stripe_invoice_id), storico rettifiche; liquidabile a fine trimestre + 30 gg; liquidazioni manuali con IBAN obbligatorio; export CSV (BOM, `;`).
+- Referral `?ref=&cmp=` conservato solo dopo consenso iubenda (finalità 4/5), finestra 30 gg, un partner per org (indice univoco), anti auto-referral (email/telefono), tracking click/visitatori anonimo, campagne.
+- Partner: nuova landing, registrazione (categoria + soggetto fiscale, indirizzo, sito/social), dashboard a schede (panoramica, link e campagne, commissioni e liquidazioni, simulatore 12/12/24 con rinnovi, materiali, profilo + IBAN), recupero password, email approvazione/rifiuto.
+- Super Admin: menu "Partner" (/piattaforma/partner) con Anagrafiche, Statistiche, Organizzatori (attribuzione manuale con registro), Commissioni, Configurazione (+ materiali). Footer crmevent.it: "Diventa Partner" (REACT_APP_PARTNER_URL).
+- Workflow: `partner-frontend/deploy/partner-deploy.yml.example` (paths partner-frontend/**, release versionate, symlink atomico, rollback via workflow_dispatch).
+

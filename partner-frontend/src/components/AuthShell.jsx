@@ -25,7 +25,7 @@ export default function AuthShell({ title, subtitle, children }) {
         <Link to="/"><Logo className="text-xl text-white [&>span:last-child]:text-slate-400" /></Link>
         <div>
           <h2 className="text-4xl font-extrabold leading-tight">Ogni evento organizzato meglio <span className="text-tiffany">parte da un consiglio.</span></h2>
-          <p className="mt-4 text-slate-300 max-w-md">Commissioni sui primi 12 mesi di abbonamento dei clienti che porti su CRMEvent.</p>
+          <p className="mt-4 text-slate-300 max-w-md">Il 10% per 24 mesi sugli abbonamenti dei clienti che porti su CRMEvent.</p>
         </div>
         <p className="text-xs text-slate-500">partner.crmevent.it</p>
       </aside>

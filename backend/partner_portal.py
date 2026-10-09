@@ -337,7 +337,8 @@ def build(db, deps: dict) -> dict:
     @r.post("/partner/login")
     async def login(body: LoginIn, request: Request, response: Response):
         email = body.email.lower()
-        ident = f"{request.client.host if request.client else '-'}:{email}"
+        ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "-")).split(",")[0].strip()
+        ident = f"{ip}:{email}"
         att = await db.partner_login_attempts.find_one({"identifier": ident}, {"_id": 0})
         if att and att.get("count", 0) >= MAX_ATTEMPTS and att.get("locked_until") and _dt(att["locked_until"]) > _now():
             raise HTTPException(status_code=429, detail="Troppi tentativi. Riprova tra 15 minuti.")
