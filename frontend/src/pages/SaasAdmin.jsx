@@ -110,8 +110,8 @@ function OrgsTab() {
             <td className="px-3 py-2">{d(r.mode === "trial" ? r.trial_start : r.admin?.access_start || r.current_period_start || r.activated_at)}</td>
             <td className="px-3 py-2" data-testid={`saas-expiry-${r.id}`}>{endOf(r) ? d(endOf(r)) : r.billing === "free" ? "Nessuna scadenza" : "—"}</td>
             <td className="px-3 py-2">{r.billing === "free" ? "Nessun addebito" : d(r.admin?.renewal_date || (r.stripe_status === "active" ? r.current_period_end : null))}</td>
-            <td className="px-3 py-2">{r.users_count ?? "—"}{r.limits?.max_users > 0 ? `/${r.limits.max_users}` : ""}</td>
-            <td className="px-3 py-2">{r.events_count ?? "—"}{r.limits?.max_events > 0 ? `/${r.limits.max_events}` : ""}</td>
+            <td className="px-3 py-2"><span data-testid={`saas-users-${r.id}`}>{r.users_count ?? "—"}{r.pending_invites ? ` (+${r.pending_invites} inviti)` : ""} / {r.limits?.max_users > 0 ? r.limits.max_users : "∞"}</span></td>
+            <td className="px-3 py-2"><span data-testid={`saas-events-${r.id}`} title="Eventi creati (inclusi eliminati)">{r.events_count ?? "—"} / {r.limits?.max_events > 0 ? r.limits.max_events : "∞"}</span></td>
             <td className="px-3 py-2">{r.payments_count ?? "—"}{r.payments_total ? ` · €${r.payments_total}` : ""}</td>
             <td className="px-3 py-2">{r.model !== "abbonamento" ? "—" : r.video_unlimited ? `${r.video_used ?? 0} · illimitate` : r.video_quota ? `${r.video_used ?? 0}/${r.video_quota}` : "Email"}</td>
             <td className="px-3 py-2 whitespace-nowrap space-x-1">

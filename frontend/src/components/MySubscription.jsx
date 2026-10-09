@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { CreditCard, Video, Mail, Crown, Check, ReceiptText, Settings2 } from "lucide-react";
 import { usePlans, PlanCard, CycleToggle, eur } from "@/components/PlansSection";
 import PlanBadge, { BILLING } from "@/components/PlanBadge";
+import { UsageBars } from "@/components/UsageMeter";
 
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const CYC = { monthly: "Mensile", yearly: "Annuale" };
@@ -44,6 +45,7 @@ function Summary({ s, features }) {
         {s.purchased && isTrial && <Field label="Piano acquistato" value={`${s.paid_plan_label} dal ${d(s.trial_end)}`} testid="sub-purchased" />}
       </div>
       {s.pending_change && <p className="text-sm rounded-lg bg-amber-50 text-amber-900 px-3 py-2" data-testid="sub-pending">Dal {d(s.pending_change.effective_at)} passerai a {s.pending_change.plan.toUpperCase()} {CYC[s.pending_change.cycle]?.toLowerCase()}.</p>}
+      <UsageBars limits={s.limits} usage={s.usage} />
       <VideoUsage v={s.video} />
       <div>
         <div className="text-xs uppercase text-slate-400 font-medium mb-2">Funzionalità disponibili</div>
@@ -85,6 +87,9 @@ function ChangeDialog({ pv, onClose, onConfirm, busy }) {
             : up ? <>Il nuovo piano è attivo subito. Conguaglio addebitato ora: <b data-testid="change-plan-amount">€{eur(pv.amount_due)}</b>.</>
               : <>Il nuovo piano entrerà in vigore alla scadenza del periodo già pagato ({d(pv.current_period_end)}). I dati dei moduli non inclusi restano conservati.</>}
         </div>
+        {pv.over_limits?.length > 0 && <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900" data-testid="change-plan-over-limits">
+          Con il nuovo piano superi i limiti: {pv.over_limits.map((o) => `${o.kind === "events" ? "eventi" : "utenti"} ${o.used} su ${o.limit}`).join(", ")}. Nessun dato verrà eliminato, ma non potrai creare nuovi eventi o invitare utenti finché non rientri nei limiti.
+        </div>}
         <DialogFooter className="gap-2"><Button variant="outline" onClick={onClose}>Annulla</Button>
           <Button disabled={busy} onClick={onConfirm} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="change-plan-confirm">{busy ? "Attendi..." : "Conferma"}</Button></DialogFooter>
       </DialogContent>

@@ -678,6 +678,7 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base["subscription"] = _sub_summary(org)
     base["welcome_demo"] = u.get("welcome_demo") if chosen["role"] == "admin_org" else None
     base["saas"] = subscriptions.org_state(org, await SAAS["get_config"]())
+    base["saas_usage"] = await SAAS["usage"](chosen["org_id"]) if base["saas"].get("enabled") and chosen["role"] == "admin_org" else None
     return base
 
 

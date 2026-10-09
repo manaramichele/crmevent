@@ -12,7 +12,7 @@ export function supportLabel(p) {
 }
 
 export function limitsLabel(p) {
-  const ev = p.max_events < 0 ? "Eventi illimitati" : p.max_events === 1 ? "1 evento incluso" : `${p.max_events} eventi inclusi`;
+  const ev = p.max_events < 0 ? "Eventi illimitati" : p.max_events === 1 ? "1 evento incluso" : `Fino a ${p.max_events} eventi`;
   const us = p.max_users < 0 ? "Utenti registrati illimitati" : `Fino a ${p.max_users} utenti registrati`;
   return { ev, us };
 }
@@ -68,7 +68,7 @@ export function ComparisonTable({ plans, features }) {
   const cell = (v, k) => <td key={k} className="px-3 py-2.5 text-center">{v === true ? <Check className="w-4 h-4 text-[#0ABAB5] mx-auto" /> : v === false ? <Minus className="w-4 h-4 text-slate-300 mx-auto" /> : <span className="text-xs sm:text-sm text-slate-700">{v}</span>}</td>;
   const rows = [
     ...features.map((f) => [f.label, plans.map((p) => p.features.includes(f.key))]),
-    ["Eventi", plans.map((p) => (p.max_events < 0 ? "Illimitati" : String(p.max_events)))],
+    ["Eventi", plans.map((p) => (p.max_events < 0 ? "Illimitati" : p.max_events === 1 ? "1" : `Fino a ${p.max_events}`))],
     ["Utenti registrati", plans.map((p) => (p.max_users < 0 ? "Illimitati" : `Fino a ${p.max_users}`))],
     ["Staff e volontari (senza accesso)", plans.map(() => "Illimitati")],
     ["Assistenza email", plans.map(() => true)],

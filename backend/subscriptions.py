@@ -29,7 +29,7 @@ FEATURES = [  # (chiave, etichetta) — chiavi = sezioni permessi + funzioni tra
 ]
 FEATURE_KEYS = [k for k, _ in FEATURES]
 # Limiti per piano (-1 = illimitati). Usati se la configurazione salvata non li specifica.
-DEFAULT_LIMITS = {"bronze": {"max_events": 1, "max_users": 10}, "silver": {"max_events": -1, "max_users": 30},
+DEFAULT_LIMITS = {"bronze": {"max_events": 1, "max_users": 10}, "silver": {"max_events": 5, "max_users": 30},
                   "gold": {"max_events": -1, "max_users": -1}}
 UPGRADE_TO = {"bronze": "SILVER o GOLD", "silver": "GOLD"}
 
@@ -170,7 +170,7 @@ def org_state(org: dict, cfg: dict) -> dict:
     days_left = max(0, math.ceil((trial_end - now).total_seconds() / 86400)) if (trial_active and mode == "trial") else 0
     lim = plan_limits(cfg, eff) if eff and mode != "trial" else {"max_events": -1, "max_users": -1}
     for k in ("max_events", "max_users"):
-        if adm.get(k) is not None and mode != "trial":
+        if adm.get(k) is not None:
             lim[k] = int(adm[k])
     if mode == "trial":
         expires_at = s.get("trial_end")
@@ -272,6 +272,7 @@ def build(db, deps: dict):
             await db.saas_video_quota.create_index([("org_id", 1), ("period", 1)], unique=True)
             await db.saas_emails.create_index("key", unique=True)
             await db.saas_stripe_prices.create_index([("plan", 1), ("cycle", 1), ("amount_cents", 1), ("mode", 1)])
+            await db.saas_usage.create_index("org_id", unique=True)
             state["idx"] = True
 
     async def get_config() -> dict:
@@ -281,6 +282,10 @@ def build(db, deps: dict):
         if not doc:
             doc = copy.deepcopy(DEFAULT_CONFIG)
             await db.saas_config.update_one({"id": "config"}, {"$setOnInsert": doc}, upsert=True)
+            doc = await db.saas_config.find_one({"id": "config"}, {"_id": 0})
+        if not doc.get("silver_limits_v2"):  # migrazione una tantum: SILVER 5 eventi / 30 utenti / 3 videochiamate
+            await db.saas_config.update_one({"id": "config"}, {"$set": {"plans.silver.max_events": 5, "plans.silver.max_users": 30,
+                                                                       "plans.silver.video_quota": 3, "silver_limits_v2": True}})
             doc = await db.saas_config.find_one({"id": "config"}, {"_id": 0})
         _cfg_cache.update(at=time.time(), cfg=doc)
         return doc
@@ -305,29 +310,55 @@ def build(db, deps: dict):
             raise HTTPException(status_code=403, detail={
                 "code": "plan_readonly", "message": "Prova terminata – Scegli il tuo piano. I tuoi dati restano consultabili."})
 
+    async def _seed_usage(org_id: str) -> None:
+        cur = await db.events.count_documents({"org_id": org_id})
+        try:
+            await db.saas_usage.update_one({"org_id": org_id}, {"$max": {"events_created": cur}}, upsert=True)
+        except DuplicateKeyError:
+            await db.saas_usage.update_one({"org_id": org_id}, {"$max": {"events_created": cur}})
+
+    async def usage(org_id: str) -> dict:
+        """Eventi = tutti quelli mai creati (anche eliminati). Utenti = account attivi; inviti validi riservano un posto."""
+        await _indexes()
+        await _seed_usage(org_id)
+        u = await db.saas_usage.find_one({"org_id": org_id}, {"_id": 0}) or {}
+        now = _iso(_now())
+        return {"events": int(u.get("events_created", 0)), "events_current": await db.events.count_documents({"org_id": org_id}),
+                "users": await db.memberships.count_documents({"org_id": org_id, "active": True}),
+                "pending_invites": await db.org_invites.count_documents({"org_id": org_id, "status": "pending", "expires_at": {"$gt": now}})}
+
+    def _limit_error(st: dict, kind: str, lim: int):
+        up = UPGRADE_TO.get(st.get("plan"), "un piano superiore")
+        what = (f"{lim} evento" if lim == 1 else f"{lim} eventi") if kind == "events" else f"{lim} utenti registrati"
+        more = "creare altri eventi" if kind == "events" else "aggiungere altri utenti"
+        label = st.get("plan_label") or "attuale"
+        return HTTPException(status_code=403, detail={
+            "code": "plan_limit", "kind": kind, "plan": st.get("plan"), "limit": lim, "upgrade_to": up,
+            "message": f"Il piano {label} include fino a {what}. Gli elementi esistenti restano gestibili. Passa a {up} per {more}."})
+
     async def check_limit(org_id: str, kind: str) -> None:
-        """Limiti piano (eventi / utenti registrati con accesso). Prova = accesso completo. Nessuna rimozione di dati esistenti."""
+        """Limiti piano (eventi / utenti registrati con accesso). Prova = accesso completo salvo eccezioni del Super Admin.
+        kind=events riserva atomicamente il posto (contatore mai decrementato: anche gli eventi eliminati contano)."""
         st = await state_for(org_id)
-        if not st.get("enabled") or st.get("mode") == "trial" or not st.get("plan"):
+        if kind == "events":
+            await _indexes()
+            await _seed_usage(org_id)
+            lim = st["limits"]["max_events"] if st.get("enabled") else -1
+            q = {"org_id": org_id} if lim < 0 else {"org_id": org_id, "events_created": {"$lt": lim}}
+            if not await db.saas_usage.find_one_and_update(q, {"$inc": {"events_created": 1}}):
+                raise _limit_error(st, kind, lim)
             return
-        cfg = await get_config()
-        lim = st["limits"]["max_events" if kind == "events" else "max_users"]
+        if not st.get("enabled"):
+            return
+        lim = st["limits"]["max_users"]
         if lim < 0:
             return
-        if kind == "events":
-            used = await db.events.count_documents({"org_id": org_id})
-        else:
-            now = _iso(_now())
-            used = await db.memberships.count_documents({"org_id": org_id, "active": True}) + (0 if kind == "users_accept" else await db.org_invites.count_documents(
-                {"org_id": org_id, "status": "pending", "expires_at": {"$gt": now}}))
+        now = _iso(_now())
+        used = await db.memberships.count_documents({"org_id": org_id, "active": True}) + (0 if kind == "users_accept" else await db.org_invites.count_documents(
+            {"org_id": org_id, "status": "pending", "expires_at": {"$gt": now}}))
         if used < lim:
             return
-        up = UPGRADE_TO.get(st["plan"], "un piano superiore")
-        what = (f"{lim} evento" if lim == 1 else f"{lim} eventi") if kind == "events" else f"{lim} utenti registrati"
-        more = "eventi illimitati" if kind == "events" else "aggiungere altri utenti"
-        raise HTTPException(status_code=403, detail={
-            "code": "plan_limit", "kind": kind, "plan": st["plan"], "limit": lim,
-            "message": f"Il piano {st['plan_label']} include fino a {what}. Passa a {up} per {more}."})
+        raise _limit_error(st, "users", lim)
 
     async def init_trial(org_id: str, owner_user_id: Optional[str] = None):
         cfg = await get_config()
@@ -540,7 +571,7 @@ def build(db, deps: dict):
         st = await state_for(user["org_id"])
         if not st["enabled"]:
             return st
-        out = {**st, "video": await video_policy(user["org_id"])}
+        out = {**st, "video": await video_policy(user["org_id"]), "usage": await usage(user["org_id"])}
         if (user.get("perm") or {}).get("admin"):
             out["payments"] = await db.invoices.find({"org_id": user["org_id"], "kind": "saas_subscription"}, {"_id": 0}).sort("data", -1).to_list(100)
         return out
@@ -611,6 +642,11 @@ def build(db, deps: dict):
         kind = _kind(s.get("plan"), s.get("billing_cycle"), plan, cycle)
         out = {"kind": kind, "plan": plan, "cycle": cycle, "price": cfg["plans"][plan][cycle],
                "current_period_end": s.get("current_period_end"), "trialing": sub.get("status") == "trialing", "amount_due": 0.0}
+        adm = s.get("admin") or {}
+        lim = {k: int(adm[k]) if adm.get(k) is not None else v for k, v in plan_limits(cfg, plan).items()}
+        us = await usage(org["id"])
+        out["over_limits"] = [{"kind": k, "used": n, "limit": lim[f"max_{k}"]} for k, n in (("events", us["events"]), ("users", us["users"] + us["pending_invites"]))
+                              if 0 <= lim[f"max_{k}"] < n]
         if kind == "upgrade" and sub.get("status") != "trialing":
             price_id = await ensure_price(cfg, plan, cycle)
             pv = stripe_sdk.Invoice.create_preview(customer=sub["customer"], subscription=sub["id"], subscription_details={
@@ -834,8 +870,8 @@ def build(db, deps: dict):
                 row.update({k: st.get(k) for k in ("mode", "plan", "plan_label", "paid_plan", "billing_cycle", "price_amount", "activated_at",
                                                    "current_period_end", "current_period_start", "trial_start", "trial_end", "days_left", "cancel_at_period_end",
                                                    "pending_change", "stripe_status", "admin", "access_end", "expires_at", "limits", "assigned_plan")})
-                row["users_count"] = await db.memberships.count_documents({"org_id": o["id"], "active": True})
-                row["events_count"] = await db.events.count_documents({"org_id": o["id"]})
+                us = await usage(o["id"])
+                row.update({"users_count": us["users"], "pending_invites": us["pending_invites"], "events_count": us["events"], "events_current": us["events_current"]})
                 row.update({"payments_count": len([p for p in pay if p.get("payment_status") == "paid"]),
                             "payments_total": round(sum(float(p.get("totale") or 0) for p in pay if p.get("payment_status") == "paid"), 2),
                             "invoices_count": len(pay), "video_used": vp.get("used"), "video_quota": vp.get("quota"),
@@ -983,4 +1019,4 @@ def build(db, deps: dict):
     return {"router": r, "get_config": get_config, "state_for": state_for, "is_saas": is_saas, "check": check, "check_limit": check_limit,
             "init_trial": init_trial, "handle_webhook": handle_webhook, "video_policy": video_policy,
             "video_consume": video_consume, "video_release": video_release, "gold_notice_hours": GOLD_NOTICE_HOURS,
-            "run_trial_notices": run_trial_notices, "set_formula": set_formula}
+            "run_trial_notices": run_trial_notices, "set_formula": set_formula, "usage": usage}

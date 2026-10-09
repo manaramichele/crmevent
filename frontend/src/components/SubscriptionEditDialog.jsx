@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 const TABS = [["formula", "Formula"], ["date", "Date e rinnovi"], ["stato", "Stato"], ["custom", "Personalizzazioni"], ["storico", "Storico"]];
-const PLANS = [["bronze", "BRONZE – €19/mese · 1 evento · 10 utenti"], ["silver", "SILVER – €49/mese · eventi illimitati · 30 utenti"], ["gold", "GOLD – €79/mese · eventi e utenti illimitati"]];
+const PLANS = [["bronze", "BRONZE – €19/mese · 1 evento · 10 utenti"], ["silver", "SILVER – €49/mese · fino a 5 eventi · 30 utenti"], ["gold", "GOLD – €79/mese · eventi e utenti illimitati"]];
 const STATUS = [["auto", "Automatico (Stripe / prova)"], ["trial", "Prova gratuita"], ["active", "Attivo"], ["expired", "Scaduto"], ["suspended", "Sospeso"]];
 const LABEL = { plan: "Formula", status: "Stato", billing_cycle: "Periodicità", access_start: "Inizio abbonamento", access_end: "Scadenza abbonamento", renewal_date: "Prossimo rinnovo", trial_start: "Inizio prova", trial_end: "Fine prova", comp: "Piano omaggio", max_events: "Limite eventi", max_users: "Limite utenti", notes: "Note interne" };
 const END = new Set(["access_end", "renewal_date", "trial_end"]);
@@ -73,7 +73,7 @@ export default function SubscriptionEditDialog({ row, onClose, onSaved }) {
           {tab === "formula" && <>
             <F label="Formula"><select value={f.plan} onChange={set("plan")} className={sel} data-testid="sub-plan"><option value="">—</option>{PLANS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></F>
             <F label="Periodicità"><select value={f.billing_cycle} onChange={set("billing_cycle")} className={sel} data-testid="sub-cycle"><option value="">—</option><option value="monthly">Mensile</option><option value="yearly">Annuale</option></select></F>
-            <p className="text-xs text-slate-500">La formula si applica quando lo stato è "Attivo". Limiti standard: BRONZE 1 evento/10 utenti, SILVER illimitati/30, GOLD illimitati.</p>
+            <p className="text-xs text-slate-500">La formula si applica quando lo stato è "Attivo". Limiti standard: BRONZE 1 evento/10 utenti, SILVER 5 eventi/30 utenti, GOLD illimitati. Le eccezioni di limite valgono anche durante la prova.</p>
           </>}
           {tab === "date" && <div className="grid sm:grid-cols-2 gap-3">
             {[["access_start", "Inizio abbonamento"], ["access_end", "Scadenza abbonamento"], ["renewal_date", "Prossimo rinnovo (interno)"], ["trial_start", "Inizio prova gratuita"], ["trial_end", "Fine prova gratuita"]].filter(([k]) => !internal || !k.startsWith("trial")).map(([k, l]) =>
