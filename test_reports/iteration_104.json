@@ -1,0 +1,25 @@
+{
+  "summary": "Tested Super Admin subscription management (PUT /platform/saas/orgs/{id}/admin, GET history, admin_orgs) and the Abbonamenti → Organizzazioni UI (filters, SubscriptionEditDialog, tabs, summary & save, history, cancel, mobile 390px). 15/15 backend pytest tests pass covering security (QA org admin → 403 for PUT and GET history), active+bronze with limits 1/10, active+gold with limits -1/-1, max_users override on bronze, suspended, expired, active with past access_end → expired, trial with trial_end+20d → mode=trial & days_left≈20, status 'auto' restoration, history row shape (field/old/new/admin_email/at/reason), and validations (active without plan → 400, max_users=0 → 400, invalid date → 400, invalid plan 'platinum' → 400). UI test: created a dedicated TEST org, verified saas-filters (saas-search, saas-filter-plan/status/expiry), opened sub-edit-dialog via saas-edit-{id}, switched sub-tab-formula/date/stato/custom/storico, set plan silver, status active, used sub-extend-30, sub-save showed sub-confirm summary with pending diffs, sub-confirm-save persisted and closed dialog, Storico tab listed 5 history items, sub-cancel closes without saving. Cleaned up: TEST org deleted via DELETE /api/platform/organizations/{id} (200) and its saas_admin_history rows removed from Mongo. No real org touched.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/piattaforma?sezione=abbonamenti on mobile 390px", "issues": ["iubenda cookie banner overlays the bottom of the dialog/table and intercepts clicks until accepted/dismissed; not a bug of this feature but worth noting for UX on mobile. Desktop dialog layout is fine with internal scroll (max-h-[92dvh])."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter104_sub_admin.py", "/app/test_reports/pytest/iter104.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "subscriptions.admin_edit builds `prev` only from ADMIN_FIELDS + trial_start/trial_end (OK) and compares via `(prev or None) != (new or None)` — this coerces falsy values to None, so toggling comp from False to False or notes '' to '' never records history (good), but a change from False→True on comp when previously missing would still be recorded (expected). No real bug.",
+    "org_state uses adm.get('access_end') for `access_end` only when a_status=='active' — if admin sets status='active' with past access_end the response correctly flips mode to 'expired' and access_end is None in response. Verified in test_07.",
+    "SubscriptionEditDialog.save() does not re-prompt if sub_confirm is dismissed with Esc; harmless. Dialog overflow handling (max-h-[92dvh] overflow-y-auto) is correct for mobile."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter104_sub_admin.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% on acceptance checks"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026!; QA org admin qa.eventi@crmeventqa.it / QaEvents2026!",
+  "seed_data_creation": "Created and then deleted one TEST cliente org (name 'TEST_SubAdmin_<ts>') via POST/DELETE /api/platform/organizations. Related saas_admin_history rows deleted from Mongo (test_database.saas_admin_history). No non-TEST org was edited.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Feature works end-to-end. Reusable regression file: /app/backend/tests/test_iter104_sub_admin.py (needs REACT_APP_BACKEND_URL, MONGO_URL, DB_NAME in env). The platform create-org endpoint is POST /api/platform/organizations (not /orgs). Delete requires body {confirm_name: <nome>}. Each new cliente org auto-initializes a 14d GOLD trial via SAAS.init_trial."
+}
