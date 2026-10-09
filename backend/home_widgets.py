@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 import permissions as P
@@ -31,8 +31,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_router(db, require_admin, get_current_user, saas: dict) -> APIRouter:
+def build_router(db, require_admin, get_current_user, saas: dict, resolve_org=None) -> APIRouter:
     r = APIRouter()
+
+    async def _note_org(request: Request, user: dict):
+        """Organizzazione attiva della richiesta (Super Admin: X-Org-Id validato). None = contesto piattaforma."""
+        try:
+            return (await resolve_org(request, user))[0] if resolve_org else None
+        except HTTPException:
+            return None
+
+    def _note_q(user: dict, org_id) -> dict:
+        # Note personali dell'utente, separate per organizzazione; le note precedenti (senza org) restano visibili al proprietario.
+        return {"user_id": user["user_id"], "$or": [{"org_id": org_id}, {"org_id": {"$exists": False}}]}
 
     async def _scope(user: dict) -> dict:
         """Tipi visibili (permessi + piano), filtro eventi e persona collegata per i non Admin."""
@@ -115,32 +126,34 @@ def build_router(db, require_admin, get_current_user, saas: dict) -> APIRouter:
         return {"ok": True}
 
     @r.get("/my/notes")
-    async def notes(user: dict = Depends(get_current_user)):
-        return {"items": await db.user_notes.find({"user_id": user["user_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(500)}
+    async def notes(request: Request, user: dict = Depends(get_current_user)):
+        q = _note_q(user, await _note_org(request, user))
+        return {"items": await db.user_notes.find(q, {"_id": 0, "user_id": 0, "org_id": 0}).sort("created_at", -1).to_list(500)}
 
     @r.post("/my/notes")
-    async def add_note(body: NoteIn, user: dict = Depends(get_current_user)):
+    async def add_note(body: NoteIn, request: Request, user: dict = Depends(get_current_user)):
         text = body.text.strip()[:5000]
         if not text:
             raise HTTPException(status_code=400, detail="La nota è vuota")
-        doc = {"id": uuid.uuid4().hex, "user_id": user["user_id"], "text": text, "created_at": _now(), "updated_at": _now()}
+        doc = {"id": uuid.uuid4().hex, "user_id": user["user_id"], "org_id": await _note_org(request, user), "text": text, "created_at": _now(), "updated_at": _now()}
         await db.user_notes.insert_one(dict(doc))
         doc.pop("user_id")
+        doc.pop("org_id")
         return doc
 
     @r.put("/my/notes/{nid}")
-    async def edit_note(nid: str, body: NoteIn, user: dict = Depends(get_current_user)):
+    async def edit_note(nid: str, body: NoteIn, request: Request, user: dict = Depends(get_current_user)):
         text = body.text.strip()[:5000]
         if not text:
             raise HTTPException(status_code=400, detail="La nota è vuota")
-        res = await db.user_notes.update_one({"id": nid, "user_id": user["user_id"]}, {"$set": {"text": text, "updated_at": _now()}})
+        res = await db.user_notes.update_one({**_note_q(user, await _note_org(request, user)), "id": nid}, {"$set": {"text": text, "updated_at": _now()}})
         if not res.matched_count:
             raise HTTPException(status_code=404, detail="Nota non trovata")
         return {"ok": True}
 
     @r.delete("/my/notes/{nid}")
-    async def del_note(nid: str, user: dict = Depends(get_current_user)):
-        res = await db.user_notes.delete_one({"id": nid, "user_id": user["user_id"]})
+    async def del_note(nid: str, request: Request, user: dict = Depends(get_current_user)):
+        res = await db.user_notes.delete_one({**_note_q(user, await _note_org(request, user)), "id": nid})
         if not res.deleted_count:
             raise HTTPException(status_code=404, detail="Nota non trovata")
         return {"ok": True}

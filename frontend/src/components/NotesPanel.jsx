@@ -38,7 +38,9 @@ export default function NotesPanel() {
   const [items, setItems] = useState(null);
   const [draft, setDraft] = useState("");
   const [del, setDel] = useState(null);
-  useEffect(() => { api.get("/my/notes").then(({ data }) => setItems(data.items)).catch(() => setItems([])); }, []);
+  const [err, setErr] = useState(false);
+  const load = () => { setErr(false); setItems(null); api.get("/my/notes").then(({ data }) => setItems(data.items)).catch(() => { setErr(true); setItems([]); }); };
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const add = async () => {
     if (!draft.trim()) return;
     try { const { data } = await api.post("/my/notes", { text: draft }); setItems((l) => [data, ...(l || [])]); setDraft(""); }
@@ -60,7 +62,8 @@ export default function NotesPanel() {
           className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#0ABAB5] focus:ring-2 focus:ring-[#0ABAB5]/20 transition-[border-color,box-shadow]" />
       </div>
       <ul className="flex-1 overflow-y-auto" data-testid="notes-list">
-        {items === null ? <li className="p-4 text-sm text-slate-400">Caricamento...</li>
+        {items === null ? <li className="p-4 text-sm text-slate-400" data-testid="notes-loading">Caricamento...</li>
+          : err ? <li className="p-4 text-sm text-red-600" data-testid="notes-error">Impossibile caricare le note. <button type="button" onClick={load} className="underline font-semibold" data-testid="notes-retry">Riprova</button></li>
           : !items.length ? <li className="p-4 text-sm text-slate-500" data-testid="notes-empty">Nessuna nota. Scrivi sopra e premi Invio.</li>
           : items.map((n) => <NoteItem key={n.id} n={n} onDelete={setDel} />)}
       </ul>

@@ -13198,7 +13198,7 @@ async def require_org_member(request: Request, user: dict = Depends(get_current_
 
 
 app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
-app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS), prefix="/api")
+app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
 app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
