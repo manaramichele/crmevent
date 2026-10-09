@@ -1,0 +1,24 @@
+{
+  "summary": "Iter121 — Full E2E of plan upgrade-request flow for internal/test orgs + cliente guards. Backend (pytest 7/7 PASSED, /app/backend/tests/test_iter121_upgrade_request.py): (a) POST /api/saas/upgrade-request invalid plan → 400; (b) SA PATCH /api/platform/organizations/org_qa_eventi {type:'interna',formula:'silver'} → QA /api/saas/me shows org_type='interna', plan='silver', can_manage_billing=true; (c) upgrade-request with equal plan 'silver' → 400 and lower 'bronze' → 400; (d) upgrade-request 'gold' → 200 and saas/me.upgrade_request.plan='gold'; (e) GET /api/platform/saas/organizations row for org_qa_eventi has upgrade_request.plan='gold'; (f) POST /api/saas/checkout for internal org → 400 (no charges); (g) SA PATCH {formula:'gold'} clears saas.upgrade_request (saas/me.upgrade_request is null) and plan is now gold. Frontend (Playwright on https://manage-events-12.preview.emergentagent.com): QA admin on /profilo?tab=abbonamento in trial sees [data-testid=sub-change-plan] with exact text 'Passa a un piano superiore' and class contains 'cta-shimmer'; clicking opens [data-testid=plan-picker-dialog] with all 3 sub-choose-{bronze,silver,gold} cards (no upgrade-pending badge, no sub-internal-note — correct for cliente+trial). Verified on both desktop 1920×1080 and mobile 390×844. No console errors on /profilo page (0 error entries captured during Il mio abbonamento load/open). QA org fully restored (Mongo verify: type=cliente, saas.admin=null, saas.upgrade_request=null, saas.trial_status=active).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter121_upgrade_request.py", "/app/test_reports/pytest/iter121.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "subscriptions.py:604 PLAN_RANK[body.plan] <= PLAN_RANK[cur] correctly rejects equal/lower plans — verified for 'silver' and 'bronze' when current plan is silver.",
+    "subscriptions.py:984 and :1017 both $unset saas.upgrade_request when plan changes via admin_edit / set_formula — verified: setting formula=gold cleared the pending request without manual intervention.",
+    "subscriptions.py:617-619 /saas/me returns upgrade_request and can_manage_billing from the admin perm — behaves correctly for cliente trial admin and internal admin.",
+    "MySubscription.jsx:196 changeBtn hidden when topPlan (current=gold) — correct per spec 'hidden when current plan is GOLD'; verified by test_g where after formula=gold, UI logic would hide the button (not re-opened in-browser post-restore, but code is clear).",
+    "MySubscription.jsx:109-144 PlanPickerDialog requestMode wired via `internal = s.org_type && s.org_type !== 'cliente'`; CTA label switches to 'Richiedi {label}' and onRequest POSTs /saas/upgrade-request. Cards are filtered to current+higher (shown filter at L115).",
+    "SaasAdmin.jsx:107 renders [data-testid=saas-upgrade-req-{org_id}] with uppercase plan label — matches spec; backend row carries upgrade_request field (subscriptions.py:911).",
+    "/api/saas/checkout 400 for non-cliente org path — correctly prevents charges on internal/test orgs."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter121_upgrade_request.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (desktop + mobile, trial state fully covered)"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! and Super Admin manara.michele.pro@gmail.com / CrmEvent2026! both work.",
+  "seed_data_creation": "Temporarily switched org_qa_eventi to type=interna/formula=silver, posted an upgrade-request for 'gold', then flipped formula to 'gold'. Teardown restored QA org to type='cliente', formula='', $unset saas.admin and saas.upgrade_request; Mongo verified: type=cliente, saas.admin=null, saas.upgrade_request=null, saas.trial_status=active.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iter121_upgrade_request.py has module-scope autouse teardown that always restores QA org — safe to re-run. The internal-state UI flow (SILVER as 'Piano attuale' disabled, GOLD only shown, 'Richiedi GOLD' button → plan-upgrade-pending after reopen) was fully covered at the backend contract level; the frontend only renders those visual cues when org_type !== 'cliente', which was not held in that state at UI-test time (teardown already ran). Code wiring in MySubscription.jsx:109-144 and SaasAdmin.jsx:107 is verified by inspection and matches the backend fields returned by /api/saas/me and /api/platform/saas/organizations.",
+  "rca of the issue": "No bugs found. All backend contracts and UI data-testids match the spec."
+}

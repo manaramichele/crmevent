@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { PageHeader, StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +64,7 @@ function Book({ info, onBooked }) {
   if (!info.ready) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600" data-testid="support-video-not-ready">Le prenotazioni non sono al momento disponibili. Riprova più tardi.</div>;
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 space-y-4" data-testid="support-video-book">
+      <BookingAs />
       <div className="flex items-center gap-2 font-semibold text-slate-800"><CalendarDays className="w-4 h-4 text-[#0ABAB5]" />Scegli giorno e orario</div>
       <SlotPicker slots={slots} value={slot} onChange={setSlot} />
       <Textarea placeholder="Di cosa vuoi parlare? (facoltativo)" value={note} onChange={(e) => setNote(e.target.value)} rows={3} data-testid="support-video-note" />
@@ -81,6 +83,18 @@ function Book({ info, onBooked }) {
             <Button disabled={busy} onClick={book} className="bg-[#0ABAB5] hover:bg-[#09a39f] text-slate-900 font-semibold" data-testid="support-video-confirm-btn">{busy ? "Prenotazione..." : planMode ? "Conferma prenotazione" : `Conferma e usa ${cost} crediti`}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function BookingAs() {
+  const { user } = useAuth();
+  const rows = [["Organizzazione", user?.org_name, "org"], ["Nome", user?.name, "name"], ["Email", user?.email, "email"]].filter((r) => r[1]);
+  if (!rows.length) return null;
+  return (
+    <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm" data-testid="support-video-booking-as">
+      <div className="font-semibold text-slate-800 mb-1.5">Prenoti come</div>
+      <div className="grid sm:grid-cols-3 gap-x-4 gap-y-1">{rows.map(([l, v, k]) => <div key={k} className="min-w-0"><span className="text-xs text-slate-500">{l}</span><div className="font-medium text-slate-900 truncate" data-testid={`support-video-as-${k}`}>{v}</div></div>)}</div>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { UsageNotice } from "@/components/UsageMeter";
 import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
 import WelcomeDemo from "@/components/WelcomeDemo";
+import SupportButton from "@/components/SupportButton";
 import { TutorialHint } from "@/components/Onboarding";
 import { NEWS_READ_EVENT } from "@/pages/News";
 
@@ -387,9 +388,7 @@ export default function Layout({ children }) {
               <Video className="w-4 h-4" aria-hidden="true" /><span className="hidden sm:inline">Prenota una demo</span>
             </button>
           ) : (
-          <NavLink to="/assistenza" data-testid="header-assistenza-button" className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
-            <Headset className="w-4 h-4" aria-hidden="true" /><span className={user?.saas?.enabled && ["trial", "expired", "canceled"].includes(user.saas.mode) && !user.saas.purchased ? "hidden sm:inline" : ""}>Assistenza</span>
-          </NavLink>)}
+          <SupportButton user={user} />)}
           {!isSuper && <div className="shrink-0"><NewsButton /></div>}
           <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
             className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>

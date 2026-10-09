@@ -106,16 +106,19 @@ export function recommendPlan(plans, usage) {
   return [...plans].sort((a, b) => RANK.indexOf(a.key) - RANK.indexOf(b.key)).find(fits) || null;
 }
 
-function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, choose, busy }) {
+function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, choose, busy, requestMode, onRequest }) {
   const [ack, setAck] = useState(false);
   const rec = recommendPlan(plans.plans, s.usage);
-  const curKey = s.mode === "trial" ? null : s.paid_plan || s.plan;
-  const needsAck = s.billing === "free";
+  const curKey = s.mode === "trial" ? null : s.paid_plan || s.plan || s.assigned_plan;
+  const needsAck = !requestMode && s.billing === "free";
+  // Solo il piano attuale (evidenziato) e i piani superiori.
+  const shown = plans.plans.filter((p) => !curKey || RANK.indexOf(p.key) >= RANK.indexOf(curKey));
+  const isCurrent = (k) => isCur(k) || k === curKey;
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" data-testid="plan-picker-dialog">
-        <DialogHeader><DialogTitle>Cambia piano</DialogTitle>
-          <DialogDescription>Prezzi del catalogo attuale. Il nuovo piano si applica solo dopo la tua conferma.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Passa a un piano superiore</DialogTitle>
+          <DialogDescription>{requestMode ? "La tua formula è assegnata dall'amministrazione CRMEvent: invia una richiesta, nessun addebito automatico." : "Prezzi del catalogo attuale. Il nuovo piano si applica solo dopo la tua conferma."} I tuoi dati restano invariati.</DialogDescription></DialogHeader>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {rec && rec.key !== curKey
             ? <p className="text-sm rounded-lg bg-[#0ABAB5]/10 text-slate-800 px-3 py-2" data-testid="plan-recommendation">Ti consigliamo <b>{rec.label}</b>: è il piano che supporta tutti i tuoi eventi e collaboratori attuali.</p>
@@ -125,13 +128,14 @@ function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, cho
         {needsAck && <label className="flex items-start gap-2 text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-900 p-3" data-testid="plan-free-warning">
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-[#0ABAB5]" data-testid="plan-free-ack" />
           <span>La tua organizzazione usa una formula gratuita concessa da CRMEvent. Scegliendo un piano passerai a un <b>abbonamento a pagamento</b>: confermo di voler procedere.</span></label>}
+        {s.upgrade_request && <p className="text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2" data-testid="plan-upgrade-pending">Richiesta di upgrade a <b>{s.upgrade_request.plan.toUpperCase()}</b> inviata il {d(s.upgrade_request.at)}: ti contatteremo a breve.</p>}
         <div className="grid gap-4 lg:grid-cols-3">
-          {plans.plans.map((p) => (
+          {shown.map((p) => (
             <div key={p.key} className="relative">
-              {rec?.key === p.key && <span className="absolute -top-2.5 right-3 z-10 rounded-full bg-[#0ABAB5] text-slate-900 text-[11px] font-bold px-2 py-0.5" data-testid={`plan-recommended-${p.key}`}>Consigliato</span>}
-              <PlanCard p={p} cycle={cycle} features={plans.features} current={isCur(p.key)}
-                cta={<Button disabled={busy || isCur(p.key) || (needsAck && !ack)} onClick={() => choose(p.key)} data-testid={`sub-choose-${p.key}`}
-                  className="w-full h-10 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold">{isCur(p.key) ? "Piano attuale" : `Passa a ${p.label}`}</Button>} />
+              {rec?.key === p.key && !isCurrent(p.key) && <span className="absolute -top-2.5 right-3 z-10 rounded-full bg-[#0ABAB5] text-slate-900 text-[11px] font-bold px-2 py-0.5" data-testid={`plan-recommended-${p.key}`}>Consigliato</span>}
+              <PlanCard p={p} cycle={cycle} features={plans.features} current={isCurrent(p.key)}
+                cta={<Button disabled={busy || isCurrent(p.key) || (needsAck && !ack)} onClick={() => (requestMode ? onRequest(p.key) : choose(p.key))} data-testid={`sub-choose-${p.key}`}
+                  className="w-full h-10 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold">{isCurrent(p.key) ? "Piano attuale" : requestMode ? `Richiedi ${p.label}` : `Passa a ${p.label}`}</Button>} />
             </div>
           ))}
         </div>
@@ -187,11 +191,20 @@ export default function MySubscription() {
   if (!s || !plans) return <p className="text-sm text-slate-400">Caricamento...</p>;
   const closePicker = () => { setPickerOpen(false); if (params.get("upgrade")) { params.delete("upgrade"); setParams(params, { replace: true }); } };
   const isCur = (k) => (live ? s.paid_plan === k && s.billing_cycle === cycle : s.mode !== "trial" && s.plan === k && s.billing === "paid");
-  const changeBtn = <Button size="sm" onClick={() => setPickerOpen(true)} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="sub-change-plan"><Settings2 className="w-4 h-4 mr-1.5" />Cambia piano</Button>;
-  if (s.org_type && s.org_type !== "cliente") return (
+  const internal = s.org_type && s.org_type !== "cliente";
+  const topPlan = s.mode !== "trial" && (s.paid_plan || s.plan || s.assigned_plan) === "gold";
+  const changeBtn = s.can_manage_billing && !topPlan ? <Button size="sm" onClick={() => setPickerOpen(true)} className="cta-shimmer cta-shimmer-5 h-9 px-4 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="sub-change-plan"><Settings2 className="w-4 h-4 mr-1.5" />Passa a un piano superiore</Button> : null;
+  const request = async (plan) => {
+    setBusy(true);
+    try { await api.post("/saas/upgrade-request", { plan }); toast.success("Richiesta di upgrade inviata all'amministrazione CRMEvent"); closePicker(); load(); }
+    catch (e) { err(e); } finally { setBusy(false); }
+  };
+  const picker = <PlanPickerDialog open={pickerOpen} onClose={closePicker} s={s} plans={plans} cycle={cycle} setCycle={setCycle} isCur={isCur} requestMode={internal} onRequest={request} choose={(k) => { closePicker(); choose(k); }} busy={busy} />;
+  if (internal) return (
     <div className="space-y-4" data-testid="my-subscription">
-      <Summary s={s} features={plans.features} />
-      <p className="text-sm text-slate-500" data-testid="sub-internal-note">Formula assegnata dall'amministrazione CRMEvent: nessun pagamento richiesto.</p>
+      <Summary s={s} features={plans.features} action={changeBtn} />
+      <p className="text-sm text-slate-500" data-testid="sub-internal-note">Formula assegnata dall'amministrazione CRMEvent: nessun pagamento richiesto. Puoi richiedere un piano superiore: nessun addebito automatico.</p>
+      {picker}
     </div>
   );
   return (
@@ -205,7 +218,7 @@ export default function MySubscription() {
       </div>
       <Payments rows={s.payments} />
       {!live && s.trial_active && <p className="text-xs text-slate-500" data-testid="sub-trial-note">Se acquisti ora, il piano pagato parte alla fine della prova ({d(s.trial_end)}): nessun addebito anticipato.</p>}
-      <PlanPickerDialog open={pickerOpen} onClose={closePicker} s={s} plans={plans} cycle={cycle} setCycle={setCycle} isCur={isCur} choose={(k) => { closePicker(); choose(k); }} busy={busy} />
+      {picker}
       <ChangeDialog pv={pv} busy={busy} onClose={() => setPv(null)} onConfirm={confirm} />
     </div>
   );

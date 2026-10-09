@@ -103,7 +103,8 @@ function OrgsTab() {
           <tr key={r.id} className="border-t border-slate-100" data-testid={`saas-org-${r.id}`}>
             <td className="px-3 py-2 font-medium">{r.nome}{r.admin?.comp ? <span className="ml-1 text-[10px] rounded bg-emerald-50 text-emerald-700 px-1">Omaggio</span> : null}</td>
             <td className="px-3 py-2" data-testid={`saas-type-${r.id}`}>{TYPE[r.type] || "Cliente"}</td>
-            <td className="px-3 py-2">{r.model === "abbonamento" ? <FormulaBadge plan={formulaOf(r)} testid={`saas-badge-${r.id}`} /> : "—"}{r.pending_change ? ` → ${r.pending_change.plan.toUpperCase()}` : ""}</td>
+            <td className="px-3 py-2">{r.model === "abbonamento" ? <FormulaBadge plan={formulaOf(r)} testid={`saas-badge-${r.id}`} /> : "—"}{r.pending_change ? ` → ${r.pending_change.plan.toUpperCase()}` : ""}
+              {r.upgrade_request && <div className="mt-1 text-[11px] font-semibold text-amber-700" data-testid={`saas-upgrade-req-${r.id}`} title={r.upgrade_request.note || ""}>Richiesta upgrade: {r.upgrade_request.plan.toUpperCase()}</div>}</td>
             <td className="px-3 py-2" data-testid={`saas-status-${r.id}`}>{r.mode ? MODE[r.mode] : r.model === "abbonamento" ? "Accesso completo" : "—"}{r.mode === "trial" ? ` (${r.days_left} gg)` : ""}{r.cancel_at_period_end ? " · annullato a fine periodo" : ""}</td>
             <td className="px-3 py-2" data-testid={`saas-billing-${r.id}`}>{BILLING[r.billing] || "—"}</td>
             <td className="px-3 py-2">{({ yearly: "12 mesi", semester: "6 mesi", monthly: "Mensile" })[r.admin?.billing_cycle || r.billing_cycle] || "—"}</td>
