@@ -126,9 +126,23 @@ def org_state(org: dict, cfg: dict) -> dict:
         mode, eff = ("past_due" if st == "past_due" else "active"), paid_plan
     else:
         mode, eff = ("canceled" if s.get("plan") else "expired"), None
+    adm = s.get("admin") or {}
+    a_status, a_end = adm.get("status") or "auto", _parse(adm.get("access_end"))
+    if a_status == "suspended":
+        mode, eff = "suspended", None
+    elif a_status == "expired":
+        mode, eff = "expired", None
+    elif a_status == "trial":
+        mode, eff = ("trial", s.get("trial_plan") or cfg.get("trial_plan", "gold")) if trial_active else ("expired", None)
+    elif a_status == "active":
+        mode, eff = ("active", adm.get("plan") or s.get("plan") or "bronze") if (not a_end or a_end > now) else ("expired", None)
     last = eff or s.get("plan") or s.get("trial_plan") or "gold"
     features = list((cfg["plans"].get(last) or {}).get("features") or [])
-    days_left = max(0, math.ceil((trial_end - now).total_seconds() / 86400)) if trial_active else 0
+    days_left = max(0, math.ceil((trial_end - now).total_seconds() / 86400)) if (trial_active and mode == "trial") else 0
+    lim = plan_limits(cfg, eff) if eff and mode != "trial" else {"max_events": -1, "max_users": -1}
+    for k in ("max_events", "max_users"):
+        if adm.get(k) is not None and mode != "trial":
+            lim[k] = int(adm[k])
     return {"enabled": True, "mode": mode, "plan": eff, "plan_label": plan_label(cfg, eff) if eff else None,
             "writable": eff is not None, "features": features,
             "trial_plan": s.get("trial_plan"), "trial_start": s.get("trial_start"), "trial_end": s.get("trial_end"),
@@ -138,7 +152,8 @@ def org_state(org: dict, cfg: dict) -> dict:
             "price_amount": s.get("price_amount"), "activated_at": s.get("activated_at"),
             "current_period_start": s.get("current_period_start"), "current_period_end": s.get("current_period_end"),
             "cancel_at_period_end": bool(s.get("cancel_at_period_end")), "pending_change": s.get("pending_change"),
-            "limits": plan_limits(cfg, eff) if eff and mode != "trial" else {"max_events": -1, "max_users": -1}}
+            "admin": adm or None, "access_end": adm.get("access_end") if a_status == "active" else None,
+            "limits": lim}
 
 
 def trial_doc(cfg: dict) -> dict:
@@ -188,6 +203,26 @@ class AdjustIn(BaseModel):
 
 class ExtendIn(BaseModel):
     days: int
+
+
+ADMIN_STATUS = {"auto", "trial", "active", "expired", "suspended"}
+ADMIN_FIELDS = ("plan", "status", "billing_cycle", "access_start", "access_end", "renewal_date", "comp", "max_events", "max_users", "notes")
+
+
+class AdminEditIn(BaseModel):
+    plan: Optional[str] = None
+    status: str = "auto"
+    billing_cycle: Optional[str] = None
+    access_start: Optional[str] = None
+    access_end: Optional[str] = None
+    renewal_date: Optional[str] = None
+    trial_start: Optional[str] = None
+    trial_end: Optional[str] = None
+    comp: bool = False
+    max_events: Optional[int] = None
+    max_users: Optional[int] = None
+    notes: Optional[str] = None
+    reason: Optional[str] = None
 
 
 def build(db, deps: dict):
@@ -240,7 +275,7 @@ def build(db, deps: dict):
         if not st.get("enabled") or st.get("mode") == "trial" or not st.get("plan"):
             return
         cfg = await get_config()
-        lim = plan_limits(cfg, st["plan"])["max_events" if kind == "events" else "max_users"]
+        lim = st["limits"]["max_events" if kind == "events" else "max_users"]
         if lim < 0:
             return
         if kind == "events":
@@ -753,7 +788,10 @@ def build(db, deps: dict):
                 pay = await db.invoices.find({"org_id": o["id"], "kind": "saas_subscription"}, {"_id": 0, "totale": 1, "payment_status": 1}).to_list(500)
                 vp = await video_policy(o["id"])
                 row.update({k: st.get(k) for k in ("mode", "plan", "plan_label", "paid_plan", "billing_cycle", "price_amount", "activated_at",
-                                                   "current_period_end", "trial_end", "days_left", "cancel_at_period_end", "pending_change", "stripe_status")})
+                                                   "current_period_end", "current_period_start", "trial_start", "trial_end", "days_left", "cancel_at_period_end",
+                                                   "pending_change", "stripe_status", "admin", "access_end", "limits")})
+                row["users_count"] = await db.memberships.count_documents({"org_id": o["id"], "active": True})
+                row["events_count"] = await db.events.count_documents({"org_id": o["id"]})
                 row.update({"payments_count": len([p for p in pay if p.get("payment_status") == "paid"]),
                             "payments_total": round(sum(float(p.get("totale") or 0) for p in pay if p.get("payment_status") == "paid"), 2),
                             "invoices_count": len(pay), "video_used": vp.get("used"), "video_quota": vp.get("quota"),
@@ -781,6 +819,45 @@ def build(db, deps: dict):
         await db.organizations.update_one({"id": org_id}, {"$set": {"saas.trial_end": _iso(base + timedelta(days=body.days)), "saas.trial_status": "active"}})
         await deps["record_audit"](admin, "saas_extend_trial", org_id=org_id, org_name=org.get("nome"), detail=f"+{body.days} giorni")
         return await state_for(org_id)
+
+    @r.put("/platform/saas/orgs/{org_id}/admin")
+    async def admin_edit(org_id: str, body: AdminEditIn, admin: dict = Depends(deps["require_superadmin"])):
+        org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "saas": 1, "nome": 1, "type": 1})
+        if not org or not org.get("saas") or org.get("type", "cliente") != "cliente":
+            raise HTTPException(status_code=404, detail="Organizzazione con abbonamento non trovata")
+        if body.status not in ADMIN_STATUS or (body.plan and body.plan not in PLAN_KEYS) or body.billing_cycle not in (None, "monthly", "yearly"):
+            raise HTTPException(status_code=400, detail="Valori non validi")
+        for k in ("max_events", "max_users"):
+            v = getattr(body, k)
+            if v is not None and (v == 0 or v < -1):
+                raise HTTPException(status_code=400, detail="Limite non valido (-1 = illimitato)")
+        for k in ("access_start", "access_end", "renewal_date", "trial_start", "trial_end"):
+            v = getattr(body, k)
+            if v and not _parse(v):
+                raise HTTPException(status_code=400, detail=f"Data non valida: {k}")
+        if body.status == "active" and not body.plan:
+            raise HTTPException(status_code=400, detail="Seleziona la formula per lo stato Attivo")
+        s = org["saas"]
+        prev = {**{k: (s.get("admin") or {}).get(k) for k in ADMIN_FIELDS}, "trial_start": s.get("trial_start"), "trial_end": s.get("trial_end")}
+        new = body.model_dump(exclude={"reason"})
+        changes = [(k, prev.get(k), new.get(k)) for k in new if (prev.get(k) or None) != (new.get(k) or None)]
+        if not changes:
+            return await state_for(org_id)
+        upd = {"saas.admin": {k: new[k] for k in ADMIN_FIELDS}}
+        upd["saas.admin"].update({"updated_at": _iso(_now()), "updated_by": admin.get("email")})
+        for k in ("trial_start", "trial_end"):
+            if new[k]:
+                upd[f"saas.{k}"] = new[k]
+        await db.organizations.update_one({"id": org_id}, {"$set": upd})
+        at = _iso(_now())
+        await db.saas_admin_history.insert_many([{"id": uuid.uuid4().hex, "org_id": org_id, "org_name": org.get("nome"), "admin_email": admin.get("email"),
+                                                  "at": at, "field": k, "old": o, "new": n, "reason": (body.reason or "").strip()[:500]} for k, o, n in changes])
+        await deps["record_audit"](admin, "saas_admin_edit", org_id=org_id, org_name=org.get("nome"), detail=", ".join(k for k, _, _ in changes))
+        return await state_for(org_id)
+
+    @r.get("/platform/saas/orgs/{org_id}/history")
+    async def admin_org_history(org_id: str, admin: dict = Depends(deps["require_superadmin"])):
+        return await db.saas_admin_history.find({"org_id": org_id}, {"_id": 0}).sort("at", -1).to_list(500)
 
     @r.post("/platform/saas/orgs/{org_id}/video-adjust")
     async def admin_video_adjust(org_id: str, body: AdjustIn, admin: dict = Depends(deps["require_superadmin"])):
