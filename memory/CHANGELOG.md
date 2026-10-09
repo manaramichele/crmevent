@@ -998,3 +998,8 @@ Task 2 — Creatività manuale:
 - Abbinamento: google_sub → email verificata (auto) → Super Admin/conflitto con conferma password. Nuovi account solo da Registrazione/Invito.
 - Frontend: `lib/googleAuth.js`, `GoogleLinkPrompt.jsx`; Login/Registrati/Invito aggiornati. Report: `/app/memory/GOOGLE_LOGIN_IMPLEMENTATION.md`.
 
+
+## 2026-10-09 — Popup "Completa la registrazione" per Google ✅ (iteration_114: backend 8/8, frontend 100%)
+- `CompleteOrg.jsx` ora popup obbligatorio (nome/cognome precompilati, email verificata, org, cellulare, Termini+Privacy obbligatori, marketing facoltativo, solo "Esci e completa più tardi").
+- `/auth/complete-organization`: blocco atomico anti doppio clic (409), rifiuto se già membro di un'organizzazione, salva nome/cognome, terms/privacy_version `2026-10`, marketing_consent, welcome_demo pending; trial 14 gg via `_create_organization`.
+

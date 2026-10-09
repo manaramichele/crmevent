@@ -1,0 +1,29 @@
+{
+  "summary": "Full backend + frontend testing for CRMEvent Complete Organization popup (iter114). Backend: 8/8 pytest cases pass in /app/backend/tests/test_iter114_complete_org.py - needs_org=true + /api/my/todo blocked (403), validation errors (empty org_name, missing accept_terms), success path (org created, admin_org membership, 14-day trial, terms_version/privacy_version 2026-10, marketing_consent + marketing_consent_at, welcome_demo=pending, nome/cognome persisted), double-call rejected (400 'presente/collegato'), concurrency double-click (exactly 1 org created, second request returns 409 'Registrazione già in corso'), invited collaborator with active membership rejected (400, 0 orgs created), regression /auth/register-organization + superadmin login unchanged. Frontend (Playwright, both 1920 and 390 viewports): /app -> redirects to /completa-organizzazione; complete-org-dialog shows title 'Completa la registrazione' + subtitle; nome='Mario', cognome='Rossi' prefilled from Google name; email readonly with complete-org-email-verified badge; no X close button present (only complete-org-logout); submitting empty shows complete-org-name-error + complete-org-tel-error + complete-org-accept-error + nome/cognome inline errors; filling org 'TEST_Org Google UI' + phone +393331234567 (parsed as +39 333 123 4567) + accept + marketing + submit -> navigates to /app and welcome-demo popup appears; DB confirms terms_version=2026-10, marketing_consent=true, welcome_demo=pending, admin_org membership. Mobile 390px: dialog width 366 fits, submit button scrollable into view. Logout flow: user without completing never gets an organization (0 orgs, 0 memberships), confirming 'Esci e completa più tardi' resume behavior.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/completa-organizzazione mobile 390px", "issues": ["iubenda cookie consent banner is anchored to bottom and overlaps the complete-org-logout link when the dialog scrolls; on mobile users may need to dismiss the iubenda banner before being able to click 'Esci e completa più tardi'. Not blocking (user can scroll past), but suboptimal UX."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter114_complete_org.py", "/app/test_reports/pytest/iter114.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py complete_organization (lines 770-811): correctly uses atomic find_one_and_update with org_onboarding_lock to prevent double-click org creation; releases lock on exception via $unset. Good.",
+    "complete_organization order of checks: user.org_id check (line 774) happens BEFORE the active-membership check (line 784); for invited collaborators without org_id this means the 'già collegato' 400 is returned, matching spec. OK.",
+    "CompleteOrg.jsx line 55: isValidPhoneNumber from react-phone-number-input requires full E.164 - the inner PhoneInputInput accepts user digits in national format and formats them. UI works, but tests should always pass E.164 (+39...) to be deterministic.",
+    "server.py line 793 TRIAL_DAYS used by _create_organization sets subscription.trial_end; the spec text says 'db org saas trial_end' but the field is actually subscription.trial_end. Not a bug - just document that the trial lives under org.subscription.*",
+    "complete_organization writes terms_version/privacy_version from the single TERMS_VERSION constant ('2026-10'). Consider accepting separate versions in future if ToS and Privacy are versioned independently.",
+    "The complete-org-marketing checkbox is not read back via a dedicated field in /api/auth/me response; verified in DB only. If product needs to resurface marketing_consent toggle in profile UI, expose it in user_payload."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter114_complete_org.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all 10 UI checks across desktop + mobile)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! verified via /api/auth/login (regression). JWT_SECRET read from /app/backend/.env for minting Google user cookies.",
+  "seed_data_creation": "Transient Google users (user_test_g1, user_test_g_val, user_test_g_ok, user_test_g_race, user_test_g_invited, user_test_g_ui, user_test_g_logout) + TEST_ organizations + memberships inserted via pymongo and fully cleaned up at teardown. Final verification: 0 TEST_ users, 0 TEST_ organizations remaining.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter114: CRMEvent 'Completa la registrazione' popup for Google users without org is production-ready. All invariants verified: atomic lock prevents duplicate orgs, operational APIs blocked server-side (403) until completion, invited collaborators cannot double-register, terms/privacy version '2026-10' + marketing_consent + welcome_demo=pending stored. UI pre-fills Google name, email is readonly with 'Verificata' badge, no close button (only logout for resume). Welcome demo popup fires on first entry to /app after creation. Minor UX note: iubenda cookie banner may overlap logout link on mobile viewport. Backend tests at /app/backend/tests/test_iter114_complete_org.py run clean with -o 'addopts='.",
+  "rca of the issue": "N/A - no critical issues. Flow verified end-to-end from DB-seeded Google user + minted HS256 JWT -> complete-org-dialog -> POST /api/auth/complete-organization -> dashboard with trial active + welcome demo popup."
+}

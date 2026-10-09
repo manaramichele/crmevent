@@ -72,7 +72,7 @@ export default function CompleteOrg() {
   return (
     <>
       <div className="sticky top-0 z-40"><SupportBanner /></div>
-      <div className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" data-testid="complete-org-overlay">
+      <div className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 pb-40 sm:p-6 overflow-y-auto" data-testid="complete-org-overlay">
         <div role="dialog" aria-modal="true" aria-labelledby="complete-org-title" className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-8 my-4 animate-in fade-in zoom-in-95 duration-200" data-testid="complete-org-dialog">
           <img src="/logo-crmevent.png?v=5" alt="CRMEvent" className="h-9 w-auto mb-4" />
           <h1 id="complete-org-title" className="font-display text-2xl font-bold text-slate-900">Completa la registrazione</h1>
