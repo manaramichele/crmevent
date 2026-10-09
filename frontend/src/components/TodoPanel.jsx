@@ -34,24 +34,51 @@ function TodoRow({ i, onDone }) {
   );
 }
 
+function TodoFilters({ items, tipo, setTipo, ev, setEv }) {
+  const types = [...new Set(items.map((i) => i.tipo))];
+  const events = [...new Map(items.filter((i) => i.evento_id).map((i) => [i.evento_id, i.evento || "Evento non trovato"])).entries()];
+  const chip = (k, label) => (
+    <button key={k} type="button" onClick={() => setTipo(k)} data-testid={`todo-filter-tipo-${k}`}
+      className={`h-7 px-2.5 rounded-full text-xs font-semibold border transition-colors ${tipo === k ? "bg-[#0ABAB5] border-[#0ABAB5] text-slate-900" : "border-slate-200 text-slate-600 hover:border-[#0ABAB5]"}`}>{label}</button>
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-slate-100" data-testid="todo-filters">
+      {chip("all", "Tutti")}{types.map((t) => chip(t, TIPO[t][0]))}
+      {events.length > 0 && (
+        <select value={ev} onChange={(e) => setEv(e.target.value)} aria-label="Filtra per evento" data-testid="todo-filter-evento"
+          className="ml-auto h-7 max-w-[11rem] rounded-full border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0ABAB5]">
+          <option value="all">Tutti gli eventi</option>
+          {events.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+          <option value="none">Senza evento</option>
+        </select>
+      )}
+    </div>
+  );
+}
+
 export default function TodoPanel() {
   const [items, setItems] = useState(null);
+  const [tipo, setTipo] = useState("all");
+  const [ev, setEv] = useState("all");
   const load = () => api.get("/my/todo").then(({ data }) => setItems(data.items)).catch(() => setItems([]));
   useEffect(() => { load(); }, []);
   const done = async (i) => {
     try { await api.post("/my/todo/complete", { tipo: i.tipo, id: i.id }); setItems((l) => l.filter((x) => x.id !== i.id)); toast.success("Attività completata"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
-  const groups = items ? Object.keys(BUCKET).map((b) => [b, items.filter((i) => i.bucket === b)]).filter(([, l]) => l.length) : [];
+  const shown = (items || []).filter((i) => (tipo === "all" || i.tipo === tipo) && (ev === "all" || (ev === "none" ? !i.evento_id : i.evento_id === ev)));
+  const groups = Object.keys(BUCKET).map((b) => [b, shown.filter((i) => i.bucket === b)]).filter(([, l]) => l.length);
   return (
     <section className="flex flex-col min-h-0 h-[420px] lg:h-[calc(100dvh-14rem)] lg:min-h-[420px] rounded-xl border border-slate-200 bg-white" data-testid="todo-panel">
       <header className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
         <ListTodo className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-900">To Do List</h2>
-        {items && <span className="ml-auto rounded-full bg-[#0ABAB5]/15 text-slate-800 text-xs font-semibold px-2 py-0.5" data-testid="todo-count">{items.length}</span>}
+        {items && <span className="ml-auto rounded-full bg-[#0ABAB5]/15 text-slate-800 text-xs font-semibold px-2 py-0.5" data-testid="todo-count">{shown.length}</span>}
       </header>
+      {items?.length > 0 && <TodoFilters items={items} tipo={tipo} setTipo={setTipo} ev={ev} setEv={setEv} />}
       <div className="flex-1 overflow-y-auto" data-testid="todo-list">
         {items === null ? <p className="p-4 text-sm text-slate-400">Caricamento...</p>
           : !items.length ? <p className="p-4 text-sm text-slate-500" data-testid="todo-empty">Nessuna attività da completare.</p>
+          : !shown.length ? <p className="p-4 text-sm text-slate-500" data-testid="todo-filter-empty">Nessuna attività con i filtri selezionati.</p>
           : groups.map(([b, l]) => (
             <div key={b} data-testid={`todo-group-${b}`}>
               <div className={`sticky top-0 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide ${BUCKET[b][1]}`}>{BUCKET[b][0]} · {l.length}</div>

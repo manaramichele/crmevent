@@ -542,6 +542,7 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 ## Dashboard: To Do List + Note e appunti — 2026-10-09 ✅ VERIFICATO (iteration_100 + test permessi manuale + build)
 - backend/home_widgets.py: GET /api/my/todo (pipeline_tasks + activities + followups non completati, permessi sezione/eventi/piano; non Admin: pipeline assegnate alla propria persona o senza responsabile), POST /api/my/todo/complete; note personali /api/my/notes CRUD (collection user_notes per user_id, indipendenti dall'organizzazione).
+- Filtri rapidi To Do (2026-10-09): chip tipo (Tutti/Pipeline/Attività/Follow-up, solo tipi presenti) + select evento (incl. "Senza evento"), lato client; contatore aggiornato.
 - Frontend: Dashboard.jsx solo titolo + OrgMessagesBanner + TodoPanel/NotesPanel 50/50 (stack su mobile). Riepiloghi KPI rimossi (scelta utente). Endpoint /api/dashboard invariato.
 
 ## Limiti piani BRONZE/SILVER — 2026-10-09 ✅ VERIFICATO (iteration_99 + test check_limit + build)
