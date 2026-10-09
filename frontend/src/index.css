@@ -68,6 +68,8 @@ h1, h2, h3, h4, .font-display {
 @media (max-width: 640px) {
   input, select, textarea { font-size: 16px !important; }
   html, body { overflow-x: hidden; }
+  /* sito pubblico: clip non rompe l'header sticky */
+  html:not(:has(body.app-shell)), body:not(.app-shell) { overflow-x: clip; }
 }
 
 /* react-phone-number-input — allineato allo stile input CRMEvent */

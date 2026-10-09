@@ -15,7 +15,22 @@ const NAV = [
   ["Sponsor", "sponsor"], ["Come funziona", "come-funziona"], ["Prezzi", "prezzi"], ["Contatti", "demo"],
 ];
 
-const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+const GAP = 48; // spazio visibile tra header sticky e inizio contenuti
+const targetTop = (el) => {
+  const headerH = document.querySelector("[data-testid='landing-header']")?.getBoundingClientRect().height || 0;
+  const padTop = parseFloat(getComputedStyle(el).paddingTop) || 0;
+  return el.getBoundingClientRect().top + window.scrollY + padTop - headerH - GAP;
+};
+const scrollTo = (id, behavior = "smooth") => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  window.scrollTo({ top: targetTop(el), behavior });
+  // corregge eventuali spostamenti dovuti a immagini caricate durante lo scorrimento
+  [700, 1400].forEach((ms) => setTimeout(() => {
+    const t = targetTop(el);
+    if (Math.abs(t - window.scrollY) > 4) window.scrollTo({ top: t, behavior: "auto" });
+  }, ms));
+};
 
 function BrowserFrame({ children, url = "app.crmevent.it" }) {
   return (
@@ -189,6 +204,13 @@ const H2 = ({ children }) => <h2 className="font-display text-3xl md:text-4xl fo
 export default function LandingPage() {
   const [open, setOpen] = useState(false);
   useEffect(() => { document.title = "CRMEvent | Il CRM per organizzare eventi"; }, []);
+  useEffect(() => {
+    const go = () => { const id = decodeURIComponent(window.location.hash.slice(1)); if (id) setTimeout(() => scrollTo(id, "auto"), 300); };
+    go();
+    window.addEventListener("hashchange", go);
+    return () => window.removeEventListener("hashchange", go);
+  }, []);
+  const goMobile = (id) => { setOpen(false); requestAnimationFrame(() => requestAnimationFrame(() => scrollTo(id))); };
 
   return (
     <div className="bg-white text-slate-900">
@@ -207,7 +229,7 @@ export default function LandingPage() {
         </div>
         {open && (
           <div className="lg:hidden border-t border-slate-100 bg-[#FFFFFF] px-6 py-4 space-y-3" data-testid="landing-mobile-menu">
-            {NAV.map(([l, id]) => <button key={id} onClick={() => { scrollTo(id); setOpen(false); }} className="block text-sm font-medium text-slate-600">{l}</button>)}
+            {NAV.map(([l, id]) => <button key={id} onClick={() => goMobile(id)} className="block text-sm font-medium text-slate-600">{l}</button>)}
             <div className="flex gap-3 pt-2"><Link to="/login" className="flex-1 h-10 rounded-lg border border-slate-200 flex items-center justify-center text-sm font-semibold">Accedi</Link>
               <Link to="/registrati" onClick={() => setOpen(false)} className="flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">Registrati gratis</Link></div>
           </div>
