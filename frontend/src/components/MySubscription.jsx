@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CreditCard, Video, Mail, Crown, Check, ReceiptText, Settings2 } from "lucide-react";
 import { usePlans, PlanCard, CycleToggle, eur } from "@/components/PlansSection";
-import PlanBadge from "@/components/PlanBadge";
+import PlanBadge, { BILLING } from "@/components/PlanBadge";
 
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const CYC = { monthly: "Mensile", yearly: "Annuale" };
@@ -26,19 +26,21 @@ function VideoUsage({ v }) {
 
 function Summary({ s, features }) {
   const isTrial = s.mode === "trial";
+  const free = s.billing === "free";
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 space-y-5" data-testid="my-subscription-summary">
       <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-800">Il mio abbonamento</h2></div>
       <div className="space-y-1.5" data-testid="sub-plan">
         <PlanBadge s={s} testid="sub-plan-badge" />
-        <div className="text-sm text-slate-600" data-testid="sub-expiry">Scadenza: <b className="text-slate-800">{isTrial ? `${d(s.expires_at)} (${s.days_left} gg)` : d(s.expires_at)}</b></div>
+        <div className="text-sm text-slate-600" data-testid="sub-expiry">Scadenza: <b className="text-slate-800">{isTrial ? `${d(s.expires_at)} (${s.days_left} gg)` : s.expires_at ? d(s.expires_at) : "Nessuna scadenza"}</b></div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
         <Field label="Stato" value={MODE[s.mode] || s.mode} testid="sub-status" />
-        <Field label="Periodicità" value={CYC[s.billing_cycle] || "—"} testid="sub-cycle" />
+        <Field label="Condizione economica" value={BILLING[s.billing] || "—"} testid="sub-billing" />
+        {!free && <><Field label="Periodicità" value={CYC[s.billing_cycle] || "—"} testid="sub-cycle" />
         <Field label="Prezzo" value={s.price_amount ? `€${eur(s.price_amount)}/${s.billing_cycle === "yearly" ? "anno" : "mese"}` : "—"} testid="sub-price" />
         <Field label="Data attivazione" value={d(s.activated_at)} testid="sub-activated" />
-        <Field label="Prossimo rinnovo" value={s.cancel_at_period_end ? `Termina il ${d(s.current_period_end)}` : d(s.admin?.renewal_date || s.current_period_end)} testid="sub-renewal" />
+        <Field label="Prossimo rinnovo" value={s.cancel_at_period_end ? `Termina il ${d(s.current_period_end)}` : d(s.admin?.renewal_date || s.current_period_end)} testid="sub-renewal" /></>}
         {s.purchased && isTrial && <Field label="Piano acquistato" value={`${s.paid_plan_label} dal ${d(s.trial_end)}`} testid="sub-purchased" />}
       </div>
       {s.pending_change && <p className="text-sm rounded-lg bg-amber-50 text-amber-900 px-3 py-2" data-testid="sub-pending">Dal {d(s.pending_change.effective_at)} passerai a {s.pending_change.plan.toUpperCase()} {CYC[s.pending_change.cycle]?.toLowerCase()}.</p>}
@@ -135,6 +137,12 @@ export default function MySubscription() {
 
   if (!s || !plans) return <p className="text-sm text-slate-400">Caricamento...</p>;
   const isCur = (k) => live && s.paid_plan === k && s.billing_cycle === cycle;
+  if (s.org_type && s.org_type !== "cliente") return (
+    <div className="space-y-4" data-testid="my-subscription">
+      <Summary s={s} features={plans.features} />
+      <p className="text-sm text-slate-500" data-testid="sub-internal-note">Formula assegnata dall'amministrazione CRMEvent: nessun pagamento richiesto.</p>
+    </div>
+  );
   return (
     <div className="space-y-4" data-testid="my-subscription">
       <Summary s={s} features={plans.features} />

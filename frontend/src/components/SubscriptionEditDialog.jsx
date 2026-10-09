@@ -51,6 +51,8 @@ export default function SubscriptionEditDialog({ row, onClose, onSaved }) {
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
   const base = initial(row);
   const diff = Object.keys(LABEL).filter((k) => String(base[k] ?? "") !== String(f[k] ?? ""));
+  const internal = !!row.type && row.type !== "cliente";
+  const statusOpts = internal ? STATUS.filter(([k]) => k !== "trial").map(([k, l]) => [k, k === "auto" ? "Automatico (formula assegnata, senza scadenza se non impostata)" : l]) : STATUS;
   const stripeEnd = row.stripe_status === "active" && row.current_period_end ? day(row.current_period_end) : null;
   const save = async () => {
     setBusy(true);
@@ -62,7 +64,7 @@ export default function SubscriptionEditDialog({ row, onClose, onSaved }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl w-[calc(100vw-1.5rem)] max-h-[92dvh] overflow-y-auto" data-testid="sub-edit-dialog">
         <DialogTitle className="font-display text-xl">Abbonamento · {row.nome}</DialogTitle>
-        <DialogDescription className="text-xs">Gestione accesso CRMEvent. Le modifiche non cambiano addebiti Stripe né fatture.</DialogDescription>
+        <DialogDescription className="text-xs">Gestione accesso CRMEvent. Le modifiche non cambiano addebiti Stripe né fatture.{internal ? " Organizzazione Interna/Test: accesso gratuito, nessuna prova né pagamento." : ""}</DialogDescription>
         <div role="tablist" className="inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-1 gap-1" data-testid="sub-edit-tabs">
           {TABS.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} data-testid={`sub-tab-${k}`}
             className={`h-8 px-3 shrink-0 rounded-md text-sm font-medium transition-[background-color,color,box-shadow] ${tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{l}</button>)}
@@ -74,20 +76,20 @@ export default function SubscriptionEditDialog({ row, onClose, onSaved }) {
             <p className="text-xs text-slate-500">La formula si applica quando lo stato è "Attivo". Limiti standard: BRONZE 1 evento/10 utenti, SILVER illimitati/30, GOLD illimitati.</p>
           </>}
           {tab === "date" && <div className="grid sm:grid-cols-2 gap-3">
-            {[["access_start", "Inizio abbonamento"], ["access_end", "Scadenza abbonamento"], ["renewal_date", "Prossimo rinnovo (interno)"], ["trial_start", "Inizio prova gratuita"], ["trial_end", "Fine prova gratuita"]].map(([k, l]) =>
+            {[["access_start", "Inizio abbonamento"], ["access_end", "Scadenza abbonamento"], ["renewal_date", "Prossimo rinnovo (interno)"], ["trial_start", "Inizio prova gratuita"], ["trial_end", "Fine prova gratuita"]].filter(([k]) => !internal || !k.startsWith("trial")).map(([k, l]) =>
               <F key={k} label={l}><Input type="date" value={f[k]} onChange={set(k)} data-testid={`sub-${k}`} /></F>)}
             <div className="sm:col-span-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600" data-testid="sub-stripe-info">
               {stripeEnd ? <>Prossimo addebito Stripe: <b>{new Date(stripeEnd).toLocaleDateString("it-IT")}</b>{f.access_end && f.access_end !== stripeEnd && <span className="text-amber-700"> · diverso dalla scadenza CRMEvent ({new Date(f.access_end).toLocaleDateString("it-IT")})</span>}</> : "Nessun abbonamento Stripe attivo."}
             </div>
           </div>}
           {tab === "stato" && <>
-            <F label="Stato"><select value={f.status} onChange={set("status")} className={sel} data-testid="sub-status">{STATUS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></F>
+            <F label="Stato"><select value={f.status} onChange={set("status")} className={sel} data-testid="sub-status">{statusOpts.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></F>
             <p className="text-xs text-slate-500">Prova gratuita: vale fino a "Fine prova". Attivo: accesso con la formula scelta fino alla scadenza. Scaduto/Sospeso: sola consultazione, nessun dato eliminato.</p>
           </>}
           {tab === "custom" && <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
               {[7, 30].map((n) => <Button key={`a${n}`} size="sm" variant="outline" onClick={() => setF((s) => ({ ...s, access_end: addDays(s.access_end, n), status: s.status === "auto" ? "active" : s.status, plan: s.plan || "gold" }))} data-testid={`sub-extend-${n}`}>Proroga gratuita +{n} gg</Button>)}
-              {[7, 14].map((n) => <Button key={`t${n}`} size="sm" variant="outline" onClick={() => setF((s) => ({ ...s, trial_end: addDays(s.trial_end, n) }))} data-testid={`sub-trial-${n}`}>Prova +{n} gg</Button>)}
+              {!internal && [7, 14].map((n) => <Button key={`t${n}`} size="sm" variant="outline" onClick={() => setF((s) => ({ ...s, trial_end: addDays(s.trial_end, n) }))} data-testid={`sub-trial-${n}`}>Prova +{n} gg</Button>)}
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.comp} onChange={(e) => setF((s) => ({ ...s, comp: e.target.checked, status: e.target.checked ? "active" : s.status }))} data-testid="sub-comp" />Piano omaggio (accesso senza addebito)</label>
             <div className="grid grid-cols-2 gap-3">

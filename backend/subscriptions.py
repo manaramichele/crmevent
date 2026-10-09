@@ -110,11 +110,40 @@ def plan_label(cfg: dict, plan: Optional[str]) -> str:
     return (cfg["plans"].get(plan) or {}).get("label", (plan or "").upper())
 
 
+def _internal_state(org: dict, cfg: dict, t: str) -> dict:
+    """Organizzazioni Interne/Test: formula assegnata dal Super Admin, sempre gratuita, nessuna prova."""
+    adm = ((org or {}).get("saas") or {}).get("admin") or {}
+    plan = adm.get("plan")
+    if plan not in PLAN_KEYS:
+        return {"enabled": False, "org_type": t, "billing": "free", "plan": None}
+    a_status, a_end = adm.get("status") or "auto", _parse(adm.get("access_end"))
+    if a_status == "suspended":
+        mode, eff = "suspended", None
+    elif a_status == "expired" or (a_end and a_end <= _now()):
+        mode, eff = "expired", None
+    else:
+        mode, eff = "active", plan
+    lim = plan_limits(cfg, eff) if eff else {"max_events": -1, "max_users": -1}
+    for k in ("max_events", "max_users"):
+        if adm.get(k) is not None:
+            lim[k] = int(adm[k])
+    return {"enabled": True, "org_type": t, "billing": "free", "mode": mode, "plan": eff, "plan_label": plan_label(cfg, eff) if eff else None,
+            "assigned_plan": plan, "writable": eff is not None, "features": list((cfg["plans"].get(plan) or {}).get("features") or []),
+            "trial_plan": None, "trial_start": None, "trial_end": None, "trial_active": False, "days_left": 0,
+            "paid_plan": None, "paid_plan_label": None, "purchased": False, "billing_cycle": None, "stripe_status": None,
+            "price_amount": None, "activated_at": None, "current_period_start": None, "current_period_end": None,
+            "cancel_at_period_end": False, "pending_change": None, "admin": adm, "access_end": adm.get("access_end"),
+            "expires_at": adm.get("access_end"), "limits": lim}
+
+
 def org_state(org: dict, cfg: dict) -> dict:
-    """Stato commerciale (fonte autorevole: backend). enabled=False → organizzazione sul modello precedente."""
+    """Stato commerciale (fonte autorevole: backend). enabled=False → nessun vincolo di piano."""
     s = (org or {}).get("saas")
-    if not s or (org or {}).get("type", "cliente") != "cliente":
-        return {"enabled": False}
+    t = (org or {}).get("type") or "cliente"
+    if t != "cliente":
+        return _internal_state(org, cfg, t)
+    if not s:
+        return {"enabled": False, "org_type": t}
     now = _now()
     trial_end = _parse(s.get("trial_end"))
     trial_active = bool(trial_end and trial_end > now)
@@ -149,8 +178,9 @@ def org_state(org: dict, cfg: dict) -> dict:
         expires_at = adm.get("access_end")
     else:
         expires_at = s.get("current_period_end") or (None if mode in ("active", "past_due") else s.get("trial_end"))
-    return {"enabled": True, "mode": mode, "plan": eff, "plan_label": plan_label(cfg, eff) if eff else None,
-            "writable": eff is not None, "features": features,
+    billing = "trial" if mode == "trial" else "free" if adm.get("comp") else "paid" if (paid_plan or a_status == "active") else "none"
+    return {"enabled": True, "org_type": t, "billing": billing, "mode": mode, "plan": eff, "plan_label": plan_label(cfg, eff) if eff else None,
+            "assigned_plan": adm.get("plan") if a_status == "active" else None, "writable": eff is not None, "features": features,
             "trial_plan": s.get("trial_plan"), "trial_start": s.get("trial_start"), "trial_end": s.get("trial_end"),
             "trial_active": trial_active, "days_left": days_left,
             "paid_plan": s.get("plan"), "paid_plan_label": plan_label(cfg, s.get("plan")) if s.get("plan") else None,
@@ -521,6 +551,8 @@ def build(db, deps: dict):
         cfg = await get_config()
         _validate(cfg, body.plan, body.cycle)
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+        if (org or {}).get("type", "cliente") != "cliente":
+            raise HTTPException(status_code=400, detail="Organizzazione interna o di test: la formula è assegnata dal Super Admin, nessun pagamento richiesto")
         if not (org or {}).get("saas"):
             raise HTTPException(status_code=400, detail="La tua organizzazione usa ancora il modello a crediti")
         missing = deps["billing_missing"](org.get("billing") or {})
@@ -784,18 +816,24 @@ def build(db, deps: dict):
     @r.get("/platform/saas/organizations")
     async def admin_orgs(admin: dict = Depends(deps["require_superadmin"])):
         cfg = await get_config()
-        orgs = await db.organizations.find({"type": {"$in": ["cliente", None]}}, {"_id": 0, "id": 1, "nome": 1, "type": 1, "saas": 1, "credits": 1, "created_at": 1}).to_list(5000)
+        orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "type": 1, "saas": 1, "credits": 1, "created_at": 1}).sort("nome", 1).to_list(5000)
         out = []
         for o in orgs:
             st = org_state(o, cfg)
-            row = {"id": o["id"], "nome": o.get("nome"), "created_at": o.get("created_at"), "model": "abbonamento" if st["enabled"] else "crediti",
+            t = o.get("type") or "cliente"
+            row = {"id": o["id"], "nome": o.get("nome"), "type": t, "created_at": o.get("created_at"),
+                   "model": "abbonamento" if (st["enabled"] or t != "cliente") else "crediti", "billing": st.get("billing"),
                    "credits_balance": (o.get("credits") or {}).get("balance")}
+            if not st["enabled"] and t != "cliente":
+                row.update({"mode": None, "plan": None, "admin": ((o.get("saas") or {}).get("admin")), "expires_at": None, "limits": None,
+                            "users_count": await db.memberships.count_documents({"org_id": o["id"], "active": True}),
+                            "events_count": await db.events.count_documents({"org_id": o["id"]})})
             if st["enabled"]:
                 pay = await db.invoices.find({"org_id": o["id"], "kind": "saas_subscription"}, {"_id": 0, "totale": 1, "payment_status": 1}).to_list(500)
                 vp = await video_policy(o["id"])
                 row.update({k: st.get(k) for k in ("mode", "plan", "plan_label", "paid_plan", "billing_cycle", "price_amount", "activated_at",
                                                    "current_period_end", "current_period_start", "trial_start", "trial_end", "days_left", "cancel_at_period_end",
-                                                   "pending_change", "stripe_status", "admin", "access_end", "expires_at", "limits")})
+                                                   "pending_change", "stripe_status", "admin", "access_end", "expires_at", "limits", "assigned_plan")})
                 row["users_count"] = await db.memberships.count_documents({"org_id": o["id"], "active": True})
                 row["events_count"] = await db.events.count_documents({"org_id": o["id"]})
                 row.update({"payments_count": len([p for p in pay if p.get("payment_status") == "paid"]),
@@ -829,8 +867,11 @@ def build(db, deps: dict):
     @r.put("/platform/saas/orgs/{org_id}/admin")
     async def admin_edit(org_id: str, body: AdminEditIn, admin: dict = Depends(deps["require_superadmin"])):
         org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "saas": 1, "nome": 1, "type": 1})
-        if not org or not org.get("saas") or org.get("type", "cliente") != "cliente":
+        internal = bool(org) and (org.get("type") or "cliente") != "cliente"
+        if not org or (not internal and not org.get("saas")):
             raise HTTPException(status_code=404, detail="Organizzazione con abbonamento non trovata")
+        if internal and (body.status == "trial" or body.trial_start or body.trial_end):
+            raise HTTPException(status_code=400, detail="La prova gratuita non si applica alle organizzazioni Interne o Test")
         if body.status not in ADMIN_STATUS or (body.plan and body.plan not in PLAN_KEYS) or body.billing_cycle not in (None, "monthly", "yearly"):
             raise HTTPException(status_code=400, detail="Valori non validi")
         for k in ("max_events", "max_users"):
@@ -843,7 +884,7 @@ def build(db, deps: dict):
                 raise HTTPException(status_code=400, detail=f"Data non valida: {k}")
         if body.status == "active" and not body.plan:
             raise HTTPException(status_code=400, detail="Seleziona la formula per lo stato Attivo")
-        s = org["saas"]
+        s = org.get("saas") or {}
         prev = {**{k: (s.get("admin") or {}).get(k) for k in ADMIN_FIELDS}, "trial_start": s.get("trial_start"), "trial_end": s.get("trial_end")}
         new = body.model_dump(exclude={"reason"})
         changes = [(k, prev.get(k), new.get(k)) for k in new if (prev.get(k) or None) != (new.get(k) or None)]
@@ -860,6 +901,39 @@ def build(db, deps: dict):
                                                   "at": at, "field": k, "old": o, "new": n, "reason": (body.reason or "").strip()[:500]} for k, o, n in changes])
         await deps["record_audit"](admin, "saas_admin_edit", org_id=org_id, org_name=org.get("nome"), detail=", ".join(k for k, _, _ in changes))
         return await state_for(org_id)
+
+    async def set_formula(org_id: str, plan: Optional[str], admin: dict) -> None:
+        """Formula da 'Dati organizzazione': stesso dato (saas.admin) della gestione Abbonamenti. Nessun effetto su Stripe/FIC."""
+        if plan not in (None, *PLAN_KEYS):
+            raise HTTPException(status_code=400, detail="Formula non valida")
+        org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "saas": 1, "nome": 1, "type": 1})
+        if not org:
+            raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+        internal = (org.get("type") or "cliente") != "cliente"
+        s = org.get("saas") or {}
+        if not internal and not s:
+            raise HTTPException(status_code=400, detail="Attiva prima la prova dalla sezione Abbonamenti")
+        adm = {k: (s.get("admin") or {}).get(k) for k in ADMIN_FIELDS}
+        old = (adm["plan"], adm["status"])
+        if plan:
+            adm["plan"] = plan
+            if adm["status"] != "suspended":
+                adm["status"] = "active"
+            if internal:
+                adm["comp"] = True
+        else:
+            adm["plan"] = None
+            if internal or adm["status"] in (None, "active"):
+                adm["status"] = "auto"
+        if (adm["plan"], adm["status"]) == old:
+            return
+        adm.update({"updated_at": _iso(_now()), "updated_by": admin.get("email")})
+        await db.organizations.update_one({"id": org_id}, {"$set": {"saas.admin": adm}})
+        at = _iso(_now())
+        await db.saas_admin_history.insert_many([{"id": uuid.uuid4().hex, "org_id": org_id, "org_name": org.get("nome"), "admin_email": admin.get("email"),
+                                                  "at": at, "field": k, "old": o, "new": n, "reason": "Dati organizzazione"}
+                                                 for k, o, n in (("plan", old[0], adm["plan"]), ("status", old[1], adm["status"])) if o != n])
+        await deps["record_audit"](admin, "saas_formula_set", org_id=org_id, org_name=org.get("nome"), detail=f"formula: {(old[0] or 'nessuna').upper()} → {(plan or 'nessuna').upper()}")
 
     @r.get("/platform/saas/orgs/{org_id}/history")
     async def admin_org_history(org_id: str, admin: dict = Depends(deps["require_superadmin"])):
@@ -909,4 +983,4 @@ def build(db, deps: dict):
     return {"router": r, "get_config": get_config, "state_for": state_for, "is_saas": is_saas, "check": check, "check_limit": check_limit,
             "init_trial": init_trial, "handle_webhook": handle_webhook, "video_policy": video_policy,
             "video_consume": video_consume, "video_release": video_release, "gold_notice_hours": GOLD_NOTICE_HOURS,
-            "run_trial_notices": run_trial_notices}
+            "run_trial_notices": run_trial_notices, "set_formula": set_formula}

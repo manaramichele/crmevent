@@ -53,7 +53,7 @@ export default function TrialButton({ saas }) {
   );
   if (!trial && !ended) return null;
   const n = s.days_left;
-  const label = s.mode === "suspended" ? "Abbonamento sospeso" : ended ? "Prova terminata" : n === 1 ? "1 giorno rimasto" : `${n} giorni rimasti`;
+  const label = s.mode === "suspended" ? "Abbonamento sospeso" : ended && s.org_type && s.org_type !== "cliente" ? "Accesso scaduto" : ended ? "Prova terminata" : n === 1 ? "1 giorno rimasto" : `${n} giorni rimasti`;
   const short = s.mode === "suspended" ? "Sospeso" : ended ? "Terminata" : `${n} gg`;
   const tone = ended ? "bg-red-600 text-white hover:bg-red-700" : "bg-white text-[#0ABAB5] border-[1.5px] border-[#0ABAB5] hover:bg-[#0ABAB5]/10";
   const Icon = ended ? AlertTriangle : CalendarClock;

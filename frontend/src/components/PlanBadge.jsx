@@ -20,6 +20,19 @@ export const badgeFor = (s) => {
   return { ...p, label: `Piano ${s.plan_label || s.plan.toUpperCase()}`, extra: s.mode === "past_due" ? "Pagamento in sospeso" : null };
 };
 
+export const BILLING = { free: "Gratuito", trial: "Prova gratuita", paid: "Abbonamento a pagamento", none: "Nessun addebito" };
+
+export function FormulaBadge({ plan, testid }) {
+  const p = PLAN[plan];
+  if (!p) return <span className="text-xs text-slate-500" data-testid={testid}>Nessuna formula</span>;
+  const { Icon } = p;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full font-semibold ring-1 ring-inset whitespace-nowrap text-[11px] px-2 py-0.5 ${p.cls}`} data-testid={testid} data-plan={plan}>
+      {Icon && <Icon className="w-3 h-3" aria-hidden="true" />}{plan.toUpperCase()}
+    </span>
+  );
+}
+
 export default function PlanBadge({ s, testid = "plan-badge", size = "md" }) {
   const b = badgeFor(s);
   if (!b) return <span className="text-slate-400">—</span>;
