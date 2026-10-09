@@ -963,3 +963,8 @@ Task 2 — Creatività manuale:
 - Eccezioni Super Admin applicate anche in prova. Nessuna eliminazione dati su cambio piano; change-preview restituisce `over_limits` e il dialog avvisa.
 - UI: barre utilizzo in "Il mio abbonamento", avviso 80% chiudibile (localStorage), popup limite con "Passa al piano superiore", colonne utilizzo/limite nel Super Admin, testi "Fino a 5 eventi".
 
+
+## 2026-10-09 — Tabella comparativa piani compatta desktop/mobile ✅
+- `ComparisonTable`: table-fixed a 4 colonne (Funzionalità + 3 piani a larghezza uniforme), padding/caratteri/icone ridotti su mobile, nessun min-width né scroll orizzontale, max-w-3xl su desktop. Valori Eventi da config: 1 / Fino a 5 / Illimitati.
+- Verificato senza overflow a 320, 390 e 1440 px.
+
