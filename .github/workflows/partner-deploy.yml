@@ -1,0 +1,105 @@
+
+name: Deploy CRMEvent Partner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "partner-frontend/**"
+      - ".github/workflows/partner-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      rollback_to:
+        description: "Nome release per rollback (vuoto = nuovo deploy)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crmevent-partner
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: partner-frontend
+    env:
+      BASE: /opt/crmevent/partner
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.ARUBA_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.ARUBA_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rollback
+        if: ${{ github.event.inputs.rollback_to != '' }}
+        env:
+          RELEASE: ${{ inputs.rollback_to }}
+        run: |
+          case "$RELEASE" in
+            *[!a-zA-Z0-9._-]*|""|"."|"..")
+              echo "Nome release non valido"
+              exit 1
+              ;;
+          esac
+          ssh -i ~/.ssh/id_deploy \
+            "${{ secrets.ARUBA_USER }}@${{ secrets.ARUBA_HOST }}" \
+            "test -f '$BASE/releases/$RELEASE/build/index.html' &&
+             ln -s '$BASE/releases/$RELEASE' '$BASE/current.tmp' &&
+             mv -Tf '$BASE/current.tmp' '$BASE/current'"
+
+      - uses: actions/setup-node@v4
+        if: ${{ github.event.inputs.rollback_to == '' }}
+        with:
+          node-version: 20
+
+      - name: Build Partner
+        if: ${{ github.event.inputs.rollback_to == '' }}
+        env:
+          REACT_APP_BACKEND_URL: https://api.crmevent.it
+          CI: "false"
+        run: |
+          if [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --frozen-lockfile
+            yarn build
+          elif [ -f package-lock.json ]; then
+            npm ci
+            npm run build
+          else
+            echo "Lockfile mancante"
+            exit 1
+          fi
+          test -f build/index.html
+
+      - name: Pubblica su Aruba
+        if: ${{ github.event.inputs.rollback_to == '' }}
+        run: |
+          REL="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}"
+          TARGET="$BASE/releases/$REL"
+
+          ssh -i ~/.ssh/id_deploy \
+            "${{ secrets.ARUBA_USER }}@${{ secrets.ARUBA_HOST }}" \
+            "mkdir -p '$TARGET/build'"
+
+          rsync -az --delete \
+            -e "ssh -i $HOME/.ssh/id_deploy" \
+            build/ \
+            "${{ secrets.ARUBA_USER }}@${{ secrets.ARUBA_HOST }}:$TARGET/build/"
+
+          ssh -i ~/.ssh/id_deploy \
+            "${{ secrets.ARUBA_USER }}@${{ secrets.ARUBA_HOST }}" \
+            "test -f '$TARGET/build/index.html' &&
+             ln -s '$TARGET' '$BASE/current.tmp' &&
+             mv -Tf '$BASE/current.tmp' '$BASE/current'"
+
+          echo "Release pubblicata: $REL"
