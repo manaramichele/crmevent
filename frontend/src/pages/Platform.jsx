@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert, Mail } from "lucide-react";
 import PlatformUsers from "@/pages/PlatformUsers";
 import SaasAdmin from "@/pages/SaasAdmin";
+import NormalizePreview from "@/components/NormalizePreview";
 
 const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"]];
 
@@ -222,6 +223,7 @@ export default function Platform() {
         )}
       </div>
 
+      <NormalizePreview />
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800">Organizzazioni</div>
         <div className="overflow-x-auto">

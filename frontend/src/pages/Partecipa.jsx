@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2, CalendarDays, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { personName } from "@/lib/textCase";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 const CRM_LOGO = "/logo-crmevent.png?v=5";
@@ -220,8 +221,8 @@ export default function Partecipa() {
 
       <div className="mt-6 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <F label={t("nome")} req><Input value={form.nome} onChange={(e) => ch("nome", e.target.value)} data-testid="pf-nome" /></F>
-          <F label={t("cognome")} req><Input value={form.cognome} onChange={(e) => ch("cognome", e.target.value)} data-testid="pf-cognome" /></F>
+          <F label={t("nome")} req><Input value={form.nome} onChange={(e) => ch("nome", e.target.value)} onBlur={() => ch("nome", personName(form.nome))} data-testid="pf-nome" /></F>
+          <F label={t("cognome")} req><Input value={form.cognome} onChange={(e) => ch("cognome", e.target.value)} onBlur={() => ch("cognome", personName(form.cognome))} data-testid="pf-cognome" /></F>
           <F label={t("cellulare")} req>
             <div className="flex gap-2">
               <select value={form.prefix} onChange={(e) => ch("prefix", e.target.value)} className="border border-slate-200 rounded-md px-2 py-2 text-sm bg-white w-[112px] shrink-0" data-testid="pf-cellulare-prefix">

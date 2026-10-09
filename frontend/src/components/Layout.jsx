@@ -64,7 +64,7 @@ const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
-  { to: "/piattaforma/demo", label: "Demo", icon: CalendarDays, id: "piattaforma-demo" },
+  { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
   { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },

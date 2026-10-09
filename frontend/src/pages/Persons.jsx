@@ -24,6 +24,7 @@ import TeamMembersDialog, { teamCounts } from "@/components/TeamMembersDialog";
 import TeamSelect from "@/components/TeamSelect";
 import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 import { usePeople } from "@/lib/peopleStore";
+import { PERSON_RULES } from "@/lib/textCase";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
@@ -448,7 +449,7 @@ export default function Persons({ mode = "anagrafiche" }) {
       )}
 
       <EntityDialog open={formOpen} onOpenChange={setFormOpen} title={editing ? "Modifica persona" : "Nuova persona"}
-        fields={personFields} initial={editing} onSubmit={submitPerson} testid="person" />
+        fields={personFields} initial={editing} onSubmit={submitPerson} testid="person" caseRules={PERSON_RULES} />
       {detailId && <PersonDetailDialog personId={detailId} open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}
         events={events} settings={settings} onChanged={reload}
         onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={canInvite ? (p) => { setDetailId(null); setInvite(p); } : null} />}

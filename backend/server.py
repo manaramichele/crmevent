@@ -39,6 +39,7 @@ import subscriptions
 import pipeline_seed_sports
 import demo_booking
 import demo_slots
+import text_normalize as TN
 import home_widgets
 import marketplace
 import brevo_funnel
@@ -517,7 +518,7 @@ async def _create_organization(name: str, owner_user_id: Optional[str] = None,
         sub = {"status": org_type, "plan": "crmevent", "billing_cycle": None, "trial_start": None,
                "trial_end": None, "current_period_end": None, "stripe_customer_id": None,
                "stripe_subscription_id": None}
-    org = {"id": new_id(), "nome": name, "type": org_type, "status": status,
+    org = {"id": new_id(), "nome": TN.business_name(name), "type": org_type, "status": status,
            "owner_user_id": owner_user_id, "subscription": sub,
            "created_at": now_iso(), "updated_at": now_iso()}
     await db.organizations.insert_one(org)
@@ -559,6 +560,7 @@ async def _guard_last_admin(org: dict, exclude_user_id: str) -> None:
 
 # ---------------- generic crud ----------------
 async def _create(coll, data):
+    data = TN.normalize_fields(coll, data)
     doc = {**data, "id": new_id(), "created_at": now_iso(), "updated_at": now_iso()}
     await db[coll].insert_one(doc)
     doc.pop("_id", None)
@@ -577,7 +579,7 @@ async def _get(coll, _id):
 
 
 async def _update(coll, _id, data):
-    clean = {k: v for k, v in data.items() if v is not None}
+    clean = {k: v for k, v in TN.normalize_fields(coll, data).items() if v is not None}
     clean["updated_at"] = now_iso()
     res = await db[coll].update_one({"id": _id}, {"$set": clean})
     if res.matched_count == 0:
@@ -729,6 +731,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
     phone = _normalize_phone(body.telefono)
     uid = f"user_{uuid.uuid4().hex[:12]}"
     org = await _create_organization(body.org_name.strip(), uid)
+    body.nome, body.cognome = TN.person_name(body.nome), TN.person_name(body.cognome)
     full_name = f"{body.nome} {body.cognome or ''}".strip()
     await db.users.insert_one({"user_id": uid, "email": email, "name": full_name,
                                "nome": body.nome, "cognome": body.cognome, "registered_at": now_iso(),
@@ -836,7 +839,7 @@ async def google_session(request: Request, response: Response):
     user = await db.users.find_one({"email": email})
     if not user:
         uid = f"user_{uuid.uuid4().hex[:12]}"
-        await db.users.insert_one({"user_id": uid, "email": email, "name": data.get("name", email),
+        await db.users.insert_one({"user_id": uid, "email": email, "name": TN.person_name(data.get("name")) or email,
                                    "role": "admin", "auth_provider": "google", "active": True,
                                    "picture": data.get("picture", ""), "created_at": now_iso()})
     else:
@@ -1923,7 +1926,7 @@ async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_a
             return {"status": "exists", "person": {"id": existing["id"], "nome": existing.get("nome"), "cognome": existing.get("cognome"), "email": existing.get("email"), "cellulare": existing.get("cellulare")}}
         person = existing
     if not person:
-        person = {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()}
+        person = TN.normalize_fields("persons", {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()})
         await db.persons.insert_one({**person})
     categoria = body.categoria if body.categoria in ("staff", "volontario") else "staff"
     link = await db.staff.find_one({**oq(admin), "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
@@ -4121,8 +4124,8 @@ async def create_organization_admin(body: OrgCreateIn, admin: dict = Depends(req
 async def update_organization_admin(org_id: str, body: OrgUpdateIn, admin: dict = Depends(require_superadmin)):
     org = await _org_or_404(org_id)
     upd, changes = {}, []
-    if body.nome and body.nome.strip() != org.get("nome"):
-        upd["nome"] = body.nome.strip(); changes.append(f"nome: {org.get('nome')} → {body.nome.strip()}")
+    if body.nome and TN.business_name(body.nome.strip()) != org.get("nome"):
+        upd["nome"] = TN.business_name(body.nome.strip()); changes.append(f"nome: {org.get('nome')} → {upd['nome']}")
     if body.type and body.type in ("cliente", "interna", "test") and body.type != org.get("type"):
         upd["type"] = body.type; changes.append(f"tipo: {org.get('type')} → {body.type}")
     if body.status and body.status in ("active", "disabled") and body.status != org.get("status"):
@@ -4430,8 +4433,8 @@ async def platform_user_profile_update(user_id: str, body: PlatformUserProfileIn
         raise HTTPException(status_code=404, detail="Account non trovato")
     if u.get("role") == "superadmin":
         raise HTTPException(status_code=400, detail="L'anagrafica del Super Admin non è modificabile da qui")
-    nome = (body.nome or "").strip()
-    cognome = (body.cognome or "").strip()
+    nome = TN.person_name((body.nome or "").strip())
+    cognome = TN.person_name((body.cognome or "").strip())
     if not nome:
         raise HTTPException(status_code=400, detail="Il nome è obbligatorio")
     email = (body.email or "").strip().lower()
@@ -5402,8 +5405,8 @@ async def add_staff_candidate(org_id: str, body: StaffCandidateIn, user: dict = 
     conds = ([{"email": email}] if email else []) + ([{"cellulare": tel}] if tel else [])
     person = await db.persons.find_one({"org_id": org_id, "$or": conds}, {"_id": 0}) if conds else None
     if not person:
-        person = {"id": new_id(), "org_id": org_id, "nome": body.nome.strip(), "cognome": body.cognome.strip(),
-                  "email": email, "cellulare": tel, "created_at": now_iso()}
+        person = TN.normalize_fields("persons", {"id": new_id(), "org_id": org_id, "nome": body.nome.strip(), "cognome": body.cognome.strip(),
+                  "email": email, "cellulare": tel, "created_at": now_iso()})
         await db.persons.insert_one({**person})
     link = await db.staff.find_one({"org_id": org_id, "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
     if not link:
@@ -5604,7 +5607,7 @@ async def register_via_invite(token: str, body: InviteRegisterIn, response: Resp
         raise HTTPException(status_code=400, detail="La password deve avere almeno 8 caratteri")
     uid = f"user_{uuid.uuid4().hex[:12]}"
     inv_name = f"{(inv.get('nome') or '').strip()} {(inv.get('cognome') or '').strip()}".strip()
-    full_name = (body.name or inv_name or "").strip()
+    full_name = TN.person_name((body.name or inv_name or "").strip())
     phone = _normalize_phone(body.telefono or inv.get("telefono"))
     await db.users.insert_one({"user_id": uid, "email": email, "name": full_name,
         "password_hash": hash_password(body.password), "role": "member", "auth_provider": "password",
@@ -6541,7 +6544,7 @@ async def validate_billing(user: dict = Depends(require_admin)):
 
 @api.put("/account/billing")
 async def put_billing(body: BillingDetails, user: dict = Depends(require_admin)):
-    data = body.model_dump()
+    data = TN.normalize_fields("billing", body.model_dump())
     await db.organizations.update_one({"id": user["org_id"]}, {"$set": {"billing": data, "updated_at": now_iso()}})
     return data
 
@@ -10305,7 +10308,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     email = (body.email or "").strip().lower()
     raw_cell = (body.cellulare or "").strip()
     cell = _norm_phone(raw_cell) or raw_cell
-    submitted = {"nome": body.nome.strip(), "cognome": body.cognome.strip(), "email": email,
+    submitted = {"nome": TN.person_name(body.nome.strip()), "cognome": TN.person_name(body.cognome.strip()), "email": email,
                  "cellulare": cell, "data_nascita": birth, "codice_fiscale": cf_norm or None}
     person = await db.persons.find_one({"org_id": org_id, "email": email}, {"_id": 0}) if email else None
     if not person and cell:
@@ -13183,6 +13186,7 @@ async def require_org_member(request: Request, user: dict = Depends(get_current_
 
 app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
 app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS), prefix="/api")
+app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
     "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing, "record_invoice": _record_invoice,
