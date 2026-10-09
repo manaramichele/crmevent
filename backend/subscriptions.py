@@ -587,12 +587,36 @@ def build(db, deps: dict):
                           for k in PLAN_KEYS if cfg["plans"][k].get("active", True)]}
 
     # ---------------- Organizzazione ----------------
+    class UpgradeReqIn(BaseModel):
+        plan: str
+        note: Optional[str] = None
+
+    @r.post("/saas/upgrade-request")
+    async def upgrade_request(body: UpgradeReqIn, user: dict = Depends(deps["require_admin"])):
+        """Richiesta di upgrade per formule assegnate dall'amministrazione: nessun addebito, decide il Super Admin."""
+        if not (user.get("perm") or {}).get("admin"):
+            raise HTTPException(status_code=403, detail="Solo l'amministratore può gestire l'abbonamento")
+        if body.plan not in PLAN_KEYS:
+            raise HTTPException(status_code=400, detail="Piano non valido")
+        org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+        st = org_state(org, await get_config())
+        cur = st.get("plan") or st.get("assigned_plan")
+        if cur and PLAN_RANK[body.plan] <= PLAN_RANK[cur]:
+            raise HTTPException(status_code=400, detail="Scegli un piano superiore a quello attuale")
+        req = {"plan": body.plan, "note": (body.note or "").strip()[:500] or None, "requested_by": user.get("email"), "at": _iso(_now())}
+        await db.organizations.update_one({"id": org["id"]}, {"$set": {"saas.upgrade_request": req}})
+        await deps["record_audit"](user, "saas_upgrade_requested", org_id=org["id"], org_name=org.get("nome"), detail=f"richiesta upgrade a {body.plan.upper()}")
+        return {"ok": True, "upgrade_request": req}
+
     @r.get("/saas/me")
     async def me(user: dict = Depends(deps["require_admin"])):
         st = await state_for(user["org_id"])
         if not st["enabled"]:
             return st
         out = {**st, "video": await video_policy(user["org_id"]), "usage": await usage(user["org_id"])}
+        org_doc = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "saas.upgrade_request": 1}) or {}
+        out["upgrade_request"] = (org_doc.get("saas") or {}).get("upgrade_request")
+        out["can_manage_billing"] = bool((user.get("perm") or {}).get("admin"))
         if (user.get("perm") or {}).get("admin"):
             out["payments"] = await db.invoices.find({"org_id": user["org_id"], "kind": "saas_subscription"}, {"_id": 0}).sort("data", -1).to_list(100)
         return out
@@ -884,6 +908,7 @@ def build(db, deps: dict):
             t = o.get("type") or "cliente"
             row = {"id": o["id"], "nome": o.get("nome"), "type": t, "created_at": o.get("created_at"),
                    "model": "abbonamento" if (st["enabled"] or t != "cliente") else "crediti", "billing": st.get("billing"),
+                   "upgrade_request": (o.get("saas") or {}).get("upgrade_request"),
                    "credits_balance": (o.get("credits") or {}).get("balance")}
             if not st["enabled"] and t != "cliente":
                 row.update({"mode": None, "plan": None, "admin": ((o.get("saas") or {}).get("admin")), "expires_at": None, "limits": None,
@@ -956,7 +981,7 @@ def build(db, deps: dict):
         for k in ("trial_start", "trial_end"):
             if new[k]:
                 upd[f"saas.{k}"] = new[k]
-        await db.organizations.update_one({"id": org_id}, {"$set": upd})
+        await db.organizations.update_one({"id": org_id}, {"$set": upd, **({"$unset": {"saas.upgrade_request": ""}} if upd["saas.admin"].get("plan") != prev.get("plan") else {})})
         at = _iso(_now())
         await db.saas_admin_history.insert_many([{"id": uuid.uuid4().hex, "org_id": org_id, "org_name": org.get("nome"), "admin_email": admin.get("email"),
                                                   "at": at, "field": k, "old": o, "new": n, "reason": (body.reason or "").strip()[:500]} for k, o, n in changes])
@@ -989,7 +1014,7 @@ def build(db, deps: dict):
         if (adm["plan"], adm["status"]) == old:
             return
         adm.update({"updated_at": _iso(_now()), "updated_by": admin.get("email")})
-        await db.organizations.update_one({"id": org_id}, {"$set": {"saas.admin": adm}})
+        await db.organizations.update_one({"id": org_id}, {"$set": {"saas.admin": adm}, **({"$unset": {"saas.upgrade_request": ""}} if plan else {})})
         at = _iso(_now())
         await db.saas_admin_history.insert_many([{"id": uuid.uuid4().hex, "org_id": org_id, "org_name": org.get("nome"), "admin_email": admin.get("email"),
                                                   "at": at, "field": k, "old": o, "new": n, "reason": "Dati organizzazione"}
