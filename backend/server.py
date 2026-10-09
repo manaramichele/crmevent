@@ -39,6 +39,7 @@ import subscriptions
 import pipeline_seed_sports
 import demo_booking
 import demo_slots
+import home_widgets
 import marketplace
 import brevo_funnel
 import social_ai
@@ -4403,7 +4404,7 @@ async def platform_user_delete(user_id: str, admin: dict = Depends(require_super
     if u.get("person_id"):
         await db.persons.update_one({"id": u["person_id"]},
                                     {"$set": {"invite_status": None, "user_role": None, "updated_at": now_iso()}})
-    for coll in ("user_sessions", "password_reset_tokens", "calendar_connections", "calendar_event_links"):
+    for coll in ("user_sessions", "password_reset_tokens", "calendar_connections", "calendar_event_links", "user_notes"):
         await db[coll].delete_many({"user_id": user_id})
     await db.users.delete_one({"user_id": user_id})
     await record_audit(admin, "account_deleted", org_id=u.get("org_id"),
@@ -13181,6 +13182,7 @@ async def require_org_member(request: Request, user: dict = Depends(get_current_
 
 
 app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
+app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS), prefix="/api")
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
     "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing, "record_invoice": _record_invoice,
