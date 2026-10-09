@@ -956,3 +956,10 @@ Task 2 — Creatività manuale:
 - Elenco Abbonamenti: tutte le organizzazioni, colonne Tipo/Formula/Stato/Condizione, filtro Tipo, "Nessuna scadenza"/"Nessun addebito" per le gratuite.
 - Header e "Il mio abbonamento" mostrano il badge anche per Interne/Test; nessun piano picker per Interne/Test.
 
+
+## 2026-10-09 — Limiti SILVER 5 eventi + gestione limiti ✅ (iteration_108: backend 12/12, frontend 100%)
+- SILVER: 5 eventi / 30 utenti / 3 videochiamate (DEFAULT_LIMITS + migrazione una tantum `silver_limits_v2` sulla config salvata). Prezzi/sconto annuale/Stripe invariati.
+- Eventi: contatore atomico `saas_usage.events_created` (gli eventi eliminati contano, scelta utente), riserva atomica anti-concorrenza. Utenti: membership attive + inviti validi in attesa (posto riservato).
+- Eccezioni Super Admin applicate anche in prova. Nessuna eliminazione dati su cambio piano; change-preview restituisce `over_limits` e il dialog avvisa.
+- UI: barre utilizzo in "Il mio abbonamento", avviso 80% chiudibile (localStorage), popup limite con "Passa al piano superiore", colonne utilizzo/limite nel Super Admin, testi "Fino a 5 eventi".
+
