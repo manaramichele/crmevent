@@ -309,7 +309,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "indirizzo", label: "Indirizzo" }, { name: "cap", label: "CAP" }, { name: "citta", label: "Città" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "foto_url", label: "Foto (URL)" }, { name: "note", label: "Note", type: "textarea", full: true },
-  ];
+  ].filter((f) => mode !== "staff" || !["email_secondaria", "azienda_id"].includes(f.name));
   const submitPerson = async (form) => {
     if (editing) { await api.put(`/persons/${editing.id}`, form); toast.success("Persona aggiornata"); }
     else { await api.post("/persons", form); toast.success("Persona creata"); }
