@@ -1040,3 +1040,8 @@ Task 2 — Creatività manuale:
 - `MySubscription.jsx`: pulsante Tiffany "Cambia piano" in alto a destra del riepilogo → `PlanPickerDialog` (3 piani, 6/12 mesi, piano attuale evidenziato, `recommendPlan` su eventi + Staff/Volontari reali, conferma esplicita per formule gratuite). Riusa checkout / change-preview / change Stripe esistenti. `?upgrade=1` apre il dialog (usato da PlanLimitDialog). Interne/Test: nessun pulsante.
 - Header: `PlanBadge size="lg"` (+20%) con effetto `.cta-shimmer .cta-shimmer-5` (5 s, prefers-reduced-motion rispettato), apre Il mio abbonamento.
 
+
+## 2026-10-09 — "Passa a un piano superiore" + richieste upgrade formule assegnate ✅ (iteration_121: backend 7/7, frontend 100%)
+- Pulsante Tiffany con shimmer nel riepilogo (solo permesso economico, nascosto con GOLD). Dialog: piano attuale evidenziato + solo piani superiori; Stripe esistente per clienti, conferma esplicita per formule gratuite.
+- Interne/Test: `POST /api/saas/upgrade-request` (nessun addebito) → `saas.upgrade_request`, visibile nel dialog e in Super Admin ("Richiesta upgrade: X"); azzerata quando il Super Admin assegna una nuova formula.
+
