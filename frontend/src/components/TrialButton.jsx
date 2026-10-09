@@ -43,11 +43,11 @@ export default function TrialButton({ saas }) {
   const [open, setOpen] = useState(false);
   if (!s?.enabled) return null;
   const trial = s.mode === "trial" && !s.purchased;
-  const ended = s.mode === "expired" || s.mode === "canceled";
+  const ended = s.mode === "expired" || s.mode === "canceled" || s.mode === "suspended";
   if (!trial && !ended) return null;
   const n = s.days_left;
-  const label = ended ? "Prova terminata" : n === 1 ? "1 giorno rimasto" : `${n} giorni rimasti`;
-  const short = ended ? "Terminata" : `${n} gg`;
+  const label = s.mode === "suspended" ? "Abbonamento sospeso" : ended ? "Prova terminata" : n === 1 ? "1 giorno rimasto" : `${n} giorni rimasti`;
+  const short = s.mode === "suspended" ? "Sospeso" : ended ? "Terminata" : `${n} gg`;
   const tone = ended ? "bg-red-600 text-white hover:bg-red-700" : "bg-white text-[#0ABAB5] border-[1.5px] border-[#0ABAB5] hover:bg-[#0ABAB5]/10";
   const Icon = ended ? AlertTriangle : CalendarClock;
   const go = () => { setOpen(false); navigate("/profilo?tab=abbonamento"); };

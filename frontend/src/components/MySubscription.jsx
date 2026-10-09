@@ -10,7 +10,7 @@ import { usePlans, PlanCard, CycleToggle, eur } from "@/components/PlansSection"
 
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const CYC = { monthly: "Mensile", yearly: "Annuale" };
-const MODE = { trial: "Prova gratuita", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Annullato", expired: "Prova terminata" };
+const MODE = { trial: "Prova gratuita", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Annullato", expired: "Scaduto", suspended: "Sospeso" };
 
 function Field({ label, value, testid }) {
   return <div><div className="text-xs uppercase text-slate-400 font-medium">{label}</div><div className="text-slate-800 font-medium" data-testid={testid}>{value}</div></div>;

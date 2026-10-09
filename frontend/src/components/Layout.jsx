@@ -108,6 +108,7 @@ function trialInfo(s) {
     const n = s.days_left;
     return { urgent: n <= 3, text: `Prova gratuita · ${n === 1 ? "Ti resta 1 giorno" : `Ti restano ${n} giorni`}`, short: `${n}g` };
   }
+  if (s.mode === "suspended") return { expired: true, urgent: true, text: "Abbonamento sospeso – Contatta l'assistenza CRMEvent", short: "Sospeso" };
   if (s.mode === "expired" || s.mode === "canceled") return { expired: true, urgent: true, text: s.mode === "expired" ? "Prova terminata – Scegli il tuo piano" : "Abbonamento terminato – Scegli il tuo piano", short: "Prova terminata" };
   if (s.mode === "past_due") return { urgent: true, text: "Pagamento non riuscito – Aggiorna il metodo di pagamento", short: "Pagamento" };
   return null;

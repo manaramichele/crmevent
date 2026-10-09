@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { Save, Pencil, Search } from "lucide-react";
+import SubscriptionEditDialog from "@/components/SubscriptionEditDialog";
 
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
-const MODE = { trial: "Prova", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Annullato", expired: "Prova terminata" };
+const MODE = { trial: "Prova gratuita", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Scaduto", expired: "Scaduto", suspended: "Sospeso" };
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 
 function PlanEditor({ k, p, catalog, onChange }) {
@@ -60,31 +61,54 @@ function ConfigTab() {
   );
 }
 
+function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe }) {
+  const s = "h-9 rounded-md border border-slate-200 bg-white px-2 text-sm";
+  return (
+    <div className="flex flex-wrap gap-2 mb-3" data-testid="saas-filters">
+      <div className="relative w-full sm:w-64"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca organizzazione" className="pl-8 h-9" data-testid="saas-search" /></div>
+      <select value={fp} onChange={(e) => setFp(e.target.value)} className={s} data-testid="saas-filter-plan"><option value="">Tutte le formule</option><option value="bronze">BRONZE</option><option value="silver">SILVER</option><option value="gold">GOLD</option></select>
+      <select value={fs} onChange={(e) => setFs(e.target.value)} className={s} data-testid="saas-filter-status"><option value="">Tutti gli stati</option><option value="trial">Prova gratuita</option><option value="active">Attivo</option><option value="expired">Scaduto</option><option value="suspended">Sospeso</option></select>
+      <select value={fe} onChange={(e) => setFe(e.target.value)} className={s} data-testid="saas-filter-expiry"><option value="">Qualsiasi scadenza</option><option value="7">Entro 7 giorni</option><option value="30">Entro 30 giorni</option><option value="past">Già scaduti</option></select>
+    </div>
+  );
+}
+const endOf = (r) => (r.mode === "trial" ? r.trial_end : r.access_end || r.current_period_end || r.trial_end);
+const stOf = (r) => (r.mode === "canceled" ? "expired" : r.mode === "past_due" ? "active" : r.mode);
+
 function OrgsTab() {
   const [rows, setRows] = useState(null);
+  const [edit, setEdit] = useState(null);
+  const [q, setQ] = useState(""); const [fp, setFp] = useState(""); const [fs, setFs] = useState(""); const [fe, setFe] = useState("");
   const load = useCallback(() => api.get("/platform/saas/organizations").then(({ data }) => setRows(data)).catch(err), []);
   useEffect(() => { load(); }, [load]);
   const post = async (url, body, msg) => { try { await api.post(url, body); toast.success(msg); load(); } catch (e) { err(e); } };
   if (!rows) return <p className="text-sm text-slate-400">Caricamento...</p>;
+  const now = Date.now();
+  const shown = rows.filter((r) => (!q || (r.nome || "").toLowerCase().includes(q.toLowerCase())) && (!fp || r.plan === fp || r.paid_plan === fp)
+    && (!fs || stOf(r) === fs) && (!fe || (() => { const e = endOf(r); if (!e) return false; const dd = (new Date(e) - now) / 864e5; return fe === "past" ? dd < 0 : dd >= 0 && dd <= Number(fe); })()));
   return (
+    <>
+    <OrgsFilters {...{ q, setQ, fp, setFp, fs, setFs, fe, setFe }} />
+    {edit && <SubscriptionEditDialog row={edit} onClose={() => setEdit(null)} onSaved={load} />}
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="saas-orgs-table">
       <table className="w-full min-w-[1100px] text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Modello", "Piano", "Stato", "Periodicità", "Importo", "Attivazione", "Rinnovo", "Scadenza prova", "Pagamenti", "Fatture", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
-        <tbody>{rows.map((r) => (
+        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Formula", "Stato", "Periodicità", "Data inizio", "Data scadenza", "Prossimo rinnovo", "Utenti", "Eventi", "Pagamenti", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+        <tbody>{shown.map((r) => (
           <tr key={r.id} className="border-t border-slate-100" data-testid={`saas-org-${r.id}`}>
-            <td className="px-3 py-2 font-medium">{r.nome}</td>
-            <td className="px-3 py-2">{r.model === "abbonamento" ? "Abbonamento" : "Da migrare"}</td>
+            <td className="px-3 py-2 font-medium">{r.nome}{r.admin?.comp ? <span className="ml-1 text-[10px] rounded bg-emerald-50 text-emerald-700 px-1">Omaggio</span> : null}</td>
             <td className="px-3 py-2">{r.plan_label || (r.paid_plan || "—").toUpperCase()}{r.pending_change ? ` → ${r.pending_change.plan.toUpperCase()}` : ""}</td>
-            <td className="px-3 py-2">{MODE[r.mode] || "—"}{r.cancel_at_period_end ? " · annullato a fine periodo" : ""}</td>
-            <td className="px-3 py-2">{r.billing_cycle === "yearly" ? "Annuale" : r.billing_cycle === "monthly" ? "Mensile" : "—"}</td>
-            <td className="px-3 py-2">{r.price_amount ? `€${r.price_amount}` : "—"}</td>
-            <td className="px-3 py-2">{d(r.activated_at)}</td>
-            <td className="px-3 py-2">{d(r.current_period_end)}</td>
-            <td className="px-3 py-2">{d(r.trial_end)}{r.mode === "trial" ? ` (${r.days_left} gg)` : ""}</td>
+            <td className="px-3 py-2">{MODE[r.mode] || "—"}{r.mode === "trial" ? ` (${r.days_left} gg)` : ""}{r.cancel_at_period_end ? " · annullato a fine periodo" : ""}</td>
+            <td className="px-3 py-2">{(r.admin?.billing_cycle || r.billing_cycle) === "yearly" ? "Annuale" : (r.admin?.billing_cycle || r.billing_cycle) === "monthly" ? "Mensile" : "—"}</td>
+            <td className="px-3 py-2">{d(r.mode === "trial" ? r.trial_start : r.admin?.access_start || r.current_period_start || r.activated_at)}</td>
+            <td className="px-3 py-2">{d(endOf(r))}</td>
+            <td className="px-3 py-2">{d(r.admin?.renewal_date || (r.stripe_status === "active" ? r.current_period_end : null))}</td>
+            <td className="px-3 py-2">{r.users_count ?? "—"}{r.limits?.max_users > 0 ? `/${r.limits.max_users}` : ""}</td>
+            <td className="px-3 py-2">{r.events_count ?? "—"}{r.limits?.max_events > 0 ? `/${r.limits.max_events}` : ""}</td>
             <td className="px-3 py-2">{r.payments_count ?? "—"}{r.payments_total ? ` · €${r.payments_total}` : ""}</td>
-            <td className="px-3 py-2">{r.invoices_count ?? "—"}</td>
             <td className="px-3 py-2">{r.model !== "abbonamento" ? "—" : r.video_unlimited ? `${r.video_used ?? 0} · illimitate` : r.video_quota ? `${r.video_used ?? 0}/${r.video_quota}` : "Email"}</td>
             <td className="px-3 py-2 whitespace-nowrap space-x-1">
+              {r.model === "abbonamento" && <Button size="sm" variant="outline" onClick={() => setEdit(r)} data-testid={`saas-edit-${r.id}`}><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>}
               {r.model !== "abbonamento"
                 ? <Button size="sm" variant="outline" onClick={() => window.confirm(`Passare ${r.nome} al modello ad abbonamento con prova GOLD? Operazione non reversibile dall'interfaccia.`) && post(`/platform/saas/orgs/${r.id}/enable-trial`, {}, "Prova GOLD attivata")} data-testid={`saas-enable-${r.id}`}>Attiva prova</Button>
                 : <>
@@ -96,6 +120,7 @@ function OrgsTab() {
         ))}</tbody>
       </table>
     </div>
+    </>
   );
 }
 
