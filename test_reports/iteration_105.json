@@ -1,0 +1,19 @@
+{
+  "summary": "Iter105 - To Do List assign responsabile. Backend: 10/10 pytest pass. Verified GET /my/todo returns responsabile_id, GET /my/todo/assignees returns only org persons sorted by (cognome,nome), POST /my/todo/assign for tipo=attivita/followup/pipeline sets only responsabile_id (scadenza/priorita/stato/evento_id/event_id/data unchanged confirmed via direct Mongo compare), null removes assignment, foreign-org person -> 400, unknown id -> 404, non-admin member with empty attivita permissions -> 403. One real QA pipeline task was temporarily reassigned and restored to its original responsabile_id. GET /api/activities now includes responsabile_id for assigned items. UI desktop (1920x1080): logged in as qa.eventi@crmeventqa.it; dashboard shows todo-assign-{id}, popover todo-assign-menu-{id} opens, todo-assign-search filters list, clicking todo-assign-opt-{personId} saves and the trigger label updates to the person name, todo-assign-remove clears back to 'Assegna'. todo-filter-tipo-* and todo-filter-evento still present. UI mobile 390px: popover fits viewport (256px wide, offset 68). Activities page /attivita renders 'Responsabile' column. TEST_ activity + TEST_ followup created in QA org via POST /api/activities and /api/followups and deleted at end. Non-admin membership permissions restored.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter105_todo_assign.py", "/app/test_reports/pytest/iter105.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "home_widgets._query strips 'stato' key via q.pop('stato') before update to allow reassigning closed items; acceptable because the complete flow is handled separately. Note: assign still enforces responsabile scope for non-admin (sc['persona'] + None/empty), which may prevent a non-admin from reassigning a task that was already assigned to someone else—likely the intended behaviour.",
+    "AssignSelect returns a flat list of up to 5000 persons from /my/todo/assignees per load; cached per-component via loadPeople+useQuery would reduce calls. Not blocking.",
+    "normalize_permissions treats missing 'sections' dict as 'use defaults' (full access for role=user). This means setting membership permissions to {} does NOT restrict — restriction requires an explicit sections dict with empty arrays. Documented here for future test authors."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter105_todo_assign.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% on acceptance checks"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! (org_qa_eventi); Super Admin manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Created TEST_iter105_act_* activity and TEST_iter105_fu_* followup in org_qa_eventi; deleted at end of module. One real pipeline task was reassigned then restored to original responsabile_id. Non-admin user user_f7b931f6759f membership permissions snapshotted and restored.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reusable regression file /app/backend/tests/test_iter105_todo_assign.py. Requires REACT_APP_BACKEND_URL, MONGO_URL, DB_NAME, JWT_SECRET in env. Login via /api/auth/login (cookie-based) + X-Org-Id header for QA. To test non-admin perm restrictions you must explicitly set memberships.permissions.sections to a dict with empty arrays (empty {} normalizes to full defaults)."
+}
