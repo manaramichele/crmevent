@@ -58,6 +58,10 @@ import PlatformDemoRequests from "@/pages/PlatformDemoRequests";
 import QuickActions from "@/pages/QuickActions";
 import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
+import PlatformPartners from "@/pages/PlatformPartners";
+import { captureReferral } from "@/lib/referral";
+
+captureReferral();
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
 const isSuper = (u) => u && u.role === "superadmin";
@@ -166,6 +170,7 @@ function Shell() {
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/messaggi" element={<Protected><SuperAdminOnly><PlatformMessages /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/novita" element={<Protected><SuperAdminOnly><PlatformNews /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/partner" element={<Protected><SuperAdminOnly><PlatformPartners /></SuperAdminOnly></Protected>} />
         <Route path="/novita" element={<Protected><News /></Protected>} />
         <Route path="/piattaforma/org/:id" element={<Protected><SuperAdminOnly><OrgDetail /></SuperAdminOnly></Protected>} />
         <Route path="/audit" element={<Protected><SuperAdminOnly><AuditLog /></SuperAdminOnly></Protected>} />

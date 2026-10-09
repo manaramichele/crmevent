@@ -27,6 +27,7 @@ export default function Login() {
         <Field label="Email"><Input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required autoComplete="email" data-testid="login-email" /></Field>
         <Field label="Password"><Input type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required autoComplete="current-password" data-testid="login-password" /></Field>
         <Button type="submit" disabled={busy} className="w-full" data-testid="login-submit">{busy ? "Accesso..." : "Accedi"}</Button>
+        <p className="text-right text-sm"><Link to="/password-dimenticata" className="text-slate-500 hover:text-ink hover:underline" data-testid="link-forgot">Password dimenticata?</Link></p>
       </form>
       <p className="text-sm text-slate-500 text-center">Non sei ancora partner? <Link to="/registrati" className="font-semibold text-tiffany-fg hover:underline" data-testid="link-register">Registrati</Link></p>
     </AuthShell>

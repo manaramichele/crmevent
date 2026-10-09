@@ -713,7 +713,7 @@ class OrgRegisterIn(BaseModel):
     org_name: str
     telefono: Optional[str] = None
     accept_terms: bool = False
-    ref: Optional[str] = None
+    ref: Optional[dict] = None
 
 
 class CompleteOrgIn(BaseModel):
@@ -723,7 +723,7 @@ class CompleteOrgIn(BaseModel):
     nome: Optional[str] = None
     cognome: Optional[str] = None
     marketing_consent: bool = False
-    ref: Optional[str] = None
+    ref: Optional[dict] = None
 
 
 TERMS_VERSION = "2026-10"
@@ -752,7 +752,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
                                "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso(),
                                "self_registered": True, "welcome_demo": "pending"})
     await _ensure_membership(uid, org["id"], "admin_org", uid)
-    await PARTNER["attach_referral"](org["id"], org.get("nome"), email, body.ref)
+    await PARTNER["attach_referral"](org["id"], org.get("nome"), {"email": email, "telefono": phone}, body.ref)
     # Lead continuity: if this email already requested a demo, link that lead to the new account
     # (no duplicate contact) and advance the funnel — preserving the lead → demo → trial history.
     lead = await db.leads.find_one({"email": email})
@@ -808,7 +808,7 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
         upd.update({"nome": nome, "cognome": cognome or None, "name": f"{nome} {cognome}".strip()})
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd, "$unset": {"org_onboarding_lock": ""}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
-    await PARTNER["attach_referral"](org["id"], org.get("nome"), user.get("email"), body.ref)
+    await PARTNER["attach_referral"](org["id"], org.get("nome"), {"email": user.get("email"), "telefono": phone}, body.ref)
     try:
         await sync_registered_user(user["user_id"], org["id"], nome=nome or None, cognome=cognome or None, source="registration")
     except Exception as e:
@@ -13258,6 +13258,7 @@ SAAS.update(subscriptions.build(db, {
 PARTNER = partner_portal.build(db, {"hash_password": hash_password, "verify_password": verify_password, "person_name": TN.person_name,
                                     "require_superadmin": require_superadmin, "record_audit": record_audit, "saas_config": SAAS["get_config"]})
 app.include_router(PARTNER["router"])
+app.add_event_handler("startup", PARTNER["ensure_indexes"])
 app.include_router(api)
 app.include_router(SAAS["router"])
 async def require_org_member(request: Request, user: dict = Depends(get_current_user)) -> dict:

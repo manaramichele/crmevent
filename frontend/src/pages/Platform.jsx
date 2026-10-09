@@ -8,10 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Unlink, Plus, X, Trash2, Power, ShieldAlert, Mail } from "lucide-react";
 import PlatformUsers from "@/pages/PlatformUsers";
 import SaasAdmin from "@/pages/SaasAdmin";
-import PlatformPartners from "@/pages/PlatformPartners";
 import NormalizePreview from "@/components/NormalizePreview";
 
-const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"], ["partner", "Partner"]];
+const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"]];
 
 function SectionSwitch({ value, onChange }) {
   return (
@@ -119,7 +118,6 @@ export default function Platform() {
       <SectionSwitch value={sez} onChange={setSez} />
 
       {sez === "abbonamenti" && <SaasAdmin embedded />}
-      {sez === "partner" && <PlatformPartners />}
       {sez === "organizzazioni" && <>
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-8">

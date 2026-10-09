@@ -6,6 +6,7 @@ import Register from "@/pages/Register";
 import Login from "@/pages/Login";
 import CompleteProfile from "@/pages/CompleteProfile";
 import Dashboard from "@/pages/Dashboard";
+import { ForgotPassword, ResetPassword } from "@/pages/Password";
 
 function Private({ children }) {
   const { partner } = useAuth();
@@ -25,6 +26,8 @@ export default function App() {
           <Route path="/registrati" element={<Register />} />
           <Route path="/login" element={<Login />} />
           <Route path="/completa-profilo" element={<CompleteProfile />} />
+          <Route path="/password-dimenticata" element={<ForgotPassword />} />
+          <Route path="/reimposta-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Private><Dashboard /></Private>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

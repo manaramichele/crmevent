@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { BadgeCheck, LogOut } from "lucide-react";
 import SupportBanner from "@/components/SupportBanner";
+import { getReferral, clearReferral } from "@/lib/referral";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 
@@ -60,9 +61,9 @@ export default function CompleteOrg() {
     try {
       const { data } = await api.post("/auth/complete-organization", {
         org_name: form.org_name.trim(), telefono: form.telefono, accept_terms: true, marketing_consent: marketing,
-        nome: personName(form.nome.trim()), cognome: personName(form.cognome.trim()), ref: localStorage.getItem("crmevent_ref") || null,
+        nome: personName(form.nome.trim()), cognome: personName(form.cognome.trim()), ref: getReferral(),
       });
-      try { localStorage.removeItem("crmevent_ref"); } catch {}
+      clearReferral();
       setUser(data);
       toast.success("Organizzazione creata! Prova gratuita di 14 giorni attivata.");
       nav("/app", { replace: true });
