@@ -9,6 +9,7 @@ import {
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
+import PlanLimitDialog from "@/components/PlanLimitDialog";
 import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
 import WelcomeDemo from "@/components/WelcomeDemo";
@@ -62,10 +63,8 @@ const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
-  { to: "/piattaforma/utenti", label: "Gestione Utenti", icon: UserCog, id: "piattaforma-utenti" },
-  { to: "/piattaforma/abbonamenti", label: "Abbonamenti", icon: BadgeEuro, id: "abbonamenti" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
-  { to: "/piattaforma/demo", label: "Demo", icon: CalendarDays, id: "piattaforma-demo" },
+  { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
   { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
@@ -428,6 +427,7 @@ export default function Layout({ children }) {
         </main>
       </div>
       <SupportChat fab={false} />
+      <PlanLimitDialog />
       <WelcomeDemo />
     </div>
   );

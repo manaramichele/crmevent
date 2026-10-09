@@ -22,8 +22,10 @@ function PlanEditor({ k, p, catalog, onChange }) {
         <label>Mensile €<Input type="number" step="0.01" value={p.monthly} onChange={(e) => set("monthly", parseFloat(e.target.value))} data-testid={`saas-monthly-${k}`} /></label>
         <label>Annuale €<Input type="number" step="0.01" value={p.yearly} onChange={(e) => set("yearly", parseFloat(e.target.value))} data-testid={`saas-yearly-${k}`} /></label>
         <label>Video/mese<Input type="number" value={p.video_quota} onChange={(e) => set("video_quota", parseInt(e.target.value, 10))} data-testid={`saas-video-${k}`} /></label>
+        <label>Max eventi<Input type="number" value={p.max_events ?? -1} onChange={(e) => set("max_events", parseInt(e.target.value, 10))} data-testid={`saas-max-events-${k}`} /></label>
+        <label>Max utenti<Input type="number" value={p.max_users ?? -1} onChange={(e) => set("max_users", parseInt(e.target.value, 10))} data-testid={`saas-max-users-${k}`} /></label>
       </div>
-      <p className="text-[11px] text-slate-400">Videochiamate: 0 = solo email, -1 = illimitate.</p>
+      <p className="text-[11px] text-slate-400">Videochiamate: 0 = solo email, -1 = illimitate. Eventi/utenti: -1 = illimitati (utenti = account con accesso, esclusi staff e volontari).</p>
       <div className="flex flex-wrap gap-1.5">{catalog.map((f) => (
         <button key={f.key} type="button" onClick={() => toggle(f.key)} data-testid={`saas-feature-${k}-${f.key}`}
           className={`rounded-full px-2.5 py-1 text-xs border ${p.features.includes(f.key) ? "bg-[#0ABAB5]/15 border-[#0ABAB5] text-slate-900" : "border-slate-200 text-slate-400"}`}>{f.label}</button>
@@ -118,10 +120,10 @@ function MigrationTab() {
   );
 }
 
-export default function SaasAdmin() {
+export default function SaasAdmin({ embedded = false }) {
   return (
     <div className="animate-fade-up space-y-4" data-testid="saas-admin-page">
-      <PageHeader title="Abbonamenti" subtitle="Piani BRONZE, SILVER e GOLD: prezzi, funzionalità, prova gratuita e stato delle organizzazioni" />
+      {!embedded && <PageHeader title="Abbonamenti" subtitle="Piani BRONZE, SILVER e GOLD: prezzi, funzionalità, prova gratuita e stato delle organizzazioni" />}
       <Tabs defaultValue="orgs">
         <TabsList className="mb-4 w-full sm:w-auto overflow-x-auto justify-start h-auto flex-nowrap">
           <TabsTrigger value="orgs" data-testid="saas-tab-orgs">Organizzazioni</TabsTrigger>

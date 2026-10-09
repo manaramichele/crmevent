@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import SettingSelect from "@/components/SettingSelect";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { CASE_FN, COMPANY_RULES } from "@/lib/textCase";
 
 const emptyRef = { nome: "", cognome: "", ruolo: "", email: "", cellulare: "", referente_principale: false };
 
@@ -22,6 +23,7 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
 
   useEffect(() => { setF(initial || { nazione: "Italia", tipo: "Azienda" }); setRefs([]); }, [initial, open]);
   const ch = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const fix = (k) => () => setF((s) => (typeof s[k] === "string" ? { ...s, [k]: CASE_FN[COMPANY_RULES[k]](s[k]) } : s));
 
   const save = async () => {
     if (!f.nome) { toast.error("Ragione sociale obbligatoria"); return; }
@@ -66,7 +68,7 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
         <DialogHeader><DialogTitle className="font-display">{editing ? "Modifica azienda" : "Nuova azienda"}</DialogTitle>
           <DialogDescription className="sr-only">Anagrafica azienda e referenti</DialogDescription></DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
-          <div className="sm:col-span-2 space-y-1.5"><Label className="text-xs">Ragione sociale*</Label><Input value={f.nome || ""} onChange={(e) => ch("nome", e.target.value)} data-testid="field-nome" /></div>
+          <div className="sm:col-span-2 space-y-1.5"><Label className="text-xs">Ragione sociale*</Label><Input value={f.nome || ""} onChange={(e) => ch("nome", e.target.value)} onBlur={fix("nome")} data-testid="field-nome" /></div>
           <div className="space-y-1.5"><Label className="text-xs">Settore</Label>
             <SettingSelect settingKey="settori" value={f.settore} onChange={(v) => ch("settore", v)} options={settings?.settori || []} addLabel="Aggiungi nuovo settore" testid="field-settore" /></div>
           <div className="space-y-1.5"><Label className="text-xs">Tipo</Label>
@@ -77,10 +79,10 @@ export default function CompanyDialog({ open, onOpenChange, initial, onSaved }) 
           <div className="space-y-1.5"><Label className="text-xs">Telefono</Label><Input value={f.telefono || ""} onChange={(e) => ch("telefono", e.target.value)} /></div>
           <div className="space-y-1.5"><Label className="text-xs">Indirizzo</Label><Input value={f.indirizzo || ""} onChange={(e) => ch("indirizzo", e.target.value)} /></div>
           <div className="space-y-1.5"><Label className="text-xs">CAP</Label><Input value={f.cap || ""} onChange={(e) => ch("cap", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label className="text-xs">Città</Label><Input value={f.citta || ""} onChange={(e) => ch("citta", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label className="text-xs">Città</Label><Input value={f.citta || ""} onChange={(e) => ch("citta", e.target.value)} onBlur={fix("citta")} /></div>
           <div className="space-y-1.5"><Label className="text-xs">Provincia</Label><Input value={f.provincia || ""} onChange={(e) => ch("provincia", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label className="text-xs">Regione</Label><Input value={f.regione || ""} onChange={(e) => ch("regione", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label className="text-xs">Nazione</Label><Input value={f.nazione || ""} onChange={(e) => ch("nazione", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label className="text-xs">Regione</Label><Input value={f.regione || ""} onChange={(e) => ch("regione", e.target.value)} onBlur={fix("regione")} /></div>
+          <div className="space-y-1.5"><Label className="text-xs">Nazione</Label><Input value={f.nazione || ""} onChange={(e) => ch("nazione", e.target.value)} onBlur={fix("nazione")} /></div>
           <div className="space-y-1.5"><Label className="text-xs">Responsabile interno</Label><Input value={f.responsabile_interno || ""} onChange={(e) => ch("responsabile_interno", e.target.value)} /></div>
           <div className="sm:col-span-2 space-y-1.5"><Label className="text-xs">Note</Label><Textarea value={f.note || ""} onChange={(e) => ch("note", e.target.value)} /></div>
         </div>

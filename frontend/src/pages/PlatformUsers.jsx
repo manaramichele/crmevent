@@ -39,7 +39,7 @@ function ChooseOrg({ data, onPick, onClose }) {
   );
 }
 
-export default function PlatformUsers() {
+export default function PlatformUsers({ embedded = false }) {
   const { startSupport } = useAuth();
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
@@ -69,7 +69,8 @@ export default function PlatformUsers() {
 
   return (
     <div className="animate-fade-up" data-testid="platform-users-page">
-      <PageHeader title="Gestione Utenti" subtitle="Accedi come utente per verificare cosa vede e può usare (sessione di assistenza di 30 minuti, registrata in Audit)" />
+      {embedded ? <h2 className="font-semibold text-slate-800 mb-1">Gestione utenti</h2> : <PageHeader title="Gestione Utenti" subtitle="Accedi come utente per verificare cosa vede e può usare (sessione di assistenza di 30 minuti, registrata in Audit)" />}
+      {embedded && <p className="text-sm text-slate-500 mb-4">Accedi come utente per verificare cosa vede e può usare (sessione di assistenza di 30 minuti, registrata in Audit).</p>}
       <div className="mb-4 flex flex-col sm:flex-row sm:flex-wrap gap-3">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

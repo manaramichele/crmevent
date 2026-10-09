@@ -22,7 +22,6 @@ import OrgDetail from "@/pages/OrgDetail";
 import PricingAdmin from "@/pages/PricingAdmin";
 import PlatformMessages from "@/pages/PlatformMessages";
 import PlatformNews from "@/pages/PlatformNews";
-import PlatformUsers from "@/pages/PlatformUsers";
 import Assistenza from "@/pages/Assistenza";
 import PlatformVideoSupport from "@/pages/PlatformVideoSupport";
 import SupportBanner from "@/components/SupportBanner";
@@ -54,7 +53,6 @@ import VolunteerDashboard from "@/pages/VolunteerDashboard";
 import VolunteerEvent from "@/pages/VolunteerEvent";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import PlanUpgrade from "@/components/PlanUpgrade";
-import SaasAdmin from "@/pages/SaasAdmin";
 import PlatformDemo from "@/pages/PlatformDemo";
 import PlatformDemoRequests from "@/pages/PlatformDemoRequests";
 import QuickActions from "@/pages/QuickActions";
@@ -154,7 +152,7 @@ function Shell() {
         <Route path="/account" element={<AccountRedirect />} />
         <Route path="/permessi" element={<Navigate to="/profilo" replace />} />
         <Route path="/piattaforma" element={<Protected><SuperAdminOnly><Platform /></SuperAdminOnly></Protected>} />
-        <Route path="/piattaforma/utenti" element={<Protected><SuperAdminOnly><PlatformUsers /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/utenti" element={<Navigate to="/piattaforma?sezione=utenti" replace />} />
         <Route path="/piattaforma/assistenza-video" element={<Protected><SuperAdminOnly><PlatformVideoSupport /></SuperAdminOnly></Protected>} />
         <Route path="/azioni-rapide" element={<Protected><QuickActions /></Protected>} />
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
@@ -164,7 +162,7 @@ function Shell() {
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/demo" element={<Protected><SuperAdminOnly><PlatformDemo /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/richieste-demo" element={<Protected><SuperAdminOnly><PlatformDemoRequests /></SuperAdminOnly></Protected>} />
-        <Route path="/piattaforma/abbonamenti" element={<Protected><SuperAdminOnly><SaasAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/abbonamenti" element={<Navigate to="/piattaforma?sezione=abbonamenti" replace />} />
         <Route path="/piattaforma/modelli-pipeline" element={<Protected><SuperAdminOnly><PipelineTemplates /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/messaggi" element={<Protected><SuperAdminOnly><PlatformMessages /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/novita" element={<Protected><SuperAdminOnly><PlatformNews /></SuperAdminOnly></Protected>} />

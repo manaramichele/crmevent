@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
+import { personName } from "@/lib/textCase";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -133,7 +134,7 @@ export default function Invite() {
             </div>
           ) : (
             <div className="space-y-3">
-              <Input placeholder="Nome e cognome" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} data-testid="invite-reg-name" />
+              <Input placeholder="Nome e cognome" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onBlur={() => setForm((f) => ({ ...f, name: personName(f.name) }))} data-testid="invite-reg-name" />
               <PhoneInput international defaultCountry="IT" placeholder="Cellulare" value={form.telefono} onChange={(v) => setForm((f) => ({ ...f, telefono: v || "" }))} className="phone-input" data-testid="invite-reg-telefono" />
               <PwField placeholder="Crea una password (min 8)" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} testid="invite-reg-password" />
               <Button onClick={registerAndAccept} disabled={busy} data-testid="invite-reg-btn" className="w-full h-11 bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold">Crea account e accetta</Button>

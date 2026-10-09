@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiError } from "@/lib/api";
+import { personName, businessName } from "@/lib/textCase";
 import { trackEvent } from "@/lib/analytics";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,7 @@ export default function Register() {
   const [accept, setAccept] = useState(false);
   const [loading, setLoading] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const fix = (k, fn) => () => setForm((f) => ({ ...f, [k]: fn(f[k]) }));
   useEffect(() => { trackEvent("sign_up_start"); }, []);
   useEffect(() => {
     try { const l = JSON.parse(localStorage.getItem("crmevent_lead")); if (l) setForm((f) => ({ ...f, email: l.email || f.email, nome: l.nome || f.nome, cognome: l.cognome || f.cognome })); } catch {}
@@ -74,10 +76,10 @@ export default function Register() {
 
           <form onSubmit={submit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label htmlFor="nome">Nome</Label><Input id="nome" data-testid="reg-nome" value={form.nome} onChange={ch("nome")} required /></div>
-              <div className="space-y-1.5"><Label htmlFor="cognome">Cognome</Label><Input id="cognome" data-testid="reg-cognome" value={form.cognome} onChange={ch("cognome")} /></div>
+              <div className="space-y-1.5"><Label htmlFor="nome">Nome</Label><Input id="nome" data-testid="reg-nome" value={form.nome} onChange={ch("nome")} onBlur={fix("nome", personName)} required /></div>
+              <div className="space-y-1.5"><Label htmlFor="cognome">Cognome</Label><Input id="cognome" data-testid="reg-cognome" value={form.cognome} onChange={ch("cognome")} onBlur={fix("cognome", personName)} /></div>
             </div>
-            <div className="space-y-1.5"><Label htmlFor="org">Nome organizzazione</Label><Input id="org" data-testid="reg-org" value={form.org_name} onChange={ch("org_name")} placeholder="Es. La tua agenzia eventi" required /></div>
+            <div className="space-y-1.5"><Label htmlFor="org">Nome organizzazione</Label><Input id="org" data-testid="reg-org" value={form.org_name} onChange={ch("org_name")} onBlur={fix("org_name", businessName)} placeholder="Es. La tua agenzia eventi" required /></div>
             <div className="space-y-1.5"><Label htmlFor="email">Email</Label><Input id="email" type="email" data-testid="reg-email" value={form.email} onChange={ch("email")} required /></div>
             <div className="space-y-1.5"><Label htmlFor="tel">Cellulare <span className="text-red-500">*</span></Label><PhoneInput id="tel" international defaultCountry="IT" value={form.telefono} onChange={(v) => setForm((f) => ({ ...f, telefono: v || "" }))} className="phone-input" data-testid="reg-telefono" /></div>
             <div className="space-y-1.5"><Label htmlFor="password">Password</Label><Input id="password" type="password" data-testid="reg-password" value={form.password} onChange={ch("password")} required /><p className="text-xs text-slate-400">Almeno 8 caratteri.</p></div>

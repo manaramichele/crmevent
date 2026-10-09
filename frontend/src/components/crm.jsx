@@ -7,6 +7,7 @@ import SettingSelect from "@/components/SettingSelect";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { CASE_FN } from "@/lib/textCase";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -333,13 +334,14 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
   );
 }
 
-export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity", entityCreators, size = "medium" }) {
+export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity", entityCreators, size = "medium", caseRules }) {
   const [form, setForm] = useState(initial || {});
   const [saving, setSaving] = useState(false);
   const [addField, setAddField] = useState(null);
   useEffect(() => { setForm(initial || {}); }, [initial, open]);
 
   const change = (name, val) => setForm((f) => ({ ...f, [name]: val }));
+  const fixCase = (name) => { const k = caseRules?.[name]; if (k) setForm((f) => (typeof f[name] === "string" ? { ...f, [name]: CASE_FN[k](f[name]) } : f)); };
 
   const submit = async () => {
     for (const f of fields) {
@@ -364,7 +366,7 @@ export function EntityDialog({ open, onOpenChange, title, fields, initial, onSub
           <DialogHeader><DialogTitle className="font-display">{title}</DialogTitle><DialogDescription className="sr-only">Compila i campi e salva.</DialogDescription></DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
             {fields.map((f) => (
-              <div key={f.name} className={f.full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}>
+              <div key={f.name} className={f.full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"} onBlur={() => fixCase(f.name)}>
                 <Label htmlFor={f.name} className="text-xs font-medium text-slate-600">
                   {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
                 </Label>

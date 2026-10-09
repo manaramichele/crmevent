@@ -1,0 +1,23 @@
+{
+  "summary": "Frontend read-only test of Super Admin /piattaforma SectionSwitch (Organizzazioni | Utenti | Abbonamenti). All acceptance criteria verified: switch container with correct data-testid, three buttons present, default Organizzazioni selected (aria-selected=true), content swaps without full navigation, ?sezione= URL param set, Utenti shows platform-users-page + platform-accounts + 32 impersonate buttons, Abbonamenti shows saas-admin-page + saas-tab-orgs + saas-tab-config + saas-max-users-bronze editor. Persistence confirmed via sessionStorage (Abbonamenti still selected after navigating to /audit and back). ?sezione=utenti on reload persists Utenti. /piattaforma/utenti and /piattaforma/abbonamenti correctly redirect to /piattaforma?sezione=... . Sidebar no longer contains 'Gestione Utenti' or 'Abbonamenti' entries. Mobile 390px: switch visible (x=16,width=307), no horizontal overflow (sw=cw=390). Read-only: no save/delete/impersonate actions were invoked.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Platform.jsx is ~325 lines and still mixes 3 concerns (orgs listing, FIC/Brevo integration cards, embedded Users/SaasAdmin). Consider extracting Brevo card and FIC card into dedicated components to keep file under ~250 lines.",
+    "sez initial computation reads sessionStorage/searchParams inline on every render; acceptable but could be useState initializer to avoid redundant work."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "SectionSwitch implementation at /app/frontend/src/pages/Platform.jsx lines 14-23; redirects at /app/frontend/src/App.js lines 155 and 165; PLATFORM_NAV in Layout.jsx no longer has utenti/abbonamenti entries. All data-testids match request. 16 organizations exist in DB; the row-count test ran before the async fetch resolved so count showed 0 — not a bug (stats card showed 16).",
+  "rca of the issue": "n/a — no issues found"
+}

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 import demo_booking
 import email_utils
+import text_normalize as TN
 import gcal_utils
 import video_support
 
@@ -125,6 +126,8 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
     async def create_request(body: RequestIn, user: dict = Depends(require_member)):
         if not body.nome.strip():
             raise HTTPException(status_code=400, detail="Inserisci nome e cognome")
+        body.nome = TN.person_name(body.nome)
+        body.organizzazione = TN.business_name(body.organizzazione)
         if body.slot_key not in {s["slot_key"] for s in await slots()}:
             raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile, scegline un altro")
         now, email = _iso(_now()), (user.get("email") or "").lower()

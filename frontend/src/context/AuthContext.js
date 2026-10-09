@@ -54,7 +54,7 @@ export function AuthProvider({ children }) {
 
   const stopSupport = useCallback(async () => {
     try { await api.post("/platform/impersonate/stop"); } catch {}
-    const back = sessionStorage.getItem("support_return") || "/piattaforma/utenti";
+    const back = sessionStorage.getItem("support_return") || "/piattaforma?sezione=utenti";
     sessionStorage.removeItem("support_return");
     window.location.href = back;
   }, []);

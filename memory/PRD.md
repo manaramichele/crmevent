@@ -540,6 +540,32 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Nuovo componente `frontend/src/components/OrgUsers.jsx` montato in `Profile.jsx` come scheda "Utenti e accessi", visibile SOLO se `user.org_role === "admin_org"`. Tabella unica membri+inviti: Nome | Email | Cellulare | Ruolo | Stato (Invito inviato/Attivo/Invito scaduto) | Ultimo accesso | Azioni. "+ Invita utente" (Nome, Cognome, Email, Cellulare con PhoneInput intl, Ruolo). Azioni: Reinvia · Cambia ruolo · Disattiva/Riattiva accesso. Scadenza invito 7gg. Nessun consumo crediti; nessuna modifica a Stripe/wallet/ledger/FIC.
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
+## Prenotazioni demo + formattazione automatica anagrafiche — 2026-10-09 ✅ VERIFICATO (iteration_103 + fix PUT + build)
+- "Demo" → "Prenotazioni demo" (sidebar + titolo PlatformDemo).
+- backend/text_normalize.py: person_name (tutto maiuscolo → Capitalizzato, D'Amico, De Luca, McDonald), business_name (sigle/marchi conservati, connettori minuscoli), FIELD_RULES per persons/companies/structures/teams/organizations/users/leads/demo_requests/billing; hook in _create/_update e PUT CRUD generici, registrazione organizzatore, Google, invito, staff/Partecipa, profilo Super Admin, fatturazione, demo request, disponibilità pubblica.
+- Super Admin: GET/POST /api/platform/normalize/preview|apply + card "Formattazione anagrafiche esistenti" (righe deselezionate di default).
+- Frontend lib/textCase.js (stessa logica) on blur: EntityDialog caseRules (Persone/Staff), CompanyDialog, Registrazione, Partecipa, Invito. Team/Strutture: normalizzati dal backend al salvataggio.
+
+## Dashboard Piattaforma a pulsanti — 2026-10-09 ✅ VERIFICATO (iteration_102 + build)
+- Platform.jsx: SectionSwitch "Organizzazioni | Utenti | Abbonamenti" (?sezione= + sessionStorage). Utenti = PlatformUsers embedded + tabella account; Abbonamenti = SaasAdmin embedded. /piattaforma/utenti e /piattaforma/abbonamenti → redirect; voci sidebar rimosse.
+
+## Form Staff e Volontari semplificato — 2026-10-09 ✅ VERIFICATO (iteration_101)
+- Persons.jsx: in mode "staff" nascosti "Email secondaria" e "Azienda principale" (dati esistenti preservati: PUT parziale). Anagrafiche invariata; Partecipa non aveva i campi.
+
+## Dashboard: To Do List + Note e appunti — 2026-10-09 ✅ VERIFICATO (iteration_100 + test permessi manuale + build)
+- backend/home_widgets.py: GET /api/my/todo (pipeline_tasks + activities + followups non completati, permessi sezione/eventi/piano; non Admin: pipeline assegnate alla propria persona o senza responsabile), POST /api/my/todo/complete; note personali /api/my/notes CRUD (collection user_notes per user_id, indipendenti dall'organizzazione).
+- Filtri rapidi To Do (2026-10-09): chip tipo (Tutti/Pipeline/Attività/Follow-up, solo tipi presenti) + select evento (incl. "Senza evento"), lato client; contatore aggiornato.
+- Frontend: Dashboard.jsx solo titolo + OrgMessagesBanner + TodoPanel/NotesPanel 50/50 (stack su mobile). Riepiloghi KPI rimossi (scelta utente). Endpoint /api/dashboard invariato.
+
+## Limiti piani BRONZE/SILVER — 2026-10-09 ✅ VERIFICATO (iteration_99 + test check_limit + build)
+- subscriptions.py: DEFAULT_LIMITS (bronze 1 evento/10 utenti, silver ∞/30, gold ∞/∞), `plan_limits`, `check_limit` (403 code plan_limit; prova = illimitato; utenti = membership attive + inviti pendenti), limiti in plans-public e saas/me, modificabili in Super Admin.
+- server.py: controllo su creazione evento, creazione invito, accettazione invito, aggiunta membro esistente, riattivazione membro. Nessuna rimozione utenti in downgrade. Staff/volontari non conteggiati.
+- Frontend: PlansSection (card + tabella), SaasAdmin (Max eventi/Max utenti), PlanLimitDialog globale con "Cambia piano".
+
+## Home pubblica: spazio sotto header e ancore — 2026-10-09 ✅ VERIFICATO (screenshot desktop/tablet/mobile + build)
+- LandingPage.jsx: scrollTo calcola altezza reale header sticky → 48px visibili prima dei contenuti (menu desktop, menu mobile chiuso prima dello scroll, hash /#sezione anche da altre pagine e hashchange; correzione dopo caricamento immagini).
+- index.css: su mobile `overflow-x: clip` per pagine pubbliche (prima `hidden` rompeva l'header sticky). App interna invariata.
+
 ## Sistema a crediti eliminato — 2026-10-08 ✅ VERIFICATO (iteration_98)
 - Backend kill-switch: `_charge_begin`→None, `_apply_credit_movement` ignora addebiti, `_assert_org_operational`/`_is_credit_model_org` disattivati, `/credits/estimate` will_charge=false, `/credits/checkout` 410, `_gcal_unlocked` sempre True, Pipeline status senza costi. Marketplace: solo addebito Stripe.
 - Migrazione startup idempotente `migrate_legacy_orgs_to_trial`: org cliente senza saas → prova GOLD 14 gg (`saas.migrated_from_credits`). In preview 32 org migrate. NB: in produzione avverrà al primo avvio dopo il deploy. Nessuna email di benvenuto inviata.
