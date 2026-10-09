@@ -949,3 +949,10 @@ Task 2 — Creatività manuale:
 - Header: badge piano (cliccabile → abbonamento) quando attivo; tabella Super Admin con badge e colonna scadenza = expires_at.
 - Nessuna modifica a regole economiche/Stripe. Nessun deploy.
 
+
+## 2026-10-09 — Formula abbonamento per tutte le organizzazioni ✅ (iteration_107: backend 12/12, frontend 100%)
+- "Dati organizzazione": nuovo campo "Formula abbonamento" (Nessuna/BRONZE/SILVER/GOLD) per Cliente/Interna/Test → scrive `saas.admin` (stessa fonte della gestione Abbonamenti) via PATCH /platform/organizations/{id} {formula}.
+- Interna/Test: `_internal_state` → formula gratuita (billing=free), nessuna prova/14 gg, scadenza solo se impostata dal Super Admin; checkout Stripe bloccato (400). Senza formula = accesso completo come prima.
+- Elenco Abbonamenti: tutte le organizzazioni, colonne Tipo/Formula/Stato/Condizione, filtro Tipo, "Nessuna scadenza"/"Nessun addebito" per le gratuite.
+- Header e "Il mio abbonamento" mostrano il badge anche per Interne/Test; nessun piano picker per Interne/Test.
+
