@@ -223,7 +223,7 @@ export default function LandingPage() {
           </nav>
           <div className="hidden lg:flex items-center gap-3">
             <Link to="/login" data-testid="landing-login" className="text-sm font-semibold text-slate-700 hover:text-slate-900">Accedi</Link>
-            <Link to="/registrati" data-testid="landing-try-cta" className="h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center">Registrati gratis</Link>
+            <Link to="/registrati" data-testid="landing-try-cta" className="cta-shimmer h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center">Registrati gratis</Link>
           </div>
           <button className="lg:hidden" onClick={() => setOpen((o) => !o)} data-testid="landing-menu">{open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
         </div>
@@ -231,7 +231,7 @@ export default function LandingPage() {
           <div className="lg:hidden border-t border-slate-100 bg-[#FFFFFF] px-6 py-4 space-y-3" data-testid="landing-mobile-menu">
             {NAV.map(([l, id]) => <button key={id} onClick={() => goMobile(id)} className="block text-sm font-medium text-slate-600">{l}</button>)}
             <div className="flex gap-3 pt-2"><Link to="/login" className="flex-1 h-10 rounded-lg border border-slate-200 flex items-center justify-center text-sm font-semibold">Accedi</Link>
-              <Link to="/registrati" onClick={() => setOpen(false)} className="flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">Registrati gratis</Link></div>
+              <Link to="/registrati" onClick={() => setOpen(false)} data-testid="landing-mobile-try-cta" className="cta-shimmer flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">Registrati gratis</Link></div>
           </div>
         )}
       </header>
@@ -243,7 +243,7 @@ export default function LandingPage() {
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">Organizza il tuo evento. <span className="text-tiffany-active">Tutto in un'unica piattaforma.</span></h1>
             <p className="text-lg text-slate-500 mt-6 max-w-xl">Gestisci persone, staff, sponsor, attività, turni e tutte le informazioni operative del tuo evento con <strong className="font-semibold text-slate-700">CRMEvent</strong>.</p>
             <div className="flex flex-wrap gap-3 mt-8">
-              <Link to="/registrati" data-testid="hero-cta-start-free" className="h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Registrati gratis <ArrowRight className="w-4 h-4" /></Link>
+              <Link to="/registrati" data-testid="hero-cta-start-free" className="cta-shimmer h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Registrati gratis <ArrowRight className="w-4 h-4" /></Link>
             </div>
             <div className="mt-5 flex items-center gap-2 text-sm text-slate-500" data-testid="hero-credits-note">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-tiffany-light text-tiffany-fg px-3 py-1.5 font-semibold"><Sparkles className="w-4 h-4" />14 giorni di prova gratuita</span>
