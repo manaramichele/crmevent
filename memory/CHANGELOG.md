@@ -1049,4 +1049,6 @@ Task 2 — Creatività manuale:
 ## 2026-10-09 — Pulsante header "Supporto dedicato" ✅ (iteration_122: frontend 100%)
 - `components/SupportButton.jsx`: BRONZE (user.saas.plan) → mailto support@crmevent.it con oggetto "Supporto CRMEvent – Org – Nome" e corpo iniziale; SILVER/GOLD/senza piano → /assistenza. Mobile solo icona. Trial invariato ("Prenota una demo").
 - `/assistenza`: riquadro "Prenoti come" (organizzazione, nome, email) sopra la prenotazione.
+- Fix BRONZE (iteration_123 ✅): mailto non sostituisce più la scheda CRMEvent — desktop `target=_blank rel=noopener`, mobile `window.location.href` (app Mail nativa). Pagina e sessione restano invariate.
+
 
