@@ -33,13 +33,13 @@ export function FormulaBadge({ plan, testid }) {
   );
 }
 
-export default function PlanBadge({ s, testid = "plan-badge", size = "md" }) {
+export default function PlanBadge({ s, testid = "plan-badge", size = "md", className = "" }) {
   const b = badgeFor(s);
   if (!b) return <span className="text-slate-400">—</span>;
   const { Icon } = b;
   const sz = size === "sm" ? "text-[11px] px-2 py-0.5 gap-1" : size === "lg" ? "text-sm px-3 py-1.5 gap-1.5" : "text-xs px-2.5 py-1 gap-1.5";
   return (
-    <span className={`inline-flex items-center rounded-full font-semibold ring-1 ring-inset whitespace-nowrap ${sz} ${b.cls}`} data-testid={testid} data-mode={s.mode} data-plan={s.plan || ""}>
+    <span className={`inline-flex items-center rounded-full font-semibold ring-1 ring-inset whitespace-nowrap ${sz} ${b.cls} ${className}`} data-testid={testid} data-mode={s.mode} data-plan={s.plan || ""}>
       {Icon && <Icon className={size === "sm" ? "w-3 h-3" : size === "lg" ? "w-4 h-4" : "w-3.5 h-3.5"} aria-hidden="true" />}{b.label}{b.extra ? ` · ${b.extra}` : ""}
     </span>
   );

@@ -1,0 +1,28 @@
+{
+  "summary": "Iter120 — Frontend QA of 'Il mio abbonamento' plan picker + enlarged header plan badge for QA org admin. Verified: (1) [data-testid=sub-change-plan] visible top-right inside [data-testid=my-subscription-summary]; (2) click opens [data-testid=plan-picker-dialog] with 3 cards (sub-choose-bronze/silver/gold) and CycleToggle (6 mesi/12 mesi) — prices match /api/saas/plans-public exactly (bronze 114/182, silver 294/470, gold 474/758); (3) [data-testid=plan-recommendation] computes correct minimum-plan recommendation — with QA usage events=18, people=23 (trial unlimited limits) recommendPlan() picks GOLD (BRONZE max_events=1 and SILVER max_events=5 both exceeded) and [data-testid=plan-recommended-gold] badge is present; (4) /profilo?tab=abbonamento&upgrade=1 auto-opens dialog; closing with Escape removes 'upgrade' param (URL becomes /profilo?tab=abbonamento); (5) clicking sub-choose-gold on trial org POSTs /api/saas/checkout with {plan:'gold',cycle:'semester',origin_url:...} — redirect to Stripe triggered via window.location.href (external nav blocked by test to protect fixture); (6) no console/pageerror on the page; (7) PlanBadge size='lg' statically applies text-sm, px-3, py-1.5 and w-4 h-4 icon per code — matches spec. On mobile 390px the header is non-overlapping: trial button [52..126] with 56px gap before next header icon at x=182 (no plan badge in trial state — expected).\n\nUnverified live (not tested to avoid mutating QA org state without hand-off): (A) 'exceeded on active BRONZE' recommendation (requires SA PUT /platform/saas/orgs/org_qa_eventi/admin to set active+bronze+comp:false then restore) and (B) 'free formula' ack checkbox gating (requires SA PUT comp:true+active+silver then restore). The code-level implementation of both is in place in MySubscription.jsx PlanPickerDialog (needsAck=s.billing==='free' → plan-free-warning + plan-free-ack; recommendPlan excludes plans whose max_events/max_users are exceeded, so with usage events=X>5 and people≤30 it still recommends GOLD, never SILVER, matching the spec example).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "recommendPlan() correctly uses minimum-plan-that-fits with -1 treated as unlimited; smallest plan that fits usage.events AND usage.people — matches the spec's 5 events + 35 people → GOLD example (SILVER has max_users=30 so excluded).",
+    "PlanPickerDialog correctly disables all sub-choose-<plan> buttons until plan-free-ack when billing==='free'; also disables when isCur(k) so you can't 'change' to current.",
+    "isCur() for trial state returns false for every plan — so when trial, all three plan buttons are enabled and trigger checkout (not change-preview). Behaviour matches 'no-sub/trial goes to existing Stripe checkout'.",
+    "Dialog closes correctly and strips the 'upgrade' query param via setParams(params, {replace:true}) — no stale URL state.",
+    "org_type !== 'cliente' branch hides the Cambia piano action and shows internal-note — matches 'internal/test orgs see no change button'.",
+    "Header PlanBadge size='lg' only renders for mode==='active' with a plan (TrialButton.jsx L48-52). For trial/expired/suspended states a different button is shown — this is correct per spec ('Header plan badge shown when mode active with plan').",
+    "MySubscription.jsx is 212 lines, acceptable. server.py (per iter119) still >13k lines — not blocking this review."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% of in-scope live checks (7/7); 2 state-mutation checks skipped by design"},
+  "test_credentials": "QA org admin qa.eventi@crmeventqa.it / QaEvents2026! works. Super Admin creds in /app/memory/test_credentials.md not required for this iteration.",
+  "seed_data_creation": "None — no mutations to QA org or any seeded data. External Stripe navigation was blocked at the browser (route.abort) so no checkout session was consumed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To fully verify 'exceeded with active BRONZE recommends GOLD/SILVER per real numbers' and 'free formula ack gating', log in as Super Admin and PUT /api/platform/saas/orgs/org_qa_eventi/admin with (a) status=active, plan=bronze, comp=false → QA /profilo?tab=abbonamento&upgrade=1 should show recommended=gold (events=18 exceeds bronze cap of 1 AND silver cap of 5; people=23 fits silver's 30 so technically SILVER would fit if events≤5, but with 18 events only GOLD fits — recommendation=gold). Then PUT comp=true, plan=silver, status=active → dialog shows [data-testid=plan-free-warning], all sub-choose-* buttons disabled, enable only after checking [data-testid=plan-free-ack]. Always restore original admin state (QA is normally cliente in trial with saas.admin={} empty). PlanLimitDialog 'Passa al piano superiore' routes to /profilo?tab=abbonamento&upgrade=1 — not re-verified live but code wiring is correct.",
+  "rca of the issue": "No bugs. All live assertions passed. Checkout response body couldn't be captured by Playwright because window.location.href navigation tears down the page before resp.json() resolves — not a bug, just a Playwright capture quirk. The POST request body was captured and is correct."
+}

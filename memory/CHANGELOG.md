@@ -1035,3 +1035,8 @@ Task 2 — Creatività manuale:
 - `/org/permissions/audit`: le operazioni del Super Admin appaiono come "Assistenza CRMEvent" (senza email/ID); identità reale solo in `/platform/audit` (Super Admin).
 - `_ensure_membership`: il Super Admin non diventa mai membro di un'organizzazione; eventuali membership attive vengono disattivate (non cancellate) all'avvio.
 
+
+## 2026-10-09 — Cambia piano in Il mio abbonamento + badge header ✅ (iteration_120: frontend 7/7)
+- `MySubscription.jsx`: pulsante Tiffany "Cambia piano" in alto a destra del riepilogo → `PlanPickerDialog` (3 piani, 6/12 mesi, piano attuale evidenziato, `recommendPlan` su eventi + Staff/Volontari reali, conferma esplicita per formule gratuite). Riusa checkout / change-preview / change Stripe esistenti. `?upgrade=1` apre il dialog (usato da PlanLimitDialog). Interne/Test: nessun pulsante.
+- Header: `PlanBadge size="lg"` (+20%) con effetto `.cta-shimmer .cta-shimmer-5` (5 s, prefers-reduced-motion rispettato), apre Il mio abbonamento.
+
