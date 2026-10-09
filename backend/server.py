@@ -41,6 +41,7 @@ import demo_booking
 import demo_slots
 import text_normalize as TN
 import home_widgets
+import google_login
 import marketplace
 import brevo_funnel
 import social_ai
@@ -13199,6 +13200,9 @@ async def require_org_member(request: Request, user: dict = Depends(get_current_
 
 app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
 app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
+app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
+                                                   "verify_password": verify_password, "user_payload": user_payload,
+                                                   "person_name": TN.person_name, "now_iso": now_iso}), prefix="/api")
 app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,

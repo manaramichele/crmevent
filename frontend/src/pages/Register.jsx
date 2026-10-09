@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api, { formatApiError } from "@/lib/api";
 import { personName, businessName } from "@/lib/textCase";
 import { trackEvent } from "@/lib/analytics";
+import { startGoogle, googleErrorText } from "@/lib/googleAuth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const fix = (k, fn) => () => setForm((f) => ({ ...f, [k]: fn(f[k]) }));
-  useEffect(() => { trackEvent("sign_up_start"); }, []);
+  useEffect(() => { trackEvent("sign_up_start"); const t = googleErrorText(new URLSearchParams(window.location.search).get("google_error")); if (t) toast.error(t); }, []);
   useEffect(() => {
     try { const l = JSON.parse(localStorage.getItem("crmevent_lead")); if (l) setForm((f) => ({ ...f, email: l.email || f.email, nome: l.nome || f.nome, cognome: l.cognome || f.cognome })); } catch {}
   }, []);
@@ -43,8 +44,8 @@ export default function Register() {
   };
 
   const googleLogin = () => {
-    const redirectUrl = window.location.origin + "/";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    startGoogle({ intent: "register", legacyRedirect: window.location.origin + "/" });
   };
 
   return (
