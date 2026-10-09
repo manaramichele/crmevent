@@ -8,10 +8,19 @@ export const supportMailto = (user) => {
   return `mailto:support@crmevent.it?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent("Buongiorno, vorrei ricevere supporto per CRMEvent.\n\n")}`;
 };
 
+const isMobile = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+
+const openMail = (e, url) => {
+  if (!isMobile()) return;
+  e.preventDefault();
+  window.location.href = url;
+};
+
 export default function SupportButton({ user }) {
   const inner = <><Headset className="w-4 h-4" aria-hidden="true" /><span className="hidden sm:inline">Supporto dedicato</span></>;
   if (user?.saas?.enabled && user.saas.plan === "bronze") {
-    return <a href={supportMailto(user)} data-testid="header-assistenza-button" data-mode="email" aria-label="Supporto dedicato" title="Supporto dedicato via email" className={CLS}>{inner}</a>;
+    const url = supportMailto(user);
+    return <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => openMail(e, url)} data-testid="header-assistenza-button" data-mode="email" aria-label="Supporto dedicato" title="Supporto dedicato via email" className={CLS}>{inner}</a>;
   }
   return <NavLink to="/assistenza" data-testid="header-assistenza-button" data-mode="video" aria-label="Supporto dedicato" title="Supporto dedicato" className={CLS}>{inner}</NavLink>;
 }
