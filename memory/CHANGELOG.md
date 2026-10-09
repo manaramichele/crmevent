@@ -1057,3 +1057,21 @@ Task 2 — Creatività manuale:
 - Causa: `acting_org_id` in localStorage da accessi precedenti inviato come X-Org-Id → 403 "Accesso all'organizzazione non consentito" (il flusso Google a redirect non lo puliva).
 - Fix: `googleAuth.startGoogle` pulisce acting_org_id; `AuthContext.checkAuth` lo scarta se non è tra le organizzazioni dell'utente (no Super Admin/assistenza); `_get_base_user` prova session_token → access_token → Bearer; login password/Google cancellano vecchio cookie session_token; Eventi mostra errore + Riprova. Controlli 403 invariati.
 
+## 2026-10-09 — Piano tecnico portale partner.crmevent.it (solo analisi, nessuna modifica al codice)
+- Proposta: cartella `partner-frontend/` (CRA+craco+Tailwind+shadcn copiati), build indipendente, workflow GitHub `partner-deploy.yml` con filtro `paths: partner-frontend/**`, backend condiviso con router `/api/partner/*`, cookie separato `partner_token`, ruolo/collection `partners` isolati. In attesa di conferma utente su regole commissioni, approvazione partner, anteprima.
+
+
+
+## 2026-10-09 — Portale CRMEvent Partner (MVP) ✅ (iteration_125: backend 21/21, frontend 100%)
+- `partner-frontend/` (React separato): landing Diventa Partner + simulatore, registrazione (profilo fiscale privato/professionista/azienda), login email/password + Google (intent=partner), completa profilo, dashboard (link referral, clienti, commissioni). Anteprima: `/api/partner-preview/` (solo con PARTNER_PREVIEW_DIR). Template workflow: `partner-frontend/deploy/partner-deploy.yml.example`.
+- Backend `partner_portal.py`: cookie `partner_token` isolato, approvazione manuale SA, brute-force 5/15min, referral `?ref=` (Register/CompleteOrg), commissione 10% × 12 mesi su incassato abbonamento imposte escluse (hook `on_paid` in subscriptions.record_payment), storni su `charge.refunded`, snapshot regime CRMEvent + profilo fiscale partner.
+- Super Admin `/piattaforma?sezione=partner`: impostazioni (%, mesi, regime fiscale CRMEvent forfettario/ordinario), approva/rifiuta/sospendi, commissioni "Segna pagata".
+
+
+## 2026-10-09 — CRMEvent Partner completo ✅ (iteration_126: backend 25/25, frontend 100%)
+- Regole: 10% × 24 mesi dal primo pagamento (prima sottoscrizione, rinnovi, upgrade BRONZE/SILVER/GOLD), base = incassato Stripe al netto imposte/rimborsi, idempotenza (indice univoco stripe_invoice_id), storico rettifiche; liquidabile a fine trimestre + 30 gg; liquidazioni manuali con IBAN obbligatorio; export CSV (BOM, `;`).
+- Referral `?ref=&cmp=` conservato solo dopo consenso iubenda (finalità 4/5), finestra 30 gg, un partner per org (indice univoco), anti auto-referral (email/telefono), tracking click/visitatori anonimo, campagne.
+- Partner: nuova landing, registrazione (categoria + soggetto fiscale, indirizzo, sito/social), dashboard a schede (panoramica, link e campagne, commissioni e liquidazioni, simulatore 12/12/24 con rinnovi, materiali, profilo + IBAN), recupero password, email approvazione/rifiuto.
+- Super Admin: menu "Partner" (/piattaforma/partner) con Anagrafiche, Statistiche, Organizzatori (attribuzione manuale con registro), Commissioni, Configurazione (+ materiali). Footer crmevent.it: "Diventa Partner" (REACT_APP_PARTNER_URL).
+- Workflow: `partner-frontend/deploy/partner-deploy.yml.example` (paths partner-frontend/**, release versionate, symlink atomico, rollback via workflow_dispatch).
+

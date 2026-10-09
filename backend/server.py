@@ -42,6 +42,7 @@ import demo_slots
 import text_normalize as TN
 import home_widgets
 import google_login
+import partner_portal
 import marketplace
 import brevo_funnel
 import social_ai
@@ -712,6 +713,7 @@ class OrgRegisterIn(BaseModel):
     org_name: str
     telefono: Optional[str] = None
     accept_terms: bool = False
+    ref: Optional[dict] = None
 
 
 class CompleteOrgIn(BaseModel):
@@ -721,6 +723,7 @@ class CompleteOrgIn(BaseModel):
     nome: Optional[str] = None
     cognome: Optional[str] = None
     marketing_consent: bool = False
+    ref: Optional[dict] = None
 
 
 TERMS_VERSION = "2026-10"
@@ -749,6 +752,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
                                "picture": "", "active": True, "accepted_terms_at": now_iso(), "created_at": now_iso(),
                                "self_registered": True, "welcome_demo": "pending"})
     await _ensure_membership(uid, org["id"], "admin_org", uid)
+    await PARTNER["attach_referral"](org["id"], org.get("nome"), {"email": email, "telefono": phone}, body.ref)
     # Lead continuity: if this email already requested a demo, link that lead to the new account
     # (no duplicate contact) and advance the funnel — preserving the lead → demo → trial history.
     lead = await db.leads.find_one({"email": email})
@@ -804,6 +808,7 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
         upd.update({"nome": nome, "cognome": cognome or None, "name": f"{nome} {cognome}".strip()})
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd, "$unset": {"org_onboarding_lock": ""}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
+    await PARTNER["attach_referral"](org["id"], org.get("nome"), {"email": user.get("email"), "telefono": phone}, body.ref)
     try:
         await sync_registered_user(user["user_id"], org["id"], nome=nome or None, cognome=cognome or None, source="registration")
     except Exception as e:
@@ -6782,6 +6787,9 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Firma webhook non valida")
     t, obj = event["type"], event["data"]["object"]
+    if t == "charge.refunded":
+        await PARTNER["on_refund"](obj)
+        return {"received": True}
     if await SAAS["handle_webhook"](t, obj) or await MKT["handle_webhook"](t, obj):
         return {"received": True}
     if t == "customer.subscription.deleted":
@@ -13245,7 +13253,12 @@ SAAS.update(subscriptions.build(db, {
     "require_admin": require_admin, "require_org_admin": require_org_admin, "require_superadmin": require_superadmin,
     "record_audit": record_audit, "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
     "record_invoice": _record_invoice, "emit_invoice": _emit_saas_invoice, "retry_invoices": _retry_saas_invoices,
-    "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET}))
+    "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET,
+    "on_paid": lambda o, inv: PARTNER["on_subscription_paid"](o, inv)}))
+PARTNER = partner_portal.build(db, {"hash_password": hash_password, "verify_password": verify_password, "person_name": TN.person_name,
+                                    "require_superadmin": require_superadmin, "record_audit": record_audit, "saas_config": SAAS["get_config"]})
+app.include_router(PARTNER["router"])
+app.add_event_handler("startup", PARTNER["ensure_indexes"])
 app.include_router(api)
 app.include_router(SAAS["router"])
 async def require_org_member(request: Request, user: dict = Depends(get_current_user)) -> dict:
@@ -13257,7 +13270,8 @@ app.include_router(demo_slots.build_router(db, require_org_member, require_super
 app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
 app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
                                                    "verify_password": verify_password, "user_payload": user_payload,
-                                                   "person_name": TN.person_name, "now_iso": now_iso}), prefix="/api")
+                                                   "person_name": TN.person_name, "now_iso": now_iso,
+                                                   "partner_identity": PARTNER["google_identity"]}), prefix="/api")
 app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,

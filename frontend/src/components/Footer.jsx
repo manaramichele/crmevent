@@ -23,6 +23,7 @@ export default function Footer() {
           <ul className="space-y-2 text-sm">
             <li><Link to="/registrati" className="hover:text-white">14 giorni di prova gratuita</Link></li>
             <li><a href="/#demo" className="hover:text-white">Contatti</a></li>
+            <li><a href={process.env.REACT_APP_PARTNER_URL} target="_blank" rel="noopener noreferrer" data-testid="footer-partner-link" className="hover:text-white">Diventa Partner</a></li>
           </ul>
         </div>
         <div>

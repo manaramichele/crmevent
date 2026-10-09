@@ -1,0 +1,47 @@
+# Da creare su GitHub come .github/workflows/partner-deploy.yml (Add file → Create new file).
+# Indipendente da deploy-production.yml e sync-emergent-to-main.yml (non li modifica).
+# Secrets riutilizzati: ARUBA_HOST, ARUBA_USER, ARUBA_SSH_KEY.
+name: Deploy CRMEvent Partner
+on:
+  push:
+    branches: [main]
+    paths: ["partner-frontend/**"]
+  workflow_dispatch:
+    inputs:
+      rollback_to:
+        description: "Rollback: nome release esistente (es. 20261009-1530-ab12cd34). Vuoto = nuovo deploy"
+        required: false
+concurrency: { group: crmevent-partner, cancel-in-progress: false }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: partner-frontend } }
+    env:
+      BASE: /opt/crmevent/partner
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH
+        run: |
+          mkdir -p ~/.ssh && echo "${{ secrets.ARUBA_SSH_KEY }}" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.ARUBA_HOST }}" >> ~/.ssh/known_hosts
+          echo "SSH=ssh -i $HOME/.ssh/id_deploy ${{ secrets.ARUBA_USER }}@${{ secrets.ARUBA_HOST }}" >> $GITHUB_ENV
+      - name: Rollback
+        if: ${{ github.event.inputs.rollback_to != '' }}
+        run: |
+          $SSH "test -d $BASE/releases/${{ github.event.inputs.rollback_to }}/build && ln -sfn $BASE/releases/${{ github.event.inputs.rollback_to }} $BASE/current.tmp && mv -Tf $BASE/current.tmp $BASE/current"
+      - uses: actions/setup-node@v4
+        if: ${{ github.event.inputs.rollback_to == '' }}
+        with: { node-version: 20, cache: yarn, cache-dependency-path: partner-frontend/yarn.lock }
+      - name: Build
+        if: ${{ github.event.inputs.rollback_to == '' }}
+        run: yarn install --frozen-lockfile && yarn build && test -f build/index.html
+        env: { REACT_APP_BACKEND_URL: "https://api.crmevent.it", CI: "false" }
+      - name: Pubblica release versionata (atomica)
+        if: ${{ github.event.inputs.rollback_to == '' }}
+        run: |
+          REL=$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::8}
+          # prima volta: se current è una cartella reale la conserva come release "initial"
+          $SSH "mkdir -p $BASE/releases && if [ -d $BASE/current ] && [ ! -L $BASE/current ]; then mv $BASE/current $BASE/releases/initial && ln -sfn $BASE/releases/initial $BASE/current; fi"
+          rsync -az --delete -e "ssh -i $HOME/.ssh/id_deploy" build/ ${{ secrets.ARUBA_USER }}@${{ secrets.ARUBA_HOST }}:$BASE/releases/$REL/build/
+          $SSH "ln -sfn $BASE/releases/$REL $BASE/current.tmp && mv -Tf $BASE/current.tmp $BASE/current && cd $BASE/releases && ls -1dt */ | tail -n +8 | xargs -r rm -rf"
+          echo "Release pubblicata: $REL"

@@ -25,7 +25,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 STATE_COOKIE, LINK_COOKIE = "g_oauth_state", "g_oauth_link"
 TTL = timedelta(minutes=10)
-INTENTS = ("login", "register", "invite")
+INTENTS = ("login", "register", "invite", "partner")
 
 
 def config() -> dict:
@@ -78,7 +78,8 @@ def build_router(db, deps: dict) -> APIRouter:
 
     def _fail(code: str, intent: str = "login") -> RedirectResponse:
         page = "/registrati" if intent == "register" else "/login"
-        resp = RedirectResponse(_front(f"{page}?google_error={code}"), status_code=302)
+        base = (os.environ.get("PARTNER_URL") or "").rstrip("/") if intent == "partner" else config()["frontend"]
+        resp = RedirectResponse(f"{base}{page}?google_error={code}", status_code=302)
         resp.delete_cookie(STATE_COOKIE, path="/api/oauth/google")
         return resp
 
@@ -144,6 +145,10 @@ def build_router(db, deps: dict) -> APIRouter:
             return _fail("invalid", intent)
         ident = {"sub": claims["sub"], "email": (claims.get("email") or "").lower(), "email_verified": claims.get("email_verified") is True,
                  "name": claims.get("name") or "", "picture": claims.get("picture") or ""}
+        if intent == "partner":
+            resp = await deps["partner_identity"](ident)
+            resp.delete_cookie(STATE_COOKIE, path="/api/oauth/google")
+            return resp
         dest = f"/invito?token={doc['invite']}&google=ok" if intent == "invite" and doc.get("invite") else doc.get("next") or ""
         kind, user = await resolve_identity(db, ident, intent)
         if kind == "error":
