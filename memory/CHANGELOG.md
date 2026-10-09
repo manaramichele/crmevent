@@ -973,3 +973,9 @@ Task 2 — Creatività manuale:
 - Classe CSS `.cta-shimmer` (index.css): fascio luminoso sfumato sotto il testo, ogni 4,5 s, disattivato con prefers-reduced-motion. Applicata solo alle CTA "Registrati gratis" della Home (hero, header, menu mobile).
 - Tabella comparativa verificata a 320/375/390/430/768/1440 px senza overflow.
 
+
+## 2026-10-09 — Riepilogo volontari mancanti in Staff / Volontari ✅ (iteration_110: frontend 100%)
+- Nuovo `components/VolunteerSummary.jsx` (Necessari / Assegnati / Mancanti + barra copertura Tiffany) sotto i filtri delle schede Staff/Volontari/Da classificare.
+- Stessa regola di `_team_coverage`/`teamCounts`: volontari non rinunciatari, unici per team, staff esclusi; mancanti = MAX(0, richiesti − assegnati) per team; team senza fabbisogno esclusi da Necessari/Mancanti.
+- Rispetta il filtro evento; aggiornamento automatico tramite store condivisi people/teams. Nessuna nuova API.
+
