@@ -1012,3 +1012,8 @@ Task 2 — Creatività manuale:
 - Logo 120×120 per consenso Google: `frontend/public/google-oauth-logo-120.png` (da favicon-512, disegno invariato).
 - `google_login.py`: parametro `hl` (it di default, lingua del browser se diversa). Provider ancora NON attivo.
 
+
+## 2026-10-09 — Riepilogo volontari anche nella scheda Team + badge Team Leader ✅ (iteration_115 11/11, iteration_116)
+- `EntityManager` (crm.jsx): nuova prop `belowFilters(filterVals)`; scheda Team mostra lo stesso `VolunteerSummary` col filtro evento del Team.
+- Team Leader (team.responsabile_id): corona dorata a sinistra dei badge ruolo in tabella (rispetta filtro evento) e badge "👑 Team Leader" accanto al nome nella scheda persona (`PersonDetailDialog`, store teams condiviso).
+

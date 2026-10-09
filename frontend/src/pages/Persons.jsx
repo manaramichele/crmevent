@@ -16,7 +16,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, UserPlus, Search, Users, Phone, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, UserPlus, Search, Users, Phone, Eye, Crown } from "lucide-react";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
@@ -121,6 +121,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   });
   const { sort, toggle } = useSort({ key: "nome", dir: "asc" });
   const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare";
+  const leaderIds = new Set(teams.filter((t) => t.responsabile_id && (evFilter === "all" || t.evento_id === evFilter)).map((t) => t.responsabile_id));
   const ACC = {
     nome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
     cellulare: (r) => r.cellulare || "",
@@ -145,6 +146,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const roleBadges = (r) => (
     <button type="button" onClick={() => onRoleClick(r)} title="Gestisci ruoli evento" data-testid={`role-cell-${r.id}`}
       className="flex flex-wrap items-center gap-1 rounded-md px-1.5 py-1 -ml-1.5 hover:bg-tiffany-light/60 transition-colors group">
+      {leaderIds.has(r.id) && <Crown className="w-3.5 h-3.5 text-[#D4AF37]" aria-label="Team Leader" data-testid={`leader-crown-${r.id}`} />}
       {r.is_staff && <StatusBadge color="blue">Staff</StatusBadge>}{r.is_volontario && <StatusBadge color="green">Volontario</StatusBadge>}
       {r.is_referente && <StatusBadge color="tiffany">Referente</StatusBadge>}
       {!r.is_staff && !r.is_volontario && !r.is_referente && <span className="text-slate-400">—</span>}
@@ -435,6 +437,7 @@ export default function Persons({ mode = "anagrafiche" }) {
               fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="teams" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
               extraActions={(r, { update }) => <TeamNoteButton team={r} canEdit={canEditStaff} onSave={saveNote(update, r.id)} />}
               mobileCard={teamMobileCard}
+              belowFilters={(fv) => <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={fv.evento_id || "all"} />}
               renderDetail={(team, { close, edit, update }) => (
                 <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
                   onReloadStaff={reload} onEdit={edit} canEdit={canEditMembers} onSaveNote={saveNote(update, team.id)}

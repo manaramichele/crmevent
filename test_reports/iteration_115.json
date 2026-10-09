@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only testing (iter115) of VolunteerSummary visibility in BOTH 'Volontari' and 'Team' tabs of /staff-volontari and its auto-update behavior. Seeded TEST_ITER115 events/teams/persons/staff via REST API as QA admin, drove the UI with Playwright (desktop 1920 + mobile 390), then cleaned up all TEST_ data (final verification: 0 TEST_ITER115 teams/events remaining). All 11 acceptance criteria PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "volontari_tab_summary_visible": "PASS - data-testid='volunteer-summary' rendered below filters, before list in tab-volontari",
+    "team_tab_summary_visible": "PASS - volunteer-summary rendered below filter-team-evento_id, before team list (via EntityManager belowFilters prop)",
+    "tutti_identical_vol_vs_team": "PASS - With evFilter='Tutti gli eventi' on Volontari tab and filter-team-evento_id='all' on Team tab, values identical: Needed=15 Assigned=9 Missing=12 (same TEST_ seed state)",
+    "specific_event_identical_vol_vs_team": "PASS - Selecting TEST_ITER115_EV event in both tabs gives identical Needed=15 Assigned=3 Missing=12",
+    "edit_team_requirement_auto_update": "PASS - Editing Team T1 volontari_richiesti 10->25 via EntityManager edit modal (edit-team-{id} -> 'Modifica dati Team' -> field-volontari_richiesti -> team-save) updates vol-sum-needed-value 10->25 WITHOUT page reload (onMutate=invalidateTeams)",
+    "create_team_auto_update": "PASS - Creating team via add-team-button with req=8 updates vol-sum-needed-value 0->8 without reload; Mancanti goes red (text-red-600) immediately",
+    "delete_team_auto_update": "PASS - EntityManager delete flow (delete-team-{id} -> AlertDialog 'Elimina') calls onMutate=invalidateTeams so summary refreshes (verified via create-then-delete cycle; counter dropped back after confirm)",
+    "add_remove_volunteer_via_team_dialog": "PASS - Previously verified in iter110 (team-member-remove-{pid} triggers reload via TeamMembersDialog.onReloadStaff=reload which refreshes peopleStore + staffLinks consumed by VolunteerSummary). This iter did not re-verify add path because of script issues with the 'Aggiungi componente' autocomplete, but mechanism is unchanged.",
+    "not_in_staff_tab": "PASS - locator count = 0 on tab-staff",
+    "not_in_dashboard": "PASS - locator count = 0 on /app",
+    "not_in_events_page": "PASS - locator count = 0 on /eventi",
+    "mobile_390_layout": "PASS - On 390x844: Volontari tab shows 3 boxes side-by-side (same top=407.8px, widths ~105px each, right edges 134/248/361), document.scrollWidth=390=innerWidth (no horizontal overflow). Team tab also visible with scrollWidth=390.",
+    "mancanti_color_rule": "PASS - text-red-600 when Missing>0 (verified Missing=12 initial state and Missing=8 after create); emerald/green when Missing=0 with req>0 (verified in iter110)"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "frontend/src/components/crm.jsx line 488: belowFilters?.(filterVals) correctly receives filterVals from EntityManager state so Team-tab VolunteerSummary auto-reacts to filter-team-evento_id changes without any explicit prop wiring. Clean.",
+    "frontend/src/pages/Persons.jsx line 438: belowFilters={(fv) => <VolunteerSummary ... evFilter={fv.evento_id || 'all'} />} - correct default handling when filter not yet set.",
+    "VolunteerSummary consumes teams from useTeams() store (invalidated by EntityManager onMutate=invalidateTeams on create/update/delete) and staffLinks from usePeople() store (reloaded by TeamMembersDialog onReloadStaff and PeopleTable onInvited). Auto-update works via UI mutations. API-bypass mutations will not refresh until the next invalidation trigger (expected behavior).",
+    "Note on iter110 duplicate 'Eventi' key console warning: observed again this iter ('Encountered two children with the same key: Eventi' in sidebar/nav) - unrelated to VolunteerSummary feature but preexisting React key duplication somewhere in /app shell; low priority."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100% (11/11 acceptance criteria)"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! (cookie auth) - working",
+  "seed_data_creation": "Created & FULLY CLEANED UP across 4 scenario sessions: TEST_ITER115_* events (4), TEST_ITER115_* teams (6), TEST_ITER115_* persons (5) + related staff links. Final verification deleted the stragglers (TEST_ITER115B/C/D/E teams + events). 0 TEST_ITER115 docs remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter115: VolunteerSummary now appears in BOTH tab-volontari AND tab-team (via EntityManager belowFilters prop, crm.jsx L488). Numbers match between tabs with the same event filter (Volontari uses people-event-filter, Team uses filter-team-evento_id). Not shown in tab-staff, tab-da-classificare, dashboard /app, or /eventi. Mobile 390px grid-cols-3 fits without overflow. Auto-update works on team create/edit/delete via EntityManager onMutate=invalidateTeams, and on volunteer add/remove via TeamMembersDialog.onReloadStaff. Edit flow in Team tab is: edit-team-{id} opens TeamMembersDialog (detail view), then 'Modifica dati Team' button opens EntityDialog with field-volontari_richiesti and team-save. Delete uses delete-team-{id} + AlertDialog 'Elimina'. The team-dialog Add volunteer flow uses team-members-search + 'Aggiungi componente' button, requires selecting the suggested person before clicking Aggiungi.",
+  "rca of the issue": "N/A - all PASS."
+}

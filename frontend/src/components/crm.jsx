@@ -416,7 +416,7 @@ export function TextAction({ icon: Icon, children, danger, className = "", ...pr
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, extraActions, mobileCard, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail, defaultSort }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, extraActions, mobileCard, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail, defaultSort, belowFilters }) {
   const [detailRow, setDetailRow] = useState(null);
   const { user } = useAuth();
   const allow = (a) => !section || can(user, section, a);
@@ -485,6 +485,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
           </Select>
         ))}
       </div>
+      {belowFilters?.(filterVals)}
       <div className="md:hidden space-y-2.5" data-testid={`${testid}-mobile-list`}>
         {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
           : sorted.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessun {entityLabel} trovato.</div>
