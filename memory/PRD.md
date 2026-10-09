@@ -540,6 +540,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Nuovo componente `frontend/src/components/OrgUsers.jsx` montato in `Profile.jsx` come scheda "Utenti e accessi", visibile SOLO se `user.org_role === "admin_org"`. Tabella unica membri+inviti: Nome | Email | Cellulare | Ruolo | Stato (Invito inviato/Attivo/Invito scaduto) | Ultimo accesso | Azioni. "+ Invita utente" (Nome, Cognome, Email, Cellulare con PhoneInput intl, Ruolo). Azioni: Reinvia · Cambia ruolo · Disattiva/Riattiva accesso. Scadenza invito 7gg. Nessun consumo crediti; nessuna modifica a Stripe/wallet/ledger/FIC.
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
+## Dashboard Piattaforma a pulsanti — 2026-10-09 ✅ VERIFICATO (iteration_102 + build)
+- Platform.jsx: SectionSwitch "Organizzazioni | Utenti | Abbonamenti" (?sezione= + sessionStorage). Utenti = PlatformUsers embedded + tabella account; Abbonamenti = SaasAdmin embedded. /piattaforma/utenti e /piattaforma/abbonamenti → redirect; voci sidebar rimosse.
+
 ## Form Staff e Volontari semplificato — 2026-10-09 ✅ VERIFICATO (iteration_101)
 - Persons.jsx: in mode "staff" nascosti "Email secondaria" e "Azienda principale" (dati esistenti preservati: PUT parziale). Anagrafiche invariata; Partecipa non aveva i campi.
 
