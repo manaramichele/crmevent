@@ -1,0 +1,28 @@
+{
+  "summary": "Iter119 — Verified Super Admin platform-admin scope: SA access to orgs never creates a membership nor pollutes org-level audit/user listings; org audit masks SA identity as 'Assistenza CRMEvent' while /platform/audit preserves real actor_email; historical migration ensures every audit_logs row has scope field. 8/8 pytest cases pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter119_platform_admin_scope.py",
+    "/app/test_reports/pytest/iter119.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_ensure_membership correctly short-circuits for superadmin (returns (None, False)) so SA never becomes a member — verified by test_8 (create TEST_ org) and test_5 (members list).",
+    "record_audit stamps scope='platform_admin' iff actor.role == 'superadmin'. Note: an impersonated session (user with support context) uses the REAL org admin's role via get_current_user, so impersonation audit may land as scope='org'. If product spec requires impersonated writes also to be scope=platform_admin, revisit record_audit to consider actor.get('support').",
+    "_org_visible_audit masks when actor_role=='superadmin' OR scope=='platform_admin' — robust against legacy rows missing one of the fields.",
+    "/org/permissions filter excludes users with role=='superadmin' from members[] — good.",
+    "startup migration is idempotent and non-destructive: scope backfill + deactivates SA memberships (keeps records for audit). audit_logs are never deleted.",
+    "server.py is >13k lines — long overdue for splitting (audit/platform admin / permissions could each be a module). Not blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter119_platform_admin_scope.py"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "n/a (backend only)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! and QA org admin qa.eventi@crmeventqa.it / QaEvents2026! — both working.",
+  "seed_data_creation": "Each run creates and DELETEs a TEST_SA_Scope_<rand> org via /platform/organizations + DELETE with confirm_name. Also pre-existing 2 leftover disabled TEST_SA_Scope_ orgs from the first failing run were cleaned up directly via Mongo.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iter119_platform_admin_scope.py covers the full platform-admin scope story: (1) /platform/audit/org-access scope+identity, (2) SA-driven /org/permissions PUT appears masked in /org/permissions/audit while QA-admin entries keep real identity, (3) /platform/audit?actor_user_id=SA still has real actor_email, (4) all audit_logs rows have 'scope' field (migration), (5) /org/permissions members[] excludes SA, (6) /saas/me usage.users unchanged after SA org-access, (7) non-SA → 403 on /platform/audit, (8) SA creates+deletes TEST_ org without becoming a member. Tests permissions_changed restore is best-effort — target permissions are reapplied to the state read from /org/permissions, so the member is left in its original state.",
+  "rca of the issue": "No bugs found. Early failing variants were test-side only: (a) picked a membership whose user record was gone — fixed by requiring m['email']; (b) assumed usage.users was a dict — it's an int; (c) /platform/organizations DELETE needs confirm_name body."
+}

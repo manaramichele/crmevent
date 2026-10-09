@@ -1029,3 +1029,9 @@ Task 2 — Creatività manuale:
 - UI: selettore "6 mesi | 12 mesi −20%" (default 6 mesi), prezzo equivalente mensile, totale anticipato, prezzo barrato e risparmio annuale, nota "equivalente". Il mio abbonamento: Importo pagato, Rinnovo automatico, credito nel cambio piano. Super Admin: colonne Importo, Pagamento, Rinnovo auto.
 - Prezzi: BRONZE 114 € / 182,40 € · SILVER 294 € / 470,40 € · GOLD 474 € / 758,40 €.
 
+
+## 2026-10-09 — Riservatezza accessi Super Admin ✅ (iteration_119: backend 8/8)
+- `record_audit`: campo `scope` (platform_admin | org). Migrazione all'avvio non distruttiva: tutti i log classificati, nessuna cancellazione.
+- `/org/permissions/audit`: le operazioni del Super Admin appaiono come "Assistenza CRMEvent" (senza email/ID); identità reale solo in `/platform/audit` (Super Admin).
+- `_ensure_membership`: il Super Admin non diventa mai membro di un'organizzazione; eventuali membership attive vengono disattivate (non cancellate) all'avvio.
+
