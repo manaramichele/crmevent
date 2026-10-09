@@ -941,3 +941,11 @@ Task 2 — Creatività manuale:
 - Nomi UI reali usati: Dashboard, Eventi, Checklist Evento, Staff / Volontari, Aziende, Anagrafiche, Team, Turni, Attività, Sponsor & Partner, Ospitalità & Pasti, Briefing, Mappe / GPX, File / Documenti, Pipeline Evento Pro. ("Persone" eliminato → "Staff / Volontari").
 - Backend: endpoint onboarding INVARIATI; status usato solo per superadmin/event_id/state, state per persistenza seen/later. Super Admin: tutorial assente.
 - Smoke test OK (indice + guida + mobile), build OK. E2E completo da eseguire. Nessun deploy.
+
+## 2026-10-09 — Badge colorati abbonamento ✅ (iteration_106: backend 7/7, frontend 100%)
+- Backend `org_state()`: nuovo campo `expires_at` (prova → trial_end; attivo da Super Admin → admin.access_end; Stripe → current_period_end; scaduto/sospeso → ultima scadenza nota). Incluso anche in `/platform/saas/organizations`.
+- Nuovo `components/PlanBadge.jsx`: GOLD (oro + corona), SILVER (argento), BRONZE (bronzo); "Prova gratuita", "Scaduto", "Sospeso" come stati distinti.
+- "Il mio abbonamento": badge + "Scadenza: gg/mm/aaaa"; rimossa la scadenza prova quando l'abbonamento è attivo.
+- Header: badge piano (cliccabile → abbonamento) quando attivo; tabella Super Admin con badge e colonna scadenza = expires_at.
+- Nessuna modifica a regole economiche/Stripe. Nessun deploy.
+

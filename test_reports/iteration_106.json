@@ -1,0 +1,19 @@
+{
+  "summary": "Iter106 - Subscription plan badges (GOLD/SILVER/BRONZE) + expires_at. Backend pytest 7/7 PASS: GET /api/saas/me returns correct {mode, plan, plan_label, expires_at} across admin-managed states (active+gold/silver/bronze with access_end=2027-03-07 -> mode=active, expires_at=2027-03-07; status=trial with future trial_end -> mode=trial, expires_at=trial_end=2099-01-01; status=expired with access_end -> mode=expired, plan=None, expires_at=access_end; status=suspended similarly). GET /api/platform/saas/organizations row for org_qa_eventi includes expires_at matching admin.access_end. UI (desktop 1440x900) QA user logged in: /profilo?tab=abbonamento shows sub-plan-badge with text 'Piano GOLD/SILVER/BRONZE' (data-plan=gold|silver|bronze, data-mode=active), sub-expiry 'Scadenza: 07/03/2027'; header-plan-badge visible, trial-days-button absent; clicking header-plan-badge-button navigates to /profilo?tab=abbonamento. Trial state: badge 'Prova gratuita' (data-mode=trial), header-plan-badge absent, trial-days-button present. Expired: badge 'Scaduto' (data-mode=expired), no 'Piano X', header-plan-badge absent (TrialButton still shows trial-days-button labelled 'Prova terminata' - existing behaviour). Suspended: badge 'Sospeso' (data-mode=suspended), no 'Piano X', header-plan-badge absent. Super Admin > Piattaforma > Abbonamenti table: saas-badge-org_qa_eventi renders 'Piano GOLD' (data-plan=gold, data-mode=active) and the 'Data scadenza' column contains 07/03/2027. QA org saas doc snapshotted before tests and fully restored at the end (admin field removed, trial_end=2026-10-22 preserved).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter106_sub_badges.py", "/app/test_reports/pytest/iter106.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "subscriptions.org_state expires_at logic (lines 146-151) correctly prioritises: trial -> trial_end; admin status in {active, expired, suspended} with access_end -> access_end; else current_period_end or (fallback) trial_end for terminal states. Good.",
+    "TrialButton still renders the trial-days-button for s.mode in {expired, suspended} (showing 'Prova terminata'/'Sospeso' as red/grey header button). This is consistent with the requirement to not show a plan badge for non-active states; keep as-is since header-plan-badge is correctly suppressed.",
+    "PlanBadge.badgeFor returns null for s.mode='past_due' because STATE map lacks past_due. In that case badge falls through to PLAN[s.plan] with 'Pagamento in sospeso' extra, which is the intended fallback and still renders a plan badge during Stripe past_due."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter106_sub_badges.py", "/app/test_reports/iteration_106.json"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% on acceptance checks"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! (org_qa_eventi); Super Admin manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "No seed data created. QA org saas doc snapshotted to /tmp/qa_saas_snapshot.json and fully restored (admin field removed). No Stripe/checkout operations performed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reusable regression /app/backend/tests/test_iter106_sub_badges.py uses the module-scope autouse snapshot_and_restore fixture to safely mutate QA org admin subscription and restore. Super Admin platform URL served at /piattaforma?sezione=abbonamenti (redirected from /piattaforma/abbonamenti). To write UI tests that call admin endpoints while a different user is logged in in the browser, use urllib with User-Agent/Origin headers (default Python-urllib UA returns 403) and keep a separate CookieJar from the browser context."
+}
