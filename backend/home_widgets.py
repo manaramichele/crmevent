@@ -47,7 +47,7 @@ def build_router(db, require_admin, get_current_user, saas: dict) -> APIRouter:
         if sc["ev_ids"] is not None:
             q[EV_FIELD[tipo]] = {"$in": sc["ev_ids"] + ([None, ""] if tipo != "pipeline" else [])}
         if tipo == "pipeline" and not sc["perm"].get("admin"):
-            q["responsabile_id"] = {"$in": [x for x in (sc["persona"], None, "") if x is not None]}
+            q["responsabile_id"] = {"$in": ([sc["persona"]] if sc["persona"] else []) + [None, ""]}
         return q
 
     @r.get("/my/todo")
