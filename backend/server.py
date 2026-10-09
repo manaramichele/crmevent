@@ -717,6 +717,12 @@ class CompleteOrgIn(BaseModel):
     org_name: str
     telefono: Optional[str] = None
     accept_terms: bool = False
+    nome: Optional[str] = None
+    cognome: Optional[str] = None
+    marketing_consent: bool = False
+
+
+TERMS_VERSION = "2026-10"
 
 
 @api.post("/auth/register-organization")
@@ -771,14 +777,34 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
         raise HTTPException(status_code=400, detail="Devi accettare le condizioni per continuare")
     if not body.org_name.strip():
         raise HTTPException(status_code=400, detail="Il nome dell'organizzazione è obbligatorio")
+    nome, cognome = TN.person_name((body.nome or "").strip()), TN.person_name((body.cognome or "").strip())
+    if body.nome is not None and not nome:
+        raise HTTPException(status_code=400, detail="Il nome è obbligatorio")
     phone = _normalize_phone(body.telefono)
-    org = await _create_organization(body.org_name.strip(), user["user_id"])
-    await db.users.update_one({"user_id": user["user_id"]},
-                              {"$set": {"org_id": org["id"], "role": "admin", "telefono": phone, "self_registered": True,
-                                        "registered_at": now_iso(), "accepted_terms_at": now_iso()}})
+    if await db.memberships.find_one({"user_id": user["user_id"], "active": True}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail="Il tuo account è già collegato a un'organizzazione")
+    # Blocco atomico anti doppio clic: una sola creazione organizzazione per utente.
+    locked = await db.users.find_one_and_update(
+        {"user_id": user["user_id"], "$or": [{"org_id": {"$exists": False}}, {"org_id": None}, {"org_id": ""}], "org_onboarding_lock": {"$ne": True}},
+        {"$set": {"org_onboarding_lock": True}})
+    if not locked:
+        raise HTTPException(status_code=409, detail="Registrazione già in corso o completata. Ricarica la pagina.")
+    try:
+        org = await _create_organization(body.org_name.strip(), user["user_id"])
+    except Exception:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$unset": {"org_onboarding_lock": ""}})
+        raise
+    now = now_iso()
+    upd = {"org_id": org["id"], "role": "admin", "telefono": phone, "self_registered": True, "registered_at": now,
+           "accepted_terms_at": now, "terms_version": TERMS_VERSION, "privacy_version": TERMS_VERSION,
+           "marketing_consent": bool(body.marketing_consent), "marketing_consent_at": now if body.marketing_consent else None,
+           "welcome_demo": "pending"}
+    if nome:
+        upd.update({"nome": nome, "cognome": cognome or None, "name": f"{nome} {cognome}".strip()})
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd, "$unset": {"org_onboarding_lock": ""}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
     try:
-        await sync_registered_user(user["user_id"], org["id"], source="registration")
+        await sync_registered_user(user["user_id"], org["id"], nome=nome or None, cognome=cognome or None, source="registration")
     except Exception as e:
         logger.error(f"registered-user sync error: {e}")
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
