@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TeamSelect from "@/components/TeamSelect";
-import { Pencil, UserPlus, Trash2, CalendarDays, Users, Clock, ListChecks, IdCard, KeyRound, Plus, X, Save, AlertTriangle } from "lucide-react";
+import { Pencil, UserPlus, Trash2, CalendarDays, Users, Clock, ListChecks, IdCard, KeyRound, Plus, X, Save, AlertTriangle, Crown } from "lucide-react";
+import { useTeams } from "@/lib/teamsStore";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ function Initials({ p }) {
 }
 
 export default function PersonDetailDialog({ personId, open, onOpenChange, events = [], settings, onChanged, onInvite }) {
+  const { teams } = useTeams();
   const [d, setD] = useState(null);
   const [pf, setPf] = useState({ categoria: "volontario", stato: "da_contattare" });
   const [editMode, setEditMode] = useState(false);
@@ -143,7 +145,8 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
             <div className="flex items-start gap-4">
               <Initials p={p} />
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-bold text-slate-900 font-display" data-testid="person-detail-name">{p.cognome} {p.nome}</h2>
+                <h2 className="text-xl font-bold text-slate-900 font-display flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="person-detail-name"><span>{p.cognome} {p.nome}</span>
+                  {teams.some((t) => t.responsabile_id === p.id) && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200 px-2 py-0.5 text-xs font-semibold font-sans" data-testid="person-detail-leader"><Crown className="w-3.5 h-3.5 text-[#D4AF37]" />Team Leader</span>}</h2>
                 <p className="text-sm text-slate-500">{p.ruolo || "—"}</p>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {d.companies.length > 0 && <StatusBadge color="tiffany">Referente</StatusBadge>}
