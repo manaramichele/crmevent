@@ -678,6 +678,7 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     base["subscription"] = _sub_summary(org)
     base["welcome_demo"] = u.get("welcome_demo") if chosen["role"] == "admin_org" else None
     base["saas"] = subscriptions.org_state(org, await SAAS["get_config"]())
+    base["saas_usage"] = await SAAS["usage"](chosen["org_id"]) if base["saas"].get("enabled") and chosen["role"] == "admin_org" else None
     return base
 
 
@@ -1161,6 +1162,7 @@ class Activity(BaseModel):
     data: Optional[str] = None
     stato: Optional[str] = "da_fare"
     note: Optional[str] = None
+    responsabile_id: Optional[str] = None
 
 
 class Followup(BaseModel):
@@ -1172,6 +1174,7 @@ class Followup(BaseModel):
     priorita: Optional[str] = "media"
     stato: Optional[str] = "aperto"
     note: Optional[str] = None
+    responsabile_id: Optional[str] = None
 
 
 class Lodging(BaseModel):  # collection: lodgings — pernottamento (persona <-> evento)
@@ -4070,9 +4073,11 @@ async def _org_detail(org_id: str) -> dict:
     org = await _org_or_404(org_id)
     members = await db.memberships.count_documents({"org_id": org_id, "active": True})
     events = await db.events.count_documents({"org_id": org_id})
+    st = subscriptions.org_state(org, await SAAS["get_config"]())
     return {"id": org["id"], "nome": org.get("nome"), "type": org.get("type", "cliente"),
             "status": org.get("status", "active"), "created_at": org.get("created_at"),
-            "members": members, "events": events, "subscription": _sub_summary(org)}
+            "members": members, "events": events, "subscription": _sub_summary(org),
+            "formula": st.get("assigned_plan") if st.get("enabled") else None, "saas": st}
 
 
 class OrgCreateIn(BaseModel):
@@ -4085,6 +4090,7 @@ class OrgUpdateIn(BaseModel):
     nome: Optional[str] = None
     type: Optional[str] = None
     status: Optional[str] = None
+    formula: Optional[str] = None  # "" = nessuna formula
 
 
 class MemberAddIn(BaseModel):
@@ -4142,6 +4148,8 @@ async def update_organization_admin(org_id: str, body: OrgUpdateIn, admin: dict 
             if "status" in upd:
                 await record_audit(admin, "org_disabled" if upd["status"] == "disabled" else "org_enabled",
                                    org_id=org_id, org_name=org.get("nome"), detail="Stato aggiornato")
+    if body.formula is not None:
+        await SAAS["set_formula"](org_id, body.formula or None, admin)
     return await _org_detail(org_id)
 
 

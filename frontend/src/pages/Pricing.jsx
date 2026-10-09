@@ -38,7 +38,7 @@ export default function Pricing() {
           </div>
         )}
       </header>
-      <section className="max-w-6xl mx-auto px-6 pt-14 pb-16">
+      <section className="max-w-6xl mx-auto px-3 sm:px-6 pt-14 pb-16">
         <PlansSection authed={authed} />
       </section>
       <Footer />

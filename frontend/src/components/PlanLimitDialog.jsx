@@ -20,7 +20,7 @@ export default function PlanLimitDialog() {
         <DialogDescription className="text-slate-600" data-testid="plan-limit-message">{d?.message}</DialogDescription>
         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end mt-2">
           <Button variant="outline" onClick={() => setD(null)} data-testid="plan-limit-close">Non ora</Button>
-          <Button onClick={() => { setD(null); navigate("/profilo?tab=abbonamento"); }} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="plan-limit-upgrade">Cambia piano</Button>
+          <Button onClick={() => { setD(null); navigate("/profilo?tab=abbonamento"); setTimeout(() => document.getElementById("change-plan")?.scrollIntoView({ behavior: "smooth" }), 600); }} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="plan-limit-upgrade">Passa al piano superiore</Button>
         </div>
       </DialogContent>
     </Dialog>

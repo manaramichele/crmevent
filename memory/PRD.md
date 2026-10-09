@@ -540,6 +540,13 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Nuovo componente `frontend/src/components/OrgUsers.jsx` montato in `Profile.jsx` come scheda "Utenti e accessi", visibile SOLO se `user.org_role === "admin_org"`. Tabella unica membri+inviti: Nome | Email | Cellulare | Ruolo | Stato (Invito inviato/Attivo/Invito scaduto) | Ultimo accesso | Azioni. "+ Invita utente" (Nome, Cognome, Email, Cellulare con PhoneInput intl, Ruolo). Azioni: Reinvia · Cambia ruolo · Disattiva/Riattiva accesso. Scadenza invito 7gg. Nessun consumo crediti; nessuna modifica a Stripe/wallet/ledger/FIC.
 - Test (curl+UI): crea invito (nome/cognome/telefono) · 400 senza telefono · prefill GET /invites/{token} · registrazione→membro Attivo (nome "Marco Rossi", telefono) · cambio ruolo 200 · disattiva/riattiva · reinvio 200 · guardia ultimo admin 400 · cross-tenant 403 · bypass utente normale (lista/crea) 403 · UI desktop/mobile. NOTA: in preview `email_sent=false` (Resend non configurato): il token funziona, l'invio email reale dipende dalla config Resend gestita in produzione.
 
+## To Do List: assegnazione rapida responsabile — 2026-10-09 ✅ VERIFICATO (iteration_105 + build)
+- Activity/Followup: nuovo campo `responsabile_id` (persona). home_widgets: GET /api/my/todo/assignees (persone org ordinate cognome/nome), POST /api/my/todo/assign (solo responsabile_id, permesso edit sezione); filtro non-Admin "assegnate a me o senza responsabile" ora su tutti i tipi.
+- Frontend: AssignSelect (popover con ricerca, "Assegna ▾" Tiffany / nome ▾, rimozione) in TodoPanel; colonna/campo Responsabile in Attività e campo in Follow-up.
+
+## Home pubblica: rimossa voce "Contatti" dal menu — 2026-10-09 ✅ VERIFICATO (screenshot desktop + mobile)
+- LandingPage.jsx NAV: tolta voce "Contatti" (ancora #demo). Sezione/ancora, footer e area riservata invariati.
+
 ## Gestione completa abbonamenti da Super Admin — 2026-10-09 ✅ VERIFICATO (iteration_104 + build)
 - subscriptions.py: override amministrativo `saas.admin` {plan, status auto|trial|active|expired|suspended, billing_cycle, access_start/end, renewal_date, comp, max_events/max_users, notes}; org_state applica stato/limiti (sospeso/scaduto = sola consultazione); PUT /api/platform/saas/orgs/{id}/admin (solo Super Admin, valida, scrive saas_admin_history per campo con motivazione), GET .../history. Stripe e fatture mai toccati.
 - Frontend: SaasAdmin OrgsTab con ricerca/filtri, colonne utenti/eventi, "Modifica" → SubscriptionEditDialog (tab Formula/Date e rinnovi/Stato/Personalizzazioni/Storico, riepilogo prima del salvataggio, info prossimo addebito Stripe). Stato "Sospeso" gestito in header/TrialButton/MySubscription.

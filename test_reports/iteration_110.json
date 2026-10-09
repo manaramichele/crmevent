@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only testing of VolunteerSummary on /staff-volontari. Set up a TEST event with 3 teams (req=20, req=5, no-req), 10 volunteers + 1 staff member via API, then verified the summary UI on Staff / Volontari / Da classificare tabs. All acceptance criteria validated: correct math (unique persona per team, staff excluded), event filter (specific vs 'Tutti gli eventi'), Mancanti red/green color, teams without req excluded with vol-sum-noreq note, bar in Tiffany #0ABAB5, auto-update after TeamMembersDialog mutation (volunteer remove) and team requirement edit, mobile 390 layout (3 boxes side by side, no overflow). Cleanup completed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "initial_specific_event": "PASS - Necessari=25, Assegnati=10 (staff NOT counted), Mancanti=18 (red), Copertura=36%, bar width=36%, noReq note '1 team senza fabbisogno indicato (esclusi da Necessari e Mancanti).' visible",
+    "tabs_consistency": "PASS - Same values across Staff and Volontari tabs (each tab maintains its own evFilter state)",
+    "tutti_gli_eventi_filter": "PASS - Aggregates all org events; Necessari=25 (only TEST teams have req set), Assegnati=16 (10 TEST + 6 other events), 4 teams noReq shown",
+    "staff_excluded": "PASS - Staff member in Team A not counted in Assegnati (10 instead of 11)",
+    "overfill_cap": "PASS - Team B assigned 7 vs req 5 contributes 0 to Mancanti (max(0,req-n) rule); overall Mancanti=18 comes from Team A only",
+    "noreq_excluded": "PASS - Team C (no req) is excluded from Necessari and Mancanti, shown in vol-sum-noreq note instead",
+    "auto_update_remove_vol_via_team_dialog": "PASS - After removing volunteer(s) via TeamMembersDialog (team-member-remove-*) in Team tab, switching back to Volontari tab shows updated Assegnati (10 -> 8) without page reload",
+    "auto_update_team_req_edit": "PASS - After editing Team A volontari_richiesti from 20 to 3 via EntityManager edit modal (field-volontari_richiesti + team-save), Volontari tab summary auto-updates (Necessari 25 -> 8, pct 36% -> 88%)",
+    "mobile_390_layout": "PASS - 3 boxes (vol-sum-needed/-assigned/-missing) in grid-cols-3 side by side, same y position (within <5px), no horizontal overflow (sw=vw=390)",
+    "coverage_bar_tiffany": "PASS - Inner bar is bg-[#0ABAB5] (Tiffany); width style = pct capped by Math.min(100, pct) in code (verified visually)",
+    "mancanti_color_rule": "PASS - text-red-600 when Mancanti>0 (initial), text-emerald-600 when Mancanti=0 and req>0 (observed in prior iteration run with req edit)"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100%"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! (cookie auth)",
+  "seed_data_creation": "Created and FULLY CLEANED UP: 1 TEST_ event, 3 TEST_ teams, 11 TEST_ persons, 11 staff links (10 volontario + 1 staff). All DELETEs returned 200/204. saas_usage.events_created was incremented by 1 then the event deleted (counter not auto-decremented by product; left as-is).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 110: VolunteerSummary on /staff-volontari verified. Key selectors: volunteer-summary, vol-sum-needed-value, vol-sum-assigned-value, vol-sum-missing-value, vol-sum-coverage, vol-sum-coverage-pct, vol-sum-noreq, people-event-filter, tab-staff/tab-volontari/tab-da-classificare/tab-team. TeamMembersDialog opens via edit-team-{id}; inside: team-member-remove-{persona_id}, team-members-search, team-add-member/'Aggiungi componente', team-member-row-{persona_id}, dialog-close-x. Each PeopleTable tab holds its own evFilter state (resets to 'all' on tab mount)."
+}

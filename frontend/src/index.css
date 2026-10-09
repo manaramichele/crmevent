@@ -76,3 +76,12 @@ h1, h2, h3, h4, .font-display {
 .phone-input .PhoneInputInput{height:2.5rem;border:1px solid #e2e8f0;border-radius:0.375rem;padding:0 0.75rem;font-size:0.875rem;outline:none;background:#fff;}
 .phone-input .PhoneInputInput:focus{border-color:#0ABAB5;box-shadow:0 0 0 2px rgba(10,186,181,.3);}
 .phone-input .PhoneInputCountry{margin-right:0.5rem;padding:0 0.5rem;height:2.5rem;border:1px solid #e2e8f0;border-radius:0.375rem;background:#fff;}
+
+/* CTA prova gratuita: fascio luminoso periodico (sotto il testo) */
+.cta-shimmer{position:relative;overflow:hidden;isolation:isolate;}
+.cta-shimmer::before{content:"";position:absolute;top:-20%;bottom:-20%;left:0;width:40%;z-index:-1;pointer-events:none;
+  background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.18) 30%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.18) 70%,rgba(255,255,255,0) 100%);
+  transform:translateX(-160%) skewX(-20deg);animation:cta-sweep 4.5s cubic-bezier(.4,0,.2,1) 1.2s infinite;}
+@keyframes cta-sweep{0%{transform:translateX(-160%) skewX(-20deg);}28%,100%{transform:translateX(320%) skewX(-20deg);}}
+@media (prefers-reduced-motion:reduce){.cta-shimmer::before{animation:none;display:none;}}
+

@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CalendarClock, AlertTriangle } from "lucide-react";
 import { usePlans, eur } from "@/components/PlansSection";
+import PlanBadge from "@/components/PlanBadge";
 
 const DESC = { bronze: "Gestione essenziale.", silver: "Gestione avanzata.", gold: "Gestione completa." };
 
@@ -44,9 +45,15 @@ export default function TrialButton({ saas }) {
   if (!s?.enabled) return null;
   const trial = s.mode === "trial" && !s.purchased;
   const ended = s.mode === "expired" || s.mode === "canceled" || s.mode === "suspended";
+  if (s.mode === "active" && s.plan) return (
+    <button type="button" onClick={() => navigate("/profilo?tab=abbonamento")} data-testid="header-plan-badge-button" aria-label="Il mio abbonamento"
+      className="shrink-0 rounded-full transition-transform active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2">
+      <PlanBadge s={s} testid="header-plan-badge" />
+    </button>
+  );
   if (!trial && !ended) return null;
   const n = s.days_left;
-  const label = s.mode === "suspended" ? "Abbonamento sospeso" : ended ? "Prova terminata" : n === 1 ? "1 giorno rimasto" : `${n} giorni rimasti`;
+  const label = s.mode === "suspended" ? "Abbonamento sospeso" : ended && s.org_type && s.org_type !== "cliente" ? "Accesso scaduto" : ended ? "Prova terminata" : n === 1 ? "1 giorno rimasto" : `${n} giorni rimasti`;
   const short = s.mode === "suspended" ? "Sospeso" : ended ? "Terminata" : `${n} gg`;
   const tone = ended ? "bg-red-600 text-white hover:bg-red-700" : "bg-white text-[#0ABAB5] border-[1.5px] border-[#0ABAB5] hover:bg-[#0ABAB5]/10";
   const Icon = ended ? AlertTriangle : CalendarClock;

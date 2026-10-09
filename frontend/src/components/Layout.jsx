@@ -10,6 +10,7 @@ import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
 import PlanLimitDialog from "@/components/PlanLimitDialog";
+import { UsageNotice } from "@/components/UsageMeter";
 import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
 import WelcomeDemo from "@/components/WelcomeDemo";
@@ -408,6 +409,7 @@ export default function Layout({ children }) {
           </div>
         </header>
         {!isSuper && user?.saas?.mode === "past_due" && <TrialChip mobile s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
+        {!isSuper && <UsageNotice s={user?.saas} usage={user?.saas_usage} orgId={user?.org_id} />}
         </div>
         {user?.role !== "superadmin" && <TrialBanner sub={user?.subscription} onCta={() => navigate("/profilo?tab=abbonamento")} />}
         {isSuper && actingOrgId && !isPlatformRoute && (

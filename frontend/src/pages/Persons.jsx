@@ -21,6 +21,7 @@ import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { toast } from "sonner";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
 import TeamMembersDialog, { teamCounts } from "@/components/TeamMembersDialog";
+import VolunteerSummary from "@/components/VolunteerSummary";
 import TeamSelect from "@/components/TeamSelect";
 import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 import { usePeople } from "@/lib/peopleStore";
@@ -104,7 +105,7 @@ function EventRolesDialog({ person, events, settings, open, onOpenChange, onDone
   );
 }
 
-function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite, onDelete, onRoleClick, onInvited }) {
+function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], onOpen, onEdit, onInvite, onDelete, onRoleClick, onInvited }) {
   const [q, setQ] = useState("");
   const [evFilter, setEvFilter] = useState("all");
   const [sel, setSel] = useState(() => new Set());
@@ -183,6 +184,7 @@ function PeopleTable({ rows, loading, tab, events = [], onOpen, onEdit, onInvite
           </div>
         )}
       </div>
+      {isStaffTab && <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={evFilter} />}
       <div className="md:hidden space-y-2.5" data-testid={`people-mobile-list-${tab}`}>
         {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
           : displayRows.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessuna persona trovata.</div>
@@ -425,7 +427,7 @@ export default function Persons({ mode = "anagrafiche" }) {
           </TabsList>
           {["staff", "volontari", "da_classificare"].map((t) => (
             <TabsContent key={t} value={t}>
-              <PeopleTable tab={t} events={events} {...peopleProps} />
+              <PeopleTable tab={t} events={events} teams={teams} staffLinks={staffLinks} {...peopleProps} />
             </TabsContent>
           ))}
           <TabsContent value="team">

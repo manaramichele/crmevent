@@ -12,7 +12,7 @@ export function supportLabel(p) {
 }
 
 export function limitsLabel(p) {
-  const ev = p.max_events < 0 ? "Eventi illimitati" : p.max_events === 1 ? "1 evento incluso" : `${p.max_events} eventi inclusi`;
+  const ev = p.max_events < 0 ? "Eventi illimitati" : p.max_events === 1 ? "1 evento incluso" : `Fino a ${p.max_events} eventi`;
   const us = p.max_users < 0 ? "Utenti registrati illimitati" : `Fino a ${p.max_users} utenti registrati`;
   return { ev, us };
 }
@@ -65,25 +65,26 @@ export function PlanCard({ p, cycle, features, cta, current }) {
 }
 
 export function ComparisonTable({ plans, features }) {
-  const cell = (v, k) => <td key={k} className="px-3 py-2.5 text-center">{v === true ? <Check className="w-4 h-4 text-[#0ABAB5] mx-auto" /> : v === false ? <Minus className="w-4 h-4 text-slate-300 mx-auto" /> : <span className="text-xs sm:text-sm text-slate-700">{v}</span>}</td>;
+  const cell = (v, k) => <td key={k} className="px-1 py-1.5 sm:px-2 sm:py-2 text-center align-middle">{v === true ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0ABAB5] mx-auto" /> : v === false ? <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300 mx-auto" /> : <span className="text-[11px] sm:text-sm leading-tight text-slate-700">{v}</span>}</td>;
   const rows = [
     ...features.map((f) => [f.label, plans.map((p) => p.features.includes(f.key))]),
-    ["Eventi", plans.map((p) => (p.max_events < 0 ? "Illimitati" : String(p.max_events)))],
+    ["Eventi", plans.map((p) => (p.max_events < 0 ? "Illimitati" : p.max_events === 1 ? "1" : `Fino a ${p.max_events}`))],
     ["Utenti registrati", plans.map((p) => (p.max_users < 0 ? "Illimitati" : `Fino a ${p.max_users}`))],
     ["Staff e volontari (senza accesso)", plans.map(() => "Illimitati")],
     ["Assistenza email", plans.map(() => true)],
     ["Videochiamate Google Meet", plans.map((p) => (p.video_quota === 0 ? false : p.video_quota < 0 ? "Illimitate e prioritarie" : `${p.video_quota}/mese`))],
   ];
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white" data-testid="plans-comparison">
-      <table className="w-full min-w-[480px] text-sm">
+    <div className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white overflow-hidden max-w-3xl mx-auto" data-testid="plans-comparison">
+      <table className="w-full table-fixed text-[11px] sm:text-sm">
+        <colgroup><col />{plans.map((p) => <col key={p.key} className="w-[20%] sm:w-[17%]" />)}</colgroup>
         <thead><tr className="border-b border-slate-200 bg-slate-50">
-          <th className="px-3 py-3 text-left font-semibold text-slate-700 sticky left-0 bg-slate-50">Funzionalità</th>
-          {plans.map((p) => <th key={p.key} className="px-3 py-3 font-extrabold" style={{ color: p.color }}>{p.label}</th>)}
+          <th className="px-2 py-2 sm:px-3 sm:py-2.5 text-left font-semibold text-slate-700">Funzionalità</th>
+          {plans.map((p) => <th key={p.key} className="px-1 py-2 sm:px-2 sm:py-2.5 text-[11px] sm:text-sm font-extrabold tracking-wide text-center" style={{ color: p.color }} data-testid={`comparison-head-${p.key}`}>{p.label}</th>)}
         </tr></thead>
         <tbody>{rows.map(([label, vals]) => (
           <tr key={label} className="border-b border-slate-100 last:border-0">
-            <td className="px-3 py-2.5 text-slate-700 sticky left-0 bg-white">{label}</td>{vals.map((v, i) => cell(v, i))}
+            <td className="px-2 py-1.5 sm:px-3 sm:py-2 text-slate-700 leading-snug break-words">{label}</td>{vals.map((v, i) => cell(v, i))}
           </tr>
         ))}</tbody>
       </table>

@@ -38,6 +38,7 @@ export default function Followups() {
     { name: "evento_id", label: "Evento", type: "select", options: events.map((e) => ({ value: e.id, label: e.nome })) },
     { name: "azienda_id", label: "Azienda", type: "select", options: companies.map((c) => ({ value: c.id, label: c.nome })) },
     { name: "persona_id", label: "Referente", type: "select", options: personOptions(persons) },
+    { name: "responsabile_id", label: "Responsabile", type: "select", options: personOptions(persons) },
     { name: "note", label: "Note", type: "textarea", full: true },
     { name: "add_to_calendar", label: "Google Calendar", type: "gcalcheck", kind: "followup", full: true },
   ];

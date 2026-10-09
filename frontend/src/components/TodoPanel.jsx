@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Check, ListTodo } from "lucide-react";
+import AssignSelect from "@/components/AssignSelect";
 
 const TIPO = { pipeline: ["Pipeline", "bg-violet-50 text-violet-700"], attivita: ["Attività", "bg-sky-50 text-sky-700"], followup: ["Follow-up", "bg-amber-50 text-amber-700"] };
 const BUCKET = { ritardo: ["In ritardo", "text-red-600"], scadenza: ["In scadenza", "text-amber-600"], da_fare: ["Da completare", "text-slate-500"] };
@@ -11,7 +12,7 @@ const PRIO = { critica: "bg-red-100 text-red-800", alta: "bg-red-50 text-red-700
 const dmy = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "Senza scadenza");
 const href = (i) => (i.tipo === "pipeline" ? `/eventi/${i.evento_id}/pipeline` : i.tipo === "attivita" ? "/attivita" : "/followup");
 
-function TodoRow({ i, onDone }) {
+function TodoRow({ i, onDone, onAssigned }) {
   const [lbl, cls] = TIPO[i.tipo];
   return (
     <li className="flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 last:border-0" data-testid={`todo-item-${i.id}`}>
@@ -26,7 +27,7 @@ function TodoRow({ i, onDone }) {
           {i.priorita && <span className={`rounded px-1.5 py-0.5 capitalize ${PRIO[i.priorita] || PRIO.media}`}>{i.priorita}</span>}
           <span className={BUCKET[i.bucket][1]}>{dmy(i.scadenza)}</span>
           {i.stato && <span>· {STATO[i.stato] || i.stato}</span>}
-          {i.responsabile && <span className="truncate">· {i.responsabile}</span>}
+          <AssignSelect item={i} onAssigned={onAssigned} />
           {i.evento && <span className="truncate">· {i.evento}</span>}
         </div>
       </div>
@@ -62,6 +63,7 @@ export default function TodoPanel() {
   const [ev, setEv] = useState("all");
   const load = () => api.get("/my/todo").then(({ data }) => setItems(data.items)).catch(() => setItems([]));
   useEffect(() => { load(); }, []);
+  const assigned = (it, pid, name) => setItems((l) => l.map((x) => (x.id === it.id && x.tipo === it.tipo ? { ...x, responsabile_id: pid, responsabile: name } : x)));
   const done = async (i) => {
     try { await api.post("/my/todo/complete", { tipo: i.tipo, id: i.id }); setItems((l) => l.filter((x) => x.id !== i.id)); toast.success("Attività completata"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -82,7 +84,7 @@ export default function TodoPanel() {
           : groups.map(([b, l]) => (
             <div key={b} data-testid={`todo-group-${b}`}>
               <div className={`sticky top-0 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide ${BUCKET[b][1]}`}>{BUCKET[b][0]} · {l.length}</div>
-              <ul>{l.map((i) => <TodoRow key={`${i.tipo}-${i.id}`} i={i} onDone={done} />)}</ul>
+              <ul>{l.map((i) => <TodoRow key={`${i.tipo}-${i.id}`} i={i} onDone={done} onAssigned={assigned} />)}</ul>
             </div>
           ))}
       </div>

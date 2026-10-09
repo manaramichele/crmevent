@@ -941,3 +941,41 @@ Task 2 — Creatività manuale:
 - Nomi UI reali usati: Dashboard, Eventi, Checklist Evento, Staff / Volontari, Aziende, Anagrafiche, Team, Turni, Attività, Sponsor & Partner, Ospitalità & Pasti, Briefing, Mappe / GPX, File / Documenti, Pipeline Evento Pro. ("Persone" eliminato → "Staff / Volontari").
 - Backend: endpoint onboarding INVARIATI; status usato solo per superadmin/event_id/state, state per persistenza seen/later. Super Admin: tutorial assente.
 - Smoke test OK (indice + guida + mobile), build OK. E2E completo da eseguire. Nessun deploy.
+
+## 2026-10-09 — Badge colorati abbonamento ✅ (iteration_106: backend 7/7, frontend 100%)
+- Backend `org_state()`: nuovo campo `expires_at` (prova → trial_end; attivo da Super Admin → admin.access_end; Stripe → current_period_end; scaduto/sospeso → ultima scadenza nota). Incluso anche in `/platform/saas/organizations`.
+- Nuovo `components/PlanBadge.jsx`: GOLD (oro + corona), SILVER (argento), BRONZE (bronzo); "Prova gratuita", "Scaduto", "Sospeso" come stati distinti.
+- "Il mio abbonamento": badge + "Scadenza: gg/mm/aaaa"; rimossa la scadenza prova quando l'abbonamento è attivo.
+- Header: badge piano (cliccabile → abbonamento) quando attivo; tabella Super Admin con badge e colonna scadenza = expires_at.
+- Nessuna modifica a regole economiche/Stripe. Nessun deploy.
+
+
+## 2026-10-09 — Formula abbonamento per tutte le organizzazioni ✅ (iteration_107: backend 12/12, frontend 100%)
+- "Dati organizzazione": nuovo campo "Formula abbonamento" (Nessuna/BRONZE/SILVER/GOLD) per Cliente/Interna/Test → scrive `saas.admin` (stessa fonte della gestione Abbonamenti) via PATCH /platform/organizations/{id} {formula}.
+- Interna/Test: `_internal_state` → formula gratuita (billing=free), nessuna prova/14 gg, scadenza solo se impostata dal Super Admin; checkout Stripe bloccato (400). Senza formula = accesso completo come prima.
+- Elenco Abbonamenti: tutte le organizzazioni, colonne Tipo/Formula/Stato/Condizione, filtro Tipo, "Nessuna scadenza"/"Nessun addebito" per le gratuite.
+- Header e "Il mio abbonamento" mostrano il badge anche per Interne/Test; nessun piano picker per Interne/Test.
+
+
+## 2026-10-09 — Limiti SILVER 5 eventi + gestione limiti ✅ (iteration_108: backend 12/12, frontend 100%)
+- SILVER: 5 eventi / 30 utenti / 3 videochiamate (DEFAULT_LIMITS + migrazione una tantum `silver_limits_v2` sulla config salvata). Prezzi/sconto annuale/Stripe invariati.
+- Eventi: contatore atomico `saas_usage.events_created` (gli eventi eliminati contano, scelta utente), riserva atomica anti-concorrenza. Utenti: membership attive + inviti validi in attesa (posto riservato).
+- Eccezioni Super Admin applicate anche in prova. Nessuna eliminazione dati su cambio piano; change-preview restituisce `over_limits` e il dialog avvisa.
+- UI: barre utilizzo in "Il mio abbonamento", avviso 80% chiudibile (localStorage), popup limite con "Passa al piano superiore", colonne utilizzo/limite nel Super Admin, testi "Fino a 5 eventi".
+
+
+## 2026-10-09 — Tabella comparativa piani compatta desktop/mobile ✅
+- `ComparisonTable`: table-fixed a 4 colonne (Funzionalità + 3 piani a larghezza uniforme), padding/caratteri/icone ridotti su mobile, nessun min-width né scroll orizzontale, max-w-3xl su desktop. Valori Eventi da config: 1 / Fino a 5 / Illimitati.
+- Verificato senza overflow a 320, 390 e 1440 px.
+
+
+## 2026-10-09 — CTA prova gratuita con effetto Light Sweep ✅ (iteration_109: frontend 100%)
+- Classe CSS `.cta-shimmer` (index.css): fascio luminoso sfumato sotto il testo, ogni 4,5 s, disattivato con prefers-reduced-motion. Applicata solo alle CTA "Registrati gratis" della Home (hero, header, menu mobile).
+- Tabella comparativa verificata a 320/375/390/430/768/1440 px senza overflow.
+
+
+## 2026-10-09 — Riepilogo volontari mancanti in Staff / Volontari ✅ (iteration_110: frontend 100%)
+- Nuovo `components/VolunteerSummary.jsx` (Necessari / Assegnati / Mancanti + barra copertura Tiffany) sotto i filtri delle schede Staff/Volontari/Da classificare.
+- Stessa regola di `_team_coverage`/`teamCounts`: volontari non rinunciatari, unici per team, staff esclusi; mancanti = MAX(0, richiesti − assegnati) per team; team senza fabbisogno esclusi da Necessari/Mancanti.
+- Rispetta il filtro evento; aggiornamento automatico tramite store condivisi people/teams. Nessuna nuova API.
+

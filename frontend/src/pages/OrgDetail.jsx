@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Building2, Users, CalendarDays, ScrollText, UserPlus, Mail, Trash2, RefreshCw, XCircle, Save, Database, AlertTriangle } from "lucide-react";
 import StaffInviteDialog from "@/components/StaffInviteDialog";
 import { usePermMeta } from "@/pages/Permissions";
+import PlanBadge, { BILLING } from "@/components/PlanBadge";
 
 const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
 const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
@@ -33,7 +34,7 @@ export default function OrgDetail() {
   const nav = useNavigate();
   const [tab, setTab] = useState("dati");
   const [org, setOrg] = useState(null);
-  const [form, setForm] = useState({ nome: "", type: "cliente", status: "active" });
+  const [form, setForm] = useState({ nome: "", type: "cliente", status: "active", formula: "" });
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [events, setEvents] = useState([]);
@@ -45,7 +46,7 @@ export default function OrgDetail() {
   const [delUser, setDelUser] = useState(null); const [working, setWorking] = useState(false); const [cleaning, setCleaning] = useState(false);
 
   const loadOrg = useCallback(() => api.get(`/platform/organizations/${id}/detail`).then(({ data }) => {
-    setOrg(data); setForm({ nome: data.nome, type: data.type, status: data.status });
+    setOrg(data); setForm({ nome: data.nome, type: data.type, status: data.status, formula: data.formula || "" });
   }).catch((e) => toast.error(formatApiError(e.response?.data?.detail))), [id]);
   const loadMembers = useCallback(() => api.get(`/platform/organizations/${id}/members`).then(({ data }) => setMembers(data)).catch(() => {}), [id]);
   const loadInvites = useCallback(() => api.get(`/platform/organizations/${id}/invites`).then(({ data }) => setInvites(data)).catch(() => {}), [id]);
@@ -57,7 +58,9 @@ export default function OrgDetail() {
   }, [tab, id]);
 
   const saveOrg = async () => {
-    try { const { data } = await api.patch(`/platform/organizations/${id}`, form); setOrg(data); toast.success("Organizzazione aggiornata"); }
+    const body = { ...form };
+    if (form.formula === (org.formula || "")) delete body.formula;
+    try { const { data } = await api.patch(`/platform/organizations/${id}`, body); setOrg(data); setForm((f) => ({ ...f, formula: data.formula || "" })); toast.success("Organizzazione aggiornata"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const changeRole = async (uid, role) => {
@@ -130,11 +133,16 @@ export default function OrgDetail() {
               <option value="interna">Interna (nessun abbonamento)</option>
               <option value="test">Test</option>
             </select></div>
+          <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Formula abbonamento</label>
+            <select className={`${inputCls} w-full`} value={form.formula} onChange={(e) => setForm((f) => ({ ...f, formula: e.target.value }))} data-testid="org-edit-formula">
+              <option value="">Nessuna formula</option><option value="bronze">BRONZE</option><option value="silver">SILVER</option><option value="gold">GOLD</option>
+            </select>
+            <p className="text-xs text-slate-500">{form.type === "cliente" ? "Nessuna formula = automatico (prova gratuita / abbonamento Stripe). Una formula assegnata attiva il piano senza modificare Stripe." : "Accesso gratuito con le funzionalità della formula, senza prova né pagamenti. Nessuna formula = accesso completo senza piano."} Scadenze e limiti si gestiscono in Abbonamenti.</p></div>
+          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500" data-testid="org-current-plan">Piano effettivo: {org.saas?.enabled ? <PlanBadge s={org.saas} size="sm" testid="org-plan-badge" /> : <span>Nessun piano (accesso completo)</span>}{org.saas?.billing && <span>· {BILLING[org.saas.billing]}</span>}</div>
           <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Stato</label>
             <select className={`${inputCls} w-full`} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} data-testid="org-edit-status">
               <option value="active">Attiva</option><option value="disabled">Disattivata</option>
             </select></div>
-          <div className="text-xs text-slate-500">Abbonamento: {org.subscription.status === "cliente" || org.type === "cliente" ? `${org.subscription.status}${org.subscription.days_left != null ? ` · ${org.subscription.days_left} gg` : ""}` : "Non applicabile (organizzazione " + TYPE_LABEL[org.type] + ")"}</div>
           <Button onClick={saveOrg} data-testid="org-save-btn" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold"><Save className="w-4 h-4 mr-1.5" />Salva modifiche</Button>
         </div>
       )}
