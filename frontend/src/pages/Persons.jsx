@@ -435,6 +435,7 @@ export default function Persons({ mode = "anagrafiche" }) {
               fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="teams" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
               extraActions={(r, { update }) => <TeamNoteButton team={r} canEdit={canEditStaff} onSave={saveNote(update, r.id)} />}
               mobileCard={teamMobileCard}
+              belowFilters={(fv) => <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={fv.evento_id || "all"} />}
               renderDetail={(team, { close, edit, update }) => (
                 <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
                   onReloadStaff={reload} onEdit={edit} canEdit={canEditMembers} onSaveNote={saveNote(update, team.id)}
