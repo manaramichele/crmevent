@@ -968,3 +968,8 @@ Task 2 — Creatività manuale:
 - `ComparisonTable`: table-fixed a 4 colonne (Funzionalità + 3 piani a larghezza uniforme), padding/caratteri/icone ridotti su mobile, nessun min-width né scroll orizzontale, max-w-3xl su desktop. Valori Eventi da config: 1 / Fino a 5 / Illimitati.
 - Verificato senza overflow a 320, 390 e 1440 px.
 
+
+## 2026-10-09 — CTA prova gratuita con effetto Light Sweep ✅ (iteration_109: frontend 100%)
+- Classe CSS `.cta-shimmer` (index.css): fascio luminoso sfumato sotto il testo, ogni 4,5 s, disattivato con prefers-reduced-motion. Applicata solo alle CTA "Registrati gratis" della Home (hero, header, menu mobile).
+- Tabella comparativa verificata a 320/375/390/430/768/1440 px senza overflow.
+
