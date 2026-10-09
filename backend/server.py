@@ -2348,17 +2348,20 @@ async def _resolve_attachment(url: str, org_id: str) -> Optional[dict]:
         return None
     url_path = url.split("?", 1)[0].split("#", 1)[0]
     m = re.search(r"/api/files/public/([A-Za-z0-9_\-]+)$", url_path)
+    proj = {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1, "storage_path": 1}
+    alive = {"is_deleted": {"$ne": True}}  # i file migrati possono non avere il campo is_deleted
     if m:
-        rec = await db.files.find_one({"public_token": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1})
+        rec = await db.files.find_one({"public_token": m.group(1), **alive}, proj)
     else:
         m = re.search(r"/api/files/([A-Za-z0-9_\-]+)$", url_path)
-        rec = await db.files.find_one({"id": m.group(1), "is_deleted": False}, {"_id": 0, "original_filename": 1, "content_type": 1, "org_id": 1}) if m else None
+        rec = await db.files.find_one({"id": m.group(1), **alive}, proj) if m else None
     if m:
         if not rec or rec.get("org_id") not in (None, org_id):
             return None
-        return {"url": url, "name": rec.get("original_filename"), "content_type": rec.get("content_type")}
-    if url.startswith("http"):
-        return {"url": url, "name": url.rsplit("/", 1)[-1].split("?")[0] or None, "content_type": None}
+        name = rec.get("original_filename") or (rec.get("storage_path") or "").rsplit("/", 1)[-1] or None
+        return {"url": url, "name": name, "content_type": rec.get("content_type")}
+    if url.startswith("http") or url.startswith("/"):
+        return {"url": url, "name": url_path.rsplit("/", 1)[-1] or None, "content_type": None}
     return None
 
 
@@ -2370,6 +2373,8 @@ def _attachment_kind(field_kind: str, a: dict) -> str:
         return "pdf"
     if ct.startswith("image/") or re.search(r"\.(png|jpe?g|webp|gif|heic)$", name):
         return "image"
+    if re.search(r"\.(kml|kmz|zip|docx?|xlsx?|csv|txt)$", name):
+        return "file"
     return field_kind if field_kind in ("gpx", "pdf", "image") and not name else "file"
 
 
