@@ -28,6 +28,16 @@ FEATURES = [  # (chiave, etichetta) — chiavi = sezioni permessi + funzioni tra
     ("briefing", "Briefing"), ("followup", "Follow-up"),
 ]
 FEATURE_KEYS = [k for k, _ in FEATURES]
+# Limiti per piano (-1 = illimitati). Usati se la configurazione salvata non li specifica.
+DEFAULT_LIMITS = {"bronze": {"max_events": 1, "max_users": 10}, "silver": {"max_events": -1, "max_users": 30},
+                  "gold": {"max_events": -1, "max_users": -1}}
+UPGRADE_TO = {"bronze": "SILVER o GOLD", "silver": "GOLD"}
+
+
+def plan_limits(cfg: dict, plan: Optional[str]) -> dict:
+    p = cfg["plans"].get(plan) or {}
+    d = DEFAULT_LIMITS.get(plan, {"max_events": -1, "max_users": -1})
+    return {k: int(p[k]) if p.get(k) is not None else d[k] for k in d}
 _BRONZE = ["dashboard", "eventi", "staff", "pipeline", "calendar"]
 _SILVER = _BRONZE + ["aziende", "anagrafiche", "attivita", "mappe"]
 _GOLD = _SILVER + ["ospitalita", "sponsor", "briefing", "followup"]
@@ -127,7 +137,8 @@ def org_state(org: dict, cfg: dict) -> dict:
             "purchased": bool(paid_plan), "billing_cycle": s.get("billing_cycle"), "stripe_status": st,
             "price_amount": s.get("price_amount"), "activated_at": s.get("activated_at"),
             "current_period_start": s.get("current_period_start"), "current_period_end": s.get("current_period_end"),
-            "cancel_at_period_end": bool(s.get("cancel_at_period_end")), "pending_change": s.get("pending_change")}
+            "cancel_at_period_end": bool(s.get("cancel_at_period_end")), "pending_change": s.get("pending_change"),
+            "limits": plan_limits(cfg, eff) if eff and mode != "trial" else {"max_events": -1, "max_users": -1}}
 
 
 def trial_doc(cfg: dict) -> dict:
@@ -159,6 +170,8 @@ class ConfigPlanIn(BaseModel):
     yearly: float
     features: list[str]
     video_quota: int
+    max_events: Optional[int] = None
+    max_users: Optional[int] = None
     active: bool = True
 
 
@@ -220,6 +233,30 @@ def build(db, deps: dict):
         if method.upper() not in SAFE and not st["writable"] and not path.startswith(WRITE_EXEMPT):
             raise HTTPException(status_code=403, detail={
                 "code": "plan_readonly", "message": "Prova terminata – Scegli il tuo piano. I tuoi dati restano consultabili."})
+
+    async def check_limit(org_id: str, kind: str) -> None:
+        """Limiti piano (eventi / utenti registrati con accesso). Prova = accesso completo. Nessuna rimozione di dati esistenti."""
+        st = await state_for(org_id)
+        if not st.get("enabled") or st.get("mode") == "trial" or not st.get("plan"):
+            return
+        cfg = await get_config()
+        lim = plan_limits(cfg, st["plan"])["max_events" if kind == "events" else "max_users"]
+        if lim < 0:
+            return
+        if kind == "events":
+            used = await db.events.count_documents({"org_id": org_id})
+        else:
+            now = _iso(_now())
+            used = await db.memberships.count_documents({"org_id": org_id, "active": True}) + (0 if kind == "users_accept" else await db.org_invites.count_documents(
+                {"org_id": org_id, "status": "pending", "expires_at": {"$gt": now}}))
+        if used < lim:
+            return
+        up = UPGRADE_TO.get(st["plan"], "un piano superiore")
+        what = (f"{lim} evento" if lim == 1 else f"{lim} eventi") if kind == "events" else f"{lim} utenti registrati"
+        more = "eventi illimitati" if kind == "events" else "aggiungere altri utenti"
+        raise HTTPException(status_code=403, detail={
+            "code": "plan_limit", "kind": kind, "plan": st["plan"], "limit": lim,
+            "message": f"Il piano {st['plan_label']} include fino a {what}. Passa a {up} per {more}."})
 
     async def init_trial(org_id: str, owner_user_id: Optional[str] = None):
         cfg = await get_config()
@@ -422,7 +459,8 @@ def build(db, deps: dict):
         cfg = await get_config()
         return {"trial_days": cfg.get("trial_days"), "trial_plan": cfg.get("trial_plan"), "trial_video_quota": cfg.get("trial_video_quota"),
                 "features": [{"key": k, "label": l} for k, l in FEATURES],
-                "plans": [{"key": k, **{f: cfg["plans"][k].get(f) for f in ("label", "color", "tagline", "monthly", "yearly", "features", "video_quota")}}
+                "plans": [{"key": k, **{f: cfg["plans"][k].get(f) for f in ("label", "color", "tagline", "monthly", "yearly", "features", "video_quota")},
+                           **plan_limits(cfg, k)}
                           for k in PLAN_KEYS if cfg["plans"][k].get("active", True)]}
 
     # ---------------- Organizzazione ----------------
@@ -684,9 +722,10 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="Durata prova o limite videochiamate non validi")
         plans = {}
         for k, p in body.plans.items():
-            if p.monthly <= 0 or p.yearly <= 0 or p.video_quota < -1:
+            if p.monthly <= 0 or p.yearly <= 0 or p.video_quota < -1 or (p.max_events or 0) < -1 or (p.max_users or 0) < -1 \
+                    or p.max_events == 0 or p.max_users == 0:
                 raise HTTPException(status_code=400, detail=f"Valori non validi per {k.upper()}")
-            plans[k] = {**p.model_dump(), "features": [f for f in FEATURE_KEYS if f in p.features]}
+            plans[k] = {**p.model_dump(), **plan_limits({"plans": {k: p.model_dump()}}, k), "features": [f for f in FEATURE_KEYS if f in p.features]}
         price_changed = any(round(plans[k][c], 2) != round(float(cur["plans"][k][c]), 2) for k in PLAN_KEYS for c in CYCLES)
         doc = {"trial_days": body.trial_days, "trial_video_quota": body.trial_video_quota, "plans": plans,
                "version": int(cur.get("version", 1)) + 1, "updated_at": _iso(_now()), "updated_by": admin.get("email")}
@@ -784,7 +823,7 @@ def build(db, deps: dict):
         tot = {k: sum(r[k] or 0 for r in rows) for k in ("balance", "purchased_credits", "events_active", "renewals_scheduled", "ai_uses", "invoices")}
         return {"generated_at": _iso(_now()), "totals": {**tot, "orgs": len(rows), "orgs_credits": len([r for r in rows if r["model"] == "crediti"])}, "orgs": rows}
 
-    return {"router": r, "get_config": get_config, "state_for": state_for, "is_saas": is_saas, "check": check,
+    return {"router": r, "get_config": get_config, "state_for": state_for, "is_saas": is_saas, "check": check, "check_limit": check_limit,
             "init_trial": init_trial, "handle_webhook": handle_webhook, "video_policy": video_policy,
             "video_consume": video_consume, "video_release": video_release, "gold_notice_hours": GOLD_NOTICE_HOURS,
             "run_trial_notices": run_trial_notices}

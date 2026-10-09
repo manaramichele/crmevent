@@ -1420,7 +1420,7 @@ def crud_routes(path, coll, model, org_scoped=True):
             if data.get("team_id") not in _team_ids(user):
                 raise HTTPException(status_code=403, detail="Seleziona uno dei Team a cui hai accesso")
         if coll == "events":
-            pass  # eventi subito operativi: nessuna attivazione a crediti
+            await SAAS["check_limit"](user["org_id"], "events")
         else:
             await _assert_org_operational(user["org_id"])
             if data.get("evento_id"):
@@ -4169,6 +4169,7 @@ async def add_org_member(org_id: str, body: MemberAddIn, user: dict = Depends(ge
     existing = await db.memberships.find_one({"user_id": target["user_id"], "org_id": org_id})
     if existing and existing.get("active"):
         raise HTTPException(status_code=400, detail="L'utente è già associato a questa organizzazione")
+    await SAAS["check_limit"](org_id, "users")
     if existing:
         await db.memberships.update_one({"id": existing["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
     else:
@@ -4197,6 +4198,8 @@ async def update_org_member(org_id: str, target_id: str, body: MemberUpdateIn, u
     if body.active is not None and body.active != m.get("active", True):
         if not body.active and m["role"] == "admin_org":
             await _guard_last_admin(org, target_id)
+        if body.active:
+            await SAAS["check_limit"](org_id, "users")
         upd["active"] = body.active; changes.append(f"accesso: {'attivo' if body.active else 'disabilitato'}")
         action = action or ("member_enabled" if body.active else "member_disabled")
     if upd:
@@ -5313,6 +5316,7 @@ async def _create_invite(org: dict, email: str, role: str, invited_by: str, lead
                          nome: Optional[str] = None, cognome: Optional[str] = None, telefono: Optional[str] = None) -> dict:
     await db.org_invites.update_many({"org_id": org["id"], "email": email, "status": "pending"},
                                      {"$set": {"status": "revoked", "updated_at": now_iso()}})
+    await SAAS["check_limit"](org["id"], "users")
     token = secrets.token_urlsafe(32)
     inv = {"id": new_id(), "org_id": org["id"], "email": email, "role": role, "token": token,
            "nome": (nome or "").strip() or None, "cognome": (cognome or "").strip() or None, "telefono": telefono,
@@ -5542,6 +5546,8 @@ async def _get_valid_invite(token: str) -> dict:
 async def _accept_invite(inv: dict, target_user: dict) -> None:
     role = _norm_role(inv["role"])
     m = await db.memberships.find_one({"user_id": target_user["user_id"], "org_id": inv["org_id"]})
+    if not (m and m.get("active", True)):
+        await SAAS["check_limit"](inv["org_id"], "users_accept")
     if m:
         await db.memberships.update_one({"id": m["id"]}, {"$set": {"active": True, "role": role, "updated_at": now_iso()}})
     else:

@@ -34,6 +34,9 @@ api.interceptors.response.use(
     if (error?.response?.status === 403 && d && typeof d === "object" && d.code === "event_not_operational") {
       window.dispatchEvent(new CustomEvent("crmevent:event-not-operational", { detail: d }));
     }
+    if (error?.response?.status === 403 && d && typeof d === "object" && d.code === "plan_limit") {
+      window.dispatchEvent(new CustomEvent("crmevent:plan-limit", { detail: d }));
+    }
     return Promise.reject(error);
   }
 );

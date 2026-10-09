@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Minus, Video, Mail, Crown, Infinity as InfinityIcon, Gift } from "lucide-react";
+import { Check, Minus, Video, Mail, Crown, Infinity as InfinityIcon, Gift, Users } from "lucide-react";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 export const eur = (n) => Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -9,6 +9,12 @@ export function supportLabel(p) {
   if (p.video_quota === 0) return { icon: Mail, text: "Assistenza via email" };
   if (p.video_quota < 0) return { icon: Crown, text: "Videochiamate illimitate e prioritarie" };
   return { icon: Video, text: `Email + ${p.video_quota} videochiamate al mese` };
+}
+
+export function limitsLabel(p) {
+  const ev = p.max_events < 0 ? "Eventi illimitati" : p.max_events === 1 ? "1 evento incluso" : `${p.max_events} eventi inclusi`;
+  const us = p.max_users < 0 ? "Utenti registrati illimitati" : `Fino a ${p.max_users} utenti registrati`;
+  return { ev, us };
 }
 
 export function usePlans() {
@@ -33,6 +39,7 @@ export function PlanCard({ p, cycle, features, cta, current }) {
   const yearly = cycle === "yearly";
   const perMonth = yearly ? p.yearly / 12 : p.monthly;
   const sup = supportLabel(p);
+  const lim = limitsLabel(p);
   return (
     <div className={`relative flex flex-col rounded-2xl bg-white p-6 border transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-lg ${current ? "border-[#0ABAB5] ring-2 ring-[#0ABAB5]/30" : "border-slate-200 shadow-sm"}`}
       style={{ borderTop: `6px solid ${p.color}` }} data-testid={`plan-card-${p.key}`}>
@@ -45,7 +52,8 @@ export function PlanCard({ p, cycle, features, cta, current }) {
       </div>
       <div className="text-xs text-slate-500 h-4" data-testid={`plan-billed-${p.key}`}>{yearly ? `Totale annuale addebitato: €${eur(p.yearly)}` : "Fatturazione mensile"}</div>
       <ul className="mt-5 space-y-2 text-sm flex-1">
-        <li className="flex gap-2 text-slate-800 font-medium"><InfinityIcon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />Eventi e utenti illimitati</li>
+        <li className="flex gap-2 text-slate-800 font-medium" data-testid={`plan-events-${p.key}`}><InfinityIcon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{lim.ev}</li>
+        <li className="flex gap-2 text-slate-800 font-medium" data-testid={`plan-users-${p.key}`}><Users className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{lim.us}</li>
         <li className="flex gap-2 text-slate-800 font-medium"><sup.icon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{sup.text}</li>
         {features.filter((f) => p.features.includes(f.key)).map((f) => (
           <li key={f.key} className="flex gap-2 text-slate-600"><Check className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{f.label}</li>
@@ -60,7 +68,9 @@ export function ComparisonTable({ plans, features }) {
   const cell = (v, k) => <td key={k} className="px-3 py-2.5 text-center">{v === true ? <Check className="w-4 h-4 text-[#0ABAB5] mx-auto" /> : v === false ? <Minus className="w-4 h-4 text-slate-300 mx-auto" /> : <span className="text-xs sm:text-sm text-slate-700">{v}</span>}</td>;
   const rows = [
     ...features.map((f) => [f.label, plans.map((p) => p.features.includes(f.key))]),
-    ["Eventi illimitati", plans.map(() => true)], ["Utenti illimitati", plans.map(() => true)],
+    ["Eventi", plans.map((p) => (p.max_events < 0 ? "Illimitati" : String(p.max_events)))],
+    ["Utenti registrati", plans.map((p) => (p.max_users < 0 ? "Illimitati" : `Fino a ${p.max_users}`))],
+    ["Staff e volontari (senza accesso)", plans.map(() => "Illimitati")],
     ["Assistenza email", plans.map(() => true)],
     ["Videochiamate Google Meet", plans.map((p) => (p.video_quota === 0 ? false : p.video_quota < 0 ? "Illimitate e prioritarie" : `${p.video_quota}/mese`))],
   ];
@@ -92,7 +102,7 @@ export default function PlansSection({ authed, claim }) {
           <Gift className="w-3.5 h-3.5 text-[#0ABAB5]" />{claim || `${data.trial_days || 14} giorni di prova gratuita. Nessuna carta di credito richiesta.`}
         </div>
         <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Scegli il piano per il tuo evento</h2>
-        <p className="text-slate-500 mt-3 text-sm md:text-base">Tutti i piani includono eventi, utenti, staff e volontari illimitati.</p>
+        <p className="text-slate-500 mt-3 text-sm md:text-base">Staff e volontari illimitati in tutti i piani. Durante la prova gratuita hai accesso completo.</p>
         <div className="mt-6"><CycleToggle cycle={cycle} setCycle={setCycle} /></div>
       </div>
       <div className="grid gap-5 md:grid-cols-3">

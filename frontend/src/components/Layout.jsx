@@ -9,6 +9,7 @@ import {
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
 import SupportChat from "@/components/SupportChat";
+import PlanLimitDialog from "@/components/PlanLimitDialog";
 import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
 import WelcomeDemo from "@/components/WelcomeDemo";
@@ -428,6 +429,7 @@ export default function Layout({ children }) {
         </main>
       </div>
       <SupportChat fab={false} />
+      <PlanLimitDialog />
       <WelcomeDemo />
     </div>
   );
