@@ -16,7 +16,7 @@ export default function PlanLimitDialog() {
     <Dialog open={!!d} onOpenChange={(o) => !o && setD(null)}>
       <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]" data-testid="plan-limit-dialog">
         <ArrowUpCircle className="w-10 h-10 text-[#0ABAB5]" />
-        <DialogTitle className="font-display text-xl font-bold">{d?.kind === "events" ? "Limite eventi raggiunto" : "Limite utenti raggiunto"}</DialogTitle>
+        <DialogTitle className="font-display text-xl font-bold">{d?.kind === "events" ? "Limite eventi raggiunto" : "Limite Staff e Volontari raggiunto"}</DialogTitle>
         <DialogDescription className="text-slate-600" data-testid="plan-limit-message">{d?.message}</DialogDescription>
         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end mt-2">
           <Button variant="outline" onClick={() => setD(null)} data-testid="plan-limit-close">Non ora</Button>

@@ -6,7 +6,7 @@ export function usageItems(limits, usage) {
   if (!limits || !usage) return [];
   return [
     { kind: "events", label: "Eventi utilizzati", used: usage.events, limit: limits.max_events },
-    { kind: "users", label: "Utenti registrati", used: usage.users + (usage.pending_invites || 0), limit: limits.max_users, pending: usage.pending_invites || 0 },
+    { kind: "people", label: "Staff e Volontari", used: usage.people ?? 0, limit: limits.max_users },
   ].map((x) => ({ ...x, pct: x.limit > 0 ? Math.min(100, Math.round((x.used / x.limit) * 100)) : 0 }));
 }
 
@@ -41,7 +41,7 @@ export function UsageNotice({ s, usage, orgId }) {
   return (
     <div className="flex items-center gap-2 px-3 sm:px-6 py-1.5 text-xs bg-amber-50 text-amber-900 border-b border-amber-200" data-testid="usage-notice">
       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-      <span className="flex-1 min-w-0">{show.map((it) => `${it.kind === "events" ? "Eventi" : "Utenti"}: ${it.used} su ${it.limit}`).join(" · ")} — {show.some((it) => it.used >= it.limit) ? "limite raggiunto." : "stai per raggiungere il limite del piano."}</span>
+      <span className="flex-1 min-w-0">{show.map((it) => `${it.kind === "events" ? "Eventi" : "Staff e Volontari"}: ${it.used} su ${it.limit}`).join(" · ")} — {show.some((it) => it.used >= it.limit) ? "limite raggiunto." : "stai per raggiungere il limite del piano."}</span>
       <button type="button" onClick={() => navigate("/profilo?tab=abbonamento")} className="font-semibold underline underline-offset-2" data-testid="usage-notice-cta">Vedi piani</button>
       <button type="button" onClick={close} aria-label="Chiudi avviso" className="p-1 rounded hover:bg-amber-100" data-testid="usage-notice-close"><X className="w-3.5 h-3.5" /></button>
     </div>

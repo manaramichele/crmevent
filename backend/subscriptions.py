@@ -317,48 +317,59 @@ def build(db, deps: dict):
         except DuplicateKeyError:
             await db.saas_usage.update_one({"org_id": org_id}, {"$max": {"events_created": cur}})
 
+    async def people_ids(org_id: str) -> set:
+        """Persone Staff/Volontari uniche: presenze evento + candidature pubbliche (con o senza account)."""
+        a = await db.staff.distinct("persona_id", {"org_id": org_id})
+        b = await db.availabilities.distinct("persona_id", {"org_id": org_id})
+        return {x for x in a + b if x}
+
+    async def check_people(org_id: str, persona_id: Optional[str] = None, public: bool = False) -> None:
+        """Blocca solo l'ingresso di una NUOVA persona Staff/Volontari oltre il limite; le persone già registrate restano gestibili."""
+        st = await state_for(org_id)
+        if not st.get("enabled"):
+            return
+        lim = st["limits"]["max_users"]
+        if lim < 0:
+            return
+        ids = await people_ids(org_id)
+        if (persona_id and persona_id in ids) or len(ids) < lim:
+            return
+        if public:
+            raise HTTPException(status_code=409, detail="Le iscrizioni per questo evento sono al momento chiuse. Contatta l'organizzatore.")
+        raise _limit_error(st, "people", lim)
+
     async def usage(org_id: str) -> dict:
-        """Eventi = tutti quelli mai creati (anche eliminati). Utenti = account attivi; inviti validi riservano un posto."""
+        """Eventi = tutti quelli mai creati (anche eliminati). Persone = Staff e Volontari unici dell'organizzazione."""
         await _indexes()
         await _seed_usage(org_id)
         u = await db.saas_usage.find_one({"org_id": org_id}, {"_id": 0}) or {}
         now = _iso(_now())
         return {"events": int(u.get("events_created", 0)), "events_current": await db.events.count_documents({"org_id": org_id}),
+                "people": len(await people_ids(org_id)),
                 "users": await db.memberships.count_documents({"org_id": org_id, "active": True}),
                 "pending_invites": await db.org_invites.count_documents({"org_id": org_id, "status": "pending", "expires_at": {"$gt": now}})}
 
     def _limit_error(st: dict, kind: str, lim: int):
         up = UPGRADE_TO.get(st.get("plan"), "un piano superiore")
-        what = (f"{lim} evento" if lim == 1 else f"{lim} eventi") if kind == "events" else f"{lim} utenti registrati"
-        more = "creare altri eventi" if kind == "events" else "aggiungere altri utenti"
+        what = (f"{lim} evento" if lim == 1 else f"{lim} eventi") if kind == "events" else f"{lim} persone Staff e Volontari"
+        more = "creare altri eventi" if kind == "events" else "registrare altre persone Staff e Volontari"
         label = st.get("plan_label") or "attuale"
         return HTTPException(status_code=403, detail={
             "code": "plan_limit", "kind": kind, "plan": st.get("plan"), "limit": lim, "upgrade_to": up,
             "message": f"Il piano {label} include fino a {what}. Gli elementi esistenti restano gestibili. Passa a {up} per {more}."})
 
     async def check_limit(org_id: str, kind: str) -> None:
-        """Limiti piano (eventi / utenti registrati con accesso). Prova = accesso completo salvo eccezioni del Super Admin.
-        kind=events riserva atomicamente il posto (contatore mai decrementato: anche gli eventi eliminati contano)."""
+        """Limite eventi (contatore atomico, mai decrementato: anche gli eventi eliminati contano).
+        Gli account di accesso non sono più limitati: il limite persone è su Staff/Volontari (check_people)."""
+        if kind != "events":
+            return
         st = await state_for(org_id)
-        if kind == "events":
-            await _indexes()
-            await _seed_usage(org_id)
-            lim = st["limits"]["max_events"] if st.get("enabled") else -1
-            q = {"org_id": org_id} if lim < 0 else {"org_id": org_id, "events_created": {"$lt": lim}}
-            if not await db.saas_usage.find_one_and_update(q, {"$inc": {"events_created": 1}}):
-                raise _limit_error(st, kind, lim)
-            return
-        if not st.get("enabled"):
-            return
-        lim = st["limits"]["max_users"]
-        if lim < 0:
-            return
-        now = _iso(_now())
-        used = await db.memberships.count_documents({"org_id": org_id, "active": True}) + (0 if kind == "users_accept" else await db.org_invites.count_documents(
-            {"org_id": org_id, "status": "pending", "expires_at": {"$gt": now}}))
-        if used < lim:
-            return
-        raise _limit_error(st, "users", lim)
+        await _indexes()
+        await _seed_usage(org_id)
+        lim = st["limits"]["max_events"] if st.get("enabled") else -1
+        q = {"org_id": org_id} if lim < 0 else {"org_id": org_id, "events_created": {"$lt": lim}}
+        if not await db.saas_usage.find_one_and_update(q, {"$inc": {"events_created": 1}}):
+            raise _limit_error(st, kind, lim)
 
     async def init_trial(org_id: str, owner_user_id: Optional[str] = None):
         cfg = await get_config()
@@ -645,7 +656,7 @@ def build(db, deps: dict):
         adm = s.get("admin") or {}
         lim = {k: int(adm[k]) if adm.get(k) is not None else v for k, v in plan_limits(cfg, plan).items()}
         us = await usage(org["id"])
-        out["over_limits"] = [{"kind": k, "used": n, "limit": lim[f"max_{k}"]} for k, n in (("events", us["events"]), ("users", us["users"] + us["pending_invites"]))
+        out["over_limits"] = [{"kind": k, "used": n, "limit": lim[f"max_{k}"]} for k, n in (("events", us["events"]), ("users", us["people"]))
                               if 0 <= lim[f"max_{k}"] < n]
         if kind == "upgrade" and sub.get("status") != "trialing":
             price_id = await ensure_price(cfg, plan, cycle)
@@ -871,7 +882,7 @@ def build(db, deps: dict):
                                                    "current_period_end", "current_period_start", "trial_start", "trial_end", "days_left", "cancel_at_period_end",
                                                    "pending_change", "stripe_status", "admin", "access_end", "expires_at", "limits", "assigned_plan")})
                 us = await usage(o["id"])
-                row.update({"users_count": us["users"], "pending_invites": us["pending_invites"], "events_count": us["events"], "events_current": us["events_current"]})
+                row.update({"users_count": us["users"], "people_count": us["people"], "pending_invites": us["pending_invites"], "events_count": us["events"], "events_current": us["events_current"]})
                 row.update({"payments_count": len([p for p in pay if p.get("payment_status") == "paid"]),
                             "payments_total": round(sum(float(p.get("totale") or 0) for p in pay if p.get("payment_status") == "paid"), 2),
                             "invoices_count": len(pay), "video_used": vp.get("used"), "video_quota": vp.get("quota"),
@@ -1019,4 +1030,4 @@ def build(db, deps: dict):
     return {"router": r, "get_config": get_config, "state_for": state_for, "is_saas": is_saas, "check": check, "check_limit": check_limit,
             "init_trial": init_trial, "handle_webhook": handle_webhook, "video_policy": video_policy,
             "video_consume": video_consume, "video_release": video_release, "gold_notice_hours": GOLD_NOTICE_HOURS,
-            "run_trial_notices": run_trial_notices, "set_formula": set_formula, "usage": usage}
+            "run_trial_notices": run_trial_notices, "set_formula": set_formula, "usage": usage, "check_people": check_people}

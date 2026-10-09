@@ -25,9 +25,9 @@ function PlanEditor({ k, p, catalog, onChange }) {
         <label>Annuale €<Input type="number" step="0.01" value={p.yearly} onChange={(e) => set("yearly", parseFloat(e.target.value))} data-testid={`saas-yearly-${k}`} /></label>
         <label>Video/mese<Input type="number" value={p.video_quota} onChange={(e) => set("video_quota", parseInt(e.target.value, 10))} data-testid={`saas-video-${k}`} /></label>
         <label>Max eventi<Input type="number" value={p.max_events ?? -1} onChange={(e) => set("max_events", parseInt(e.target.value, 10))} data-testid={`saas-max-events-${k}`} /></label>
-        <label>Max utenti<Input type="number" value={p.max_users ?? -1} onChange={(e) => set("max_users", parseInt(e.target.value, 10))} data-testid={`saas-max-users-${k}`} /></label>
+        <label>Max Staff e Volontari<Input type="number" value={p.max_users ?? -1} onChange={(e) => set("max_users", parseInt(e.target.value, 10))} data-testid={`saas-max-users-${k}`} /></label>
       </div>
-      <p className="text-[11px] text-slate-400">Videochiamate: 0 = solo email, -1 = illimitate. Eventi/utenti: -1 = illimitati (utenti = account con accesso, esclusi staff e volontari).</p>
+      <p className="text-[11px] text-slate-400">Videochiamate: 0 = solo email, -1 = illimitate. Eventi/Staff e Volontari: -1 = illimitati (persone Staff/Volontari uniche, con o senza account; gli account di accesso non sono limitati).</p>
       <div className="flex flex-wrap gap-1.5">{catalog.map((f) => (
         <button key={f.key} type="button" onClick={() => toggle(f.key)} data-testid={`saas-feature-${k}-${f.key}`}
           className={`rounded-full px-2.5 py-1 text-xs border ${p.features.includes(f.key) ? "bg-[#0ABAB5]/15 border-[#0ABAB5] text-slate-900" : "border-slate-200 text-slate-400"}`}>{f.label}</button>
@@ -98,7 +98,7 @@ function OrgsTab() {
     {edit && <SubscriptionEditDialog row={edit} onClose={() => setEdit(null)} onSaved={load} />}
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="saas-orgs-table">
       <table className="w-full min-w-[1100px] text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Tipo", "Formula", "Stato", "Condizione", "Periodicità", "Data inizio", "Data scadenza", "Prossimo rinnovo", "Utenti", "Eventi", "Pagamenti", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Tipo", "Formula", "Stato", "Condizione", "Periodicità", "Data inizio", "Data scadenza", "Prossimo rinnovo", "Staff e Volontari", "Eventi", "Pagamenti", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
         <tbody>{shown.map((r) => (
           <tr key={r.id} className="border-t border-slate-100" data-testid={`saas-org-${r.id}`}>
             <td className="px-3 py-2 font-medium">{r.nome}{r.admin?.comp ? <span className="ml-1 text-[10px] rounded bg-emerald-50 text-emerald-700 px-1">Omaggio</span> : null}</td>
@@ -110,7 +110,7 @@ function OrgsTab() {
             <td className="px-3 py-2">{d(r.mode === "trial" ? r.trial_start : r.admin?.access_start || r.current_period_start || r.activated_at)}</td>
             <td className="px-3 py-2" data-testid={`saas-expiry-${r.id}`}>{endOf(r) ? d(endOf(r)) : r.billing === "free" ? "Nessuna scadenza" : "—"}</td>
             <td className="px-3 py-2">{r.billing === "free" ? "Nessun addebito" : d(r.admin?.renewal_date || (r.stripe_status === "active" ? r.current_period_end : null))}</td>
-            <td className="px-3 py-2"><span data-testid={`saas-users-${r.id}`}>{r.users_count ?? "—"}{r.pending_invites ? ` (+${r.pending_invites} inviti)` : ""} / {r.limits?.max_users > 0 ? r.limits.max_users : "∞"}</span></td>
+            <td className="px-3 py-2"><span data-testid={`saas-users-${r.id}`}>{r.people_count ?? "—"} / {r.limits?.max_users > 0 ? r.limits.max_users : "∞"}</span></td>
             <td className="px-3 py-2"><span data-testid={`saas-events-${r.id}`} title="Eventi creati (inclusi eliminati)">{r.events_count ?? "—"} / {r.limits?.max_events > 0 ? r.limits.max_events : "∞"}</span></td>
             <td className="px-3 py-2">{r.payments_count ?? "—"}{r.payments_total ? ` · €${r.payments_total}` : ""}</td>
             <td className="px-3 py-2">{r.model !== "abbonamento" ? "—" : r.video_unlimited ? `${r.video_used ?? 0} · illimitate` : r.video_quota ? `${r.video_used ?? 0}/${r.video_quota}` : "Email"}</td>

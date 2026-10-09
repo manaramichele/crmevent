@@ -1432,6 +1432,8 @@ def crud_routes(path, coll, model, org_scoped=True):
             await _assert_org_operational(user["org_id"])
             if data.get("evento_id"):
                 await _assert_event_operational(user["org_id"], data["evento_id"])
+            if coll == "staff":
+                await SAAS["check_people"](user["org_id"], data.get("persona_id"))
         return await _create(coll, data)
 
     @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
@@ -1928,6 +1930,7 @@ async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_a
         if existing and not body.confirm_existing:
             return {"status": "exists", "person": {"id": existing["id"], "nome": existing.get("nome"), "cognome": existing.get("cognome"), "email": existing.get("email"), "cellulare": existing.get("cellulare")}}
         person = existing
+    await SAAS["check_people"](admin["org_id"], (person or {}).get("id"))
     if not person:
         person = TN.normalize_fields("persons", {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()})
         await db.persons.insert_one({**person})
@@ -5412,6 +5415,7 @@ async def add_staff_candidate(org_id: str, body: StaffCandidateIn, user: dict = 
     tel = _normalize_phone(body.cellulare) if (body.cellulare or "").strip() else ""
     conds = ([{"email": email}] if email else []) + ([{"cellulare": tel}] if tel else [])
     person = await db.persons.find_one({"org_id": org_id, "$or": conds}, {"_id": 0}) if conds else None
+    await SAAS["check_people"](org_id, (person or {}).get("id"))
     if not person:
         person = TN.normalize_fields("persons", {"id": new_id(), "org_id": org_id, "nome": body.nome.strip(), "cognome": body.cognome.strip(),
                   "email": email, "cellulare": tel, "created_at": now_iso()})
@@ -10323,6 +10327,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         person = await db.persons.find_one({"org_id": org_id, "cellulare": cell}, {"_id": 0})
     if not person and cf_norm:
         person = await db.persons.find_one({"org_id": org_id, "codice_fiscale": cf_norm}, {"_id": 0})
+    await SAAS["check_people"](org_id, (person or {}).get("id"), public=True)
     mismatch = {}
     if person:
         fill = {}
