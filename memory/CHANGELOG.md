@@ -992,3 +992,9 @@ Task 2 — Creatività manuale:
 - TodoPanel/NotesPanel: stato di errore con "Riprova" invece di lista vuota.
 - Note: salvate con org_id e filtrate per (utente, org); note precedenti senza org restano visibili al proprietario.
 
+
+## 2026-10-09 — Login Google proprietario CRMEvent (non attivo) ✅ (iteration_113: backend 16/16, frontend 100%)
+- Nuovo `backend/google_login.py`: /oauth/google/config|start|callback|link (Code Flow + PKCE + state monouso + nonce, verifica id_token Google, cookie JWT esistente). Flag `GOOGLE_LOGIN_PROVIDER` (default emergent) per attivazione/rollback.
+- Abbinamento: google_sub → email verificata (auto) → Super Admin/conflitto con conferma password. Nuovi account solo da Registrazione/Invito.
+- Frontend: `lib/googleAuth.js`, `GoogleLinkPrompt.jsx`; Login/Registrati/Invito aggiornati. Report: `/app/memory/GOOGLE_LOGIN_IMPLEMENTATION.md`.
+
