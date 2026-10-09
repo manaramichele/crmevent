@@ -1007,3 +1007,8 @@ Task 2 — Creatività manuale:
 ## 2026-10-09 — Riepilogo volontari solo nella scheda Volontari ✅
 - `Persons.jsx`: VolunteerSummary mostrato solo con tab === "volontari" (non più in Staff/Da classificare). Verificato: assente in Staff, Dashboard, Eventi, Team.
 
+
+## 2026-10-09 — Preparazione attivazione login Google CRMEvent
+- Logo 120×120 per consenso Google: `frontend/public/google-oauth-logo-120.png` (da favicon-512, disegno invariato).
+- `google_login.py`: parametro `hl` (it di default, lingua del browser se diversa). Provider ancora NON attivo.
+
