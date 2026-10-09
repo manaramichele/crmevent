@@ -143,6 +143,12 @@ def org_state(org: dict, cfg: dict) -> dict:
     for k in ("max_events", "max_users"):
         if adm.get(k) is not None and mode != "trial":
             lim[k] = int(adm[k])
+    if mode == "trial":
+        expires_at = s.get("trial_end")
+    elif a_status in ("active", "expired", "suspended") and adm.get("access_end"):
+        expires_at = adm.get("access_end")
+    else:
+        expires_at = s.get("current_period_end") or (None if mode in ("active", "past_due") else s.get("trial_end"))
     return {"enabled": True, "mode": mode, "plan": eff, "plan_label": plan_label(cfg, eff) if eff else None,
             "writable": eff is not None, "features": features,
             "trial_plan": s.get("trial_plan"), "trial_start": s.get("trial_start"), "trial_end": s.get("trial_end"),
@@ -153,7 +159,7 @@ def org_state(org: dict, cfg: dict) -> dict:
             "current_period_start": s.get("current_period_start"), "current_period_end": s.get("current_period_end"),
             "cancel_at_period_end": bool(s.get("cancel_at_period_end")), "pending_change": s.get("pending_change"),
             "admin": adm or None, "access_end": adm.get("access_end") if a_status == "active" else None,
-            "limits": lim}
+            "expires_at": expires_at, "limits": lim}
 
 
 def trial_doc(cfg: dict) -> dict:
@@ -789,7 +795,7 @@ def build(db, deps: dict):
                 vp = await video_policy(o["id"])
                 row.update({k: st.get(k) for k in ("mode", "plan", "plan_label", "paid_plan", "billing_cycle", "price_amount", "activated_at",
                                                    "current_period_end", "current_period_start", "trial_start", "trial_end", "days_left", "cancel_at_period_end",
-                                                   "pending_change", "stripe_status", "admin", "access_end", "limits")})
+                                                   "pending_change", "stripe_status", "admin", "access_end", "expires_at", "limits")})
                 row["users_count"] = await db.memberships.count_documents({"org_id": o["id"], "active": True})
                 row["events_count"] = await db.events.count_documents({"org_id": o["id"]})
                 row.update({"payments_count": len([p for p in pay if p.get("payment_status") == "paid"]),

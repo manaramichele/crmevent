@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Save, Pencil, Search } from "lucide-react";
 import SubscriptionEditDialog from "@/components/SubscriptionEditDialog";
+import PlanBadge from "@/components/PlanBadge";
 
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
 const MODE = { trial: "Prova gratuita", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Scaduto", expired: "Scaduto", suspended: "Sospeso" };
@@ -73,7 +74,7 @@ function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe }) {
     </div>
   );
 }
-const endOf = (r) => (r.mode === "trial" ? r.trial_end : r.access_end || r.current_period_end || r.trial_end);
+const endOf = (r) => r.expires_at;
 const stOf = (r) => (r.mode === "canceled" ? "expired" : r.mode === "past_due" ? "active" : r.mode);
 
 function OrgsTab() {
@@ -97,7 +98,7 @@ function OrgsTab() {
         <tbody>{shown.map((r) => (
           <tr key={r.id} className="border-t border-slate-100" data-testid={`saas-org-${r.id}`}>
             <td className="px-3 py-2 font-medium">{r.nome}{r.admin?.comp ? <span className="ml-1 text-[10px] rounded bg-emerald-50 text-emerald-700 px-1">Omaggio</span> : null}</td>
-            <td className="px-3 py-2">{r.plan_label || (r.paid_plan || "—").toUpperCase()}{r.pending_change ? ` → ${r.pending_change.plan.toUpperCase()}` : ""}</td>
+            <td className="px-3 py-2">{r.model === "abbonamento" ? <PlanBadge s={r} size="sm" testid={`saas-badge-${r.id}`} /> : "—"}{r.pending_change ? ` → ${r.pending_change.plan.toUpperCase()}` : ""}</td>
             <td className="px-3 py-2">{MODE[r.mode] || "—"}{r.mode === "trial" ? ` (${r.days_left} gg)` : ""}{r.cancel_at_period_end ? " · annullato a fine periodo" : ""}</td>
             <td className="px-3 py-2">{(r.admin?.billing_cycle || r.billing_cycle) === "yearly" ? "Annuale" : (r.admin?.billing_cycle || r.billing_cycle) === "monthly" ? "Mensile" : "—"}</td>
             <td className="px-3 py-2">{d(r.mode === "trial" ? r.trial_start : r.admin?.access_start || r.current_period_start || r.activated_at)}</td>
