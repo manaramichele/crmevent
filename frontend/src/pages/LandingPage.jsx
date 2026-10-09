@@ -12,7 +12,7 @@ import {
 
 const NAV = [
   ["Funzionalità", "funzionalita"], ["Per chi è", "per-chi"], ["Staff & Volontari", "staff"],
-  ["Sponsor", "sponsor"], ["Come funziona", "come-funziona"], ["Prezzi", "prezzi"], ["Contatti", "demo"],
+  ["Sponsor", "sponsor"], ["Come funziona", "come-funziona"], ["Prezzi", "prezzi"],
 ];
 
 const GAP = 48; // spazio visibile tra header sticky e inizio contenuti
