@@ -1045,3 +1045,8 @@ Task 2 — Creatività manuale:
 - Pulsante Tiffany con shimmer nel riepilogo (solo permesso economico, nascosto con GOLD). Dialog: piano attuale evidenziato + solo piani superiori; Stripe esistente per clienti, conferma esplicita per formule gratuite.
 - Interne/Test: `POST /api/saas/upgrade-request` (nessun addebito) → `saas.upgrade_request`, visibile nel dialog e in Super Admin ("Richiesta upgrade: X"); azzerata quando il Super Admin assegna una nuova formula.
 
+
+## 2026-10-09 — Pulsante header "Supporto dedicato" ✅ (iteration_122: frontend 100%)
+- `components/SupportButton.jsx`: BRONZE (user.saas.plan) → mailto support@crmevent.it con oggetto "Supporto CRMEvent – Org – Nome" e corpo iniziale; SILVER/GOLD/senza piano → /assistenza. Mobile solo icona. Trial invariato ("Prenota una demo").
+- `/assistenza`: riquadro "Prenoti come" (organizzazione, nome, email) sopra la prenotazione.
+
