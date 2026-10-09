@@ -25,12 +25,12 @@ function VideoUsage({ v }) {
   return <div className="flex items-center gap-2 text-sm" data-testid="sub-video-usage"><Video className="w-4 h-4 text-[#0ABAB5]" />Videochiamate utilizzate: <b>{v.used} di {v.quota}</b>{v.trial ? " (prova)" : " questo mese"}</div>;
 }
 
-function Summary({ s, features }) {
+function Summary({ s, features, action }) {
   const isTrial = s.mode === "trial";
   const free = s.billing === "free";
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 space-y-5" data-testid="my-subscription-summary">
-      <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-800">Il mio abbonamento</h2></div>
+      <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-800">Il mio abbonamento</h2></div>{action}</div>
       <div className="space-y-1.5" data-testid="sub-plan">
         <PlanBadge s={s} testid="sub-plan-badge" />
         <div className="text-sm text-slate-600" data-testid="sub-expiry">Scadenza: <b className="text-slate-800">{isTrial ? `${d(s.expires_at)} (${s.days_left} gg)` : s.expires_at ? d(s.expires_at) : "Nessuna scadenza"}</b></div>
@@ -98,6 +98,48 @@ function ChangeDialog({ pv, onClose, onConfirm, busy }) {
   );
 }
 
+const RANK = ["bronze", "silver", "gold"];
+// Piano minimo che contiene l'utilizzo reale (eventi creati + persone Staff/Volontari).
+export function recommendPlan(plans, usage) {
+  if (!usage) return null;
+  const fits = (p) => (p.max_events < 0 || usage.events <= p.max_events) && (p.max_users < 0 || (usage.people ?? 0) <= p.max_users);
+  return [...plans].sort((a, b) => RANK.indexOf(a.key) - RANK.indexOf(b.key)).find(fits) || null;
+}
+
+function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, choose, busy }) {
+  const [ack, setAck] = useState(false);
+  const rec = recommendPlan(plans.plans, s.usage);
+  const curKey = s.mode === "trial" ? null : s.paid_plan || s.plan;
+  const needsAck = s.billing === "free";
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" data-testid="plan-picker-dialog">
+        <DialogHeader><DialogTitle>Cambia piano</DialogTitle>
+          <DialogDescription>Prezzi del catalogo attuale. Il nuovo piano si applica solo dopo la tua conferma.</DialogDescription></DialogHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {rec && rec.key !== curKey
+            ? <p className="text-sm rounded-lg bg-[#0ABAB5]/10 text-slate-800 px-3 py-2" data-testid="plan-recommendation">Ti consigliamo <b>{rec.label}</b>: è il piano che supporta tutti i tuoi eventi e collaboratori attuali.</p>
+            : <p className="text-sm text-slate-500" data-testid="plan-recommendation">{rec ? "Il tuo piano attuale copre già eventi e collaboratori." : ""}</p>}
+          <CycleToggle cycle={cycle} setCycle={setCycle} />
+        </div>
+        {needsAck && <label className="flex items-start gap-2 text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-900 p-3" data-testid="plan-free-warning">
+          <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-[#0ABAB5]" data-testid="plan-free-ack" />
+          <span>La tua organizzazione usa una formula gratuita concessa da CRMEvent. Scegliendo un piano passerai a un <b>abbonamento a pagamento</b>: confermo di voler procedere.</span></label>}
+        <div className="grid gap-4 lg:grid-cols-3">
+          {plans.plans.map((p) => (
+            <div key={p.key} className="relative">
+              {rec?.key === p.key && <span className="absolute -top-2.5 right-3 z-10 rounded-full bg-[#0ABAB5] text-slate-900 text-[11px] font-bold px-2 py-0.5" data-testid={`plan-recommended-${p.key}`}>Consigliato</span>}
+              <PlanCard p={p} cycle={cycle} features={plans.features} current={isCur(p.key)}
+                cta={<Button disabled={busy || isCur(p.key) || (needsAck && !ack)} onClick={() => choose(p.key)} data-testid={`sub-choose-${p.key}`}
+                  className="w-full h-10 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold">{isCur(p.key) ? "Piano attuale" : `Passa a ${p.label}`}</Button>} />
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function MySubscription() {
   const { checkAuth } = useAuth();
   const plans = usePlans();
@@ -106,6 +148,7 @@ export default function MySubscription() {
   const [pv, setPv] = useState(null);
   const [busy, setBusy] = useState(false);
   const [params, setParams] = useSearchParams();
+  const [pickerOpen, setPickerOpen] = useState(params.get("upgrade") === "1");
   const load = useCallback(() => api.get("/saas/me").then(({ data }) => { setS(data); if (data.billing_cycle && data.billing_cycle !== "monthly") setCycle(data.billing_cycle); }).catch(() => {}), []);
   const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 
@@ -142,7 +185,9 @@ export default function MySubscription() {
   const portal = async () => { try { const { data } = await api.post("/account/portal", { origin_url: window.location.origin }); window.location.href = data.url; } catch (e) { err(e); } };
 
   if (!s || !plans) return <p className="text-sm text-slate-400">Caricamento...</p>;
-  const isCur = (k) => live && s.paid_plan === k && s.billing_cycle === cycle;
+  const closePicker = () => { setPickerOpen(false); if (params.get("upgrade")) { params.delete("upgrade"); setParams(params, { replace: true }); } };
+  const isCur = (k) => (live ? s.paid_plan === k && s.billing_cycle === cycle : s.mode !== "trial" && s.plan === k && s.billing === "paid");
+  const changeBtn = <Button size="sm" onClick={() => setPickerOpen(true)} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="sub-change-plan"><Settings2 className="w-4 h-4 mr-1.5" />Cambia piano</Button>;
   if (s.org_type && s.org_type !== "cliente") return (
     <div className="space-y-4" data-testid="my-subscription">
       <Summary s={s} features={plans.features} />
@@ -151,29 +196,16 @@ export default function MySubscription() {
   );
   return (
     <div className="space-y-4" data-testid="my-subscription">
-      <Summary s={s} features={plans.features} />
+      <Summary s={s} features={plans.features} action={changeBtn} />
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => document.getElementById("change-plan")?.scrollIntoView({ behavior: "smooth" })} data-testid="sub-change-plan"><Settings2 className="w-4 h-4 mr-1.5" />Cambia piano</Button>
         {live && <Button variant="outline" onClick={portal} data-testid="sub-manage"><CreditCard className="w-4 h-4 mr-1.5" />Gestisci abbonamento</Button>}
         {live && !s.cancel_at_period_end && <Button variant="outline" className="text-red-600" onClick={() => window.confirm("Annullare l'abbonamento alla fine del periodo già pagato?") && act("/saas/cancel", "Abbonamento annullato a fine periodo")} data-testid="sub-cancel">Annulla abbonamento</Button>}
         {live && s.cancel_at_period_end && <Button variant="outline" onClick={() => act("/saas/resume", "Abbonamento riattivato")} data-testid="sub-resume">Riattiva rinnovo</Button>}
         {s.pending_change && <Button variant="outline" onClick={() => act("/saas/change/cancel-pending", "Cambio programmato annullato")} data-testid="sub-cancel-pending">Annulla cambio programmato</Button>}
       </div>
       <Payments rows={s.payments} />
-      <div id="change-plan" className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 space-y-4" data-testid="sub-plan-picker">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div><h2 className="font-semibold text-slate-800">{live ? "Cambia piano" : "Scegli il tuo piano"}</h2>
-            {!live && s.trial_active && <p className="text-xs text-slate-500 mt-0.5">Se acquisti ora, il piano pagato parte alla fine della prova ({d(s.trial_end)}): nessun addebito anticipato.</p>}</div>
-          <CycleToggle cycle={cycle} setCycle={setCycle} />
-        </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          {plans.plans.map((p) => (
-            <PlanCard key={p.key} p={p} cycle={cycle} features={plans.features} current={isCur(p.key)}
-              cta={<Button disabled={busy || isCur(p.key)} onClick={() => choose(p.key)} data-testid={`sub-choose-${p.key}`}
-                className="w-full h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold">{isCur(p.key) ? "Piano attuale" : "Scegli piano"}</Button>} />
-          ))}
-        </div>
-      </div>
+      {!live && s.trial_active && <p className="text-xs text-slate-500" data-testid="sub-trial-note">Se acquisti ora, il piano pagato parte alla fine della prova ({d(s.trial_end)}): nessun addebito anticipato.</p>}
+      <PlanPickerDialog open={pickerOpen} onClose={closePicker} s={s} plans={plans} cycle={cycle} setCycle={setCycle} isCur={isCur} choose={(k) => { closePicker(); choose(k); }} busy={busy} />
       <ChangeDialog pv={pv} busy={busy} onClose={() => setPv(null)} onConfirm={confirm} />
     </div>
   );

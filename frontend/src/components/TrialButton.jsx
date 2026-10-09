@@ -48,7 +48,7 @@ export default function TrialButton({ saas }) {
   if (s.mode === "active" && s.plan) return (
     <button type="button" onClick={() => navigate("/profilo?tab=abbonamento")} data-testid="header-plan-badge-button" aria-label="Il mio abbonamento"
       className="shrink-0 rounded-full transition-transform active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2">
-      <PlanBadge s={s} testid="header-plan-badge" />
+      <PlanBadge s={s} size="lg" testid="header-plan-badge" />
     </button>
   );
   if (!trial && !ended) return null;
