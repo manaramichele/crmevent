@@ -60,8 +60,9 @@ export default function CompleteOrg() {
     try {
       const { data } = await api.post("/auth/complete-organization", {
         org_name: form.org_name.trim(), telefono: form.telefono, accept_terms: true, marketing_consent: marketing,
-        nome: personName(form.nome.trim()), cognome: personName(form.cognome.trim()),
+        nome: personName(form.nome.trim()), cognome: personName(form.cognome.trim()), ref: localStorage.getItem("crmevent_ref") || null,
       });
+      try { localStorage.removeItem("crmevent_ref"); } catch {}
       setUser(data);
       toast.success("Organizzazione creata! Prova gratuita di 14 giorni attivata.");
       nav("/app", { replace: true });

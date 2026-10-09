@@ -543,6 +543,11 @@ def build(db, deps: dict):
         if test:
             upd.update({"fic_stato_documento": "test_non_inviata", "fic_stato_sdi": "non_inviato"})
         await db.invoices.update_one({"stripe_invoice_id": inv.get("id"), "fic_document_id": None}, {"$set": upd})
+        if status == "paid" and deps.get("on_paid"):
+            try:
+                await deps["on_paid"](org, inv)
+            except Exception as e:  # la commissione partner non deve mai bloccare il pagamento
+                logger.error("partner commission error: %s", e)
         if status == "paid" and not test:
             row = await db.invoices.find_one({"stripe_invoice_id": inv.get("id")}, {"_id": 0, "id": 1})
             if row:

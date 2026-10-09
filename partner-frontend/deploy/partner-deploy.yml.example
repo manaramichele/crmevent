@@ -1,0 +1,29 @@
+# Copiare in .github/workflows/partner-deploy.yml (direttamente su GitHub) per attivare il deploy automatico.
+# Secrets richiesti: ARUBA_HOST, ARUBA_USER, ARUBA_SSH_KEY (eventualmente gli stessi del workflow esistente).
+name: Deploy partner.crmevent.it
+on:
+  push:
+    branches: [main]
+    paths: ["partner-frontend/**"]
+  workflow_dispatch:
+concurrency: { group: partner-deploy, cancel-in-progress: false }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: partner-frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: yarn, cache-dependency-path: partner-frontend/yarn.lock }
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+        env: { REACT_APP_BACKEND_URL: "https://api.crmevent.it", CI: "false" }
+      - name: Upload su Aruba (release atomica)
+        env: { SSH_KEY: "${{ secrets.ARUBA_SSH_KEY }}", HOST: "${{ secrets.ARUBA_HOST }}", USER: "${{ secrets.ARUBA_USER }}" }
+        run: |
+          mkdir -p ~/.ssh && echo "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+          REL=/opt/crmevent/partner/releases/${GITHUB_SHA::8}
+          ssh -i ~/.ssh/id_deploy $USER@$HOST "mkdir -p $REL"
+          rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" build/ $USER@$HOST:$REL/build/
+          ssh -i ~/.ssh/id_deploy $USER@$HOST "ln -sfn $REL /opt/crmevent/partner/current.tmp && mv -Tf /opt/crmevent/partner/current.tmp /opt/crmevent/partner/current && ls -1dt /opt/crmevent/partner/releases/* | tail -n +6 | xargs -r rm -rf"

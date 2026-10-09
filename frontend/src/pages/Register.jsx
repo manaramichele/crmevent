@@ -22,7 +22,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const ch = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const fix = (k, fn) => () => setForm((f) => ({ ...f, [k]: fn(f[k]) }));
-  useEffect(() => { trackEvent("sign_up_start"); const t = googleErrorText(new URLSearchParams(window.location.search).get("google_error")); if (t) toast.error(t); }, []);
+  useEffect(() => { trackEvent("sign_up_start"); const qs = new URLSearchParams(window.location.search); const t = googleErrorText(qs.get("google_error")); if (t) toast.error(t); const ref = (qs.get("ref") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12); if (ref) try { localStorage.setItem("crmevent_ref", ref.toUpperCase()); } catch {} }, []);
   useEffect(() => {
     try { const l = JSON.parse(localStorage.getItem("crmevent_lead")); if (l) setForm((f) => ({ ...f, email: l.email || f.email, nome: l.nome || f.nome, cognome: l.cognome || f.cognome })); } catch {}
   }, []);
@@ -34,10 +34,10 @@ export default function Register() {
     if (!form.telefono || !isValidPhoneNumber(form.telefono)) { toast.error("Inserisci un numero di cellulare valido."); return; }
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/register-organization", { ...form, accept_terms: accept });
+      const { data } = await api.post("/auth/register-organization", { ...form, accept_terms: accept, ref: localStorage.getItem("crmevent_ref") || null });
       setUser(data);
       trackEvent("sign_up", { method: "email" });
-      try { localStorage.removeItem("crmevent_lead"); } catch {}
+      try { localStorage.removeItem("crmevent_lead"); localStorage.removeItem("crmevent_ref"); } catch {}
       nav("/app", { replace: true });  // unico benvenuto: WelcomeDemo nel Layout
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     finally { setLoading(false); }

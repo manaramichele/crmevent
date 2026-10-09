@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { font-family: 'Inter', sans-serif; color: #0F172A; background: #fff; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, .font-display { font-family: 'Plus Jakarta Sans', sans-serif; }
+::selection { background: #0ABAB5; color: #0F172A; }
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fade-up .6s cubic-bezier(.2,.7,.2,1) both; }
+.d1 { animation-delay: .08s; } .d2 { animation-delay: .16s; } .d3 { animation-delay: .24s; }
+.grain { background-image: radial-gradient(rgba(15,23,42,.06) 1px, transparent 1px); background-size: 18px 18px; }
