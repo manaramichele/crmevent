@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Copy, Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Share2, Trash2 } from "lucide-react";
 import api, { formatApiError } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
 
 export function CopyBtn({ text, testid }) {
   const copy = async () => { try { await navigator.clipboard.writeText(text); toast.success("Link copiato"); } catch { toast.error("Copia non riuscita"); } };
   return <Button onClick={copy} data-testid={testid} className="shrink-0"><Copy className="w-4 h-4" />Copia</Button>;
+}
+
+export function ShareBtn({ text, testid }) {
+  const share = async () => {
+    if (navigator.share) { try { await navigator.share({ title: "CRMEvent", text: "Organizza i tuoi eventi con CRMEvent: prova gratuita di 14 giorni.", url: text }); } catch {} return; }
+    try { await navigator.clipboard.writeText(text); toast.success("Link copiato: incollalo dove vuoi condividerlo"); } catch { toast.error("Condivisione non disponibile"); }
+  };
+  return <Button variant="outline" onClick={share} data-testid={testid} className="shrink-0"><Share2 className="w-4 h-4" />Condividi</Button>;
 }
 
 const Mini = ({ s }) => <div className="flex gap-3 text-xs text-slate-500"><span>{s.clicks} click</span><span>{s.visitors} visitatori</span><span>{s.registrations} registrazioni</span><span>{s.converted} abbonati</span></div>;
@@ -24,7 +32,7 @@ export default function Links({ d, reload }) {
         <div className="text-sm text-slate-300">Il tuo link referral · codice <b className="text-tiffany" data-testid="referral-code">{d.partner.code}</b></div>
         <div className="mt-3 flex flex-col sm:flex-row gap-2">
           <code className="flex-1 min-w-0 truncate rounded-xl bg-white/10 px-4 h-11 flex items-center text-sm" data-testid="referral-link">{d.partner.referral_link}</code>
-          <CopyBtn text={d.partner.referral_link} testid="referral-copy" />
+          <div className="flex gap-2"><CopyBtn text={d.partner.referral_link} testid="referral-copy" /><ShareBtn text={d.partner.referral_link} testid="referral-share" /></div>
         </div>
         <div className="mt-3 [&_span]:text-slate-400"><Mini s={d.main_stats} /></div>
         <p className="mt-2 text-xs text-slate-400">Il cliente viene attribuito a te se si registra entro {d.settings.attribution_days} giorni dalla visita e ha accettato i cookie di misurazione.</p>

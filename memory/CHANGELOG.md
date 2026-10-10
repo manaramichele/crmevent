@@ -1075,3 +1075,19 @@ Task 2 — Creatività manuale:
 - Super Admin: menu "Partner" (/piattaforma/partner) con Anagrafiche, Statistiche, Organizzatori (attribuzione manuale con registro), Commissioni, Configurazione (+ materiali). Footer crmevent.it: "Diventa Partner" (REACT_APP_PARTNER_URL).
 - Workflow: `partner-frontend/deploy/partner-deploy.yml.example` (paths partner-frontend/**, release versionate, symlink atomico, rollback via workflow_dispatch).
 
+
+
+## 2026-10-09 — Fix CI "Lockfile mancante" partner-frontend ✅
+- `partner-frontend/yarn.lock` presente ma non tracciato da git: verificato `yarn install --frozen-lockfile` (up-to-date) e `yarn build` con Node 20.20.2 (ok sia CI=false che CI=true). Da salvare su GitHub tramite "Save to GitHub".
+
+
+
+## 2026-10-10 — CRMEvent Partner: correzioni e completamento ✅ (iteration_127: backend 14/14, frontend 100%)
+- Causa guasti produzione: CORS di api.crmevent.it rifiutava partner.crmevent.it → aggiunto `allow_origin_regex` https://*.crmevent.it in server.py (attivo in produzione dopo il deploy backend).
+- Footer crmevent.it: "Diventa Partner" → https://partner.crmevent.it (nuova scheda).
+- Simulatore: contatori +/- e input per BRONZE/SILVER/GOLD, semestrale/annuale, anno 1/anno 2/totale 24 mesi, prezzi da configurazione SaaS, disclaimer.
+- Registrazione nuova: nome, cognome, email, cellulare (+39 normalizzato), tipologia (persona_fisica/professionista/azienda/influencer), ragione sociale, password+conferma, 2 consensi; 409 su duplicato; nessun login automatico; email conferma + notifica ADMIN_EMAIL; stato pending. Layout AuthShell responsive.
+- Codice referral generato solo all'approvazione (indice univoco parziale su `code`); email approvazione con istruzioni.
+- Brevo: `brevo_sync` → lista `BREVO_PARTNER_LIST_ID` (default 18), attributi PARTNER_* creati solo se mancanti, NOME/COGNOME/SMS esistenti; aggiornamento a ogni cambio stato; errori salvati in `partners.brevo_sync`; pulsante "Sincronizza Brevo" in Super Admin. Test reale Brevo NON eseguito (chiave assente in anteprima, scelta utente): solo test simulati `tests/test_partner_brevo_mock.py`.
+- Dashboard partner: link + Copia + Condividi, organizzatori registrati / con abbonamento, commissioni maturate / liquidate.
+
