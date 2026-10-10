@@ -13285,4 +13285,5 @@ app.include_router(video_support.build_router(db, require_admin, require_superad
 app.include_router(brevo_org_lists.build_router(db, require_superadmin, record_audit))
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],
+                   allow_origin_regex=r"https://([a-z0-9-]+\.)*crmevent\.it",
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])

@@ -20,20 +20,23 @@ export function GoogleButton({ label = "Continua con Google" }) {
 
 export default function AuthShell({ title, subtitle, children }) {
   return (
-    <div className="min-h-screen grid lg:grid-cols-[1fr_1.1fr]">
-      <aside className="hidden lg:flex flex-col justify-between bg-ink text-white p-10 grain">
-        <Link to="/"><Logo className="text-xl text-white [&>span:last-child]:text-slate-400" /></Link>
-        <div>
-          <h2 className="text-4xl font-extrabold leading-tight">Ogni evento organizzato meglio <span className="text-tiffany">parte da un consiglio.</span></h2>
-          <p className="mt-4 text-slate-300 max-w-md">Il 10% per 24 mesi sugli abbonamenti dei clienti che porti su CRMEvent.</p>
+    <div className="min-h-screen w-full overflow-x-hidden grid grid-cols-1 lg:grid-cols-2" data-testid="auth-shell">
+      <aside className="hidden lg:block min-w-0 bg-ink text-white grain" data-testid="auth-aside">
+        <div className="sticky top-0 h-screen flex flex-col justify-between gap-8 p-10 xl:p-14 overflow-hidden">
+          <Link to="/"><Logo className="text-xl text-white [&>span:last-child]:text-slate-400" /></Link>
+          <div className="min-w-0 max-w-lg">
+            <h2 className="text-3xl xl:text-4xl font-extrabold leading-tight break-words">Ogni evento organizzato meglio <span className="text-tiffany">parte da un consiglio.</span></h2>
+            <p className="mt-4 text-slate-300 break-words">Il 10% per 24 mesi sugli abbonamenti dei clienti che porti su CRMEvent.</p>
+          </div>
+          <p className="text-xs text-slate-500">partner.crmevent.it</p>
         </div>
-        <p className="text-xs text-slate-500">partner.crmevent.it</p>
       </aside>
-      <main className="flex items-center justify-center p-5 sm:p-10">
-        <div className="w-full max-w-md fade-up">
+      <main className="min-w-0 flex items-start lg:items-center justify-center px-4 py-8 sm:p-10">
+        <div className="w-full max-w-md min-w-0 fade-up">
           <Link to="/" className="lg:hidden"><Logo className="text-lg" /></Link>
-          <h1 className="mt-6 lg:mt-0 text-3xl font-extrabold tracking-tight">{title}</h1>
-          {subtitle && <p className="mt-2 text-sm text-slate-500">{subtitle}</p>}
+          <p className="lg:hidden mt-3 text-sm text-slate-600 break-words" data-testid="auth-mobile-intro">Il 10% per 24 mesi sugli abbonamenti dei clienti che porti su CRMEvent.</p>
+          <h1 className="mt-6 lg:mt-0 text-3xl font-extrabold tracking-tight break-words">{title}</h1>
+          {subtitle && <p className="mt-2 text-sm text-slate-500 break-words">{subtitle}</p>}
           <div className="mt-7 space-y-4">{children}</div>
         </div>
       </main>

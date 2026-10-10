@@ -5,7 +5,7 @@ import api, { eur } from "@/lib/api";
 import { useAuth } from "@/context/Auth";
 import { Logo } from "@/components/ui";
 import Simulator from "@/components/Simulator";
-import Links from "@/components/dash/Links";
+import Links, { CopyBtn, ShareBtn } from "@/components/dash/Links";
 import Commissions from "@/components/dash/Commissions";
 import { Materials, Profile } from "@/components/dash/More";
 
@@ -20,11 +20,18 @@ function Overview({ d }) {
   const ST = { abbonato: "bg-emerald-50 text-emerald-700", prova: "bg-sky-50 text-sky-700", non_attivo: "bg-slate-100 text-slate-500" };
   return (
     <div className="space-y-6">
+      <div className="rounded-3xl bg-ink text-white p-5 sm:p-6" data-testid="overview-referral">
+        <div className="text-sm text-slate-300">Il tuo link referral personale · codice <b className="text-tiffany">{d.partner.code}</b></div>
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+          <code className="flex-1 min-w-0 truncate rounded-xl bg-white/10 px-4 h-11 flex items-center text-sm" data-testid="overview-referral-link">{d.partner.referral_link}</code>
+          <div className="flex gap-2"><CopyBtn text={d.partner.referral_link} testid="overview-referral-copy" /><ShareBtn text={d.partner.referral_link} testid="overview-referral-share" /></div>
+        </div>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat icon={UserPlus} label="Organizzatori registrati" value={s.registrations} testid="stat-registrations" /><Stat icon={BadgeCheck} label="Con abbonamento acquistato" value={s.converted} testid="stat-converted" />
+        <Stat icon={Wallet} label="Commissioni maturate" value={eur(s.maturate_cents + s.liquidabili_cents + s.in_liquidazione_cents)} testid="stat-maturate" /><Stat icon={Wallet} label="Commissioni liquidate" value={eur(s.pagate_cents)} testid="stat-liquidate" />
         <Stat icon={MousePointerClick} label="Click" value={s.clicks} testid="stat-clicks" /><Stat icon={Eye} label="Visitatori unici" value={s.visitors} testid="stat-visitors" />
-        <Stat icon={UserPlus} label="Registrazioni" value={s.registrations} testid="stat-registrations" /><Stat icon={FlaskConical} label="In prova gratuita" value={s.trial} testid="stat-trial" />
-        <Stat icon={BadgeCheck} label="Abbonamenti attivati" value={s.converted} testid="stat-converted" /><Stat icon={Percent} label="Tasso di conversione" value={`${s.conversion_rate}%`} testid="stat-conversion" />
-        <Stat icon={Wallet} label="Commissioni maturate" value={eur(s.maturate_cents)} testid="stat-maturate" /><Stat icon={Wallet} label="Liquidabili · pagate" value={`${eur(s.liquidabili_cents)} · ${eur(s.pagate_cents)}`} testid="stat-liquidabili" />
+        <Stat icon={FlaskConical} label="In prova gratuita" value={s.trial} testid="stat-trial" /><Stat icon={Percent} label="Tasso di conversione" value={`${s.conversion_rate}%`} testid="stat-conversion" />
       </div>
       <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden" data-testid="referrals-list">
         <h3 className="font-bold p-5 border-b border-slate-100">Organizzazioni acquisite</h3>

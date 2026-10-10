@@ -1,4 +1,5 @@
 """CRMEvent Partner: account (cookie separato), referral/campagne/click, commissioni su pagamenti Stripe confermati, liquidazioni, materiali, Super Admin."""
+import asyncio
 import csv
 import hashlib
 import io
@@ -16,8 +17,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
 
+import brevo_funnel
 import email_utils
 import storage_utils
+from pymongo.errors import DuplicateKeyError
 
 log = logging.getLogger("partner_portal")
 COOKIE = "partner_token"
@@ -31,6 +34,12 @@ CATEGORIE = ("professionista", "influencer", "agenzia", "organizzatore", "societ
 SOGGETTI = ("privato", "professionista", "azienda")
 CAT = Literal["professionista", "influencer", "agenzia", "organizzatore", "societa_sportiva", "altro"]
 SOG = Literal["privato", "professionista", "azienda"]
+TIPOLOGIE = {"persona_fisica": "Persona fisica", "professionista": "Professionista", "azienda": "Azienda", "influencer": "Influencer"}
+TIP = Literal["persona_fisica", "professionista", "azienda", "influencer"]
+STATO_IT = {"pending": "In attesa", "approved": "Approvato", "rejected": "Rifiutato", "suspended": "Sospeso"}
+BREVO_PARTNER_LIST_ID = int(os.environ.get("BREVO_PARTNER_LIST_ID") or 18)
+BREVO_ATTRS = {"PARTNER_TIPOLOGIA": "text", "PARTNER_RAGIONE_SOCIALE": "text", "PARTNER_CELLULARE": "text",
+               "PARTNER_DATA_REGISTRAZIONE": "date", "PARTNER_STATO": "text", "PARTNER_CODICE": "text"}
 KIND = {"subscription_create": "prima_sottoscrizione", "subscription_cycle": "rinnovo", "subscription_update": "upgrade"}
 
 
@@ -101,6 +110,15 @@ def com_status(c: dict, hold_days: int, now: Optional[datetime] = None) -> str:
     return "liquidabile" if now >= quarter_end(pa) and now >= pa + timedelta(days=hold_days) and c.get("commission_net_cents", 0) > 0 else "maturata"
 
 
+def intl_phone(s: str) -> Optional[str]:
+    t = re.sub(r"[\s\-./()]", "", s or "")
+    if t.startswith("00"):
+        t = "+" + t[2:]
+    elif not t.startswith("+") and re.fullmatch(r"3\d{8,9}", t):
+        t = "+39" + t
+    return t if re.fullmatch(r"\+[1-9]\d{7,14}", t) else None
+
+
 def slugify(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")[:40]
 
@@ -130,15 +148,21 @@ class ProfileIn(BaseModel):
     accept_terms: Optional[bool] = None
 
 
-class RegisterIn(ProfileIn):
+class RegisterIn(BaseModel):
     nome: str = Field(min_length=1, max_length=80)
     cognome: str = Field(min_length=1, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
     telefono: str = Field(min_length=6, max_length=30)
-    categoria: CAT
-    soggetto: SOG
+    tipologia: TIP
+    ragione_sociale: Optional[str] = Field(default=None, max_length=160)
+    password: str = Field(min_length=8, max_length=200)
+    password_confirm: str = Field(max_length=200)
     accept_terms: bool = False
+    accept_privacy: bool = False
+
+
+class BrevoSyncIn(BaseModel):
+    only_failed: bool = True
 
 
 class LoginIn(BaseModel):
@@ -200,14 +224,14 @@ class PayoutPaidIn(BaseModel):
 
 
 PROFILE_FIELDS = ("categoria", "soggetto", "ragione_sociale", "codice_fiscale", "partita_iva", "regime_fiscale", "indirizzo", "sito_web", "social", "iban")
-PUBLIC_FIELDS = ("id", "email", "nome", "cognome", "telefono", "status", "code", "created_at", "approved_at", "auth_provider") + PROFILE_FIELDS
+PUBLIC_FIELDS = ("id", "email", "nome", "cognome", "telefono", "tipologia", "status", "code", "created_at", "approved_at", "auth_provider") + PROFILE_FIELDS
 
 
 def public_partner(p: dict) -> dict:
     out = {k: p.get(k) for k in PUBLIC_FIELDS}
     out["has_password"] = bool(p.get("password_hash"))
     out["profile_complete"] = bool(p.get("categoria") and p.get("soggetto") and p.get("telefono") and p.get("accepted_terms_at"))
-    out["referral_link"] = f"{app_url()}/registrati?ref={p.get('code')}"
+    out["referral_link"] = f"{app_url()}/registrati?ref={p['code']}" if p.get("code") else None
     return out
 
 
@@ -252,7 +276,10 @@ def build(db, deps: dict) -> dict:
         await db.partner_commissions.create_index("stripe_invoice_id", unique=True)
         await db.partner_referrals.create_index("org_id", unique=True)
         await db.partners.create_index("email", unique=True)
-        await db.partners.create_index("code", unique=True)
+        idx = (await db.partners.index_information()).get("code_1")
+        if idx and not idx.get("partialFilterExpression"):
+            await db.partners.drop_index("code_1")
+        await db.partners.create_index("code", unique=True, partialFilterExpression={"code": {"$type": "string"}})
         await db.partner_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
         await db.partner_clicks.create_index([("partner_id", 1), ("at", -1)])
 
@@ -295,6 +322,60 @@ def build(db, deps: dict) -> dict:
         except Exception as e:
             log.warning("partner email failed: %s", type(e).__name__)
 
+    brevo_attrs_ok = {"done": False}
+
+    async def _brevo_attrs():
+        if brevo_attrs_ok["done"]:
+            return
+        sc, data, err = await brevo_funnel._request("GET", "/v3/contacts/attributes")
+        if sc != 200:
+            raise RuntimeError(err or "Attributi Brevo non leggibili")
+        have = {a.get("name") for a in (data or {}).get("attributes", [])}
+        for name, typ in BREVO_ATTRS.items():
+            if name not in have:
+                sc2, _, err2 = await brevo_funnel._request("POST", f"/v3/contacts/attributes/normal/{name}", json={"type": typ})
+                if sc2 not in (200, 201, 204):
+                    raise RuntimeError(f"Creazione attributo {name}: {err2}")
+        brevo_attrs_ok["done"] = True
+
+    async def brevo_sync(pid: str) -> dict:
+        p = await db.partners.find_one({"id": pid}, {"_id": 0})
+        if not p:
+            return {"ok": False, "error": "Partner non trovato"}
+        res = {"ok": False, "error": "Brevo non configurato"}
+        try:
+            if brevo_funnel.is_configured():
+                await _brevo_attrs()
+                attrs = {"NOME": p.get("nome"), "COGNOME": p.get("cognome"), "SMS": p.get("telefono"), "PARTNER_CELLULARE": p.get("telefono"),
+                         "PARTNER_TIPOLOGIA": TIPOLOGIE.get(p.get("tipologia")) or p.get("categoria"), "PARTNER_RAGIONE_SOCIALE": p.get("ragione_sociale"),
+                         "PARTNER_DATA_REGISTRAZIONE": (p.get("created_at") or "")[:10] or None, "PARTNER_STATO": STATO_IT.get(p.get("status")),
+                         "PARTNER_CODICE": p.get("code") if p.get("status") != "pending" else None}
+                attrs = {k: v for k, v in attrs.items() if v}
+                res = await brevo_funnel.upsert_registered_contact(email=p["email"], attributes=attrs, list_ids=[BREVO_PARTNER_LIST_ID])
+                if not res["ok"] and "SMS" in attrs and "sms" in str(res.get("error") or "").lower():
+                    attrs.pop("SMS")  # numero già associato a un altro contatto Brevo: resta in PARTNER_CELLULARE
+                    res = await brevo_funnel.upsert_registered_contact(email=p["email"], attributes=attrs, list_ids=[BREVO_PARTNER_LIST_ID])
+        except Exception as e:
+            res = {"ok": False, "error": str(e)[:200] or type(e).__name__}
+        st = {"status": "ok" if res["ok"] else "error", "at": _iso(), "error": None if res["ok"] else str(res.get("error"))[:200]}
+        await db.partners.update_one({"id": pid}, {"$set": {"brevo_sync": st}})
+        if not res["ok"]:
+            log.warning("brevo partner sync failed partner=%s error=%s", pid, st["error"])
+        return {"ok": res["ok"], "error": st["error"]}
+
+    async def _after_register(p: dict):
+        await _mail(p, "Abbiamo ricevuto la tua candidatura CRMEvent Partner",
+                    "Grazie per la tua richiesta di adesione al programma CRMEvent Partner. Il nostro team verificherà i dati e riceverai un'email quando il tuo account sarà approvato.",
+                    "Vai al portale partner", "/")
+        try:
+            html = email_utils.link_email(name="", intro=f"Nuova richiesta partner: {p.get('nome')} {p.get('cognome')} ({p['email']}), tipologia {TIPOLOGIE.get(p.get('tipologia'))}"
+                                          f"{', ' + p['ragione_sociale'] if p.get('ragione_sociale') else ''}. Approva o rifiuta la richiesta dal Super Admin.",
+                                          cta_label="Apri Super Admin → Partner", url=f"{app_url()}/piattaforma/partner", footer_note="Notifica automatica CRMEvent Partner.")
+            await email_utils.send_email(to=os.environ["ADMIN_EMAIL"], subject="Nuova richiesta CRMEvent Partner", html=html)
+        except Exception as e:
+            log.warning("partner admin notify failed: %s", type(e).__name__)
+        await brevo_sync(p["id"])
+
     # ---------- pubblico ----------
     @r.get("/partner/public-config")
     async def public_config():
@@ -320,19 +401,32 @@ def build(db, deps: dict) -> dict:
         return {"ok": True}
 
     @r.post("/partner/register")
-    async def register(body: RegisterIn, response: Response):
-        if not body.accept_terms:
-            raise HTTPException(status_code=400, detail="Devi accettare il regolamento Partner e l'informativa privacy")
+    async def register(body: RegisterIn):
+        if not body.accept_terms or not body.accept_privacy:
+            raise HTTPException(status_code=400, detail="Devi accettare le condizioni del programma Partner e la Privacy Policy")
+        if body.password != body.password_confirm:
+            raise HTTPException(status_code=400, detail="Le password non coincidono")
+        tel = intl_phone(body.telefono)
+        if not tel:
+            raise HTTPException(status_code=400, detail="Numero di cellulare non valido: usa il formato internazionale, es. +39 333 1234567")
+        rs = (body.ragione_sociale or "").strip() or None
+        if body.tipologia == "azienda" and not rs:
+            raise HTTPException(status_code=400, detail="La ragione sociale è obbligatoria per le aziende")
         email = body.email.lower()
         if await db.partners.find_one({"email": email}, {"_id": 1}):
-            raise HTTPException(status_code=400, detail="Email già registrata come partner")
-        upd = _clean_profile(body, person_name)
-        _check_fiscal(upd)
-        p = {**upd, "id": uuid.uuid4().hex, "email": email, "password_hash": deps["hash_password"](body.password), "auth_provider": "password",
-             "status": "pending", "code": await _new_code(), "accepted_terms_at": _iso(), "created_at": _iso()}
-        await db.partners.insert_one(dict(p))
-        _set_cookie(response, p["id"])
-        return public_partner(p)
+            raise HTTPException(status_code=409, detail="Esiste già una registrazione partner con questa email. Accedi o recupera la password.")
+        t = body.tipologia
+        p = {"id": uuid.uuid4().hex, "email": email, "nome": person_name(body.nome.strip()), "cognome": person_name(body.cognome.strip()), "telefono": tel,
+             "tipologia": t, "ragione_sociale": rs, "soggetto": {"professionista": "professionista", "azienda": "azienda"}.get(t, "privato"),
+             "categoria": {"influencer": "influencer", "professionista": "professionista"}.get(t, "altro"),
+             "password_hash": deps["hash_password"](body.password), "auth_provider": "password", "status": "pending",
+             "accepted_terms_at": _iso(), "accepted_privacy_at": _iso(), "created_at": _iso()}
+        try:
+            await db.partners.insert_one(dict(p))
+        except DuplicateKeyError:
+            raise HTTPException(status_code=409, detail="Esiste già una registrazione partner con questa email. Accedi o recupera la password.")
+        asyncio.create_task(_after_register(p))
+        return {"ok": True, "email": email, "status": "pending"}
 
     @r.post("/partner/login")
     async def login(body: LoginIn, request: Request, response: Response):
@@ -580,8 +674,9 @@ def build(db, deps: dict) -> dict:
             name = (ident.get("name") or "").split(" ", 1)
             p = {"id": uuid.uuid4().hex, "email": ident["email"], "auth_provider": "google", "google_sub": ident["sub"],
                  "nome": person_name(name[0]) if name[0] else None, "cognome": person_name(name[1]) if len(name) > 1 else None,
-                 "status": "pending", "code": await _new_code(), "created_at": _iso()}
+                 "status": "pending", "created_at": _iso()}
             await db.partners.insert_one(dict(p))
+            asyncio.create_task(brevo_sync(p["id"]))
         else:
             await db.partners.update_one({"id": p["id"]}, {"$set": {"google_sub": ident["sub"], "last_login_at": _iso()}})
         resp = RedirectResponse(f"{base}{'/dashboard' if public_partner(p)['profile_complete'] else '/completa-profilo'}", status_code=302)
@@ -602,7 +697,20 @@ def build(db, deps: dict) -> dict:
             f["$or"] = [{"email": rx}, {"nome": rx}, {"cognome": rx}, {"ragione_sociale": rx}, {"code": rx}, {"partita_iva": rx}, {"codice_fiscale": rx}]
         ps = await db.partners.find(f, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(2000)
         refs = {x["_id"]: x["n"] for x in await db.partner_referrals.aggregate([{"$group": {"_id": "$partner_id", "n": {"$sum": 1}}}]).to_list(2000)}
-        return [{**public_partner(p), "referrals": refs.get(p["id"], 0), "status_note": p.get("status_note")} for p in ps]
+        return [{**public_partner(p), "referrals": refs.get(p["id"], 0), "status_note": p.get("status_note"), "brevo_sync": p.get("brevo_sync")} for p in ps]
+
+    @r.post("/platform/partners/brevo-sync")
+    async def sa_brevo_sync_all(body: BrevoSyncIn, admin: dict = Depends(sa_dep)):
+        f = {"brevo_sync.status": {"$ne": "ok"}} if body.only_failed else {}
+        ids = [x["id"] for x in await db.partners.find(f, {"_id": 0, "id": 1}).to_list(2000)]
+        res = [await brevo_sync(i) for i in ids]
+        ok = sum(1 for x in res if x["ok"])
+        await audit(admin, "partner_brevo_sync", detail=f"{ok}/{len(ids)} sincronizzati")
+        return {"total": len(ids), "ok": ok, "failed": len(ids) - ok, "errors": [x["error"] for x in res if not x["ok"]][:5]}
+
+    @r.post("/platform/partners/{pid}/brevo-sync")
+    async def sa_brevo_sync_one(pid: str, admin: dict = Depends(sa_dep)):
+        return await brevo_sync(pid)
 
     @r.get("/platform/partners/{pid}")
     async def sa_partner(pid: str, admin: dict = Depends(sa_dep)):
@@ -620,10 +728,16 @@ def build(db, deps: dict) -> dict:
         upd = {"status": body.status, "status_note": body.note, "updated_at": _iso()}
         if body.status == "approved" and not p.get("approved_at"):
             upd["approved_at"] = _iso()
+        if body.status == "approved" and not p.get("code"):
+            upd["code"] = p["code"] = await _new_code()
         await db.partners.update_one({"id": pid}, {"$set": upd})
         await audit(admin, "partner_status", detail=f"{p['email']} → {body.status}")
+        asyncio.create_task(brevo_sync(pid))
         if body.status != p.get("status") and body.status == "approved":
-            await _mail(p, "Benvenuto nel programma CRMEvent Partner", "La tua candidatura è stata approvata. Accedi all'area partner per copiare il tuo link referral e iniziare.",
+            how = "con il tuo account Google" if p.get("auth_provider") == "google" else "con la password scelta in fase di registrazione"
+            await _mail(p, "Benvenuto nel programma CRMEvent Partner",
+                        f"La tua candidatura è stata approvata. Accedi all'area partner con l'email {p['email']} {how}. "
+                        f"Nella dashboard trovi il tuo link referral personale (codice {p['code']}): copialo e condividilo con gli organizzatori di eventi.",
                         "Accedi all'area partner", "/login")
         elif body.status != p.get("status") and body.status == "rejected":
             await _mail(p, "Candidatura CRMEvent Partner", "Dopo la verifica non possiamo approvare la tua candidatura al programma partner. Per informazioni scrivi a support@crmevent.it.",
