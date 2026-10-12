@@ -45,6 +45,7 @@ export default function Simulator() {
   if (cfg === false) return <p className="text-sm text-red-600" data-testid="simulator-error">Simulatore non disponibile al momento. <button type="button" onClick={load} className="underline font-semibold" data-testid="simulator-retry">Riprova</button></p>;
   if (!res) return <p className="text-sm text-slate-400" data-testid="simulator-loading">Caricamento simulatore...</p>;
   const months = CYCLES.find((c) => c[0] === cycle)[2];
+  const payments = Math.ceil(Math.min(cfg.duration_months, 24) / months);
   const totN = cfg.plans.reduce((s, p) => s + (n[p.key] || 0), 0);
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-[0_20px_60px_-30px_rgba(10,186,181,.45)] min-w-0" data-testid="commission-simulator">
@@ -59,7 +60,8 @@ export default function Simulator() {
           <div key={p.key} className="py-3 flex flex-wrap items-center justify-between gap-3" data-testid={`simulator-plan-${p.key}`}>
             <div className="min-w-0">
               <div className="font-semibold text-sm"><span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ background: p.color }} />{p.label}</div>
-              <div className="text-xs text-slate-500" data-testid={`simulator-price-${p.key}`}>{eurN(p[cycle])} ogni {months} mesi · commissione {eurN(p[cycle] * cfg.commission_pct / 100)}</div>
+              <div className="text-xs text-slate-500" data-testid={`simulator-price-${p.key}`}>{eurN(p[cycle])} ogni {months} mesi</div>
+              <div className="text-xs text-tiffany-fg font-medium" data-testid={`simulator-payments-${p.key}`}>{payments} pagamenti × {eurN(p[cycle] * cfg.commission_pct / 100)} per organizzatore in 24 mesi</div>
             </div>
             <Counter value={n[p.key] || 0} onChange={(v) => setN((s) => ({ ...s, [p.key]: v }))} plan={p.key} />
           </div>
@@ -71,7 +73,8 @@ export default function Simulator() {
         <Out label="Secondo anno" value={res.second} testid="simulator-second" />
         <Out label="Totale 24 mesi" value={res.total} testid="simulator-total" strong />
       </div>
-      <p className="text-xs mt-4 text-slate-500 leading-relaxed" data-testid="simulator-disclaimer">Stima indicativa, non un guadagno garantito. Calcolata sui prezzi attuali CRMEvent, ipotizzando che ogni organizzatore resti abbonato e rinnovi per 24 mesi. La commissione reale è il {cfg.commission_pct}% degli importi effettivamente incassati, al netto dell'IVA e di eventuali rimborsi, per un massimo di 24 mesi dal primo pagamento. Acquisti Marketplace esclusi.</p>
+      <p className="text-sm mt-4 rounded-2xl bg-tiffany-light text-tiffany-fg p-3 leading-relaxed" data-testid="simulator-explanation">Il piano annuale genera una commissione maggiore sul singolo pagamento. Il piano semestrale può generare commissioni complessive superiori nell'arco di 24 mesi, grazie al prezzo mensile più alto. Le simulazioni ipotizzano il rinnovo continuativo di tutti gli abbonamenti.</p>
+      <p className="text-xs mt-3 text-slate-500 leading-relaxed" data-testid="simulator-disclaimer">Stima indicativa, non un guadagno garantito. Calcolata sui prezzi attuali CRMEvent, ipotizzando che ogni organizzatore resti abbonato e rinnovi per 24 mesi. La commissione reale è il {cfg.commission_pct}% degli importi effettivamente incassati, al netto dell'IVA e di eventuali rimborsi, per un massimo di 24 mesi dal primo pagamento. Acquisti Marketplace esclusi.</p>
     </div>
   );
 }
