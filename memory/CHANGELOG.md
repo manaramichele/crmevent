@@ -1114,4 +1114,11 @@ Task 2 — Creatività manuale:
 
 
 
+## 2026-10-12 — Upload materiali partner: errore "Connessione al server non riuscita" ✅
+- Causa (misurata su api.crmevent.it): nginx ancora a 1 MB → 413 senza header CORS → il browser lo segnala come errore di rete. Serve client_max_body_size su Aruba (comandi forniti all'utente).
+- Backend: whitelist MIME+estensione (JPG, PNG, WEBP, PDF, MP4/M4V, WEBM, MOV) → 415 specifico.
+- PartnerConfig (SA): barra di avanzamento upload (onUploadProgress, timeout 0), messaggio dedicato per il blocco nginx (>1000 KB senza risposta), elenco formati e limite.
+
+
+
 

@@ -34,6 +34,8 @@ CATEGORIE = ("professionista", "influencer", "agenzia", "organizzatore", "societ
 SOGGETTI = ("privato", "professionista", "azienda")
 CAT = Literal["professionista", "influencer", "agenzia", "organizzatore", "societa_sportiva", "altro"]
 SOG = Literal["privato", "professionista", "azienda"]
+MATERIAL_TYPES = {"image/jpeg": {"jpg", "jpeg"}, "image/png": {"png"}, "image/webp": {"webp"}, "application/pdf": {"pdf"},
+                  "video/mp4": {"mp4", "m4v"}, "video/webm": {"webm"}, "video/quicktime": {"mov"}}
 TIPOLOGIE = {"persona_fisica": "Persona fisica", "professionista": "Professionista", "azienda": "Azienda", "influencer": "Influencer"}
 TIP = Literal["persona_fisica", "professionista", "azienda", "influencer"]
 STATO_IT = {"pending": "In attesa", "approved": "Approvato", "rejected": "Rifiutato", "suspended": "Sospeso"}
@@ -912,6 +914,9 @@ def build(db, deps: dict) -> dict:
                 raise HTTPException(status_code=400, detail="Il file caricato è vuoto")
             name = re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "file")[-80:]
             ct = file.content_type or "application/octet-stream"
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            if ct not in MATERIAL_TYPES or ext not in MATERIAL_TYPES[ct]:
+                raise HTTPException(status_code=415, detail=f"Formato non supportato ({ct}, .{ext or '?'}): sono ammessi JPG, PNG, WEBP, PDF e video MP4, WEBM, MOV")
             try:
                 saved = storage_utils.save(f"partner_materials/{m['id']}_{name}", data, ct)
             except Exception as e:
