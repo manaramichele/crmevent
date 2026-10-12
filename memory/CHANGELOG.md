@@ -1102,3 +1102,10 @@ Task 2 — Creatività manuale:
 - Fix: Login usa `setActingOrg("", false)`; Layout riallinea stato e localStorage dopo /platform/organizations (anche multi-org non SA); gate `validActing` richiede localStorage === stato. Backend invariato.
 
 
+## 2026-10-12 — Materiali partner: "Testo promozionale" ✅ (iteration_129)
+- partner_materials: nuovi campi `kind` (file|text), `category` (generale/instagram/facebook/linkedin/whatsapp/email), `text` (max 10000). Testo senza file/link.
+- SA: selettore tipologia + categoria, textarea ampia, pulsante "Inserisci [LINK PERSONALE DEL PARTNER]".
+- Portale partner: filtro categorie, testo completo (a capo preservati) con placeholder sostituito dal referral_link, pulsante "Copia testo".
+
+
+
