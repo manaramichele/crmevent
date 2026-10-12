@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
 import gcal_utils
+import gcal_tokens
 from email_utils import link_email, send_email
 
 logger = logging.getLogger("video_support")
@@ -101,7 +102,13 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits, p
 
     async def _calendar(cfg: dict) -> Optional[dict]:
         uid = cfg.get("calendar_user_id")
-        return await db.calendar_connections.find_one({"user_id": uid}, {"_id": 0}) if uid else None
+        if not uid:
+            return None
+        try:
+            return await gcal_tokens.load(db, uid)  # token decifrati e rinnovati se scaduti
+        except gcal_tokens.GCalError as e:
+            logger.warning(f"video_support calendar unavailable: {e.code}")
+            return None
 
     async def _ready(cfg: dict) -> bool:
         return simulation() or (gcal_utils.is_configured() and bool(await _calendar(cfg)))

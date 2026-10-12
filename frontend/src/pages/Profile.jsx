@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader, SectionCard, PrimaryButton, StatusBadge } from "@/components/crm";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { CalendarCheck2, Link2, Unplug } from "lucide-react";
+import { GoogleCalendarCard } from "@/components/GoogleCalendarCard";
 import OrgUsers from "@/components/OrgUsers";
 import Account from "@/pages/Account";
 import { isOrgAdmin } from "@/lib/perms";
@@ -24,11 +22,6 @@ export default function Profile() {
   const canManageUsers = user?.org_role === "admin_org" || isSuper;
   const manageOrgId = isSuper ? actingOrgId : (user?.active_org_id || user?.org_id);
   const [cur, setCur] = useState(""); const [np, setNp] = useState(""); const [np2, setNp2] = useState("");
-  const [cal, setCal] = useState(null);
-  const [cals, setCals] = useState([]);
-
-  const loadCal = async () => { try { const { data } = await api.get("/calendar/status"); setCal(data); if (data.connected) { try { const r = await api.get("/calendar/calendars"); setCals(r.data.calendars); } catch {} } } catch {} };
-  useEffect(() => { loadCal(); }, []);
 
   const changePw = async (e) => {
     e.preventDefault();
@@ -37,12 +30,6 @@ export default function Profile() {
     catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
   };
 
-  const connect = async () => {
-    try { const { data } = await api.get("/calendar/connect"); window.location.href = data.authorization_url; }
-    catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
-  };
-  const disconnect = async () => { await api.post("/calendar/disconnect"); toast.success("Google Calendar scollegato"); loadCal(); };
-  const selectCal = async (id) => { await api.post("/calendar/select", { calendar_id: id }); setCal((c) => ({ ...c, calendar_id: id })); toast.success("Calendario aggiornato"); };
   const saas = !!user?.saas?.enabled;
   const showSub = (isOrgAdmin(user) || !!user?.permissions?.subscription_manage) && !isSuper && saas;
   const [params, setParams] = useSearchParams();
@@ -92,26 +79,7 @@ export default function Profile() {
       </SectionCard>
 
       <SectionCard title="Integrazioni · Google Calendar">
-        {!cal ? <div className="text-sm text-slate-400">Caricamento...</div> : !cal.configured ? (
-          <div className="text-sm text-amber-700 bg-amber-50 ring-1 ring-amber-200 rounded-lg p-3">
-            Google Calendar non è ancora configurato dall'amministratore (mancano GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET nei Secrets).
-          </div>
-        ) : cal.connected ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm"><CalendarCheck2 className="w-5 h-5 text-emerald-600" /><span className="text-slate-700">Collegato come <b>{cal.google_email}</b></span></div>
-            {cals.length > 0 && (
-              <div className="max-w-xs space-y-1.5"><Label className="text-xs">Calendario selezionato</Label>
-                <Select value={cal.calendar_id} onValueChange={selectCal}>
-                  <SelectTrigger data-testid="calendar-select"><SelectValue /></SelectTrigger>
-                  <SelectContent>{cals.map((c) => <SelectItem key={c.id} value={c.id}>{c.summary}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            )}
-            <Button variant="outline" onClick={disconnect} data-testid="calendar-disconnect"><Unplug className="w-4 h-4 mr-1.5" />Disconnetti</Button>
-          </div>
-        ) : (
-          <PrimaryButton onClick={connect} data-testid="calendar-connect"><Link2 className="w-4 h-4 mr-1.5" />Collega Google Calendar</PrimaryButton>
-        )}
+        <GoogleCalendarCard />
       </SectionCard>
         </TabsContent>
       </Tabs>

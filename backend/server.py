@@ -34,6 +34,7 @@ import email_utils
 import permissions as P
 import storage_utils
 import gcal_utils
+import gcal_tokens
 import video_support
 import subscriptions
 import brevo_subscriptions
@@ -3400,84 +3401,129 @@ def _cal_state(user_id: str):
 @api.get("/calendar/status")
 async def calendar_status(user: dict = Depends(get_current_user)):
     if not gcal_utils.is_configured():
-        return {"configured": False, "connected": False}
-    conn = await db.calendar_connections.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        return {"configured": False, "connected": False, "status": "not_configured"}
+    extra = {"redirect_uri": gcal_utils.REDIRECT_URI, "key_configured": gcal_tokens.key_configured()} if user.get("role") == "superadmin" else {}
+    conn = await db.calendar_connections.find_one({"user_id": user["user_id"]}, {"_id": 0, "tokens": 0, "tokens_enc": 0})
     if not conn:
-        return {"configured": True, "connected": False}
-    return {"configured": True, "connected": True, "google_email": conn.get("google_email"),
-            "calendar_id": conn.get("calendar_id", "primary")}
+        return {"configured": True, "connected": False, "status": "not_connected", **extra}
+    status, msg = "connected", None
+    try:
+        await gcal_tokens.load(db, user["user_id"])  # stato reale: rinnova se scaduto
+    except gcal_tokens.GCalError as e:
+        status, msg = ("reauthorization_required" if e.code in ("reauthorization_required", "insufficient_scope", "key_missing") else "temporary_error"), e.message
+    if status == "connected" and not conn.get("google_email"):
+        status, msg = "reauthorization_required", "Account da riconnettere: email dell'account Google non disponibile."
+    return {"configured": True, "connected": status == "connected", "status": status, "message": msg, "google_email": conn.get("google_email"),
+            "calendar_id": conn.get("calendar_id", "primary"), "connected_at": conn.get("connected_at") or conn.get("updated_at"),
+            "last_sync_at": conn.get("last_sync_at"), **extra}
 
 
 @api.get("/calendar/connect")
-async def calendar_connect(user: dict = Depends(get_current_user)):
+async def calendar_connect(force_consent: bool = False, user: dict = Depends(get_current_user)):
     if not gcal_utils.is_configured():
         raise HTTPException(status_code=400, detail="Google Calendar non è configurato. Aggiungi GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET nei Secrets.")
+    if not gcal_tokens.key_configured():
+        raise HTTPException(status_code=503, detail=gcal_tokens.MESSAGES["key_missing"])
     state, jti = _cal_state(user["user_id"])
-    auth_url, code_verifier = gcal_utils.authorization_url(state)
+    auth_url, code_verifier = gcal_utils.authorization_url(state, force_consent)
     # Store the PKCE verifier server-side (Mongo → multi-pod safe), single-use, short TTL.
     await db.calendar_oauth_pkce.update_one({"jti": jti}, {"$set": {
-        "jti": jti, "uid": user["user_id"], "code_verifier": code_verifier,
+        "jti": jti, "uid": user["user_id"], "org_id": user.get("org_id"), "code_verifier": code_verifier,
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10), "created_at": now_iso()}}, upsert=True)
     logger.info("gcal connect: redirect_uri=%s scopes=%s", gcal_utils.REDIRECT_URI, gcal_utils.SCOPES)
     return {"authorization_url": auth_url}
+
+
+def _cal_back(reason: Optional[str] = None):
+    return RedirectResponse(f"{APP_URL}/app?calendar=" + (f"error&reason={reason}" if reason else "connected"))
 
 
 @api.get("/oauth/calendar/callback")
 async def calendar_callback(code: str = "", state: str = "", error: str = "", error_description: str = ""):
     # Google can redirect back with ?error=... (e.g. access_denied) instead of a code.
     if error:
-        logger.warning("gcal callback: google returned error stage=consent error=%s desc=%s",
-                       error, (error_description or "")[:200])
-        return RedirectResponse(f"{APP_URL}/app?calendar=error")
+        logger.warning("gcal callback: google returned error stage=consent error=%s", error)
+        return _cal_back("access_denied" if error == "access_denied" else "generic")
     try:
         payload = jwt.decode(state, JWT_SECRET, algorithms=[JWT_ALG])
         uid = payload["uid"]
         jti = payload.get("jti")
+    except jwt.ExpiredSignatureError:
+        return _cal_back("expired")
     except jwt.PyJWTError as e:
         logger.warning("gcal callback: invalid state jwt stage=state_decode (%s)", type(e).__name__)
-        return RedirectResponse(f"{APP_URL}/app?calendar=error")
+        return _cal_back("generic")
     # Retrieve the single-use PKCE verifier (delete on read); must match this uid + jti.
     pkce = await db.calendar_oauth_pkce.find_one_and_delete({"jti": jti, "uid": uid}) if jti else None
     if not pkce:
         logger.warning("gcal callback: pkce verifier missing or already used stage=pkce_lookup")
-        return RedirectResponse(f"{APP_URL}/app?calendar=error")
+        return _cal_back("expired")
     exp = pkce.get("expires_at")
     if isinstance(exp, datetime):
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
         if exp < datetime.now(timezone.utc):
             logger.warning("gcal callback: pkce verifier expired stage=pkce_expired")
-            return RedirectResponse(f"{APP_URL}/app?calendar=error")
+            return _cal_back("expired")
     try:
         tokens = gcal_utils.exchange_code(code, pkce.get("code_verifier"))
     except Exception as e:
-        logger.error("gcal callback: exchange_code exception stage=code_to_token %s: %s",
-                     type(e).__name__, str(e)[:200])
-        return RedirectResponse(f"{APP_URL}/app?calendar=error")
+        logger.error("gcal callback: exchange_code exception stage=code_to_token %s", type(e).__name__)
+        return _cal_back("exchange_failed")
     # Pop the non-sensitive diagnostic status so it is never persisted with the tokens.
     http_status = tokens.pop("_http_status", None)
     if "access_token" not in tokens:
         # Safe diagnostic log: OAuth error code + description only. NEVER logs code/tokens/secret/state.
         logger.error("gcal callback: token exchange failed stage=code_to_token http_status=%s error=%s desc=%s",
                      http_status, tokens.get("error"), str(tokens.get("error_description"))[:300])
-        return RedirectResponse(f"{APP_URL}/app?calendar=error")
-    info = gcal_utils.userinfo(tokens["access_token"])
-    await db.calendar_connections.update_one({"user_id": uid},
-        {"$set": {"user_id": uid, "tokens": tokens, "google_email": info.get("email"),
-                  "calendar_id": "primary", "updated_at": now_iso()}}, upsert=True)
-    return RedirectResponse(f"{APP_URL}/app?calendar=connected")
+        return _cal_back("exchange_failed")
+    try:
+        ident = gcal_utils.identity(tokens)
+    except Exception as e:
+        logger.error("gcal callback: identity failed %s", type(e).__name__)
+        ident = {}
+    if not ident.get("email") or not ident.get("sub"):
+        return _cal_back("identity_failed")
+    old = await db.calendar_connections.find_one({"user_id": uid}, {"_id": 0})
+    if not tokens.get("refresh_token"):
+        prev = gcal_tokens.tokens_of(old) if old and old.get("google_sub") == ident["sub"] else {}
+        if not prev.get("refresh_token"):
+            return _cal_back("consent_required")  # nuovo consenso necessario per l'accesso offline
+        tokens["refresh_token"] = prev["refresh_token"]
+    try:
+        fields = gcal_tokens.store_fields(tokens)
+    except gcal_tokens.GCalError:
+        return _cal_back("generic")
+    same = old and old.get("google_sub") == ident["sub"]
+    # Sostituzione solo a collegamento riuscito; il token del vecchio account viene revocato dopo.
+    await db.calendar_connections.update_one({"user_id": uid}, {"$set": {
+        "user_id": uid, "org_id": pkce.get("org_id"), **fields, "google_email": ident["email"], "google_sub": ident["sub"],
+        "google_email_verified": ident.get("email_verified"), "calendar_id": old.get("calendar_id", "primary") if same else "primary",
+        "status": "connected", "status_reason": None, "connected_at": now_iso(), "updated_at": now_iso(),
+        "token_rev": ((old or {}).get("token_rev") or 0) + 1}, "$unset": {"tokens": ""}}, upsert=True)
+    if old and not same:
+        try:
+            t = gcal_tokens.tokens_of(old)
+            gcal_utils.revoke(t.get("refresh_token") or t.get("access_token") or "")
+        except Exception:
+            pass
+    return _cal_back()
+
+
+def _gcal_http(e: Exception):
+    if isinstance(e, gcal_tokens.GCalError):
+        code = 409 if e.code in ("reauthorization_required", "insufficient_scope") else 400 if e.code == "not_connected" else 503
+        return HTTPException(status_code=code, detail=e.message)
+    return HTTPException(status_code=502, detail="Errore Google Calendar")
 
 
 @api.get("/calendar/calendars")
 async def calendar_list(user: dict = Depends(get_current_user)):
-    conn = await db.calendar_connections.find_one({"user_id": user["user_id"]})
-    if not conn:
-        raise HTTPException(status_code=400, detail="Google Calendar non collegato")
     try:
-        return {"calendars": gcal_utils.list_calendars(conn["tokens"])}
+        return {"calendars": await gcal_tokens.run(db, user["user_id"], lambda c: gcal_utils.list_calendars(c["tokens"]))}
     except Exception as e:
-        logger.error(f"calendar list error: {e}")
-        raise HTTPException(status_code=502, detail="Errore Google Calendar")
+        logger.error("calendar list error: %s", type(e).__name__)
+        raise _gcal_http(e)
 
 
 class SelectCalIn(BaseModel):
@@ -3492,22 +3538,31 @@ async def calendar_select(body: SelectCalIn, user: dict = Depends(get_current_us
 
 @api.post("/calendar/disconnect")
 async def calendar_disconnect(user: dict = Depends(get_current_user)):
+    conn = await db.calendar_connections.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if conn:
+        try:
+            t = gcal_tokens.tokens_of(conn)
+            gcal_utils.revoke(t.get("refresh_token") or t.get("access_token") or "")
+        except Exception:
+            pass
     await db.calendar_connections.delete_one({"user_id": user["user_id"]})
     return {"ok": True}
 
 
 async def _sync_object(user_id: str, kind: str, ref_id: str, body: dict):
-    conn = await db.calendar_connections.find_one({"user_id": user_id})
-    if not conn:
-        raise HTTPException(status_code=400, detail="Google Calendar non collegato")
     link = await db.calendar_event_links.find_one({"user_id": user_id, "kind": kind, "ref_id": ref_id})
     gid = link.get("google_event_id") if link else None
-    cal_id = conn.get("calendar_id", "primary")
+    holder = {}
     try:
-        ev = gcal_utils.upsert_event(conn["tokens"], cal_id, body, gid)
+        def call(c):
+            holder["cal"] = c.get("calendar_id", "primary")
+            return gcal_utils.upsert_event(c["tokens"], holder["cal"], body, gid)
+        ev = await gcal_tokens.run(db, user_id, call)
     except Exception as e:
-        logger.error(f"calendar sync error: {e}")
-        raise HTTPException(status_code=502, detail="Errore sincronizzazione Google Calendar")
+        logger.error("calendar sync error: %s", type(e).__name__)
+        raise _gcal_http(e)
+    cal_id = holder["cal"]
+    await db.calendar_connections.update_one({"user_id": user_id}, {"$set": {"last_sync_at": now_iso()}})
     await db.calendar_event_links.update_one({"user_id": user_id, "kind": kind, "ref_id": ref_id},
         {"$set": {"user_id": user_id, "kind": kind, "ref_id": ref_id, "google_event_id": ev["id"],
                   "calendar_id": cal_id, "html_link": ev.get("htmlLink"), "updated_at": now_iso()}}, upsert=True)
@@ -3623,13 +3678,11 @@ async def _gcal_delete(user: dict, kind: str, rec_id: str):
     link = await db.calendar_event_links.find_one({"user_id": user["user_id"], "kind": kind, "ref_id": rec_id})
     if not link:
         return {"deleted": False}
-    conn = await db.calendar_connections.find_one({"user_id": user["user_id"]})
-    if conn:
-        try:
-            svc = gcal_utils.service_for(conn["tokens"])
-            svc.events().delete(calendarId=link.get("calendar_id", "primary"), eventId=link["google_event_id"]).execute()
-        except Exception as e:
-            logger.error(f"gcal delete error: {e}")
+    try:
+        await gcal_tokens.run(db, user["user_id"], lambda c: gcal_utils.service_for(c["tokens"]).events().delete(
+            calendarId=link.get("calendar_id", "primary"), eventId=link["google_event_id"]).execute())
+    except Exception as e:
+        logger.error("gcal delete error: %s", type(e).__name__)
     await db.calendar_event_links.delete_one({"user_id": user["user_id"], "kind": kind, "ref_id": rec_id})
     return {"deleted": True}
 

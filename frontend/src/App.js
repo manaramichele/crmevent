@@ -1,7 +1,7 @@
 import "@/App.css";
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useSearchParams } from "react-router-dom";
-import { Toaster, toast } from "sonner";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import VolunteerLayout from "@/components/VolunteerLayout";
@@ -66,16 +66,6 @@ captureReferral();
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
 const isSuper = (u) => u && u.role === "superadmin";
 
-function CalendarToast() {
-  const [params, setParams] = useSearchParams();
-  useEffect(() => {
-    const c = params.get("calendar");
-    if (c === "connected") { toast.success("Google Calendar collegato"); params.delete("calendar"); setParams(params, { replace: true }); }
-    else if (c === "error") { toast.error("Errore collegamento Google Calendar"); params.delete("calendar"); setParams(params, { replace: true }); }
-  }, [params, setParams]);
-  return null;
-}
-
 function Protected({ children }) {
   const { user, loading } = useAuth();
   if (loading || user === null) return <div className="min-h-screen flex items-center justify-center text-slate-400">Caricamento...</div>;
@@ -133,7 +123,6 @@ function Shell() {
   if (location.hash?.includes("session_id=")) return <AuthCallback />;
   return (
     <>
-      <CalendarToast />
       <RouteTracker />
       <Routes>
         <Route path="/" element={<LandingPage />} />

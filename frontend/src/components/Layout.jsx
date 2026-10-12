@@ -14,6 +14,7 @@ import { UsageNotice } from "@/components/UsageMeter";
 import TrialButton from "@/components/TrialButton";
 import SupportBanner from "@/components/SupportBanner";
 import WelcomeDemo from "@/components/WelcomeDemo";
+import { CalendarReturnHandler } from "@/components/GoogleCalendarCard";
 import SupportButton from "@/components/SupportButton";
 import { TutorialHint } from "@/components/Onboarding";
 import { NEWS_READ_EVENT } from "@/pages/News";
@@ -458,6 +459,7 @@ export default function Layout({ children }) {
       <SupportChat fab={false} />
       <PlanLimitDialog />
       <WelcomeDemo />
+      <CalendarReturnHandler />
     </div>
   );
 }
