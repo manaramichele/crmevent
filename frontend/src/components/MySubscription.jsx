@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { CreditCard, Video, Mail, Crown, Check, ReceiptText, Settings2 } from "lucide-react";
+import { CreditCard, Video, Mail, Crown, Check, ReceiptText, Settings2, RefreshCw } from "lucide-react";
 import { usePlans, PlanCard, CycleToggle, eur } from "@/components/PlansSection";
 import PlanBadge, { BILLING } from "@/components/PlanBadge";
 import { UsageBars } from "@/components/UsageMeter";
@@ -13,6 +13,8 @@ import { UsageBars } from "@/components/UsageMeter";
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const CYC = { monthly: "Mensile", semester: "6 mesi", yearly: "12 mesi" };
 const MODE = { trial: "Prova gratuita", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Annullato", expired: "Scaduto", suspended: "Sospeso" };
+const SUB = { trial: "Prova gratuita", active: "Attivo", expiring: "In scadenza", expired: "Scaduto", suspended: "Sospeso" };
+const eurO = (n) => (n || n === 0 ? `€${eur(n)}` : "—");
 
 function Field({ label, value, testid }) {
   return <div><div className="text-xs uppercase text-slate-400 font-medium">{label}</div><div className="text-slate-800 font-medium" data-testid={testid}>{value}</div></div>;
@@ -33,16 +35,17 @@ function Summary({ s, features, action }) {
       <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-800">Il mio abbonamento</h2></div>{action}</div>
       <div className="space-y-1.5" data-testid="sub-plan">
         <PlanBadge s={s} testid="sub-plan-badge" />
-        <div className="text-sm text-slate-600" data-testid="sub-expiry">Scadenza: <b className="text-slate-800">{isTrial ? `${d(s.expires_at)} (${s.days_left} gg)` : s.expires_at ? d(s.expires_at) : "Nessuna scadenza"}</b></div>
+        <div className="text-sm text-slate-600" data-testid="sub-expiry">{isTrial ? "Fine prova" : "Scadenza"}: <b className="text-slate-800">{s.expires_at ? d(s.expires_at) : "Nessuna scadenza"}</b>{s.days_to_expiry != null && s.expires_at && <span data-testid="sub-days-left"> · {s.days_to_expiry === 0 ? "scade oggi" : `${s.days_to_expiry} giorni rimanenti`}</span>}</div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-        <Field label="Stato" value={MODE[s.mode] || s.mode} testid="sub-status" />
+        <Field label="Stato" value={SUB[s.sub_status] || MODE[s.mode] || s.mode} testid="sub-status" />
         <Field label="Condizione economica" value={BILLING[s.billing] || "—"} testid="sub-billing" />
-        {!free && <><Field label="Periodicità" value={CYC[s.billing_cycle] || "—"} testid="sub-cycle" />
+        <Field label="Eventi coperti" value={s.limits?.max_events < 0 ? "Illimitati" : s.limits?.max_events ?? "—"} testid="sub-events-covered" />
+        {!free && s.paid_plan && <><Field label="Durata" value={CYC[s.billing_cycle] || "—"} testid="sub-cycle" />
         <Field label="Importo pagato" value={s.price_amount ? `€${eur(s.price_amount)}/${({ yearly: "12 mesi", semester: "6 mesi" })[s.billing_cycle] || "mese"}` : "—"} testid="sub-price" />
-        <Field label="Rinnovo automatico" value={s.cancel_at_period_end ? "Disattivato" : s.stripe_status ? "Attivo" : "—"} testid="sub-autorenew" />
+        <Field label="Rinnovo automatico" value={s.auto_renew ? "Attivo" : "Disattivato"} testid="sub-autorenew" />
         <Field label="Data attivazione" value={d(s.activated_at)} testid="sub-activated" />
-        <Field label="Prossimo rinnovo" value={s.cancel_at_period_end ? `Termina il ${d(s.current_period_end)}` : d(s.admin?.renewal_date || s.current_period_end)} testid="sub-renewal" /></>}
+        <Field label="Prossimo rinnovo" value={s.auto_renew && s.next_amount ? `${d(s.next_amount.date)} · ${eurO(s.next_amount.net)} IVA esclusa · ${eurO(s.next_amount.gross)} IVA inclusa${s.next_amount.vat_rate === 0 ? " (IVA 0%)" : ""}` : s.cancel_at_period_end ? `Termina il ${d(s.current_period_end)}` : "—"} testid="sub-renewal" /></>}
         {s.purchased && isTrial && <Field label="Piano acquistato" value={`${s.paid_plan_label} dal ${d(s.trial_end)}`} testid="sub-purchased" />}
       </div>
       {s.pending_change && <p className="text-sm rounded-lg bg-amber-50 text-amber-900 px-3 py-2" data-testid="sub-pending">Dal {d(s.pending_change.effective_at)} passerai a {s.pending_change.plan.toUpperCase()} {CYC[s.pending_change.cycle]?.toLowerCase()}.</p>}
@@ -61,17 +64,33 @@ function Summary({ s, features, action }) {
 function Payments({ rows }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6" data-testid="sub-payments">
-      <div className="flex items-center gap-2 mb-3"><ReceiptText className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-800">Storico pagamenti</h2></div>
+      <div className="flex items-center gap-2 mb-3"><ReceiptText className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-800">Storico abbonamenti e pagamenti</h2></div>
       {!rows?.length ? <p className="text-sm text-slate-500" data-testid="sub-payments-empty">Nessun pagamento registrato.</p> : (
         <div className="divide-y divide-slate-100">{rows.map((p) => (
-          <div key={p.id} className="py-2.5 flex items-center justify-between gap-3 text-sm" data-testid={`sub-payment-${p.id}`}>
-            <div className="min-w-0"><div className="font-medium text-slate-800 truncate">{p.descrizione || "Abbonamento CRMEvent"}</div>
-              <div className="text-xs text-slate-500">{d(p.data)} · {p.payment_status === "paid" ? "Pagato" : "Non riuscito"}{p.is_test ? " · TEST (nessuna fattura inviata)" : ""}</div></div>
-            <div className="flex items-center gap-2 shrink-0"><b>€{eur(p.totale)}</b>{p.hosted_invoice_url && <a href={p.hosted_invoice_url} target="_blank" rel="noreferrer" className="text-xs text-[#0ABAB5] font-semibold">Ricevuta</a>}</div>
+          <div key={p.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm" data-testid={`sub-payment-${p.id}`}>
+            <div className="min-w-0"><div className="font-medium text-slate-800">{p.saas_plan ? `${p.saas_plan.toUpperCase()} · ${CYC[p.saas_cycle] || ""}` : p.descrizione || "Abbonamento CRMEvent"}</div>
+              <div className="text-xs text-slate-500">Pagamento {d(p.data)}{p.periodo_inizio ? ` · validità ${d(p.periodo_inizio)} – ${d(p.periodo_fine)}` : ""} · {p.payment_status === "paid" ? "Pagato" : "Non riuscito"}{p.is_test ? " · TEST (nessuna fattura inviata)" : ""}</div></div>
+            <div className="flex items-center gap-3 shrink-0"><b>€{eur(p.totale)}</b>
+              {p.fic_pdf_url && <a href={p.fic_pdf_url} target="_blank" rel="noreferrer" className="text-xs text-[#0ABAB5] font-semibold" data-testid={`sub-payment-invoice-${p.id}`}>Fattura</a>}
+              {p.hosted_invoice_url && <a href={p.hosted_invoice_url} target="_blank" rel="noreferrer" className="text-xs text-[#0ABAB5] font-semibold" data-testid={`sub-payment-receipt-${p.id}`}>Ricevuta</a>}</div>
           </div>
         ))}</div>
       )}
     </div>
+  );
+}
+
+function RenewDialog({ s, open, onClose, onChange }) {
+  if (!open) return null;
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md" data-testid="renew-dialog">
+        <DialogHeader><DialogTitle>Rinnovo abbonamento</DialogTitle><DialogDescription>{s.paid_plan_label} · {CYC[s.billing_cycle]}</DialogDescription></DialogHeader>
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm" data-testid="renew-detail">Il rinnovo automatico è attivo: Stripe rinnoverà il piano il <b>{d(s.next_amount?.date || s.current_period_end)}</b> addebitando <b>{eurO(s.next_amount?.gross)}</b> (IVA inclusa). Non serve pagare in anticipo e non perdi nessun giorno già pagato.</div>
+        <DialogFooter className="gap-2"><Button variant="outline" onClick={onClose}>Chiudi</Button>
+          <Button onClick={onChange} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="renew-change-plan">Cambia durata o piano</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -106,10 +125,10 @@ export function recommendPlan(plans, usage) {
   return [...plans].sort((a, b) => RANK.indexOf(a.key) - RANK.indexOf(b.key)).find(fits) || null;
 }
 
-function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, choose, busy, requestMode, onRequest }) {
+function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, choose, busy, requestMode, onRequest, live, title }) {
   const [ack, setAck] = useState(false);
   const rec = recommendPlan(plans.plans, s.usage);
-  const curKey = s.mode === "trial" ? null : s.paid_plan || s.plan || s.assigned_plan;
+  const curKey = requestMode ? s.paid_plan || s.plan || s.assigned_plan : live ? s.paid_plan : null;
   const needsAck = !requestMode && s.billing === "free";
   // Solo il piano attuale (evidenziato) e i piani superiori.
   const shown = plans.plans.filter((p) => !curKey || RANK.indexOf(p.key) >= RANK.indexOf(curKey));
@@ -117,7 +136,7 @@ function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, cho
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" data-testid="plan-picker-dialog">
-        <DialogHeader><DialogTitle>Passa a un piano superiore</DialogTitle>
+        <DialogHeader><DialogTitle>{title || "Passa a un piano superiore"}</DialogTitle>
           <DialogDescription>{requestMode ? "La tua formula è assegnata dall'amministrazione CRMEvent: invia una richiesta, nessun addebito automatico." : "Prezzi del catalogo attuale. Il nuovo piano si applica solo dopo la tua conferma."} I tuoi dati restano invariati.</DialogDescription></DialogHeader>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {rec && rec.key !== curKey
@@ -153,6 +172,7 @@ export default function MySubscription() {
   const [busy, setBusy] = useState(false);
   const [params, setParams] = useSearchParams();
   const [pickerOpen, setPickerOpen] = useState(params.get("upgrade") === "1");
+  const [renewOpen, setRenewOpen] = useState(false);
   const load = useCallback(() => api.get("/saas/me").then(({ data }) => { setS(data); if (data.billing_cycle && data.billing_cycle !== "monthly") setCycle(data.billing_cycle); }).catch(() => {}), []);
   const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 
@@ -160,10 +180,14 @@ export default function MySubscription() {
     const sid = params.get("session_id");
     if (params.get("checkout") === "success" && sid) {
       api.get("/saas/checkout-confirmation", { params: { session_id: sid } }).then(({ data }) => {
-        if (data.complete) toast.success("Abbonamento attivato. Grazie!");
+        if (data.complete) toast.success("Pagamento confermato. Grazie!");
+        else toast.info("Pagamento in elaborazione: l'abbonamento si attiva appena Stripe conferma il pagamento.");
         load(); checkAuth?.();
       }).catch(err).finally(() => setParams({ tab: "abbonamento" }, { replace: true }));
-    } else load();
+    } else {
+      if (params.get("checkout") === "cancel") { toast.warning("Pagamento annullato: nessun addebito effettuato."); setParams({ tab: "abbonamento" }, { replace: true }); }
+      load();
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const live = s && s.purchased && ["active", "trialing", "past_due"].includes(s.stripe_status);
@@ -193,13 +217,20 @@ export default function MySubscription() {
   const isCur = (k) => (live ? s.paid_plan === k && s.billing_cycle === cycle : s.mode !== "trial" && s.plan === k && s.billing === "paid");
   const internal = s.org_type && s.org_type !== "cliente";
   const topPlan = s.mode !== "trial" && (s.paid_plan || s.plan || s.assigned_plan) === "gold";
-  const changeBtn = s.can_manage_billing && !topPlan ? <Button size="sm" onClick={() => setPickerOpen(true)} className="cta-shimmer cta-shimmer-5 h-9 px-4 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="sub-change-plan"><Settings2 className="w-4 h-4 mr-1.5" />Passa a un piano superiore</Button> : null;
+  const btnCls = "cta-shimmer cta-shimmer-5 h-9 px-4 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold";
+  const everPaid = !!s.paid_plan && s.mode !== "trial";
+  const primary = !s.can_manage_billing ? null
+    : internal ? (!topPlan && <Button size="sm" onClick={() => setPickerOpen(true)} className={btnCls} data-testid="sub-change-plan"><Settings2 className="w-4 h-4 mr-1.5" />Passa a un piano superiore</Button>)
+    : !everPaid ? (!live && <Button size="sm" onClick={() => setPickerOpen(true)} className={btnCls} data-testid="sub-activate"><CreditCard className="w-4 h-4 mr-1.5" />Attiva abbonamento</Button>)
+    : <Button size="sm" onClick={() => (!live ? setPickerOpen(true) : s.cancel_at_period_end ? act("/saas/resume", "Rinnovo automatico riattivato: nessun addebito fino alla scadenza") : setRenewOpen(true))} className={btnCls} data-testid="sub-renew"><RefreshCw className="w-4 h-4 mr-1.5" />Rinnova abbonamento</Button>;
+  const changeBtn = <div className="flex flex-wrap gap-2">{primary}{!internal && live && !topPlan && s.can_manage_billing && <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)} data-testid="sub-change-plan"><Settings2 className="w-4 h-4 mr-1.5" />Piano superiore</Button>}</div>;
   const request = async (plan) => {
     setBusy(true);
     try { await api.post("/saas/upgrade-request", { plan }); toast.success("Richiesta di upgrade inviata all'amministrazione CRMEvent"); closePicker(); load(); }
     catch (e) { err(e); } finally { setBusy(false); }
   };
-  const picker = <PlanPickerDialog open={pickerOpen} onClose={closePicker} s={s} plans={plans} cycle={cycle} setCycle={setCycle} isCur={isCur} requestMode={internal} onRequest={request} choose={(k) => { closePicker(); choose(k); }} busy={busy} />;
+  const pickerTitle = internal ? null : !everPaid ? "Attiva abbonamento" : !live ? "Rinnova abbonamento" : "Cambia durata o piano";
+  const picker = <PlanPickerDialog open={pickerOpen} onClose={closePicker} s={s} plans={plans} cycle={cycle} setCycle={setCycle} isCur={isCur} requestMode={internal} onRequest={request} live={live} title={pickerTitle} choose={(k) => { closePicker(); choose(k); }} busy={busy} />;
   if (internal) return (
     <div className="space-y-4" data-testid="my-subscription">
       <Summary s={s} features={plans.features} action={changeBtn} />
@@ -211,14 +242,14 @@ export default function MySubscription() {
     <div className="space-y-4" data-testid="my-subscription">
       <Summary s={s} features={plans.features} action={changeBtn} />
       <div className="flex flex-wrap gap-2">
-        {live && <Button variant="outline" onClick={portal} data-testid="sub-manage"><CreditCard className="w-4 h-4 mr-1.5" />Gestisci abbonamento</Button>}
-        {live && !s.cancel_at_period_end && <Button variant="outline" className="text-red-600" onClick={() => window.confirm("Annullare l'abbonamento alla fine del periodo già pagato?") && act("/saas/cancel", "Abbonamento annullato a fine periodo")} data-testid="sub-cancel">Annulla abbonamento</Button>}
-        {live && s.cancel_at_period_end && <Button variant="outline" onClick={() => act("/saas/resume", "Abbonamento riattivato")} data-testid="sub-resume">Riattiva rinnovo</Button>}
-        {s.pending_change && <Button variant="outline" onClick={() => act("/saas/change/cancel-pending", "Cambio programmato annullato")} data-testid="sub-cancel-pending">Annulla cambio programmato</Button>}
+        {live && s.can_open_portal && <Button variant="outline" onClick={portal} data-testid="sub-manage"><CreditCard className="w-4 h-4 mr-1.5" />Gestisci abbonamento</Button>}
+        {live && s.can_manage_billing && !s.cancel_at_period_end && <Button variant="outline" className="text-red-600" onClick={() => window.confirm("Disattivare il rinnovo automatico? Il piano resta attivo fino alla fine del periodo già pagato.") && act("/saas/cancel", "Rinnovo automatico disattivato")} data-testid="sub-cancel">Disattiva rinnovo automatico</Button>}
+        {s.pending_change && s.can_manage_billing && <Button variant="outline" onClick={() => act("/saas/change/cancel-pending", "Cambio programmato annullato")} data-testid="sub-cancel-pending">Annulla cambio programmato</Button>}
       </div>
-      <Payments rows={s.payments} />
+      {s.can_manage_billing && <Payments rows={s.payments} />}
       {!live && s.trial_active && <p className="text-xs text-slate-500" data-testid="sub-trial-note">Se acquisti ora, il piano pagato parte alla fine della prova ({d(s.trial_end)}): nessun addebito anticipato.</p>}
       {picker}
+      <RenewDialog s={s} open={renewOpen} onClose={() => setRenewOpen(false)} onChange={() => { setRenewOpen(false); setPickerOpen(true); }} />
       <ChangeDialog pv={pv} busy={busy} onClose={() => setPv(null)} onConfirm={confirm} />
     </div>
   );

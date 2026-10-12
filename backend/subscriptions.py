@@ -188,6 +188,15 @@ def org_state(org: dict, cfg: dict) -> dict:
     else:
         expires_at = s.get("current_period_end") or (None if mode in ("active", "past_due") else s.get("trial_end"))
     billing = "trial" if mode == "trial" else "free" if adm.get("comp") else "paid" if (paid_plan or a_status == "active") else "none"
+    auto_renew = bool(paid_plan) and st in ("active", "trialing") and not s.get("cancel_at_period_end") and a_status in ("auto", None)
+    exp = _parse(expires_at)
+    dte = max(0, math.ceil((exp - now).total_seconds() / 86400)) if exp and exp > now else (0 if exp else None)
+    if mode == "trial":
+        sub_status = "trial"
+    elif mode in ("active", "past_due"):
+        sub_status = "expiring" if st == "past_due" or (not auto_renew and dte is not None and dte <= 30) else "active"
+    else:
+        sub_status = "suspended" if mode == "suspended" else "expired"
     return {"enabled": True, "org_type": t, "billing": billing, "mode": mode, "plan": eff, "plan_label": plan_label(cfg, eff) if eff else None,
             "assigned_plan": adm.get("plan") if a_status == "active" else None, "writable": eff is not None, "features": features,
             "trial_plan": s.get("trial_plan"), "trial_start": s.get("trial_start"), "trial_end": s.get("trial_end"),
@@ -198,7 +207,8 @@ def org_state(org: dict, cfg: dict) -> dict:
             "current_period_start": s.get("current_period_start"), "current_period_end": s.get("current_period_end"),
             "cancel_at_period_end": bool(s.get("cancel_at_period_end")), "pending_change": s.get("pending_change"),
             "admin": adm or None, "access_end": adm.get("access_end") if a_status == "active" else None,
-            "expires_at": expires_at, "limits": lim}
+            "expires_at": expires_at, "limits": lim, "auto_renew": auto_renew, "days_to_expiry": dte, "sub_status": sub_status,
+            "cycle_months": {"semester": 6, "yearly": 12, "monthly": 1}.get(s.get("billing_cycle"))}
 
 
 def trial_doc(cfg: dict) -> dict:
@@ -412,6 +422,7 @@ def build(db, deps: dict):
             "trial_3d": ("La tua prova gratuita scade tra 3 giorni", "Mancano 3 giorni alla fine della prova gratuita. Scegli il piano più adatto per continuare a lavorare senza interruzioni: i tuoi dati restano al sicuro."),
             "trial_0d": ("La tua prova gratuita scade oggi", "La prova gratuita termina oggi. Dopo la scadenza i dati restano consultabili, ma per creare e modificare serve un piano attivo."),
             "purchase": ("Abbonamento CRMEvent confermato", f"Grazie! Il tuo abbonamento {extra} è confermato."),
+            "expiry": (f"Il tuo abbonamento CRMEvent scade {extra.split('|')[0]}", f"Il tuo abbonamento {extra.split('|')[-1]} scade {extra.split('|')[0]} e il rinnovo automatico non è attivo. Rinnovalo da Profilo & Account → Il mio abbonamento per continuare senza interruzioni: i tuoi dati restano al sicuro."),
             "renewal": ("Rinnovo abbonamento CRMEvent", f"Il tuo abbonamento {extra} è stato rinnovato correttamente."),
             "payment_failed": ("Pagamento abbonamento non riuscito", f"Non siamo riusciti a completare il pagamento dell'abbonamento {extra}. Aggiorna il metodo di pagamento da Gestisci abbonamento per evitare interruzioni."),
             "plan_changed": ("Cambio piano CRMEvent confermato", f"Il cambio piano è confermato: {extra}."),
@@ -542,6 +553,9 @@ def build(db, deps: dict):
                "aliquota_iva": 0.0, "importo_iva": 0.0, "iva": 0.0, "is_test": test}
         if test:
             upd.update({"fic_stato_documento": "test_non_inviata", "fic_stato_sdi": "non_inviato"})
+        per = ((((inv.get("lines") or {}).get("data") or [{}])[0]) or {}).get("period") or {}
+        if per.get("start") and per.get("end"):
+            upd.update({"periodo_inizio": _iso(_parse(per["start"])), "periodo_fine": _iso(_parse(per["end"]))})
         await db.invoices.update_one({"stripe_invoice_id": inv.get("id"), "fic_document_id": None}, {"$set": upd})
         if status == "paid" and deps.get("on_paid"):
             try:
@@ -592,6 +606,12 @@ def build(db, deps: dict):
                           for k in PLAN_KEYS if cfg["plans"][k].get("active", True)]}
 
     # ---------------- Organizzazione ----------------
+    async def billing_dep(user: dict = Depends(deps["require_admin"])) -> dict:
+        p = user.get("perm") or {}
+        if not (p.get("admin") or p.get("subscription_manage")):
+            raise HTTPException(status_code=403, detail="Solo l'Admin Organizzatore o chi ha il permesso Gestione abbonamento può acquistare o rinnovare")
+        return user
+
     class UpgradeReqIn(BaseModel):
         plan: str
         note: Optional[str] = None
@@ -621,13 +641,21 @@ def build(db, deps: dict):
         out = {**st, "video": await video_policy(user["org_id"]), "usage": await usage(user["org_id"])}
         org_doc = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "saas.upgrade_request": 1}) or {}
         out["upgrade_request"] = (org_doc.get("saas") or {}).get("upgrade_request")
-        out["can_manage_billing"] = bool((user.get("perm") or {}).get("admin"))
-        if (user.get("perm") or {}).get("admin"):
+        p = user.get("perm") or {}
+        can = bool(p.get("admin") or p.get("subscription_manage"))
+        out["can_manage_billing"] = can
+        out["can_open_portal"] = bool(p.get("admin"))
+        if st.get("auto_renew"):
+            cfg = await get_config()
+            pc = st.get("pending_change") or {}
+            net = cycle_amount(cfg, pc["plan"], pc["cycle"]) if pc.get("plan") else st.get("price_amount")
+            out["next_amount"] = {"net": net, "vat_rate": 0.0, "gross": net, "date": pc.get("effective_at") or st.get("current_period_end")} if net else None
+        if can:
             out["payments"] = await db.invoices.find({"org_id": user["org_id"], "kind": "saas_subscription"}, {"_id": 0}).sort("data", -1).to_list(100)
         return out
 
     @r.post("/saas/checkout")
-    async def checkout(body: CheckoutIn, user: dict = Depends(deps["require_org_admin"])):
+    async def checkout(body: CheckoutIn, user: dict = Depends(billing_dep)):
         _assert_stripe()
         cfg = await get_config()
         _validate(cfg, body.plan, body.cycle)
@@ -680,7 +708,7 @@ def build(db, deps: dict):
         return {"complete": done, "state": await state_for(user["org_id"])}
 
     @r.get("/saas/change-preview")
-    async def change_preview(plan: str, cycle: str, user: dict = Depends(deps["require_org_admin"])):
+    async def change_preview(plan: str, cycle: str, user: dict = Depends(billing_dep)):
         _assert_stripe()
         cfg = await get_config()
         _validate(cfg, plan, cycle)
@@ -709,7 +737,7 @@ def build(db, deps: dict):
         return out
 
     @r.post("/saas/change")
-    async def change(body: ChangeIn, user: dict = Depends(deps["require_org_admin"])):
+    async def change(body: ChangeIn, user: dict = Depends(billing_dep)):
         _assert_stripe()
         cfg = await get_config()
         _validate(cfg, body.plan, body.cycle)
@@ -755,7 +783,7 @@ def build(db, deps: dict):
         return {"ok": True, "kind": "downgrade", "immediate": False, "pending_change": pc}
 
     @r.post("/saas/change/cancel-pending")
-    async def cancel_pending(user: dict = Depends(deps["require_org_admin"])):
+    async def cancel_pending(user: dict = Depends(billing_dep)):
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
         sch = ((org or {}).get("saas") or {}).get("schedule_id")
         if sch:
@@ -781,15 +809,15 @@ def build(db, deps: dict):
         return {"ok": True, "state": await state_for(org["id"])}
 
     @r.post("/saas/cancel")
-    async def cancel(user: dict = Depends(deps["require_org_admin"])):
+    async def cancel(user: dict = Depends(billing_dep)):
         return await _set_cancel(user, True)
 
     @r.post("/saas/resume")
-    async def resume(user: dict = Depends(deps["require_org_admin"])):
+    async def resume(user: dict = Depends(billing_dep)):
         return await _set_cancel(user, False)
 
     @r.post("/saas/sync")
-    async def sync_now(user: dict = Depends(deps["require_org_admin"])):
+    async def sync_now(user: dict = Depends(billing_dep)):
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
         sid = ((org or {}).get("saas") or {}).get("stripe_subscription_id")
         if sid:
@@ -857,7 +885,26 @@ def build(db, deps: dict):
                 out["0d"] += 1
             if te <= now:
                 await db.organizations.update_one({"id": o["id"]}, {"$set": {"saas.trial_status": "expired"}})
+        out["expiry"] = await run_expiry_notices(now)
         return out
+
+    async def run_expiry_notices(now: Optional[datetime] = None) -> int:
+        """Avvisi a 30/15/7/0 giorni solo se il rinnovo automatico è disattivato o il pagamento è in sospeso; chiave = scadenza → nessun duplicato, stop al rinnovo."""
+        now, n, cfg = now or _now(), 0, await get_config()
+        q = {"type": {"$in": ["cliente", None]}, "saas.plan": {"$ne": None}, "saas.stripe_status": {"$in": ["active", "past_due"]},
+             "$or": [{"saas.cancel_at_period_end": True}, {"saas.stripe_status": "past_due"}]}
+        for o in await db.organizations.find(q, {"_id": 0, "id": 1, "saas": 1}).to_list(5000):
+            s = o["saas"]
+            end = _parse(s.get("current_period_end"))
+            if not end:
+                continue
+            days = (end.date() - now.date()).days
+            if days in (30, 15, 7, 0):
+                when = "oggi" if days == 0 else f"tra {days} giorni ({end.strftime('%d/%m/%Y')})"
+                await notify(o["id"], "expiry", f"expiry:{o['id']}:{end.date().isoformat()}:{days}",
+                             f"{when}|{plan_label(cfg, s.get('plan'))} {CYCLE_LABEL.get(s.get('billing_cycle'), '')}")
+                n += 1
+        return n
 
     @r.post("/cron/saas-trial-tick")
     async def cron_trial(authorization: str = Header(default="")):

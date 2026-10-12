@@ -44,7 +44,7 @@ export default function Profile() {
   const disconnect = async () => { await api.post("/calendar/disconnect"); toast.success("Google Calendar scollegato"); loadCal(); };
   const selectCal = async (id) => { await api.post("/calendar/select", { calendar_id: id }); setCal((c) => ({ ...c, calendar_id: id })); toast.success("Calendario aggiornato"); };
   const saas = !!user?.saas?.enabled;
-  const showSub = isOrgAdmin(user) && !isSuper && saas;
+  const showSub = (isOrgAdmin(user) || !!user?.permissions?.subscription_manage) && !isSuper && saas;
   const [params, setParams] = useSearchParams();
   const showServices = !isSuper && !!user?.org_id && (isOrgAdmin(user) || !!user?.permissions?.marketplace_purchase);
   const tabs = ["account", ...(showSub ? ["abbonamento"] : []), ...(showServices ? ["servizi"] : []), ...(canManageUsers ? ["utenti"] : [])];
@@ -61,7 +61,7 @@ export default function Profile() {
           {showServices && <TabsTrigger value="servizi" className="h-9" data-testid="profile-tab-servizi">Servizi aggiuntivi</TabsTrigger>}
           {canManageUsers && <TabsTrigger value="utenti" className="h-9" data-testid="profile-tab-utenti">Utenti e Permessi</TabsTrigger>}
         </TabsList>
-        {showSub && <TabsContent value="abbonamento" className="space-y-4"><MySubscription /><div className="max-w-3xl"><Account embedded hideCredits /></div></TabsContent>}
+        {showSub && <TabsContent value="abbonamento" className="space-y-4"><MySubscription />{isOrgAdmin(user) && <div className="max-w-3xl"><Account embedded hideCredits /></div>}</TabsContent>}
         {showServices && <TabsContent value="servizi"><MyServices /></TabsContent>}
         {canManageUsers && <TabsContent value="utenti">
           <SectionCard title="Utenti e Permessi">

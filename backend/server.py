@@ -289,6 +289,8 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
         # Nomina Team Leader: accesso limitato ai soli Team guidati (revocato appena cambia il Team Leader)
         if led and P.tl_allows(eff, tpl, action):
             via_tl = True
+        elif secs is None and tpl.startswith("/saas/") and eff.get("subscription_manage"):
+            pass  # permesso esplicito "Gestione abbonamento"
         elif secs is None:
             raise HTTPException(status_code=403, detail="Funzione riservata all'Admin Organizzatore")
         else:
@@ -297,7 +299,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     team_ids = list(led) if via_tl else await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"), led)
     perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
             "teams": eff.get("teams") or {}, "send_invites": eff.get("send_invites", False),
-            "marketplace_purchase": eff.get("marketplace_purchase", False),
+            "marketplace_purchase": eff.get("marketplace_purchase", False), "subscription_manage": eff.get("subscription_manage", False),
             "team_leader": eff.get("team_leader") or {}, "led_team_ids": led, "via_tl": via_tl}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
