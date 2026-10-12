@@ -35,27 +35,40 @@ function Settings() {
   );
 }
 
+export const MAT_CATS = [["generale", "Generale"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["linkedin", "LinkedIn"], ["whatsapp", "WhatsApp"], ["email", "Email"]];
+const EMPTY = { kind: "file", category: "generale", title: "", description: "", url: "", text: "" };
+const PH = "[LINK PERSONALE DEL PARTNER]";
+
 function Materials() {
   const [rows, setRows] = useState([]);
-  const [f, setF] = useState({ title: "", description: "", url: "" });
+  const [f, setF] = useState(EMPTY);
   const [file, setFile] = useState(null);
   const load = () => api.get("/platform/partner-materials").then(({ data }) => setRows(data)).catch(() => {});
   useEffect(() => { load(); }, []);
   const add = async () => {
     const fd = new FormData(); Object.entries(f).forEach(([k, v]) => fd.append(k, v)); if (file) fd.append("file", file);
-    try { await api.post("/platform/partner-materials", fd); toast.success("Materiale aggiunto"); setF({ title: "", description: "", url: "" }); setFile(null); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    try { await api.post("/platform/partner-materials", fd); toast.success("Materiale aggiunto"); setF({ ...EMPTY, kind: f.kind, category: f.category }); setFile(null); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const del = async (m) => { if (!window.confirm(`Eliminare "${m.title}"?`)) return; await api.delete(`/platform/partner-materials/${m.id}`); load(); };
   return (
     <Card title="Materiali promozionali" testid="partner-materials-admin">
       <div className="p-4 grid sm:grid-cols-2 gap-2">
+        <select className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} data-testid="material-kind"><option value="file">Immagine, video, PDF o link</option><option value="text">Testo promozionale</option></select>
+        <select className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} data-testid="material-category">{MAT_CATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <Input placeholder="Titolo" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} data-testid="material-title" />
-        <Input placeholder="Link (https://...) facoltativo se carichi un file" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} data-testid="material-url" />
-        <Input placeholder="Descrizione" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} data-testid="material-description" />
-        <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" data-testid="material-file" />
-        <Button disabled={!f.title.trim() || (!f.url.trim() && !file)} onClick={add} className="bg-[#0ABAB5] text-slate-900 sm:w-fit" data-testid="material-add">Aggiungi materiale</Button>
+        <Input placeholder="Descrizione (facoltativa)" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} data-testid="material-description" />
+        {f.kind === "text" ? (
+          <div className="sm:col-span-2 space-y-1">
+            <textarea rows={10} maxLength={10000} className="w-full rounded-md border border-slate-200 p-3 text-sm leading-relaxed" placeholder={`Scrivi il messaggio completo (emoji e paragrafi inclusi). Usa ${PH} dove deve comparire il link del partner.`} value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} data-testid="material-text" />
+            <div className="flex justify-between text-xs text-slate-500"><button type="button" className="underline" onClick={() => setF({ ...f, text: `${f.text}${f.text && !f.text.endsWith("\n") ? " " : ""}${PH}` })} data-testid="material-insert-placeholder">Inserisci {PH}</button><span>{f.text.length}/10000</span></div>
+          </div>
+        ) : (<>
+          <Input placeholder="Link (https://...) facoltativo se carichi un file" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} data-testid="material-url" />
+          <input type="file" accept="image/*,video/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" data-testid="material-file" />
+        </>)}
+        <Button disabled={!f.title.trim() || (f.kind === "text" ? !f.text.trim() : !f.url.trim() && !file)} onClick={add} className="bg-[#0ABAB5] text-slate-900 sm:w-fit" data-testid="material-add">Aggiungi materiale</Button>
       </div>
-      {rows.map((m) => <div key={m.id} className="px-4 py-2 border-t border-slate-100 flex items-center justify-between text-sm" data-testid={`material-${m.id}`}><span><b>{m.title}</b> {m.description && `· ${m.description}`} {m.has_file ? "· file" : m.url ? "· link" : ""}</span><button onClick={() => del(m)} aria-label="Elimina" data-testid={`material-del-${m.id}`}><Trash2 className="w-4 h-4 text-red-500" /></button></div>)}
+      {rows.map((m) => <div key={m.id} className="px-4 py-2 border-t border-slate-100 flex items-center justify-between gap-3 text-sm" data-testid={`material-${m.id}`}><span className="min-w-0"><b>{m.title}</b> · {(MAT_CATS.find((c) => c[0] === m.category) || MAT_CATS[0])[1]} {m.kind === "text" ? "· testo" : m.has_file ? "· file" : m.url ? "· link" : ""}{m.kind === "text" && <span className="block text-xs text-slate-500 truncate">{m.text}</span>}</span><button onClick={() => del(m)} aria-label="Elimina" data-testid={`material-del-${m.id}`}><Trash2 className="w-4 h-4 text-red-500" /></button></div>)}
     </Card>
   );
 }
