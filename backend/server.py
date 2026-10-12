@@ -36,6 +36,7 @@ import storage_utils
 import gcal_utils
 import video_support
 import subscriptions
+import brevo_subscriptions
 import pipeline_seed_sports
 import demo_booking
 import demo_slots
@@ -13246,6 +13247,9 @@ SAAS.update(subscriptions.build(db, {
     "record_invoice": _record_invoice, "emit_invoice": _emit_saas_invoice, "retry_invoices": _retry_saas_invoices,
     "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET,
     "on_paid": lambda o, inv: PARTNER["on_subscription_paid"](o, inv)}))
+BREVO_SUBS = brevo_subscriptions.build(db, {"state_for": SAAS["state_for"], "require_superadmin": require_superadmin, "record_audit": record_audit})
+SAAS["hooks"].update({"on_change": BREVO_SUBS["sync_org"], "daily": BREVO_SUBS["daily"]})
+app.include_router(BREVO_SUBS["router"])
 PARTNER = partner_portal.build(db, {"hash_password": hash_password, "verify_password": verify_password, "person_name": TN.person_name,
                                     "require_superadmin": require_superadmin, "record_audit": record_audit, "saas_config": SAAS["get_config"]})
 app.include_router(PARTNER["router"])

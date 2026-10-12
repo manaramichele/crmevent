@@ -286,6 +286,13 @@ def build(db, deps: dict):
     r = APIRouter(prefix="/api")
     state = {"idx": False}
 
+    hooks: dict = {}
+
+    def changed(org_id: Optional[str]):
+        """Stato abbonamento cambiato (evento confermato dal backend) → sincronizzazione Brevo in background."""
+        if org_id and hooks.get("on_change"):
+            asyncio.create_task(hooks["on_change"](org_id))
+
     async def _indexes():
         if not state["idx"]:
             await db.saas_video_quota.create_index([("org_id", 1), ("period", 1)], unique=True)
@@ -394,6 +401,7 @@ def build(db, deps: dict):
         cfg = await get_config()
         await db.organizations.update_one({"id": org_id, "saas": {"$exists": False}}, {"$set": {"saas": trial_doc(cfg)}})
         asyncio.create_task(notify(org_id, "welcome", f"welcome:{org_id}"))
+        changed(org_id)
 
     # ---------------- email ----------------
     async def _recipients(org_id: str) -> list:
@@ -422,7 +430,6 @@ def build(db, deps: dict):
             "trial_3d": ("La tua prova gratuita scade tra 3 giorni", "Mancano 3 giorni alla fine della prova gratuita. Scegli il piano più adatto per continuare a lavorare senza interruzioni: i tuoi dati restano al sicuro."),
             "trial_0d": ("La tua prova gratuita scade oggi", "La prova gratuita termina oggi. Dopo la scadenza i dati restano consultabili, ma per creare e modificare serve un piano attivo."),
             "purchase": ("Abbonamento CRMEvent confermato", f"Grazie! Il tuo abbonamento {extra} è confermato."),
-            "expiry": (f"Il tuo abbonamento CRMEvent scade {extra.split('|')[0]}", f"Il tuo abbonamento {extra.split('|')[-1]} scade {extra.split('|')[0]} e il rinnovo automatico non è attivo. Rinnovalo da Profilo & Account → Il mio abbonamento per continuare senza interruzioni: i tuoi dati restano al sicuro."),
             "renewal": ("Rinnovo abbonamento CRMEvent", f"Il tuo abbonamento {extra} è stato rinnovato correttamente."),
             "payment_failed": ("Pagamento abbonamento non riuscito", f"Non siamo riusciti a completare il pagamento dell'abbonamento {extra}. Aggiorna il metodo di pagamento da Gestisci abbonamento per evitare interruzioni."),
             "plan_changed": ("Cambio piano CRMEvent confermato", f"Il cambio piano è confermato: {extra}."),
@@ -522,13 +529,13 @@ def build(db, deps: dict):
         if t.startswith("customer.subscription."):
             if (obj.get("metadata") or {}).get("kind") != "saas":
                 return False
-            await sync_sub(stripe_sdk.Subscription.retrieve(obj["id"]))  # stato corrente: gli eventi possono arrivare fuori ordine
+            changed(await sync_sub(stripe_sdk.Subscription.retrieve(obj["id"])))  # stato corrente: gli eventi possono arrivare fuori ordine
             return True
         if t == "checkout.session.completed":
             if (obj.get("metadata") or {}).get("kind") != "saas":
                 return False
             if obj.get("subscription"):
-                await sync_sub(stripe_sdk.Subscription.retrieve(obj["subscription"]), (obj.get("metadata") or {}).get("org_id"))
+                changed(await sync_sub(stripe_sdk.Subscription.retrieve(obj["subscription"]), (obj.get("metadata") or {}).get("org_id")))
             return True
         if t in ("invoice.paid", "invoice.payment_succeeded", "invoice.payment_failed"):
             sid = _invoice_sub_id(obj)
@@ -536,6 +543,7 @@ def build(db, deps: dict):
             if not o:
                 return False
             await record_payment(o, obj, "payment_failed" if t == "invoice.payment_failed" else "paid")
+            changed(o["id"])
             return True
         return False
 
@@ -885,26 +893,9 @@ def build(db, deps: dict):
                 out["0d"] += 1
             if te <= now:
                 await db.organizations.update_one({"id": o["id"]}, {"$set": {"saas.trial_status": "expired"}})
-        out["expiry"] = await run_expiry_notices(now)
+        if hooks.get("daily"):  # promemoria di scadenza gestiti in Brevo: qui solo l'aggiornamento degli stati
+            out["brevo"] = await hooks["daily"]()
         return out
-
-    async def run_expiry_notices(now: Optional[datetime] = None) -> int:
-        """Avvisi a 30/15/7/0 giorni solo se il rinnovo automatico è disattivato o il pagamento è in sospeso; chiave = scadenza → nessun duplicato, stop al rinnovo."""
-        now, n, cfg = now or _now(), 0, await get_config()
-        q = {"type": {"$in": ["cliente", None]}, "saas.plan": {"$ne": None}, "saas.stripe_status": {"$in": ["active", "past_due"]},
-             "$or": [{"saas.cancel_at_period_end": True}, {"saas.stripe_status": "past_due"}]}
-        for o in await db.organizations.find(q, {"_id": 0, "id": 1, "saas": 1}).to_list(5000):
-            s = o["saas"]
-            end = _parse(s.get("current_period_end"))
-            if not end:
-                continue
-            days = (end.date() - now.date()).days
-            if days in (30, 15, 7, 0):
-                when = "oggi" if days == 0 else f"tra {days} giorni ({end.strftime('%d/%m/%Y')})"
-                await notify(o["id"], "expiry", f"expiry:{o['id']}:{end.date().isoformat()}:{days}",
-                             f"{when}|{plan_label(cfg, s.get('plan'))} {CYCLE_LABEL.get(s.get('billing_cycle'), '')}")
-                n += 1
-        return n
 
     @r.post("/cron/saas-trial-tick")
     async def cron_trial(authorization: str = Header(default="")):
@@ -990,6 +981,7 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="L'organizzazione è già sul modello ad abbonamento (prova già utilizzata)")
         await db.organizations.update_one({"id": org_id}, {"$set": {"saas": trial_doc(await get_config())}})
         await deps["record_audit"](admin, "saas_enable_trial", org_id=org_id, org_name=org.get("nome"))
+        changed(org_id)
         return await state_for(org_id)
 
     @r.post("/platform/saas/orgs/{org_id}/extend-trial")
@@ -1000,6 +992,7 @@ def build(db, deps: dict):
         base = max(_parse(org["saas"].get("trial_end")) or _now(), _now())
         await db.organizations.update_one({"id": org_id}, {"$set": {"saas.trial_end": _iso(base + timedelta(days=body.days)), "saas.trial_status": "active"}})
         await deps["record_audit"](admin, "saas_extend_trial", org_id=org_id, org_name=org.get("nome"), detail=f"+{body.days} giorni")
+        changed(org_id)
         return await state_for(org_id)
 
     @r.put("/platform/saas/orgs/{org_id}/admin")
@@ -1038,6 +1031,7 @@ def build(db, deps: dict):
         await db.saas_admin_history.insert_many([{"id": uuid.uuid4().hex, "org_id": org_id, "org_name": org.get("nome"), "admin_email": admin.get("email"),
                                                   "at": at, "field": k, "old": o, "new": n, "reason": (body.reason or "").strip()[:500]} for k, o, n in changes])
         await deps["record_audit"](admin, "saas_admin_edit", org_id=org_id, org_name=org.get("nome"), detail=", ".join(k for k, _, _ in changes))
+        changed(org_id)
         return await state_for(org_id)
 
     async def set_formula(org_id: str, plan: Optional[str], admin: dict) -> None:
@@ -1072,6 +1066,7 @@ def build(db, deps: dict):
                                                   "at": at, "field": k, "old": o, "new": n, "reason": "Dati organizzazione"}
                                                  for k, o, n in (("plan", old[0], adm["plan"]), ("status", old[1], adm["status"])) if o != n])
         await deps["record_audit"](admin, "saas_formula_set", org_id=org_id, org_name=org.get("nome"), detail=f"formula: {(old[0] or 'nessuna').upper()} → {(plan or 'nessuna').upper()}")
+        changed(org_id)
 
     @r.get("/platform/saas/orgs/{org_id}/history")
     async def admin_org_history(org_id: str, admin: dict = Depends(deps["require_superadmin"])):
@@ -1121,4 +1116,4 @@ def build(db, deps: dict):
     return {"router": r, "get_config": get_config, "state_for": state_for, "is_saas": is_saas, "check": check, "check_limit": check_limit,
             "init_trial": init_trial, "handle_webhook": handle_webhook, "video_policy": video_policy,
             "video_consume": video_consume, "video_release": video_release, "gold_notice_hours": GOLD_NOTICE_HOURS,
-            "run_trial_notices": run_trial_notices, "set_formula": set_formula, "usage": usage, "check_people": check_people}
+            "run_trial_notices": run_trial_notices, "set_formula": set_formula, "usage": usage, "check_people": check_people, "hooks": hooks}

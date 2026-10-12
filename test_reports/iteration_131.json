@@ -1,0 +1,39 @@
+{
+  "summary": "Iter131 — Subscription management in Profilo & Account. Backend 11/11 pytest passing: GET /api/saas/me for QA admin returns sub_status='trial', auto_renew=false, days_to_expiry≈11, can_manage_billing=true, can_open_portal=true, payments list present, limits.max_events present. POST /api/saas/checkout as QA admin returns a Stripe TEST checkout_url (NOT paid). org_state() pure-function matrix verified for: active_semester (auto_renew=true, cycle_months=6, days_to_expiry=100), active_yearly (cycle_months=12), auto-renew-off at +20d (sub_status=expiring, days_to_expiry=20), past_due (sub_status=expiring), expired (stripe_status=canceled → sub_status=expired), trial. run_expiry_notices query verified: 4 TEST_ orgs with cancel_at_period_end=true at +30/15/7/0d match; the autorenew-ON org does NOT match. saas_emails unique index on 'key' blocks duplicates on the second run (expiry:{org}:{date}:{days}). Permissions: TEST member in QA org with permissions.subscription_manage=true → GET /saas/me 200 with can_manage_billing=true, can_open_portal=false; same user without the permission → POST /saas/checkout 403 ('Solo l'Admin Organizzatore o chi ha il permesso Gestione abbonamento'). All TEST_ orgs/users/memberships/saas_emails cleaned up. Frontend (QA admin trial, desktop 1920): /profilo?tab=abbonamento renders sub-status='Prova gratuita', sub-expiry='Fine prova: 22/10/2026 · 11 giorni rimanenti' with sub-days-left, sub-events-covered='Illimitati', sub-activate button visible ('Attiva abbonamento'), sub-renew NOT present. Clicking sub-activate opens plan-picker-dialog with title 'Attiva abbonamento' and BRONZE/SILVER/GOLD (sub-choose-{plan}) + 6/12 months toggle. Dashboard /dashboard: subscription-expiry-banner hidden for trial org (count=0). Checkout cancel: /profilo?tab=abbonamento&checkout=cancel renders Sonner toast 'Pagamento annullato: nessun addebito effettuato' and cleans the query string back to ?tab=abbonamento. Mobile 390x844 on /profilo?tab=abbonamento: scrollWidth==clientWidth==390 (no horizontal overflow). Permissions toggle perm-subscription-manage-on/off verified by source grep in /app/frontend/src/pages/Permissions.jsx line 150 (OnOff component wired to permissions.subscription_manage).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/saas/me", "issue": "Spec says a member without 'subscription_manage' should get 403 on /saas/me; current implementation returns 200 with can_manage_billing=false (ROUTE_RULES has /saas/ secs='*'). Checkout correctly 403s via billing_dep. Decide if this is intentional (member can see org status) or if /saas/me should enforce the permission."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter131_subscription_mgmt.py",
+    "/app/test_reports/pytest/iter131.xml"
+  ],
+  "action_items": [
+    "Confirm whether GET /api/saas/me should 403 for members without subscription_manage (task spec says yes). If yes, add explicit perm check in me() similar to billing_dep. Current /saas/checkout 403 works correctly."
+  ],
+  "critical_code_review_comments": [
+    "subscriptions.org_state (line 148-211): new fields auto_renew / days_to_expiry / sub_status / cycle_months computed correctly for trial / active / expiring (past_due or cancel_at_period_end+≤30d) / expired. Clean.",
+    "subscriptions.billing_dep (line 609): correctly gates /saas/checkout, /saas/change, /saas/cancel, /saas/resume, /saas/sync, /saas/change-preview, /saas/change/cancel-pending on admin OR subscription_manage. Good.",
+    "subscriptions.me (636): exposes payments only when can_manage_billing. next_amount computed with vat_rate=0 (forfettario). pending_change amount uses the new plan/cycle price — correct.",
+    "subscriptions.record_payment (542): stores periodo_inizio/periodo_fine from invoice lines[].period; db.invoices.update_one keyed by stripe_invoice_id with fic_document_id:None guarantees webhook idempotency (duplicate webhook does not reset FIC state).",
+    "subscriptions.notify (406): unique index on saas_emails.key + DuplicateKeyError catch → idempotent emails. Keys use pattern 'expiry:{org}:{date}:{days}', 'renewal:{invoice_id}', 'failed:{invoice_id}:{attempt}', etc. Correct dedup.",
+    "subscriptions.run_expiry_notices (891): filter restricts to clienti with stripe_status active|past_due AND (cancel_at_period_end OR past_due) → only sends when auto-renew is off or payment past_due, as required. Verified via DB query match.",
+    "server.py _enforce_perm (292): bypass for /saas/ when subscription_manage is set is dead code because ROUTE_RULES maps /saas/ to '*' (any member passes). Remove the dead branch or tighten the rule to None if /saas/me should 403 for members without the permission.",
+    "frontend MySubscription.jsx: primary CTA logic correct — 'sub-activate' only when !everPaid and !live (trial / never-paid), 'sub-renew' only when everPaid; auto-renew off → POST /saas/resume (act); auto-renew on → RenewDialog with 'Cambia durata o piano' (opens plan picker). Clean.",
+    "frontend SubscriptionExpiryBanner.jsx: hidden unless s.sub_status==='expiring' AND (admin OR subscription_manage) AND user.role!='superadmin'. Correct.",
+    "frontend Permissions.jsx (150): perm-subscription-manage-on/off OnOff wired to permissions.subscription_manage. Correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter131_subscription_mgmt.py",
+    "/app/test_reports/iteration_131.json"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (all testids verified; cancel toast + banner hidden on trial + plan picker + mobile 390 no overflow)"},
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026! (trial, 11 giorni rimanenti until 22/10/2026).",
+  "seed_data_creation": "Tests create temp TEST_ orgs (4 autorenew-off at +30/15/7/0d + 1 autorenew-on at +30d), 1 TEST_ user+membership in QA org (with/without subscription_manage), and TEST_ saas_emails rows. All removed in finally blocks. No modification of QA org saas data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "/api/saas/me shape includes auto_renew, days_to_expiry, sub_status (trial/active/expiring/expired/suspended), cycle_months, can_manage_billing, can_open_portal, next_amount {net, vat_rate, gross, date}, payments (only for billing managers), limits.max_events/max_users. /saas/checkout returns {checkout_url, session_id, deferred_until}. In test mode (preview), do NOT complete payments. Permissions model: role=admin_org bypass; otherwise effective() reads memberships.permissions.subscription_manage. billing_dep enforces admin OR subscription_manage on /saas/checkout|change|cancel|resume|sync. /saas/me currently returns 200 for any active member (route rule '*'), with can_manage_billing/can_open_portal flags for UI gating."
+}
