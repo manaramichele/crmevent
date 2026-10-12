@@ -33,7 +33,7 @@ export function permSummary(p, meta) {
   const secs = meta?.sections || [];
   const vis = secs.filter((s) => (p.sections?.[s.key] || []).length);
   const edit = vis.filter((s) => (p.sections[s.key] || []).some((a) => a !== "view"));
-  return `${vis.length}/${secs.length} sezioni (${edit.length} con modifica) · ${p.events === "all" ? "tutti gli eventi" : `${(p.events || []).length} eventi`}${p.send_invites ? " · inviti email" : ""}${p.marketplace_purchase ? " · acquisti Marketplace" : ""}`;
+  return `${vis.length}/${secs.length} sezioni (${edit.length} con modifica) · ${p.events === "all" ? "tutti gli eventi" : `${(p.events || []).length} eventi`}${p.send_invites ? " · inviti email" : ""}${p.marketplace_purchase ? " · acquisti Marketplace" : ""}${p.subscription_manage ? " · gestione abbonamento" : ""}`;
 }
 
 function MatrixEditor({ meta, value, onChange }) {
@@ -147,6 +147,7 @@ function TeamLeaderPerms({ perm, setPerm }) {
         <OnOff label="Gestione turni del team" value={!!tl.manage_shifts} onChange={setTl("manage_shifts")} testid="perm-tl-manage-shifts" />
         <OnOff label="Invio inviti email" hint="Area personale di Staff e Volontari accessibili" value={!!perm.send_invites} onChange={(send_invites) => setPerm((p) => ({ ...p, send_invites }))} testid="perm-send-invites" />
         <OnOff label="Acquisto servizi Marketplace" hint="Può acquistare servizi extra per l'organizzazione" value={!!perm.marketplace_purchase} onChange={(marketplace_purchase) => setPerm((p) => ({ ...p, marketplace_purchase }))} testid="perm-marketplace-purchase" />
+        <OnOff label="Gestione abbonamento" hint="Può attivare, rinnovare o cambiare il piano CRMEvent dell'organizzazione" value={!!perm.subscription_manage} onChange={(subscription_manage) => setPerm((p) => ({ ...p, subscription_manage }))} testid="perm-subscription-manage" />
       </div>
       <p className="text-xs text-slate-400">Valgono solo per i Team di cui l'utente è Team Leader e decadono automaticamente se viene sostituito. Gli inviti non permettono di creare utenti CRM, cambiare ruoli o assegnare permessi.</p>
     </div>
@@ -155,7 +156,7 @@ function TeamLeaderPerms({ perm, setPerm }) {
 
 export const initialPerm = (meta, p) => {
   const base = !p || p.admin ? meta.defaults.user : p;
-  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] }, send_invites: !!base.send_invites, marketplace_purchase: !!base.marketplace_purchase, team_leader: base.team_leader || { edit_members: false, manage_shifts: false } };
+  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] }, send_invites: !!base.send_invites, marketplace_purchase: !!base.marketplace_purchase, subscription_manage: !!base.subscription_manage, team_leader: base.team_leader || { edit_members: false, manage_shifts: false } };
 };
 
 export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId }) {

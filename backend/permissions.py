@@ -113,9 +113,9 @@ READ_ANY_EXACT = {"/settings", "/credits/balance", "/credits/services", "/events
 def default_permissions(role: str) -> dict:
     if role == "collaboratore":
         return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all",
-                "teams": default_teams(role), "send_invites": False, "marketplace_purchase": False, "team_leader": normalize_tl(None)}
+                "teams": default_teams(role), "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None)}
     return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role),
-            "send_invites": False, "marketplace_purchase": False, "team_leader": normalize_tl(None)}
+            "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None)}
 
 
 def normalize_teams(raw, role: str) -> dict:
@@ -142,6 +142,7 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
         ev = sorted({str(x) for x in (ev or []) if x})
     return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role),
             "send_invites": raw.get("send_invites") is True, "marketplace_purchase": raw.get("marketplace_purchase") is True,
+            "subscription_manage": raw.get("subscription_manage") is True,
             "team_leader": normalize_tl(raw.get("team_leader"))}
 
 
