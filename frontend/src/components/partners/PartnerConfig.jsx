@@ -38,6 +38,19 @@ function Settings() {
 export const MAT_CATS = [["generale", "Generale"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["linkedin", "LinkedIn"], ["whatsapp", "WhatsApp"], ["email", "Email"]];
 const EMPTY = { kind: "file", category: "generale", title: "", description: "", url: "", text: "" };
 const PH = "[LINK PERSONALE DEL PARTNER]";
+const MAX_MB = 20;
+const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
+
+export function uploadError(e, file) {
+  const r = e.response;
+  if (!r) return "Connessione al server non riuscita o interrotta durante il caricamento. Controlla la rete e riprova.";
+  const d = typeof r.data === "object" ? r.data?.detail : null;
+  if (r.status === 413 && !d) return `Il server web ha rifiutato il file${file ? ` (${mb(file.size)})` : ""} perché supera il limite di caricamento configurato su api.crmevent.it. Serve aumentare client_max_body_size in nginx.`;
+  if (r.status === 401) return "Sessione scaduta: accedi di nuovo.";
+  if (r.status === 403) return "Permesso negato: serve un account Super Admin.";
+  if (d) return formatApiError(d);
+  return `Errore del server (HTTP ${r.status}). Riprova tra poco.`;
+}
 
 function Materials() {
   const [rows, setRows] = useState([]);
@@ -45,9 +58,16 @@ function Materials() {
   const [file, setFile] = useState(null);
   const load = () => api.get("/platform/partner-materials").then(({ data }) => setRows(data)).catch(() => {});
   useEffect(() => { load(); }, []);
+  const [busy, setBusy] = useState(false);
   const add = async () => {
-    const fd = new FormData(); Object.entries(f).forEach(([k, v]) => fd.append(k, v)); if (file) fd.append("file", file);
-    try { await api.post("/platform/partner-materials", fd); toast.success("Materiale aggiunto"); setF({ ...EMPTY, kind: f.kind, category: f.category }); setFile(null); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    if (f.kind === "file" && file) {
+      if (!file.size) return toast.error("Il file selezionato è vuoto");
+      if (file.size > MAX_MB * 1048576) return toast.error(`File troppo grande (${mb(file.size)}): il massimo consentito è ${MAX_MB} MB`);
+      if (!/^(image|video)\//.test(file.type) && file.type !== "application/pdf") return toast.error("Formato non supportato: carica un'immagine, un video o un PDF");
+    }
+    const fd = new FormData(); Object.entries(f).forEach(([k, v]) => fd.append(k, v)); if (file && f.kind === "file") fd.append("file", file);
+    setBusy(true);
+    try { await api.post("/platform/partner-materials", fd); toast.success("Materiale aggiunto"); setF({ ...EMPTY, kind: f.kind, category: f.category }); setFile(null); load(); } catch (e) { toast.error(uploadError(e, file), { duration: 10000 }); } finally { setBusy(false); }
   };
   const del = async (m) => { if (!window.confirm(`Eliminare "${m.title}"?`)) return; await api.delete(`/platform/partner-materials/${m.id}`); load(); };
   return (
@@ -66,7 +86,7 @@ function Materials() {
           <Input placeholder="Link (https://...) facoltativo se carichi un file" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} data-testid="material-url" />
           <input type="file" accept="image/*,video/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" data-testid="material-file" />
         </>)}
-        <Button disabled={!f.title.trim() || (f.kind === "text" ? !f.text.trim() : !f.url.trim() && !file)} onClick={add} className="bg-[#0ABAB5] text-slate-900 sm:w-fit" data-testid="material-add">Aggiungi materiale</Button>
+        <Button disabled={busy || !f.title.trim() || (f.kind === "text" ? !f.text.trim() : !f.url.trim() && !file)} onClick={add} className="bg-[#0ABAB5] text-slate-900 sm:w-fit" data-testid="material-add">{busy ? "Caricamento..." : "Aggiungi materiale"}</Button>
       </div>
       {rows.map((m) => <div key={m.id} className="px-4 py-2 border-t border-slate-100 flex items-center justify-between gap-3 text-sm" data-testid={`material-${m.id}`}><span className="min-w-0"><b>{m.title}</b> · {(MAT_CATS.find((c) => c[0] === m.category) || MAT_CATS[0])[1]} {m.kind === "text" ? "· testo" : m.has_file ? "· file" : m.url ? "· link" : ""}{m.kind === "text" && <span className="block text-xs text-slate-500 truncate">{m.text}</span>}</span><button onClick={() => del(m)} aria-label="Elimina" data-testid={`material-del-${m.id}`}><Trash2 className="w-4 h-4 text-red-500" /></button></div>)}
     </Card>

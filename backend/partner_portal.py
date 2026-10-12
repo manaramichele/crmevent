@@ -907,10 +907,16 @@ def build(db, deps: dict) -> dict:
         if file and kind == "file":
             data = await file.read()
             if len(data) > 20 * 1024 * 1024:
-                raise HTTPException(status_code=400, detail="File troppo grande (max 20 MB)")
+                raise HTTPException(status_code=413, detail=f"File troppo grande ({len(data) / 1048576:.1f} MB): il massimo consentito è 20 MB")
+            if not data:
+                raise HTTPException(status_code=400, detail="Il file caricato è vuoto")
             name = re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "file")[-80:]
             ct = file.content_type or "application/octet-stream"
-            saved = storage_utils.save(f"partner_materials/{m['id']}_{name}", data, ct)
+            try:
+                saved = storage_utils.save(f"partner_materials/{m['id']}_{name}", data, ct)
+            except Exception as e:
+                log.error("partner material storage failed backend=%s error=%s", storage_utils.STORAGE_BACKEND, repr(e)[:300])
+                raise HTTPException(status_code=503, detail=f"Archiviazione del file non riuscita (storage '{storage_utils.STORAGE_BACKEND}'). Il materiale non è stato salvato: verifica la configurazione dello storage sul server.")
             m.update({"file_path": saved["path"], "storage_backend": saved.get("backend"), "content_type": ct, "file_name": name, "has_file": True})
         await db.partner_materials.insert_one(dict(m))
         m.pop("file_path", None)
