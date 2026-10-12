@@ -1096,3 +1096,9 @@ Task 2 — Creatività manuale:
 - Per piano: "N pagamenti × commissione per organizzatore in 24 mesi" (4 semestrali / 2 annuali). Aggiunta spiegazione annuale vs semestrale sotto il totale. Logica invariata (verificata: 1 org per piano → semestrale 176,40/176,40/352,80 €, annuale 141,12/141,12/282,24 €).
 
 
+
+## 2026-10-12 — Fix Super Admin org attiva (428 "Seleziona un'organizzazione attiva") ✅ (iteration_128)
+- Causa: Login.jsx (email/password) cancellava `acting_org_id` da localStorage ma non lo stato React, poi navigava in SPA → banner con org vecchia ma richieste senza X-Org-Id → 428 su tutte le API org.
+- Fix: Login usa `setActingOrg("", false)`; Layout riallinea stato e localStorage dopo /platform/organizations (anche multi-org non SA); gate `validActing` richiede localStorage === stato. Backend invariato.
+
+
