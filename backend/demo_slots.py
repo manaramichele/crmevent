@@ -13,6 +13,7 @@ import demo_booking
 import email_utils
 import text_normalize as TN
 import gcal_utils
+import gcal_tokens
 import video_support
 
 logger = logging.getLogger("demo_slots")
@@ -87,8 +88,13 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
         if video_support.simulation():
             return []
         vcfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0}) or {}
-        conn = await db.calendar_connections.find_one({"user_id": vcfg.get("calendar_user_id")}, {"_id": 0}) if vcfg.get("calendar_user_id") else None
-        if not (conn and gcal_utils.is_configured()):
+        conn = None
+        if vcfg.get("calendar_user_id") and gcal_utils.is_configured():
+            try:
+                conn = await gcal_tokens.load(db, vcfg["calendar_user_id"])
+            except gcal_tokens.GCalError as e:
+                logger.warning(f"demo freebusy calendar unavailable: {e.code}")
+        if not conn:
             return []
         try:
             return gcal_utils.freebusy(conn["tokens"], conn.get("calendar_id") or "primary", _iso(tmin), _iso(tmax))

@@ -69,6 +69,7 @@ async def sync_lead(db, lead: dict) -> dict:
 async def meet_for_demo(db, lead: dict, action: str):
     """Link Google Meet per le demo confermate (stesso calendario e stessa simulazione dell'assistenza video)."""
     import gcal_utils
+    import gcal_tokens
     import video_support
     eid = lead.get("demo_event_id")
     off = {"demo_meet_link": None, "demo_event_id": None, "demo_meet_status": None, "demo_meet_error": None}
@@ -78,8 +79,15 @@ async def meet_for_demo(db, lead: dict, action: str):
         return {"demo_event_id": eid or f"sim-demo-{lead['id'][:10]}", "demo_meet_simulated": True, "demo_meet_status": "ok", "demo_meet_error": None,
                 "demo_meet_link": lead.get("demo_meet_link") or f"https://meet.google.com/sim-{lead['id'][:3]}-{lead['id'][3:7]}-{lead['id'][7:10]}"}
     cfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0}) or {}
-    conn = await db.calendar_connections.find_one({"user_id": cfg.get("calendar_user_id")}, {"_id": 0}) if cfg.get("calendar_user_id") else None
-    if not (conn and gcal_utils.is_configured()):
+    conn = None
+    if cfg.get("calendar_user_id") and gcal_utils.is_configured():
+        try:
+            conn = await gcal_tokens.load(db, cfg["calendar_user_id"])
+        except gcal_tokens.GCalError as e:
+            if action == "cancel":
+                return off
+            return {"demo_meet_status": "errore", "demo_meet_error": f"{e.message} Poi usa «Riprova Meet»."}
+    if not conn:
         logger.warning("demo meet: calendario Super Admin non collegato")
         if action == "cancel":
             return off

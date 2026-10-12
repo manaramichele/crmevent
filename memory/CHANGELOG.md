@@ -1141,3 +1141,12 @@ Task 2 — Creatività manuale:
 - Trigger: init_trial, webhook Stripe (handle_webhook), modifiche Super Admin, cron giornaliero saas-trial-tick (solo cambiamenti/errori). Promemoria email interni 30/15/7/0 RIMOSSI (gestiti da automazioni Brevo).
 - SA: Email & Brevo → tab "Abbonamenti" (stato, conteggi, ultima sync, errori, risincronizza una/tutte). Brevo reale NON testato (chiave assente in anteprima): test simulato tests/test_brevo_subscriptions_mock.py.
 
+
+## 2026-10-12 — Google Calendar multiutente: sicurezza e gestione token (test simulati; OAuth reale da verificare in produzione)
+- Redirect: GOOGLE_CALENDAR_REDIRECT_URI (opzionale) o BACKEND_PUBLIC_URL + /api/oauth/calendar/callback; in prod deve essere https://api.crmevent.it/api/oauth/calendar/callback (crmevent.it/api non arriva al backend).
+- Scope: openid, userinfo.email, calendar.events, calendar.readonly. prompt=select_account (consent solo con force_consent). Identità da ID token validato (sub, email, email_verified).
+- gcal_tokens.py: AES-256-GCM (GOOGLE_TOKEN_ENCRYPTION_KEY="kid:base64[,kid:base64]", rotazione), refresh persistente con token_rev (concorrenza), stati connected/reauthorization_required/temporary_error, messaggi specifici. Disconnect revoca il token Google. Nuovi campi calendar_connections: tokens_enc, expires_at, google_sub, org_id, status, last_sync_at, token_rev.
+- Migrazione esplicita: backend/scripts/migrate_gcal_tokens.py (dry-run, --backup 600, --apply idempotente). NON eseguita in produzione.
+- Frontend: GoogleCalendarCard (Profilo) + CalendarReturnHandler (toast per reason, Riprova); rimosso vecchio CalendarToast in App.js.
+
+

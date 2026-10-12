@@ -9,8 +9,11 @@ from googleapiclient.discovery import build
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 BACKEND_URL = os.environ.get("BACKEND_PUBLIC_URL", "")
-REDIRECT_URI = f"{BACKEND_URL}/api/oauth/calendar/callback"
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
+# In produzione il backend è su api.crmevent.it: https://api.crmevent.it/api/oauth/calendar/callback (override esplicito opzionale)
+REDIRECT_URI = os.environ.get("GOOGLE_CALENDAR_REDIRECT_URI") or f"{BACKEND_URL}/api/oauth/calendar/callback"
+# Minimo necessario: eventi + Meet (calendar.events), elenco calendari e orari occupati (calendar.readonly), identità (openid, email)
+SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email",
+          "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"]
 
 
 def is_configured() -> bool:
@@ -23,13 +26,33 @@ def _client_config():
                     "token_uri": "https://oauth2.googleapis.com/token"}}
 
 
-def authorization_url(state: str):
+def authorization_url(state: str, force_consent: bool = False):
     """Return (authorization_url, code_verifier). PKCE code_verifier is generated here and
     must be stored server-side by the caller and passed back to exchange_code()."""
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=REDIRECT_URI)
-    url, _ = flow.authorization_url(access_type="offline", prompt="consent", state=state,
-                                    include_granted_scopes="true")
+    url, _ = flow.authorization_url(access_type="offline", prompt="select_account consent" if force_consent else "select_account",
+                                    state=state, include_granted_scopes="true")
     return url, flow.code_verifier
+
+
+def identity(tokens: dict) -> dict:
+    """sub, email, email_verified dall'ID token validato (fallback: endpoint UserInfo)."""
+    if tokens.get("id_token"):
+        try:
+            from google.oauth2 import id_token as gid
+            c = gid.verify_oauth2_token(tokens["id_token"], GoogleRequest(), CLIENT_ID)
+            return {"sub": c.get("sub"), "email": c.get("email"), "email_verified": bool(c.get("email_verified"))}
+        except Exception:  # noqa: BLE001
+            pass
+    info = userinfo(tokens["access_token"])
+    return {"sub": info.get("id"), "email": info.get("email"), "email_verified": bool(info.get("verified_email"))}
+
+
+def revoke(token: str) -> None:
+    try:
+        requests.post("https://oauth2.googleapis.com/revoke", params={"token": token}, timeout=15)
+    except requests.RequestException:
+        pass
 
 
 def exchange_code(code: str, code_verifier: str | None = None) -> dict:
@@ -57,7 +80,7 @@ def userinfo(access_token: str) -> dict:
 def creds_from_tokens(tokens: dict) -> Credentials:
     creds = Credentials(token=tokens.get("access_token"), refresh_token=tokens.get("refresh_token"),
                         token_uri="https://oauth2.googleapis.com/token",
-                        client_id=CLIENT_ID, client_secret=CLIENT_SECRET, scopes=SCOPES)
+                        client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
     if creds.expired and creds.refresh_token:
         creds.refresh(GoogleRequest())
     return creds
