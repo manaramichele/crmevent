@@ -1129,3 +1129,15 @@ Task 2 — Creatività manuale:
 
 
 
+
+
+## 2026-10-12 — Abbonamento in Profilo & Account ✅ (iteration_131: backend 11/11, frontend 100%)
+- Modello invariato: abbonamenti Stripe a rinnovo automatico (approvato). org_state: auto_renew, days_to_expiry, sub_status (trial/active/expiring/expired), cycle_months. /saas/me: next_amount (IVA 0% forfettario), can_open_portal.
+- Pulsanti: "Attiva abbonamento" (mai pagato), "Rinnova abbonamento" (scaduto→checkout, rinnovo off→resume, rinnovo on→dialog + cambio piano). Storico con periodo di validità (periodo_inizio/fine da riga fattura Stripe), link Fattura (fic_pdf_url) / Ricevuta solo se presenti. Banner dashboard sub_status=expiring.
+- Nuovo permesso membro `subscription_manage` ("Gestione abbonamento"): billing_dep su checkout/change/cancel/resume/sync; /saas/me visibile ai membri (sola lettura).
+
+## 2026-10-12 — Sincronizzazione abbonamenti → Brevo ✅ (iteration_132: backend 10/10, frontend 100%)
+- brevo_subscriptions.py: attributi CRM_PIANO, CRM_SCADENZA(date), CRM_INIZIO(date), CRM_DURATA(float), CRM_STATO, CRM_ORGANIZZAZIONE, CRM_ORG_ID, CRM_RINNOVO_AUTO(boolean), creati solo se mancanti; contatto upsert senza listIds; destinatari admin_org/owner/subscription_manage; email multi-org → org non scaduta con scadenza più vicina. Stato per org in `saas_brevo_sync`.
+- Trigger: init_trial, webhook Stripe (handle_webhook), modifiche Super Admin, cron giornaliero saas-trial-tick (solo cambiamenti/errori). Promemoria email interni 30/15/7/0 RIMOSSI (gestiti da automazioni Brevo).
+- SA: Email & Brevo → tab "Abbonamenti" (stato, conteggi, ultima sync, errori, risincronizza una/tutte). Brevo reale NON testato (chiave assente in anteprima): test simulato tests/test_brevo_subscriptions_mock.py.
+

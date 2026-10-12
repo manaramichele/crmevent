@@ -1,0 +1,22 @@
+{
+  "summary": "Iter 132 Brevo subscription sync — backend + mocked + frontend tests all green. Mocked unit test passes (only missing attributes created, no listIds, multi-org pick to nearest non-expired expiry, daily idempotent). Live backend endpoints verified against the preview URL with real SA/QA creds: overview returns configured=false and the full attributes dict; non-SA gets 403; POST resync for QA org returns ok=false with error 'Brevo non configurato (BREVO_API_KEY)' and persists a row in saas_brevo_sync (status=error, attrs CRM_STATO=Trial & CRM_ORG_ID=org_qa_eventi, recipients only qa.eventi@crmeventqa.it); unknown org -> 404; POST sync-all {only_failed:true} returns totals; regression saas/me OK; cron saas-trial-tick without auth -> 401; run_expiry_notices no longer exists in backend/subscriptions.py and run_trial_notices wires hooks['daily']. Frontend SA /marketing/brevo?tab=abbonamenti renders subscription-sync-panel with sub-sync-not-configured, sub-sync-status ('Non configurato'), sub-sync-count, sub-sync-errors, sub-sync-last, 13 rows (sub-sync-row-{org_id}) with sub-sync-one-* buttons; sub-sync-failed click produces a toast with the error count ('Sincronizzate 0/1 · Brevo non configurato (BREVO_API_KEY)'); 390px mobile shows no horizontal overflow. Previous feature regression /profilo?tab=abbonamento for QA renders sub-status and sub-activate. Cleaned up db.saas_brevo_sync (13 docs removed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter132_brevo_subs.py",
+    "/app/backend/tests/test_brevo_subscriptions_mock.py",
+    "/app/test_reports/pytest/iter132.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "brevo_subscriptions.sync_org stores the hash only on success (correct — forces retry). Good.",
+    "overview counts synced_ok/errors by iterating rows already loaded (limit 1000). If org count grows beyond that, totals could drift; low priority."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter132_brevo_subs.py"],
+  "success_rate": {"backend": "100% (9/9 live + 1/1 mocked)", "frontend": "100%"},
+  "test_credentials": "SA manara.michele.pro@gmail.com / CrmEvent2026! and QA qa.eventi@crmeventqa.it / QaEvents2026! (both work).",
+  "seed_data_creation": "None. Mocked test inserts/removes TEST_ prefixed data within its scope. db.saas_brevo_sync cleared at end as requested.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "QA org id is 'org_qa_eventi'. Brevo is intentionally unconfigured in the preview; any resync will persist status=error rows in saas_brevo_sync. test_iter132_brevo_subs.py is live-API (needs REACT_APP_BACKEND_URL + preview creds); test_brevo_subscriptions_mock.py is offline (monkeypatches brevo_funnel). Login route is /login (not /accedi)."
+}
