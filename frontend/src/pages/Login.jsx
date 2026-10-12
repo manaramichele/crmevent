@@ -11,7 +11,7 @@ import { startGoogle, googleErrorText } from "@/lib/googleAuth";
 import GoogleLinkPrompt from "@/components/GoogleLinkPrompt";
 
 export default function Login() {
-  const { setUser } = useAuth();
+  const { setUser, setActingOrg } = useAuth();
   const nav = useNavigate();
   const [mode, setMode] = useState("login"); // login | forgot
   const [form, setForm] = useState({ email: "", password: "" });
@@ -31,7 +31,7 @@ export default function Login() {
         toast.success("Se l'email esiste, riceverai un link per reimpostare la password.");
         setMode("login");
       } else {
-        localStorage.removeItem("acting_org_id");
+        setActingOrg("", false);
         const { data } = await api.post("/auth/login", { email: form.email, password: form.password });
         setUser(data);
         trackEvent("login", { method: "email" });

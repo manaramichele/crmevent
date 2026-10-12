@@ -261,21 +261,24 @@ export default function Layout({ children }) {
       api.get("/platform/organizations").then(({ data }) => {
         setOrgs(data);
         const ids = new Set(data.map((o) => o.id));
-        if (!ids.has(actingOrgId)) {
-          const last = localStorage.getItem(`last_org:${user.user_id}`);
-          setActingOrg(ids.has(last) ? last : data[0]?.id || "", false, actingOrgId);
-        }
+        // Fonte unica: l'header X-Org-Id legge localStorage, quindi stato React e localStorage devono coincidere.
+        const stored = localStorage.getItem("acting_org_id");
+        const last = localStorage.getItem(`last_org:${user.user_id}`);
+        const target = ids.has(stored) ? stored : ids.has(actingOrgId) ? actingOrgId : ids.has(last) ? last : data[0]?.id || "";
+        if (target !== stored || target !== actingOrgId) setActingOrg(target, false, stored || "");
       }).catch(() => {}).finally(() => setOrgsLoaded(true));
     } else if (multiOrg) {
       api.get("/my/organizations").then(({ data }) => {
         setOrgs(data);
         const activeId = user?.active_org_id || user?.org_id;
-        if (!actingOrgId && activeId) setActingOrg(activeId, false);
+        const stored = localStorage.getItem("acting_org_id");
+        const target = data.some((o) => o.id === stored) ? stored : activeId;
+        if (target && (target !== stored || target !== actingOrgId)) setActingOrg(target, false);
       }).catch(() => {});
     }
   }, [isSuper, multiOrg]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const validActing = orgs.some((o) => o.id === actingOrgId);
+  const validActing = orgs.some((o) => o.id === actingOrgId) && localStorage.getItem("acting_org_id") === actingOrgId;
   useEffect(() => {
     if (isSuper && validActing) localStorage.setItem(`last_org:${user.user_id}`, actingOrgId);
   }, [isSuper, validActing, actingOrgId, user?.user_id]);

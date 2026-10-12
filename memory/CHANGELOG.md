@@ -1091,3 +1091,14 @@ Task 2 — Creatività manuale:
 - Brevo: `brevo_sync` → lista `BREVO_PARTNER_LIST_ID` (default 18), attributi PARTNER_* creati solo se mancanti, NOME/COGNOME/SMS esistenti; aggiornamento a ogni cambio stato; errori salvati in `partners.brevo_sync`; pulsante "Sincronizza Brevo" in Super Admin. Test reale Brevo NON eseguito (chiave assente in anteprima, scelta utente): solo test simulati `tests/test_partner_brevo_mock.py`.
 - Dashboard partner: link + Copia + Condividi, organizzatori registrati / con abbonamento, commissioni maturate / liquidate.
 
+
+## 2026-10-12 — Simulatore partner: presentazione pagamenti ✅
+- Per piano: "N pagamenti × commissione per organizzatore in 24 mesi" (4 semestrali / 2 annuali). Aggiunta spiegazione annuale vs semestrale sotto il totale. Logica invariata (verificata: 1 org per piano → semestrale 176,40/176,40/352,80 €, annuale 141,12/141,12/282,24 €).
+
+
+
+## 2026-10-12 — Fix Super Admin org attiva (428 "Seleziona un'organizzazione attiva") ✅ (iteration_128)
+- Causa: Login.jsx (email/password) cancellava `acting_org_id` da localStorage ma non lo stato React, poi navigava in SPA → banner con org vecchia ma richieste senza X-Org-Id → 428 su tutte le API org.
+- Fix: Login usa `setActingOrg("", false)`; Layout riallinea stato e localStorage dopo /platform/organizations (anche multi-org non SA); gate `validActing` richiede localStorage === stato. Backend invariato.
+
+
