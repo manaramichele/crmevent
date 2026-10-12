@@ -1,0 +1,21 @@
+{
+  "summary": "Iter129 — Verified new 'Testo promozionale' material feature end-to-end. Backend: 7/7 pytest cases pass (text create 200 with emoji+paragraphs+placeholder, empty text 400, file-kind without url/file 400, legacy url 200, invalid category 422, partner GET /partner/materials returns text with placeholder for client-side replacement). Frontend SA: material-kind select toggles material-text ↔ material-url+material-file, material-category select, material-insert-placeholder appends [LINK PERSONALE DEL PARTNER], material-add disabled until title+text, created row shows 'WhatsApp · testo', switching back to file shows file input with accept=image/*,video/*,application/pdf. Partner portal: text cards (material-text-{id}) show full text with paragraphs preserved and placeholder replaced by referral_link; material-copy-{id} copies the resolved text to clipboard (grant_permissions + navigator.clipboard.readText verified); materials-filter-whatsapp chip filters cards; 390px mobile viewport shows no horizontal overflow.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_partner_materials.py", "/app/test_reports/pytest/partner_materials.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "partner_portal.py sa_material_add: Literal validators correctly return 422 for invalid category; empty text and missing url/file return 400 with Italian messages. kind-conditional storage of 'text' only when kind=='text' and file only when kind=='file'. OK.",
+    "PartnerConfig.jsx Materials: material-add disabled correctly reflects (title & (kind==text ? text : url||file)); material-insert-placeholder appends with smart space. Row renders '{title} · {CAT_LABEL} · testo|file|link'. OK.",
+    "More.jsx fillLink: simple split/join replacement — no regex pitfalls, handles emoji + paragraphs via whitespace-pre-wrap on material-text-* div. Copy uses navigator.clipboard with fillLink pre-substitution.",
+    "Note (not a bug for this feature): Partner referral_link in dashboard uses a different hostname (bc348517-....preview.emergentagent.com) than backend/.env APP_URL (manage-events-12...). The link is still well-formed and the placeholder replacement works, but APP_URL env may be out of sync with the real public domain. Not blocking.",
+    "Minor: Brevo sync badge expected to show error in preview (BREVO not configured); mentioned in main agent note — not a bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_partner_materials.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (SA create+toggle+row + partner view+copy+filter+mobile 390px)"},
+  "test_credentials": "SA from /app/memory/test_credentials.md. TEST partner test_partner_1791791035@example.com / Partner2026! (deleted at cleanup).",
+  "seed_data_creation": "Created 3 TEST_* materials and 1 TEST partner for E2E; all deleted at the end (SA DELETE /api/platform/partner-materials/{id} + Mongo db.partners.delete_many({email:/^test_partner_.*/})).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend contract validated: POST /api/platform/partner-materials multipart form with fields {title, description?, url?, kind=file|text, text?, category=generale|instagram|facebook|linkedin|whatsapp|email, file?}. kind=text requires non-empty text; kind=file requires url or file. Partner reads via GET /api/partner/materials — text is returned with raw [LINK PERSONALE DEL PARTNER] placeholder; client (More.jsx fillLink) substitutes with partner.referral_link. The Copy button writes substituted text via navigator.clipboard."
+}

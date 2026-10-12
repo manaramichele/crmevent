@@ -893,13 +893,18 @@ def build(db, deps: dict) -> dict:
 
     @r.post("/platform/partner-materials")
     async def sa_material_add(title: str = Form(..., max_length=120), description: str = Form("", max_length=600), url: str = Form("", max_length=500),
+                              kind: Literal["file", "text"] = Form("file"), text: str = Form("", max_length=10000),
+                              category: Literal["instagram", "facebook", "linkedin", "whatsapp", "email", "generale"] = Form("generale"),
                               file: Optional[UploadFile] = File(None), admin: dict = Depends(sa_dep)):
-        if not url.strip() and not file:
+        if kind == "text" and not text.strip():
+            raise HTTPException(status_code=400, detail="Inserisci il testo promozionale")
+        if kind == "file" and not url.strip() and not file:
             raise HTTPException(status_code=400, detail="Indica un link o carica un file")
         if url.strip() and not re.match(r"^https?://", url.strip()):
             raise HTTPException(status_code=400, detail="Link non valido")
-        m = {"id": uuid.uuid4().hex, "title": title.strip(), "description": description.strip(), "url": url.strip() or None, "active": True, "created_at": _iso()}
-        if file:
+        m = {"id": uuid.uuid4().hex, "title": title.strip(), "description": description.strip(), "url": url.strip() or None, "active": True, "created_at": _iso(),
+             "kind": kind, "category": category, "text": text.strip() if kind == "text" else None}
+        if file and kind == "file":
             data = await file.read()
             if len(data) > 20 * 1024 * 1024:
                 raise HTTPException(status_code=400, detail="File troppo grande (max 20 MB)")
