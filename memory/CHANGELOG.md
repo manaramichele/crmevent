@@ -1108,4 +1108,10 @@ Task 2 — Creatività manuale:
 - Portale partner: filtro categorie, testo completo (a capo preservati) con placeholder sostituito dal referral_link, pulsante "Copia testo".
 
 
+## 2026-10-12 — Upload materiali partner: errori specifici ✅
+- Causa in produzione: nginx di api.crmevent.it ha client_max_body_size predefinito (1 MB): file >~1 MB → 413 HTML prima del backend → messaggio generico. Richiede `client_max_body_size 25m;` nel server block nginx su Aruba (non nel repo).
+- Frontend PartnerConfig: pre-controlli (vuoto, >20 MB, formato immagine/video/PDF), messaggi specifici per 413 nginx, rete, 401/403, HTTP n. Backend: 413 >20 MB, 400 file vuoto, 503 con dettaglio se lo storage fallisce (log).
+
+
+
 
