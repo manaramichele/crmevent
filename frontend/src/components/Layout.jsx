@@ -65,8 +65,8 @@ const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
-  { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video" },
-  { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo" },
+  { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video", badge: "assistenza" },
+  { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo", badge: "demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
   { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
@@ -252,6 +252,15 @@ export default function Layout({ children }) {
   }, []);
 
   const isSuper = user?.role === "superadmin";
+  const [counts, setCounts] = useState({});
+  useEffect(() => {
+    if (!isSuper) return undefined;
+    const load = () => api.get("/platform/booking-counts").then(({ data }) => setCounts(data)).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    window.addEventListener("bookings:changed", load);
+    return () => { clearInterval(t); window.removeEventListener("bookings:changed", load); };
+  }, [isSuper]);
   const multiOrg = !isSuper && (user?.organizations?.length || 0) > 1;
   const showSwitcher = isSuper || multiOrg;
 
@@ -328,6 +337,7 @@ export default function Layout({ children }) {
         <n.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-tiffany-active" : ""}`} />
         {!(collapsed && !onClick) && <span className="truncate flex-1">{n.label}</span>}
         {n.locked && !(collapsed && !onClick) && <Lock className="w-3.5 h-3.5 shrink-0" data-testid={`sidebar-lock-${n.id}`} />}
+        {n.badge && counts[n.badge] > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-tiffany text-slate-900 text-[11px] font-bold flex items-center justify-center shrink-0" aria-label={`${counts[n.badge]} prenotazioni future`} data-testid={`sidebar-badge-${n.id}`}>{counts[n.badge]}</span>}
       </>)}
     </NavLink>
   );
