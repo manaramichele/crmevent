@@ -3876,28 +3876,17 @@ async def lead_demo_action(lead_id: str, body: DemoActionIn, admin: dict = Depen
     lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead non trovato")
-    upd = {}
-    if body.action == "confirm":
-        if not lead.get("demo_slot"):
-            raise HTTPException(status_code=400, detail="Nessuna data demo da confermare")
-        upd, kind = {"demo_status": "confermata"}, "confermata"
-    elif body.action == "reschedule":
-        slot = _demo_slot(body.demo_data, body.demo_ora)
-        if not slot:
-            raise HTTPException(status_code=400, detail="Indica la nuova data della demo")
-        upd, kind = {"demo_status": "riprogrammata", "demo_slot": slot}, "riprogrammata"
-    elif body.action == "cancel":
-        upd, kind = {"demo_status": "annullata"}, "annullata"
-    else:
-        raise HTTPException(status_code=400, detail="Azione non valida")
-    upd["updated_at"] = now_iso()
-    upd.update(await demo_booking.meet_for_demo(db, {**lead, **upd}, body.action))
-    await db.leads.update_one({"id": lead_id}, {"$set": upd})
-    lead.update(upd)
-    sent = await demo_booking.send_operational(lead, kind, APP_URL)
-    sync = await demo_booking.sync_lead(db, lead)
+    slot = _demo_slot(body.demo_data, body.demo_ora) if body.action == "reschedule" else None
+    try:
+        res = await demo_booking.apply_action(db, lead, body.action, APP_URL, slot)
+    except demo_booking.SlotTaken:
+        raise HTTPException(status_code=409, detail="Orario già occupato da un'altra demo o assistenza")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    lead = res["lead"]
     await record_audit(admin, "lead_demo_" + body.action, target_email=lead.get("email"), detail=demo_booking.fmt_slot(lead.get("demo_slot")))
-    return {"ok": True, "demo_status": lead["demo_status"], "demo_slot": lead.get("demo_slot"), "demo_meet_link": lead.get("demo_meet_link"), "email_sent": sent, "brevo_sync": sync}
+    return {"ok": True, "demo_status": lead["demo_status"], "demo_slot": lead.get("demo_slot"), "demo_meet_link": lead.get("demo_meet_link"),
+            "demo_meet_status": lead.get("demo_meet_status"), "demo_meet_error": lead.get("demo_meet_error"), "email_sent": res["email_sent"], "brevo_sync": res["brevo_sync"]}
 
 
 @api.post("/leads/{lead_id}/brevo-sync")

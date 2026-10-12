@@ -3,11 +3,11 @@ import api, { formatApiError } from "@/lib/api";
 import { PageHeader, StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SlotPicker } from "@/pages/Assistenza";
 import { toast } from "sonner";
-import { Plus, Trash2, Save, ExternalLink, CalendarCheck } from "lucide-react";
+import { Plus, Trash2, Save } from "lucide-react";
+import { BookingFilters, MeetLink, NoteEditor, notifyBookings, nowKey } from "@/components/BookingShared";
 
 const DAYS = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
 const STATUS = { confermata: ["green", "Confermata"], annullata: ["gray", "Annullata"], errore: ["red", "Errore"] };
@@ -58,16 +58,14 @@ export function Availability({ base = "/platform/video-support/config", testid =
 }
 
 function BookingCard({ b, onAction }) {
-  const [note, setNote] = useState(b.admin_note || "");
-  const saveNote = async () => { try { await api.put(`/platform/video-support/bookings/${b.id}/note`, { admin_note: note }); toast.success("Nota salvata"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2" data-testid={`vs-booking-${b.id}`}>
       <div className="flex items-start justify-between gap-2"><div><div className="font-semibold text-slate-900">{when(b.slot_key)}</div><div className="text-sm text-slate-600">{b.org_name} · {b.user_name}</div><div className="text-xs text-slate-500 break-all">{b.user_email}</div></div>
         <StatusBadge color={STATUS[b.status]?.[0]}>{STATUS[b.status]?.[1]}</StatusBadge></div>
       <div className="text-xs text-slate-500">{b.charge_mode === "plan" ? `Inclusa nel piano${b.quota_consumed && !b.quota_refunded ? " · conteggiata" : ""}${b.quota_refunded ? " · restituita" : ""}` : `${b.credits_charged} crediti addebitati`}{b.refunded ? ` · ${b.refunded} riaccreditati` : ""}{b.cancelled_by ? ` · annullata da ${b.cancelled_by}` : ""}{b.simulated ? " · SIMULAZIONE" : ""}{b.error ? ` · errore ${b.error} (nessun addebito)` : ""}</div>
       {b.note && <p className="text-sm text-slate-600">Richiesta: {b.note}</p>}
-      {b.meet_link && b.status === "confermata" && <a href={b.meet_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-[#088F8A]" data-testid={`vs-meet-${b.id}`}><ExternalLink className="w-4 h-4" />{b.meet_link}</a>}
-      <div className="flex gap-2"><Textarea rows={1} className="min-h-10" placeholder="Note interne" value={note} onChange={(e) => setNote(e.target.value)} data-testid={`vs-note-${b.id}`} /><Button variant="outline" onClick={saveNote} data-testid={`vs-note-save-${b.id}`}><Save className="w-4 h-4" /></Button></div>
+      {b.meet_link && b.status === "confermata" && <MeetLink href={b.meet_link} testid={`vs-meet-${b.id}`} />}
+      <NoteEditor initial={b.admin_note} url={`/platform/video-support/bookings/${b.id}/note`} testid={`vs-${b.id}`} />
       {b.status === "confermata" && <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => onAction("reschedule", b)} data-testid={`vs-reschedule-${b.id}`}>Riprogramma</Button>
         <Button size="sm" variant="outline" className="text-red-600" onClick={() => onAction("cancel", b)} data-testid={`vs-cancel-${b.id}`}>{b.charge_mode === "plan" ? "Annulla" : "Annulla e riaccredita"}</Button>
@@ -82,7 +80,12 @@ export default function PlatformVideoSupport() {
   const [res, setRes] = useState(null);
   const [slots, setSlots] = useState([]);
   const [slot, setSlot] = useState(null);
-  const load = useCallback(() => api.get("/platform/video-support/bookings").then(({ data }) => setRows(data.bookings || [])), []);
+  const [status, setStatus] = useState("");
+  const [whenF, setWhen] = useState("future");
+  const load = useCallback(() => { notifyBookings(); return api.get("/platform/video-support/bookings").then(({ data }) => setRows(data.bookings || [])); }, []);
+  const nk = nowKey();
+  const shown = rows.filter((b) => (!status || b.status === status) && (whenF === "all" || (whenF === "future" ? b.slot_key >= nk : b.slot_key < nk)))
+    .sort((a, b) => (whenF === "past" ? b.slot_key.localeCompare(a.slot_key) : a.slot_key.localeCompare(b.slot_key)));
   useEffect(() => { load(); }, [load]);
   const onAction = async (kind, b) => {
     if (kind === "restore") {
@@ -102,8 +105,8 @@ export default function PlatformVideoSupport() {
     <div className="animate-fade-up space-y-4" data-testid="vs-admin-page">
       <PageHeader title="Prenotazioni assistenza" subtitle="Disponibilità e videochiamate Google Meet prenotate dalle organizzazioni. Il servizio si attiva da Servizi e crediti." />
       <Availability />
-      <div className="flex items-center gap-2 font-semibold text-slate-800"><CalendarCheck className="w-4 h-4 text-[#0ABAB5]" />Prenotazioni ({rows.length})</div>
-      {rows.length === 0 ? <p className="text-sm text-slate-500" data-testid="vs-bookings-empty">Nessuna prenotazione.</p> : <div className="grid gap-3 lg:grid-cols-2">{rows.map((b) => <BookingCard key={b.id} b={b} onAction={onAction} />)}</div>}
+      <BookingFilters statuses={STATUS} status={status} setStatus={setStatus} whenF={whenF} setWhen={setWhen} count={shown.length} testid="vs-bookings" />
+      {shown.length === 0 ? <p className="text-sm text-slate-500" data-testid="vs-bookings-empty">Nessuna prenotazione.</p> : <div className="grid gap-3 lg:grid-cols-2">{shown.map((b) => <BookingCard key={b.id} b={b} onAction={onAction} />)}</div>}
       <Dialog open={!!res} onOpenChange={(o) => !o && setRes(null)}>
         <DialogContent className="max-w-lg" data-testid="vs-reschedule-dialog">
           <DialogHeader><DialogTitle>Riprogramma</DialogTitle><DialogDescription>{res?.org_name} · {res?.user_name}</DialogDescription></DialogHeader>

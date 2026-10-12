@@ -4,6 +4,8 @@ import os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from pymongo.errors import DuplicateKeyError
+
 import brevo_funnel
 import email_utils
 
@@ -69,37 +71,110 @@ async def meet_for_demo(db, lead: dict, action: str):
     import gcal_utils
     import video_support
     eid = lead.get("demo_event_id")
+    off = {"demo_meet_link": None, "demo_event_id": None, "demo_meet_status": None, "demo_meet_error": None}
     if video_support.simulation():
         if action == "cancel":
-            return {"demo_meet_link": None, "demo_event_id": None}
-        return {"demo_event_id": eid or f"sim-demo-{lead['id'][:10]}", "demo_meet_simulated": True,
+            return off
+        return {"demo_event_id": eid or f"sim-demo-{lead['id'][:10]}", "demo_meet_simulated": True, "demo_meet_status": "ok", "demo_meet_error": None,
                 "demo_meet_link": lead.get("demo_meet_link") or f"https://meet.google.com/sim-{lead['id'][:3]}-{lead['id'][3:7]}-{lead['id'][7:10]}"}
     cfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0}) or {}
     conn = await db.calendar_connections.find_one({"user_id": cfg.get("calendar_user_id")}, {"_id": 0}) if cfg.get("calendar_user_id") else None
     if not (conn and gcal_utils.is_configured()):
         logger.warning("demo meet: calendario Super Admin non collegato")
-        return {}
+        if action == "cancel":
+            return off
+        return {"demo_meet_status": "errore", "demo_meet_error": "Google Calendar non collegato: collegalo da Impostazioni e salva le disponibilità, poi usa «Riprova Meet»."}
     cal = conn.get("calendar_id") or "primary"
     try:
         if action == "cancel":
             if eid:
                 gcal_utils.delete_event(conn["tokens"], cal, eid)
-            return {"demo_meet_link": None, "demo_event_id": None}
+            return off
         start = datetime.strptime(lead["demo_slot"], "%Y-%m-%dT%H:%M")
         end = start + timedelta(minutes=30)
         times = {"start": {"dateTime": start.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": "Europe/Rome"},
                  "end": {"dateTime": end.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": "Europe/Rome"}}
-        if eid:
+        if eid and lead.get("demo_meet_link"):
             gcal_utils.patch_event(conn["tokens"], cal, eid, times)
-            return {}
+            return {"demo_meet_status": "ok", "demo_meet_error": None}
         body = {"summary": f"Demo CRMEvent · {lead.get('organizzazione') or lead.get('nome')}", **times,
                 "description": f"Demo CRMEvent\n{lead.get('nome') or ''} {lead.get('cognome') or ''} ({lead['email']})",
                 "attendees": [{"email": lead["email"]}]}
-        ev = gcal_utils.create_meet_event(conn["tokens"], cal, body, f"demo-{lead['id']}")
-        return {"demo_event_id": ev["id"], "demo_meet_link": ev.get("hangoutLink"), "demo_meet_simulated": False}
+        ev = gcal_utils.create_meet_event(conn["tokens"], cal, body, f"demo-{lead['id']}-{lead['demo_slot'].replace(':', '').replace('-', '')}")
+        link = ev.get("hangoutLink") or next((x.get("uri") for x in (ev.get("conferenceData") or {}).get("entryPoints", []) if x.get("entryPointType") == "video"), None)
+        if not link:
+            return {"demo_event_id": ev.get("id"), "demo_meet_link": None, "demo_meet_status": "errore", "demo_meet_error": "Google ha creato l'evento ma non ha restituito il link Meet: riprova."}
+        return {"demo_event_id": ev["id"], "demo_meet_link": link, "demo_meet_simulated": False, "demo_meet_status": "ok", "demo_meet_error": None}
     except Exception as e:  # noqa: BLE001
-        logger.error(f"demo meet {action} failed: {type(e).__name__}")
-        return {}
+        logger.error(f"demo meet {action} failed: {type(e).__name__}: {str(e)[:200]}")
+        if action == "cancel":
+            return off
+        return {"demo_meet_status": "errore", "demo_meet_error": f"Creazione Meet non riuscita ({type(e).__name__}): riprova o ricollega Google Calendar."}
+
+
+ACTIVE = ("da_confermare", "confermata", "riprogrammata")
+_lock_idx = {"ok": False}
+
+
+class SlotTaken(Exception):
+    pass
+
+
+async def _lock(db, lead_id: str, slot):
+    """Un solo appuntamento per orario (demo e assistenza condividono il calendario)."""
+    if not _lock_idx["ok"]:
+        await db.demo_slot_locks.create_index("slot", unique=True)
+        _lock_idx["ok"] = True
+    await db.demo_slot_locks.delete_many({"lead_id": lead_id})
+    if not slot:
+        return
+    if await db.video_support_bookings.find_one({"slot_lock": slot}, {"_id": 1}):
+        raise SlotTaken(slot)
+    try:
+        await db.demo_slot_locks.insert_one({"slot": slot, "lead_id": lead_id, "created_at": _now().isoformat()})
+    except DuplicateKeyError:
+        other = await db.demo_slot_locks.find_one({"slot": slot}, {"_id": 0})
+        if (other or {}).get("lead_id") != lead_id:
+            raise SlotTaken(slot)
+
+
+async def apply_action(db, lead: dict, action: str, app_url: str, slot=None) -> dict:
+    """confirm | reschedule | cancel | meet (riprova). Unica logica per Lead, Richieste demo e Prenotazioni demo."""
+    upd, kind = {}, None
+    if action == "confirm":
+        slot = slot or lead.get("demo_slot")
+        if not slot:
+            raise ValueError("Nessuna data demo da confermare")
+        upd, kind = {"demo_status": "confermata", "demo_slot": slot}, "confermata"
+    elif action == "reschedule":
+        if not slot:
+            raise ValueError("Indica la nuova data della demo")
+        upd, kind = {"demo_status": "riprogrammata", "demo_slot": slot}, "riprogrammata"
+    elif action == "cancel":
+        upd, kind = {"demo_status": "annullata"}, "annullata"
+    elif action == "meet":
+        if lead.get("demo_status") not in ("confermata", "riprogrammata"):
+            raise ValueError("La demo non è confermata")
+        kind = lead["demo_status"]
+    else:
+        raise ValueError("Azione non valida")
+    await _lock(db, lead["id"], None if action == "cancel" else upd.get("demo_slot") or lead.get("demo_slot"))
+    upd["updated_at"] = _now().isoformat()
+    upd.update(await meet_for_demo(db, {**lead, **upd}, "cancel" if action == "cancel" else "confirm"))
+    await db.leads.update_one({"id": lead["id"]}, {"$set": upd})
+    lead = {**lead, **upd}
+    if lead.get("demo_request_id"):
+        rs = {"confermata": "confermata", "riprogrammata": "confermata", "annullata": "annullata"}.get(lead["demo_status"])
+        if rs:
+            await db.demo_requests.update_one({"id": lead["demo_request_id"]}, {"$set": {"status": rs, "updated_at": upd["updated_at"]}})
+    sent = False
+    key = f"{lead['demo_status']}|{lead.get('demo_slot')}|{lead.get('demo_meet_link') or ''}"
+    if lead.get("demo_email_key") != key:
+        sent = await send_operational(lead, kind, app_url)
+        if sent:
+            await db.leads.update_one({"id": lead["id"]}, {"$set": {"demo_email_key": key}})
+    sync = await sync_lead(db, lead)
+    return {"lead": lead, "email_sent": sent, "brevo_sync": sync}
 
 
 async def send_operational(lead: dict, kind: str, app_url: str):

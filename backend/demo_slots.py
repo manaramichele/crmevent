@@ -45,6 +45,20 @@ class StatusIn(BaseModel):
     status: str
 
 
+class BookingActionIn(BaseModel):
+    action: str
+    slot_key: Optional[str] = None
+
+
+class NoteIn(BaseModel):
+    admin_note: str = ""
+
+
+BOOKING_FIELDS = {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "organizzazione": 1, "email": 1, "telefono": 1, "demo_slot": 1, "demo_status": 1,
+                  "demo_meet_link": 1, "demo_meet_status": 1, "demo_meet_error": 1, "demo_meet_simulated": 1, "demo_admin_note": 1,
+                  "demo_source": 1, "demo_request_id": 1, "updated_at": 1}
+
+
 REQ_STATUS = {"nuova", "da_confermare", "confermata", "completata", "annullata"}
 
 
@@ -82,10 +96,10 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
             logger.warning(f"demo freebusy failed: {type(e).__name__}")
             return []
 
-    async def slots() -> list:
+    async def slots(enforce_notice: bool = True, exclude_lead: Optional[str] = None) -> list:
         cfg, now = await _cfg(), _now()
-        start_min, horizon = now + timedelta(hours=cfg.get("min_notice_hours", 12)), now + timedelta(days=cfg.get("horizon_days", 30))
-        taken = set(await db.demo_slot_locks.distinct("slot")) | set(await db.video_support_bookings.distinct("slot_lock", {"slot_lock": {"$type": "string"}}))
+        start_min, horizon = now + timedelta(hours=cfg.get("min_notice_hours", 12) if enforce_notice else 0), now + timedelta(days=cfg.get("horizon_days", 30))
+        taken = set(await db.demo_slot_locks.distinct("slot", {"lead_id": {"$ne": exclude_lead}} if exclude_lead else {})) | set(await db.video_support_bookings.distinct("slot_lock", {"slot_lock": {"$type": "string"}}))
         busy = [(datetime.fromisoformat(s.replace("Z", "+00:00")), datetime.fromisoformat(e.replace("Z", "+00:00"))) for s, e in await _busy(now, horizon)]
         closed, out, day = set(cfg.get("closed_dates") or []), [], now.astimezone(ROME).date()
         while datetime.combine(day, datetime.min.time(), ROME) <= horizon:
@@ -163,7 +177,47 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
     @r.get("/platform/demo/requests")
     async def list_requests(status: Optional[str] = None, admin: dict = Depends(require_superadmin)):
         q = {"status": status} if status in REQ_STATUS else {}
-        return {"items": await db.demo_requests.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)}
+        items = await db.demo_requests.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+        leads = {x["demo_request_id"]: x for x in await db.leads.find({"demo_request_id": {"$in": [i["id"] for i in items]}}, BOOKING_FIELDS).to_list(1000)}
+        return {"items": [{**i, "booking": leads.get(i["id"])} for i in items]}
+
+    async def _lead_for_request(req: dict) -> dict:
+        lead = await db.leads.find_one({"demo_request_id": req["id"]}, {"_id": 0}) or await db.leads.find_one({"email": req["email"]}, {"_id": 0})
+        now = _iso(_now())
+        nome, _, cognome = (req.get("nome") or "").partition(" ")
+        base = {"user_id": req.get("user_id"), "org_id": req.get("org_id"), "demo_request_id": req["id"], "demo_source": "richiesta_demo_app",
+                "telefono": (lead or {}).get("telefono") or req.get("telefono"), "organizzazione": (lead or {}).get("organizzazione") or req.get("organizzazione")}
+        if not lead:
+            lead = {"id": uuid.uuid4().hex, "created_at": now, "source": "richiesta_demo_app", "stato": "nuovo", "note": "", "funnel_status": "demo_requested",
+                    "requested_at": req.get("created_at") or now, "nome": nome, "cognome": cognome, "email": req["email"],
+                    "demo_slot": req.get("preferred_slot"), "demo_status": "da_confermare"}
+        if not lead.get("demo_slot") or lead.get("demo_status") in (None, "annullata"):
+            base.update({"demo_slot": req.get("preferred_slot"), "demo_status": "da_confermare"})
+        lead = {**lead, **base, "updated_at": now}
+        await db.leads.update_one({"id": lead["id"]}, {"$set": lead}, upsert=True)
+        return lead
+
+    async def _do(lead: dict, action: str, slot=None) -> dict:
+        try:
+            return (await demo_booking.apply_action(db, lead, action, app_url, slot))["lead"]
+        except demo_booking.SlotTaken:
+            raise HTTPException(status_code=409, detail="Orario già occupato da un'altra demo o assistenza: riprogramma la demo")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    async def _sync_request(req: dict, admin: dict):
+        """Conferma/annullo della richiesta → crea/aggiorna l'unica prenotazione (Lead) collegata, idempotente."""
+        if req["status"] not in ("confermata", "annullata"):
+            return None
+        lead = await _lead_for_request(req)
+        if req["status"] == "annullata":
+            return await _do(lead, "cancel") if lead.get("demo_status") in demo_booking.ACTIVE else lead
+        if lead.get("demo_status") in ("confermata", "riprogrammata"):
+            lead = await _do(lead, "meet") if lead.get("demo_meet_status") != "ok" else lead
+        else:
+            lead = await _do(lead, "confirm")
+        await record_audit(admin, "demo_booking_from_request", target_email=lead.get("email"), detail=demo_booking.fmt_slot(lead.get("demo_slot")), meta={"request_id": req["id"]})
+        return lead
 
     @r.patch("/platform/demo/requests/{rid}")
     async def set_status(rid: str, body: StatusIn, admin: dict = Depends(require_superadmin)):
@@ -173,7 +227,63 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
         if not res.matched_count:
             raise HTTPException(status_code=404, detail="Richiesta non trovata")
         await record_audit(admin, "demo_request_status", detail=body.status, meta={"request_id": rid})
-        return await db.demo_requests.find_one({"id": rid}, {"_id": 0})
+        req = await db.demo_requests.find_one({"id": rid}, {"_id": 0})
+        lead = await _sync_request(req, admin)
+        return {**req, "booking": {k: lead.get(k) for k in BOOKING_FIELDS if k != "_id"} if lead else None}
+
+    @r.post("/platform/demo/requests/{rid}/booking")
+    async def sync_request_booking(rid: str, admin: dict = Depends(require_superadmin)):
+        req = await db.demo_requests.find_one({"id": rid}, {"_id": 0})
+        if not req:
+            raise HTTPException(status_code=404, detail="Richiesta non trovata")
+        if req["status"] != "confermata":
+            raise HTTPException(status_code=400, detail="La richiesta non è confermata")
+        lead = await _sync_request(req, admin)
+        return {**req, "booking": {k: lead.get(k) for k in BOOKING_FIELDS if k != "_id"}}
+
+    def _now_key() -> str:
+        return _now().astimezone(ROME).strftime("%Y-%m-%dT%H:%M")
+
+    @r.get("/platform/demo/bookings")
+    async def list_bookings(status: Optional[str] = None, when: str = "future", admin: dict = Depends(require_superadmin)):
+        q = {"demo_slot": {"$nin": [None, ""]}}
+        if status in demo_booking.STATUS_LABEL:
+            q["demo_status"] = status
+        if when == "future":
+            q["demo_slot"] = {"$gte": _now_key()}
+        elif when == "past":
+            q["demo_slot"] = {"$lt": _now_key(), "$nin": [None, ""]}
+        rows = await db.leads.find(q, BOOKING_FIELDS).sort("demo_slot", -1 if when == "past" else 1).to_list(2000)
+        return {"bookings": rows}
+
+    @r.post("/platform/demo/bookings/{lead_id}/action")
+    async def booking_action(lead_id: str, body: BookingActionIn, admin: dict = Depends(require_superadmin)):
+        lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+        if not lead:
+            raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+        if body.action == "reschedule" and body.slot_key not in {s["slot_key"] for s in await slots(enforce_notice=False, exclude_lead=lead_id)}:
+            raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile")
+        lead = await _do(lead, body.action, body.slot_key if body.action == "reschedule" else None)
+        await record_audit(admin, "demo_booking_" + body.action, target_email=lead.get("email"), detail=demo_booking.fmt_slot(lead.get("demo_slot")))
+        return {k: lead.get(k) for k in BOOKING_FIELDS if k != "_id"}
+
+    @r.put("/platform/demo/bookings/{lead_id}/note")
+    async def booking_note(lead_id: str, body: NoteIn, admin: dict = Depends(require_superadmin)):
+        res = await db.leads.update_one({"id": lead_id}, {"$set": {"demo_admin_note": body.admin_note.strip()[:2000]}})
+        if not res.matched_count:
+            raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+        return {"ok": True}
+
+    @r.get("/platform/demo/slots")
+    async def admin_demo_slots(exclude: Optional[str] = None, admin: dict = Depends(require_superadmin)):
+        return {"slots": await slots(enforce_notice=False, exclude_lead=exclude)}
+
+    @r.get("/platform/booking-counts")
+    async def booking_counts(admin: dict = Depends(require_superadmin)):
+        nk = _now_key()
+        demo = await db.leads.count_documents({"demo_status": {"$in": list(demo_booking.ACTIVE)}, "demo_slot": {"$gte": nk}})
+        assist = await db.video_support_bookings.count_documents({"status": "confermata", "slot_key": {"$gte": nk}})
+        return {"demo": demo, "assistenza": assist}
 
     @r.get("/platform/demo/config")
     async def get_cfg(admin: dict = Depends(require_superadmin)):
