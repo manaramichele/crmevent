@@ -74,7 +74,7 @@ function Interests({ svc, onClose }) {
   };
   const notify = async () => {
     setBusy(true);
-    try { const { data } = await api.post(`/platform/marketplace/services/${svc.id}/interests/notify`); toast.success(`Avvisi inviati: ${data.sent}${data.failed ? ` · errori: ${data.failed}` : ""}`); load(); }
+    try { const { data } = await api.post(`/platform/marketplace/services/${svc.id}/interests/notify`); toast[data.failed ? "warning" : "success"](`Avvisi inviati: ${data.sent}${data.failed ? ` · non inviati: ${data.failed}` : ""}`); load(); }
     catch (e) { err(e); }
     setBusy(false);
   };

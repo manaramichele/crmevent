@@ -30,7 +30,7 @@ function NotifyButton({ s, onToggle, full }) {
     </span>
   ) : (
     <button type="button" disabled={busy || on} onClick={click} onKeyDown={(e) => e.stopPropagation()} data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full border text-xs font-semibold transition-colors touch-manipulation disabled:cursor-default ${busy ? "opacity-60" : ""} ${full ? "w-full h-11 text-sm" : "h-8 px-3"} ${on ? "border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A]" : "border-slate-200 text-slate-700 hover:border-[#0ABAB5] hover:text-[#088F8A]"}`}>
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full border text-xs font-semibold transition-colors touch-manipulation disabled:cursor-default ${busy ? "opacity-60" : ""} ${full ? "w-full h-11 text-sm" : "h-10 sm:h-8 px-4 sm:px-3"} ${on ? "border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A]" : "border-slate-200 text-slate-700 hover:border-[#0ABAB5] hover:text-[#088F8A]"}`}>
       {on ? <BellRing className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}{on ? "Ti avviseremo" : "Avvisami"}
     </button>
   );

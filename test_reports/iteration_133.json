@@ -1,0 +1,38 @@
+{
+  "summary": "Tested the Marketplace 'Avvisami' feature end to end. Backend: 11/11 pytest pass (tests/test_iter133_marketplace_notify.py). Calling notify twice gives a single record. One org can flag several services. A non coming_soon or missing service returns 400. Notify works for a TEST_ org whose trial expired (read-only), while checkout and POST /events are still blocked with plan_readonly. A non-admin member (membership role 'user') can notify, and the org admin then sees notify_me true. Credits and marketplace_purchases do not change. Super Admin endpoints return 403 for org users. Switching a TEST_ service to available sets notify_status to brevo_non_configurato with notified_at null. Manual notify returns {sent:0, failed:N}. Frontend: desktop org cards show Avvisami on all 9 coming_soon cards. Clicking shows a toast, turns the button into a 'Ti avviseremo' span and does not open the detail dialog. The state survives a reload. The detail dialog's -detail button works and updates the card. Super Admin page: the count button, the interests dialog table, CSV export (correct headers and rows, BOM, ';' separator), the empty state with CSV disabled, and 'Invia avvisi in attesa' (shown only for available services) all work. Mobile 390px: tap works and the state changes, no horizontal overflow. All test data was cleaned up (interests, TEST_ services, TEST_ org and users). QA credit balance is unchanged at 97.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/marketplace/services/{sid}/notify", "issue": "marketplace_interests has no unique index on (service_id, org_id, notified_at). update_one with upsert is not safe under concurrency: simultaneous clicks from 2 users of the same org can create duplicate records. A concurrent test with 6 threads gave 1 record, but this is not guaranteed. Add a partial unique index on {service_id, org_id} for notified_at null, or a unique compound index, and catch DuplicateKeyError."},
+      {"endpoint": "GET /api/platform/marketplace/services interest_count", "issue": "Counts interest documents, not distinct orgs. If a service goes available, gets notified, and is set back to coming_soon, the same org can register again and be counted twice. Use $addToSet org_id, then $size."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "SA Invia avvisi in attesa", "issue": "A success (green) toast 'Avvisi inviati: 0 · errori: 1' is shown even when every send failed (Brevo not configured). Use toast.warning or toast.error when sent==0 && failed>0, and mention that Brevo is not configured.", "affected_selectors": ["[data-testid='mkt-admin-interests-notify']"]}
+    ],
+    "design_issues": [
+      {"screen": "Marketplace mobile 390px", "issues": ["The Avvisami button is 32px tall, below the recommended 44px touch target.", "The floating iubenda cookie-preferences icon (bottom-left) partly overlaps the Avvisami/Ti avviseremo button of the last card when scrolled to the bottom. Add bottom padding to the page."]},
+      {"screen": "Marketplace org cards", "issue_note": "", "issues": ["A service that is 'available' but not purchasable_now shows the 'Prossimamente' badge but has no Avvisami button. This can confuse users; consider a different badge, e.g. 'In attivazione'."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter133_marketplace_notify.py", "/app/test_reports/pytest/pytest_iter133.xml"],
+  "action_items": [
+    "Add a unique index for marketplace_interests (service_id, org_id) for pending interests to remove the duplicate race",
+    "Make interest_count count distinct org_id",
+    "Show a warning/error toast instead of success when admin notify sends 0 and has failures",
+    "Optional: bigger touch target for Avvisami on mobile; bottom padding so the iubenda floating icon does not overlap the last card"
+  ],
+  "critical_code_review_comments": [
+    "WRITE_EXEMPT_EXACT is matched against the route template ('/marketplace/services/{sid}/notify') in _enforce_plan. Correct, and verified working for the read-only org.",
+    "GET /marketplace/services filters interests by notified_at null. After a successful Brevo send the flag disappears, which is fine because the service is then available.",
+    "admin_update starts _notify_available with asyncio.create_task without keeping a reference. The task could be garbage collected or its errors lost. Store the task or add a done-callback that logs exceptions."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter133_marketplace_notify.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Temporary TEST_ services, a TEST_ org with expired trial, a TEST member user, and interests (some via real catalog cards for the QA org). All deleted afterwards; the marketplace_interests collection is empty again.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest tests/test_iter133_marketplace_notify.py (it cleans up after itself). BREVO_API_KEY is empty in preview, so notify_status becomes brevo_non_configurato. The member was simulated by inserting users and memberships (role 'user') directly in Mongo. Read-only mode was simulated with saas.trial_end in the past."
+}

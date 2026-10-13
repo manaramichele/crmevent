@@ -9,6 +9,7 @@ from typing import Optional
 import stripe as stripe_sdk
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 
 import email_utils
 
@@ -143,9 +144,17 @@ def build(db, deps: dict):
         if not svc or svc["status"] != "coming_soon":
             raise HTTPException(status_code=400, detail="Avviso disponibile solo per i servizi in arrivo")
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "nome": 1}) or {}
-        await db.marketplace_interests.update_one({"service_id": sid, "org_id": user["org_id"], "notified_at": None}, {"$setOnInsert": {
+        try:
+            await db.marketplace_interests.create_index([("service_id", 1), ("org_id", 1)], unique=True, name="uniq_pending_interest",
+                                                        partialFilterExpression={"notified_at": None})
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            await db.marketplace_interests.update_one({"service_id": sid, "org_id": user["org_id"], "notified_at": None}, {"$setOnInsert": {
             "id": uuid.uuid4().hex, "org_name": org.get("nome"), "user_id": user["user_id"], "name": user.get("name"),
             "email": user.get("email"), "created_at": _now(), "notify_status": None}}, upsert=True)
+        except DuplicateKeyError:
+            pass
         return {"notify_me": True}
 
     async def _notify_available(svc: dict) -> dict:
@@ -320,7 +329,7 @@ def build(db, deps: dict):
         await _seed()
         rows = await db.marketplace_services.find({}, {"_id": 0}).sort("sort", 1).to_list(500)
         counts = {c["_id"]: c["n"] for c in await db.marketplace_purchases.aggregate([{"$match": {"status": {"$in": list(ACTIVE)}}}, {"$group": {"_id": "$service_id", "n": {"$sum": 1}}}]).to_list(500)}
-        intr = {c["_id"]: c["n"] for c in await db.marketplace_interests.aggregate([{"$group": {"_id": "$service_id", "n": {"$sum": 1}}}]).to_list(500)}
+        intr = {c["_id"]: len(c["orgs"]) for c in await db.marketplace_interests.aggregate([{"$group": {"_id": "$service_id", "orgs": {"$addToSet": "$org_id"}}}]).to_list(500)}
         return {"services": [{**s, "active_count": counts.get(s["id"], 0), "interest_count": intr.get(s["id"], 0), "purchasable_now": can_buy(s) is None} for s in rows], "categories": CATEGORIES}
 
     @r.get("/platform/marketplace/services/{sid}/interests")
