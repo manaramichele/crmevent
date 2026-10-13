@@ -134,7 +134,7 @@ def build(db, deps: dict):
         rows = await db.marketplace_services.find({"visible": True}, {"_id": 0}).sort("sort", 1).to_list(200)
         pur = await _org_purchases(user["org_id"])
         ids = {i["service_id"] for i in await db.marketplace_interests.find(
-            {"org_id": user["org_id"], "user_id": user["user_id"], "notified_at": None}, {"_id": 0, "service_id": 1}).to_list(500)}
+            {"org_id": user["org_id"], "notified_at": None}, {"_id": 0, "service_id": 1}).to_list(500)}
         return {"services": [_public(s, pur, ids) for s in rows], "categories": CATEGORIES, "can_purchase": _can_purchase(user)}
 
     @r.post("/marketplace/services/{sid}/notify")
@@ -142,13 +142,10 @@ def build(db, deps: dict):
         svc = await db.marketplace_services.find_one({"id": sid, "visible": True}, {"_id": 0, "status": 1})
         if not svc or svc["status"] != "coming_soon":
             raise HTTPException(status_code=400, detail="Avviso disponibile solo per i servizi in arrivo")
-        q = {"service_id": sid, "org_id": user["org_id"], "user_id": user["user_id"], "notified_at": None}
-        if (await db.marketplace_interests.delete_one(q)).deleted_count:
-            return {"notify_me": False}
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "nome": 1}) or {}
-        await db.marketplace_interests.insert_one({**q, "id": uuid.uuid4().hex, "org_name": org.get("nome"),
-                                                   "name": user.get("name"), "email": user.get("email"),
-                                                   "created_at": _now(), "notify_status": None})
+        await db.marketplace_interests.update_one({"service_id": sid, "org_id": user["org_id"], "notified_at": None}, {"$setOnInsert": {
+            "id": uuid.uuid4().hex, "org_name": org.get("nome"), "user_id": user["user_id"], "name": user.get("name"),
+            "email": user.get("email"), "created_at": _now(), "notify_status": None}}, upsert=True)
         return {"notify_me": True}
 
     async def _notify_available(svc: dict) -> dict:

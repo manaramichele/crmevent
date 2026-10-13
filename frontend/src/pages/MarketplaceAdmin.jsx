@@ -67,7 +67,7 @@ function Interests({ svc, onClose }) {
   const load = useCallback(() => api.get(`/platform/marketplace/services/${svc.id}/interests`).then(({ data }) => setRows(data)).catch(err), [svc.id]);
   useEffect(() => { load(); }, [load]);
   const csv = () => {
-    const lines = [["Organizzazione", "Nome", "Email", "Data richiesta", "Stato avviso"], ...rows.map((r) => [r.org_name, r.name, r.email, d(r.created_at), r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"])];
+    const lines = [["Organizzazione", "Richiesto da", "Email", "Data richiesta", "Stato avviso"], ...rows.map((r) => [r.org_name, r.name, r.email, d(r.created_at), r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"])];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["\ufeff" + lines.map((l) => l.map(csvCell).join(";")).join("\n")], { type: "text/csv;charset=utf-8" }));
     a.download = `interessati-${svc.key}.csv`; a.click();
@@ -90,7 +90,7 @@ function Interests({ svc, onClose }) {
         </div>
         {!rows ? <p className="text-sm text-slate-400">Caricamento...</p> : !rows.length ? <p className="text-sm text-slate-500" data-testid="mkt-admin-interests-empty">Nessun interessato per ora.</p> : (
           <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[620px] text-sm" data-testid="mkt-admin-interests-table">
-            <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Nome", "Email", "Data", "Avviso"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
+            <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Richiesto da", "Email", "Data", "Avviso"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
             <tbody>{rows.map((r) => <tr key={r.id} className="border-t border-slate-100"><td className="px-3 py-2">{r.org_name}</td><td className="px-3 py-2">{r.name}</td><td className="px-3 py-2">{r.email}</td><td className="px-3 py-2">{d(r.created_at)}</td><td className="px-3 py-2">{r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"}</td></tr>)}</tbody>
           </table></div>
         )}
@@ -115,7 +115,7 @@ function Catalog() {
             <ServiceIcon s={s} className="w-10 h-10" />
             <div className="flex-1 min-w-0"><div className="font-semibold">{s.name} <span className="text-xs text-slate-400">· {s.category}</span></div>
               <div className="text-xs text-slate-500">{STATUS[s.status]} · {s.visible ? "pubblicato" : "nascosto"} · {s.tech_ready ? "pronto" : "non pronto"} · {s.purchasable_now ? "acquistabile" : "non acquistabile"} · {priceLabel(s)} · {PRICE_TYPES[s.price_type]} · attivi {s.active_count}</div></div>
-            <Button size="sm" variant="outline" onClick={() => setIntr(s)} data-testid={`mkt-admin-interests-${s.key}`}><Bell className="w-3.5 h-3.5 mr-1" />Interessati {s.interest_count || 0}</Button>
+            <Button size="sm" variant="outline" onClick={() => setIntr(s)} data-testid={`mkt-admin-interests-${s.key}`}><Bell className="w-3.5 h-3.5 mr-1" />Organizzazioni interessate {s.interest_count || 0}</Button>
             <Button size="sm" variant="outline" onClick={() => setEdit(s)} data-testid={`mkt-admin-edit-${s.key}`}>Modifica</Button>
           </div>
         ))}
