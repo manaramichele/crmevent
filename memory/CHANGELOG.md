@@ -1166,4 +1166,10 @@ Task 2 — Creatività manuale:
 - subscriptions.py: WRITE_EXEMPT_EXACT consente "/marketplace/services/{sid}/notify" anche a org in sola lettura (checkout resta bloccato).
 - Super Admin: contatore "Organizzazioni interessate" (org distinte), colonna "Richiesto da", toast warning se invii falliti. Testato: iteration_133 (11/11 backend, frontend desktop+mobile OK).
 
+## 2026-10-13 – "Avvisami" → attributi Brevo
+- Ogni richiesta (nuova) aggiorna il contatto Brevo via POST /v3/contacts updateEnabled (nessuna lista, nessun duplicato): NOME, COGNOME, ORGANIZZAZIONE, attributo booleano del servizio = true, MKT_ULTIMA_RICHIESTA (date).
+- Attributo per servizio salvato in marketplace_services.brevo_attribute (fisso anche se rinominato): MKT_GESTIONE_SOCIETA, MKT_ARCHIVIO_ISCRITTI, MKT_SURVEY, altri MKT_<NOME>. Creato automaticamente se mancante.
+- interests: brevo_status / brevo_synced_at / brevo_error / brevo_attribute. Super Admin: POST /api/platform/marketplace/brevo/verify (crea mancanti + report tipo) e /brevo/resync. Test mock: backend/tests/test_marketplace_brevo_mock.py.
+
+
 
