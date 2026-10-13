@@ -18,14 +18,19 @@ function NotifyButton({ s, onToggle, full }) {
   const click = async (e) => {
     e.stopPropagation();
     setBusy(true);
-    try { const { data } = await api.post(`/marketplace/services/${s.id}/notify`); onToggle(s.id, data.notify_me); toast.success(data.notify_me ? "Ti avviseremo via email appena sarà disponibile" : "Avviso annullato"); }
+    try { const { data } = await api.post(`/marketplace/services/${s.id}/notify`); onToggle(s.id, data.notify_me); toast.success("Ti avviseremo via email appena sarà disponibile"); }
     catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     setBusy(false);
   };
   const on = s.notify_me;
-  return (
-    <button type="button" disabled={busy} onClick={click} data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full border text-xs font-semibold transition-colors disabled:opacity-60 ${full ? "w-full h-11 text-sm" : "h-8 px-3"} ${on ? "border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A]" : "border-slate-200 text-slate-700 hover:border-[#0ABAB5] hover:text-[#088F8A]"}`}>
+  return on ? (
+    <span data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`} onClick={(e) => e.stopPropagation()}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full border border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A] text-xs font-semibold ${full ? "w-full h-11 text-sm" : "h-8 px-3"}`}>
+      <BellRing className="w-3.5 h-3.5" />Ti avviseremo
+    </span>
+  ) : (
+    <button type="button" disabled={busy || on} onClick={click} onKeyDown={(e) => e.stopPropagation()} data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full border text-xs font-semibold transition-colors touch-manipulation disabled:cursor-default ${busy ? "opacity-60" : ""} ${full ? "w-full h-11 text-sm" : "h-10 sm:h-8 px-4 sm:px-3"} ${on ? "border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A]" : "border-slate-200 text-slate-700 hover:border-[#0ABAB5] hover:text-[#088F8A]"}`}>
       {on ? <BellRing className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}{on ? "Ti avviseremo" : "Avvisami"}
     </button>
   );

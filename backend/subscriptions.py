@@ -67,6 +67,7 @@ def _live_enabled() -> bool:
 
 
 WRITE_EXEMPT = ("/saas", "/account", "/auth", "/notifications", "/my/", "/support", "/news")
+WRITE_EXEMPT_EXACT = ("/marketplace/services/{sid}/notify",)
 SAFE = ("GET", "HEAD", "OPTIONS")
 GOLD_NOTICE_HOURS = 4
 _cfg_cache = {"at": 0.0, "cfg": None}
@@ -332,7 +333,7 @@ def build(db, deps: dict):
             raise HTTPException(status_code=403, detail={
                 "code": "plan_feature", "plan": st.get("plan"),
                 "message": f"Funzione non inclusa nel piano {st.get('plan_label') or ''}. Passa a un piano superiore per utilizzarla.".replace("  ", " ")})
-        if method.upper() not in SAFE and not st["writable"] and not path.startswith(WRITE_EXEMPT):
+        if method.upper() not in SAFE and not st["writable"] and not path.startswith(WRITE_EXEMPT) and path not in WRITE_EXEMPT_EXACT:
             raise HTTPException(status_code=403, detail={
                 "code": "plan_readonly", "message": "Prova terminata – Scegli il tuo piano. I tuoi dati restano consultabili."})
 

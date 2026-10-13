@@ -1161,3 +1161,9 @@ Task 2 — Creatività manuale:
 - Super Admin: interest_count nel catalogo, GET /api/platform/marketplace/services/{sid}/interests, POST .../interests/notify (reinvio avvisi in attesa). Dialog "Interessati" con export CSV.
 - Passaggio a "Disponibile" (admin_update) → email automatica Brevo (email_utils._send_via_brevo + link_email), idempotente via notified_at. Senza BREVO_API_KEY → notify_status "brevo_non_configurato" (in preview la chiave è vuota: invio reale non verificato, testato con mock).
 
+## 2026-10-13 – "Avvisami" per organizzazione
+- Interesse registrato per ORGANIZZAZIONE (una richiesta per servizio, upsert + indice unico parziale uniq_pending_interest su service_id+org_id con notified_at null), nessun annullamento: pulsante fisso "Ti avviseremo" per tutti gli utenti dell'org.
+- subscriptions.py: WRITE_EXEMPT_EXACT consente "/marketplace/services/{sid}/notify" anche a org in sola lettura (checkout resta bloccato).
+- Super Admin: contatore "Organizzazioni interessate" (org distinte), colonna "Richiesto da", toast warning se invii falliti. Testato: iteration_133 (11/11 backend, frontend desktop+mobile OK).
+
+
