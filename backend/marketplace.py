@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 logger = logging.getLogger("marketplace")
-CATEGORIES = ["Siti web", "Comunicazione", "Documenti", "Logistica", "Altro"]
+CATEGORIES = ["Siti web", "Comunicazione", "Documenti", "Logistica", "Gestione", "Feedback", "Altro"]
 PRICE_TYPES = ("one_time", "monthly", "yearly", "usage")
 STATUSES = ("coming_soon", "available", "suspended")
 ACTIVE = ("active", "past_due")
@@ -27,6 +27,15 @@ SEED = [
      "Genera accordi sponsor, contratti fornitori, collaborazioni e incarichi da modelli personalizzabili, con compilazione automatica dei dati ed esportazione PDF. I documenti vanno sempre verificati da un professionista."),
     ("magazzino", "Magazzino", "Logistica", "Warehouse", "org",
      "Gestisci i materiali dell'organizzazione: anagrafica e categorie, quantità, carico e scarico, assegnazione agli eventi, prestiti e restituzioni, inventario, storico movimenti e materiali mancanti."),
+]
+# Servizi roadmap (solo vetrina, "Prossimamente"): aggiunti una sola volta anche ai cataloghi già esistenti.
+ROADMAP_SEED = [
+    ("gestione-societa", "Gestione Società", "Gestione", "Building2", "org",
+     "Gestisci la tua società sportiva in un unico ambiente: anagrafiche, tesseramenti, certificati medici, quote associative, documenti e scadenze."),
+    ("archivio-iscritti", "Archivio Iscritti & Comunicazioni", "Comunicazione", "Contact", "org",
+     "Importa gli iscritti delle precedenti edizioni dei tuoi eventi, crea uno storico dei partecipanti e prepara comunicazioni email mirate per promuovere le prossime manifestazioni."),
+    ("survey", "Survey & Questionari", "Feedback", "ClipboardList", "org",
+     "Raccogli opinioni e valutazioni dei partecipanti attraverso questionari personalizzati. Invia survey via email, gestisci domande e votazioni e analizza i risultati attraverso statistiche e grafici."),
 ]
 
 
@@ -90,6 +99,17 @@ def build(db, deps: dict):
                     "usage_unit": None, "usage_limits": None, "terms": None, "status": "coming_soon", "visible": True,
                     "purchasable": False, "tech_ready": False, "billing_method": "stripe", "scope": scope, "sort": (i + 1) * 10,
                     "created_at": _now()}}, upsert=True)
+        if not await db.marketplace_meta.find_one({"id": "roadmap_v1"}):
+            for i, (key, name, cat, icon, scope, desc) in enumerate(ROADMAP_SEED):
+                await db.marketplace_services.update_one({"key": key}, {"$setOnInsert": {
+                    "id": uuid.uuid4().hex, "key": key, "name": name, "description": desc, "icon": icon, "image": None,
+                    "category": cat, "price": None, "price_type": "monthly", "usage_unit": None, "usage_limits": None,
+                    "terms": None, "status": "coming_soon", "visible": True, "purchasable": False, "tech_ready": False,
+                    "billing_method": "stripe", "credit_service_key": None, "scope": scope, "sort": 70 + i * 10,
+                    "created_at": _now()}}, upsert=True)
+            await db.marketplace_services.update_many({"name": {"$regex": r"^\s*social\s*$", "$options": "i"}},
+                                                      {"$set": {"icon": "Megaphone", "updated_at": _now()}})
+            await db.marketplace_meta.insert_one({"id": "roadmap_v1", "applied_at": _now()})
 
     def _can_purchase(user: dict) -> bool:
         p = user.get("perm") or {}

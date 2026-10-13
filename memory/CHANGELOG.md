@@ -1150,3 +1150,8 @@ Task 2 — Creatività manuale:
 - Frontend: GoogleCalendarCard (Profilo) + CalendarReturnHandler (toast per reason, Riprova); rimosso vecchio CalendarToast in App.js.
 
 
+
+## 2026-10-13 – Marketplace: servizi roadmap + icona Social
+- marketplace.py: ROADMAP_SEED (gestione-societa/Building2, archivio-iscritti/Contact, survey/ClipboardList), status coming_soon, purchasable/tech_ready False, credit_service_key=None (predisposizione crediti). Migrazione one-shot `marketplace_meta.roadmap_v1` (aggiunge ai cataloghi esistenti, imposta icon=Megaphone ai servizi con nome "Social"). Nuove categorie Gestione, Feedback.
+- lib/marketplace.js: aggiunte icone Building2, Contact, ClipboardList. Checkout bloccato ("Servizio non disponibile"). Verificato via curl + screenshot (desktop/mobile).
+
