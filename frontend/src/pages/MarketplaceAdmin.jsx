@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Bell, Download, Send } from "lucide-react";
+import { Plus, Bell, Download, Send, ShieldCheck, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import { MKT_ICONS, PRICE_TYPES, STATUS, ServiceIcon, priceLabel } from "@/lib/marketplace";
 
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
@@ -22,7 +22,7 @@ function Editor({ svc, cats, onClose, onSaved }) {
   const img = (e) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 300000) { toast.error("Immagine max 300 KB"); return; } const r = new FileReader(); r.onload = () => set("image")(r.result); r.readAsDataURL(file); };
   const save = async () => {
     const body = { ...f, price: f.price === "" || f.price == null ? null : Number(f.price), sort: Number(f.sort) || 100 };
-    ["id", "key", "created_at", "updated_at", "active_count", "interest_count", "purchasable_now"].forEach((k) => delete body[k]);
+    ["id", "key", "created_at", "updated_at", "active_count", "interest_count", "purchasable_now", "brevo_attribute"].forEach((k) => delete body[k]);
     try { if (svc?.id) await api.put(`/platform/marketplace/services/${svc.id}`, body); else await api.post("/platform/marketplace/services", body); toast.success("Servizio salvato"); onSaved(); }
     catch (e) { err(e); }
   };
@@ -60,6 +60,45 @@ function Editor({ svc, cats, onClose, onSaved }) {
 
 const csvCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 const NSTATUS = { inviato: "Avvisato", errore: "Errore invio", brevo_non_configurato: "Brevo non configurato" };
+const BSTATUS = { sincronizzato: "Sincronizzato", errore: "Errore" };
+
+function BrevoTools() {
+  const [busy, setBusy] = useState("");
+  const [rep, setRep] = useState(null);
+  const run = async (kind) => {
+    setBusy(kind);
+    try {
+      const { data } = await api.post(`/platform/marketplace/brevo/${kind}`);
+      if (kind === "verify") setRep(data);
+      else toast[data.failed ? "warning" : "success"](`Contatti sincronizzati: ${data.synced}${data.failed ? ` · non riusciti: ${data.failed}` : ""}`);
+    } catch (e) { err(e); }
+    setBusy("");
+  };
+  return (
+    <>
+      <Button variant="outline" disabled={!!busy} onClick={() => run("verify")} data-testid="mkt-admin-brevo-verify"><ShieldCheck className="w-4 h-4 mr-1" />{busy === "verify" ? "Verifica..." : "Verifica attributi Brevo"}</Button>
+      <Button variant="outline" disabled={!!busy} onClick={() => run("resync")} data-testid="mkt-admin-brevo-resync"><RefreshCw className="w-4 h-4 mr-1" />{busy === "resync" ? "Sincronizzazione..." : "Risincronizza"}</Button>
+      {rep && (
+        <Dialog open onOpenChange={(o) => !o && setRep(null)}>
+          <DialogContent className="max-w-2xl w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto" data-testid="mkt-admin-brevo-report">
+            <DialogTitle>Attributi Brevo del Marketplace</DialogTitle>
+            <p className={`text-sm font-medium ${rep.all_ok ? "text-emerald-700" : "text-red-600"}`} data-testid="mkt-admin-brevo-allok">{rep.all_ok ? "Tutti gli attributi esistono su Brevo e sono filtrabili nei segmenti." : "Alcuni attributi mancano o hanno un tipo diverso."}</p>
+            <p className="text-xs text-slate-500">In Brevo: Contatti → Segmenti → Crea segmento → filtro sull'attributo del servizio → "è vero".</p>
+            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              {rep.attributes.map((a) => (
+                <div key={a.attribute} className="flex items-center gap-3 px-3 py-2 text-sm" data-testid={`mkt-admin-brevo-attr-${a.attribute}`}>
+                  {a.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
+                  <div className="flex-1 min-w-0"><div className="font-mono text-xs">{a.attribute}</div><div className="text-xs text-slate-500">{a.service}</div></div>
+                  <span className="text-xs text-slate-500">{a.exists ? a.type : "mancante"}</span>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
+  );
+}
 
 function Interests({ svc, onClose }) {
   const [rows, setRows] = useState(null);
@@ -67,7 +106,7 @@ function Interests({ svc, onClose }) {
   const load = useCallback(() => api.get(`/platform/marketplace/services/${svc.id}/interests`).then(({ data }) => setRows(data)).catch(err), [svc.id]);
   useEffect(() => { load(); }, [load]);
   const csv = () => {
-    const lines = [["Organizzazione", "Richiesto da", "Email", "Data richiesta", "Stato avviso"], ...rows.map((r) => [r.org_name, r.name, r.email, d(r.created_at), r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"])];
+    const lines = [["Organizzazione", "Richiesto da", "Email", "Data richiesta", "Stato avviso", "ID organizzazione", "Brevo"], ...rows.map((r) => [r.org_name, r.name, r.email, d(r.created_at), r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa", r.org_id, BSTATUS[r.brevo_status] || "In attesa"])];
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["\ufeff" + lines.map((l) => l.map(csvCell).join(";")).join("\n")], { type: "text/csv;charset=utf-8" }));
     a.download = `interessati-${svc.key}.csv`; a.click();
@@ -90,8 +129,8 @@ function Interests({ svc, onClose }) {
         </div>
         {!rows ? <p className="text-sm text-slate-400">Caricamento...</p> : !rows.length ? <p className="text-sm text-slate-500" data-testid="mkt-admin-interests-empty">Nessun interessato per ora.</p> : (
           <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[620px] text-sm" data-testid="mkt-admin-interests-table">
-            <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Richiesto da", "Email", "Data", "Avviso"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
-            <tbody>{rows.map((r) => <tr key={r.id} className="border-t border-slate-100"><td className="px-3 py-2">{r.org_name}</td><td className="px-3 py-2">{r.name}</td><td className="px-3 py-2">{r.email}</td><td className="px-3 py-2">{d(r.created_at)}</td><td className="px-3 py-2">{r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"}</td></tr>)}</tbody>
+            <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Richiesto da", "Email", "Data", "Avviso", "Brevo"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
+            <tbody>{rows.map((r) => <tr key={r.id} className="border-t border-slate-100"><td className="px-3 py-2">{r.org_name}</td><td className="px-3 py-2">{r.name}</td><td className="px-3 py-2">{r.email}</td><td className="px-3 py-2">{d(r.created_at)}</td><td className="px-3 py-2">{r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"}</td><td className="px-3 py-2" title={r.brevo_error || ""}>{BSTATUS[r.brevo_status] || "In attesa"}</td></tr>)}</tbody>
           </table></div>
         )}
       </DialogContent>
@@ -108,13 +147,16 @@ function Catalog() {
   if (!data) return <p className="text-sm text-slate-400">Caricamento...</p>;
   return (
     <div className="space-y-3">
-      <Button onClick={() => setEdit({})} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-new"><Plus className="w-4 h-4 mr-1" />Nuovo servizio</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setEdit({})} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-new"><Plus className="w-4 h-4 mr-1" />Nuovo servizio</Button>
+        <BrevoTools />
+      </div>
       <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
         {data.services.map((s) => (
           <div key={s.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3" data-testid={`mkt-admin-row-${s.key}`}>
             <ServiceIcon s={s} className="w-10 h-10" />
             <div className="flex-1 min-w-0"><div className="font-semibold">{s.name} <span className="text-xs text-slate-400">· {s.category}</span></div>
-              <div className="text-xs text-slate-500">{STATUS[s.status]} · {s.visible ? "pubblicato" : "nascosto"} · {s.tech_ready ? "pronto" : "non pronto"} · {s.purchasable_now ? "acquistabile" : "non acquistabile"} · {priceLabel(s)} · {PRICE_TYPES[s.price_type]} · attivi {s.active_count}</div></div>
+              <div className="text-xs text-slate-500">{STATUS[s.status]} · {s.visible ? "pubblicato" : "nascosto"} · {s.tech_ready ? "pronto" : "non pronto"} · {s.purchasable_now ? "acquistabile" : "non acquistabile"} · {priceLabel(s)} · {PRICE_TYPES[s.price_type]} · attivi {s.active_count}{s.brevo_attribute ? ` · Brevo ${s.brevo_attribute}` : ""}</div></div>
             <Button size="sm" variant="outline" onClick={() => setIntr(s)} data-testid={`mkt-admin-interests-${s.key}`}><Bell className="w-3.5 h-3.5 mr-1" />Organizzazioni interessate {s.interest_count || 0}</Button>
             <Button size="sm" variant="outline" onClick={() => setEdit(s)} data-testid={`mkt-admin-edit-${s.key}`}>Modifica</Button>
           </div>

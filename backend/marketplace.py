@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
 import email_utils
+import brevo_funnel
 
 logger = logging.getLogger("marketplace")
 CATEGORIES = ["Siti web", "Comunicazione", "Documenti", "Logistica", "Gestione", "Feedback", "Altro"]
@@ -45,6 +46,17 @@ ROADMAP_SEED = [
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+BREVO_ATTR_FIXED = {"gestione-societa": "MKT_GESTIONE_SOCIETA", "archivio-iscritti": "MKT_ARCHIVIO_ISCRITTI", "survey": "MKT_SURVEY"}
+BREVO_LAST_REQ = "MKT_ULTIMA_RICHIESTA"
+
+
+def _attr_slug(name: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().upper()
+    s = "_".join(w for w in "".join(c if c.isalnum() else " " for c in s).split() if w)
+    return ("MKT_" + (s or "SERVIZIO"))[:40].rstrip("_")
 
 
 class ServiceIn(BaseModel):
@@ -150,12 +162,81 @@ def build(db, deps: dict):
         except Exception:  # noqa: BLE001
             pass
         try:
-            await db.marketplace_interests.update_one({"service_id": sid, "org_id": user["org_id"], "notified_at": None}, {"$setOnInsert": {
+            res = await db.marketplace_interests.update_one({"service_id": sid, "org_id": user["org_id"], "notified_at": None}, {"$setOnInsert": {
             "id": uuid.uuid4().hex, "org_name": org.get("nome"), "user_id": user["user_id"], "name": user.get("name"),
-            "email": user.get("email"), "created_at": _now(), "notify_status": None}}, upsert=True)
+            "email": user.get("email"), "created_at": _now(), "notify_status": None, "brevo_status": None}}, upsert=True)
+            if res.upserted_id:
+                asyncio.create_task(_sync_interest_safe(sid, user["org_id"]))
         except DuplicateKeyError:
             pass
         return {"notify_me": True}
+
+    # ---------------- Brevo: attributi per servizio (booleani), nessuna lista ----------------
+    brevo_attrs_seen: set = set()
+
+    async def _service_attr(svc: dict) -> str:
+        if svc.get("brevo_attribute"):
+            return svc["brevo_attribute"]
+        base = BREVO_ATTR_FIXED.get(svc.get("key")) or _attr_slug(svc.get("name"))
+        name, n = base, 2
+        while await db.marketplace_services.find_one({"brevo_attribute": name, "id": {"$ne": svc["id"]}}, {"_id": 1}):
+            name, n = f"{base[:37]}_{n}", n + 1
+        await db.marketplace_services.update_one({"id": svc["id"], "brevo_attribute": {"$in": [None, ""]}}, {"$set": {"brevo_attribute": name}})
+        return (await db.marketplace_services.find_one({"id": svc["id"]}, {"_id": 0, "brevo_attribute": 1}))["brevo_attribute"]
+
+    async def _brevo_attributes() -> dict:
+        sc, data, err = await brevo_funnel._request("GET", "/v3/contacts/attributes")
+        if sc != 200:
+            raise RuntimeError(err or f"Attributi Brevo non leggibili (HTTP {sc})")
+        return {a.get("name"): a for a in (data or {}).get("attributes", []) if a.get("category") in (None, "normal")}
+
+    async def _ensure_attrs(names: dict) -> None:
+        """names: {ATTR: tipo}. Crea solo gli attributi mancanti (categoria normal)."""
+        todo = {k: v for k, v in names.items() if k not in brevo_attrs_seen}
+        if not todo:
+            return
+        have = await _brevo_attributes()
+        for name, typ in todo.items():
+            if name not in have:
+                sc, _, err = await brevo_funnel._request("POST", f"/v3/contacts/attributes/normal/{name}", json={"type": typ})
+                if sc not in (200, 201, 204):
+                    raise RuntimeError(f"Creazione attributo {name}: {err}")
+                logger.info("brevo attribute created: %s (%s)", name, typ)
+            brevo_attrs_seen.add(name)
+
+    async def _sync_interest(it: dict) -> None:
+        svc = await db.marketplace_services.find_one({"id": it["service_id"]}, {"_id": 0})
+        if not svc:
+            return
+        attr = await _service_attr(svc)
+        await _ensure_attrs({attr: "boolean", BREVO_LAST_REQ: "date", "NOME": "text", "COGNOME": "text", "ORGANIZZAZIONE": "text"})
+        u = await db.users.find_one({"user_id": it.get("user_id")}, {"_id": 0, "nome": 1, "cognome": 1, "name": 1}) or {}
+        parts = (u.get("name") or it.get("name") or "").split()
+        nome = u.get("nome") or (parts[0] if parts else None)
+        cognome = u.get("cognome") or (" ".join(parts[1:]) or None)
+        attrs = {k: v for k, v in {"NOME": nome, "COGNOME": cognome, "ORGANIZZAZIONE": it.get("org_name"),
+                                     attr: True, BREVO_LAST_REQ: (it.get("created_at") or _now())[:10]}.items() if v not in (None, "")}
+        sc, _, err = await brevo_funnel._request("POST", "/v3/contacts", json={"email": it["email"], "updateEnabled": True, "attributes": attrs})
+        if sc not in (200, 201, 204):
+            raise RuntimeError(err or f"HTTP {sc}")
+        await db.marketplace_interests.update_one({"id": it["id"]}, {"$set": {"brevo_status": "sincronizzato", "brevo_attribute": attr,
+                                                                          "brevo_synced_at": _now(), "brevo_error": None}})
+
+    async def _sync_one(it: dict) -> bool:
+        try:
+            if not it.get("email"):
+                raise RuntimeError("Email mancante")
+            await _sync_interest(it)
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning("marketplace brevo sync failed: %s", e)
+            await db.marketplace_interests.update_one({"id": it["id"]}, {"$set": {"brevo_status": "errore", "brevo_error": str(e)[:200]}})
+            return False
+
+    async def _sync_interest_safe(sid: str, org_id: str) -> None:
+        it = await db.marketplace_interests.find_one({"service_id": sid, "org_id": org_id, "notified_at": None}, {"_id": 0})
+        if it:
+            await _sync_one(it)
 
     async def _notify_available(svc: dict) -> dict:
         """Email Brevo agli interessati non ancora avvisati. Idempotente (notified_at)."""
@@ -363,6 +444,34 @@ def build(db, deps: dict):
             asyncio.create_task(_notify_available({**d, "id": sid}))
         await deps["record_audit"](admin, "marketplace_service_update", detail=f"{d['name']} · {d['status']} · acquistabile {d['purchasable']}")
         return await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
+
+    @r.post("/platform/marketplace/brevo/verify")
+    async def admin_brevo_verify(admin: dict = Depends(deps["require_superadmin"])):
+        """Crea gli attributi mancanti e verifica su Brevo che esistano con il tipo corretto (filtrabili)."""
+        rows = await db.marketplace_services.find({}, {"_id": 0}).sort("sort", 1).to_list(500)
+        names = {s["id"]: await _service_attr(s) for s in rows}
+        try:
+            brevo_attrs_seen.clear()
+            await _ensure_attrs({**{n: "boolean" for n in names.values()}, BREVO_LAST_REQ: "date"})
+            have = await _brevo_attributes()
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=f"Brevo: {e}")
+
+        def row(label, attr, typ):
+            a = have.get(attr) or {}
+            return {"service": label, "attribute": attr, "exists": bool(a), "type": a.get("type"), "ok": bool(a) and a.get("type") == typ}
+        out = [row(s["name"], names[s["id"]], "boolean") for s in rows] + [row("Data ultima richiesta", BREVO_LAST_REQ, "date")]
+        await deps["record_audit"](admin, "marketplace_brevo_verify", detail=f"ok {sum(r['ok'] for r in out)}/{len(out)}")
+        return {"attributes": out, "all_ok": all(r["ok"] for r in out)}
+
+    @r.post("/platform/marketplace/brevo/resync")
+    async def admin_brevo_resync(admin: dict = Depends(deps["require_superadmin"])):
+        rows = await db.marketplace_interests.find({"brevo_status": {"$ne": "sincronizzato"}}, {"_id": 0}).to_list(5000)
+        ok = 0
+        for it in rows:
+            ok += await _sync_one(it)
+        await deps["record_audit"](admin, "marketplace_brevo_resync", detail=f"sincronizzati {ok}/{len(rows)}")
+        return {"synced": ok, "failed": len(rows) - ok}
 
     @r.get("/platform/marketplace/purchases")
     async def admin_purchases(admin: dict = Depends(deps["require_superadmin"])):
