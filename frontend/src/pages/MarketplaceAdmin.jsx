@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Bell, Download, Send } from "lucide-react";
 import { MKT_ICONS, PRICE_TYPES, STATUS, ServiceIcon, priceLabel } from "@/lib/marketplace";
 
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
@@ -22,7 +22,7 @@ function Editor({ svc, cats, onClose, onSaved }) {
   const img = (e) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 300000) { toast.error("Immagine max 300 KB"); return; } const r = new FileReader(); r.onload = () => set("image")(r.result); r.readAsDataURL(file); };
   const save = async () => {
     const body = { ...f, price: f.price === "" || f.price == null ? null : Number(f.price), sort: Number(f.sort) || 100 };
-    ["id", "key", "created_at", "updated_at", "active_count", "purchasable_now"].forEach((k) => delete body[k]);
+    ["id", "key", "created_at", "updated_at", "active_count", "interest_count", "purchasable_now"].forEach((k) => delete body[k]);
     try { if (svc?.id) await api.put(`/platform/marketplace/services/${svc.id}`, body); else await api.post("/platform/marketplace/services", body); toast.success("Servizio salvato"); onSaved(); }
     catch (e) { err(e); }
   };
@@ -58,9 +58,51 @@ function Editor({ svc, cats, onClose, onSaved }) {
   );
 }
 
+const csvCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+const NSTATUS = { inviato: "Avvisato", errore: "Errore invio", brevo_non_configurato: "Brevo non configurato" };
+
+function Interests({ svc, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => api.get(`/platform/marketplace/services/${svc.id}/interests`).then(({ data }) => setRows(data)).catch(err), [svc.id]);
+  useEffect(() => { load(); }, [load]);
+  const csv = () => {
+    const lines = [["Organizzazione", "Nome", "Email", "Data richiesta", "Stato avviso"], ...rows.map((r) => [r.org_name, r.name, r.email, d(r.created_at), r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"])];
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\ufeff" + lines.map((l) => l.map(csvCell).join(";")).join("\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = `interessati-${svc.key}.csv`; a.click();
+  };
+  const notify = async () => {
+    setBusy(true);
+    try { const { data } = await api.post(`/platform/marketplace/services/${svc.id}/interests/notify`); toast.success(`Avvisi inviati: ${data.sent}${data.failed ? ` · errori: ${data.failed}` : ""}`); load(); }
+    catch (e) { err(e); }
+    setBusy(false);
+  };
+  const pending = (rows || []).filter((r) => !r.notified_at).length;
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto" data-testid="mkt-admin-interests">
+        <DialogTitle>Interessati · {svc.name}</DialogTitle>
+        <p className="text-xs text-slate-500">Quando il servizio passa a "Disponibile" gli interessati ricevono in automatico un'email tramite Brevo.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" disabled={!rows?.length} onClick={csv} data-testid="mkt-admin-interests-csv"><Download className="w-4 h-4 mr-1" />Esporta CSV</Button>
+          {svc.status === "available" && <Button size="sm" disabled={busy || !pending} onClick={notify} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid="mkt-admin-interests-notify"><Send className="w-4 h-4 mr-1" />Invia avvisi in attesa ({pending})</Button>}
+        </div>
+        {!rows ? <p className="text-sm text-slate-400">Caricamento...</p> : !rows.length ? <p className="text-sm text-slate-500" data-testid="mkt-admin-interests-empty">Nessun interessato per ora.</p> : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[620px] text-sm" data-testid="mkt-admin-interests-table">
+            <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Nome", "Email", "Data", "Avviso"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
+            <tbody>{rows.map((r) => <tr key={r.id} className="border-t border-slate-100"><td className="px-3 py-2">{r.org_name}</td><td className="px-3 py-2">{r.name}</td><td className="px-3 py-2">{r.email}</td><td className="px-3 py-2">{d(r.created_at)}</td><td className="px-3 py-2">{r.notified_at ? `Avvisato ${d(r.notified_at)}` : NSTATUS[r.notify_status] || "In attesa"}</td></tr>)}</tbody>
+          </table></div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function Catalog() {
   const [data, setData] = useState(null);
   const [edit, setEdit] = useState(null);
+  const [intr, setIntr] = useState(null);
   const load = useCallback(() => api.get("/platform/marketplace/services").then(({ data }) => setData(data)).catch(err), []);
   useEffect(() => { load(); }, [load]);
   if (!data) return <p className="text-sm text-slate-400">Caricamento...</p>;
@@ -73,10 +115,12 @@ function Catalog() {
             <ServiceIcon s={s} className="w-10 h-10" />
             <div className="flex-1 min-w-0"><div className="font-semibold">{s.name} <span className="text-xs text-slate-400">· {s.category}</span></div>
               <div className="text-xs text-slate-500">{STATUS[s.status]} · {s.visible ? "pubblicato" : "nascosto"} · {s.tech_ready ? "pronto" : "non pronto"} · {s.purchasable_now ? "acquistabile" : "non acquistabile"} · {priceLabel(s)} · {PRICE_TYPES[s.price_type]} · attivi {s.active_count}</div></div>
+            <Button size="sm" variant="outline" onClick={() => setIntr(s)} data-testid={`mkt-admin-interests-${s.key}`}><Bell className="w-3.5 h-3.5 mr-1" />Interessati {s.interest_count || 0}</Button>
             <Button size="sm" variant="outline" onClick={() => setEdit(s)} data-testid={`mkt-admin-edit-${s.key}`}>Modifica</Button>
           </div>
         ))}
       </div>
+      {intr && <Interests svc={intr} onClose={() => { setIntr(null); load(); }} />}
       {edit && <Editor svc={edit} cats={data.categories} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
     </div>
   );

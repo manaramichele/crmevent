@@ -1,4 +1,5 @@
 """Marketplace CRMEvent: catalogo servizi extra (fuori dagli abbonamenti), acquisti per organizzazione, Stripe e fatture."""
+import asyncio
 import logging
 import os
 import uuid
@@ -9,8 +10,10 @@ import stripe as stripe_sdk
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import email_utils
+
 logger = logging.getLogger("marketplace")
-CATEGORIES = ["Siti web", "Comunicazione", "Documenti", "Logistica", "Altro"]
+CATEGORIES = ["Siti web", "Comunicazione", "Documenti", "Logistica", "Gestione", "Feedback", "Altro"]
 PRICE_TYPES = ("one_time", "monthly", "yearly", "usage")
 STATUSES = ("coming_soon", "available", "suspended")
 ACTIVE = ("active", "past_due")
@@ -27,6 +30,15 @@ SEED = [
      "Genera accordi sponsor, contratti fornitori, collaborazioni e incarichi da modelli personalizzabili, con compilazione automatica dei dati ed esportazione PDF. I documenti vanno sempre verificati da un professionista."),
     ("magazzino", "Magazzino", "Logistica", "Warehouse", "org",
      "Gestisci i materiali dell'organizzazione: anagrafica e categorie, quantità, carico e scarico, assegnazione agli eventi, prestiti e restituzioni, inventario, storico movimenti e materiali mancanti."),
+]
+# Servizi roadmap (solo vetrina, "Prossimamente"): aggiunti una sola volta anche ai cataloghi già esistenti.
+ROADMAP_SEED = [
+    ("gestione-societa", "Gestione Società", "Gestione", "Building2", "org",
+     "Gestisci la tua società sportiva in un unico ambiente: anagrafiche, tesseramenti, certificati medici, quote associative, documenti e scadenze."),
+    ("archivio-iscritti", "Archivio Iscritti & Comunicazioni", "Comunicazione", "Contact", "org",
+     "Importa gli iscritti delle precedenti edizioni dei tuoi eventi, crea uno storico dei partecipanti e prepara comunicazioni email mirate per promuovere le prossime manifestazioni."),
+    ("survey", "Survey & Questionari", "Feedback", "ClipboardList", "org",
+     "Raccogli opinioni e valutazioni dei partecipanti attraverso questionari personalizzati. Invia survey via email, gestisci domande e votazioni e analizza i risultati attraverso statistiche e grafici."),
 ]
 
 
@@ -90,17 +102,28 @@ def build(db, deps: dict):
                     "usage_unit": None, "usage_limits": None, "terms": None, "status": "coming_soon", "visible": True,
                     "purchasable": False, "tech_ready": False, "billing_method": "stripe", "scope": scope, "sort": (i + 1) * 10,
                     "created_at": _now()}}, upsert=True)
+        if not await db.marketplace_meta.find_one({"id": "roadmap_v1"}):
+            for i, (key, name, cat, icon, scope, desc) in enumerate(ROADMAP_SEED):
+                await db.marketplace_services.update_one({"key": key}, {"$setOnInsert": {
+                    "id": uuid.uuid4().hex, "key": key, "name": name, "description": desc, "icon": icon, "image": None,
+                    "category": cat, "price": None, "price_type": "monthly", "usage_unit": None, "usage_limits": None,
+                    "terms": None, "status": "coming_soon", "visible": True, "purchasable": False, "tech_ready": False,
+                    "billing_method": "stripe", "credit_service_key": None, "scope": scope, "sort": 70 + i * 10,
+                    "created_at": _now()}}, upsert=True)
+            await db.marketplace_services.update_many({"name": {"$regex": r"^\s*social\s*$", "$options": "i"}},
+                                                      {"$set": {"icon": "Megaphone", "updated_at": _now()}})
+            await db.marketplace_meta.insert_one({"id": "roadmap_v1", "applied_at": _now()})
 
     def _can_purchase(user: dict) -> bool:
         p = user.get("perm") or {}
         return user.get("org_role") in ("admin_org", "superadmin") or bool(p.get("admin")) or bool(p.get("marketplace_purchase"))
 
-    def _public(s: dict, purchases: list) -> dict:
+    def _public(s: dict, purchases: list, notify_ids: set = frozenset()) -> dict:
         mine = [p for p in purchases if p["service_id"] == s["id"]]
         return {**{k: s.get(k) for k in ("id", "key", "name", "description", "icon", "image", "category", "price", "price_type",
                                           "usage_unit", "usage_limits", "terms", "status", "scope")},
                 "purchasable_now": can_buy(s) is None, "reason": can_buy(s),
-                "active": any(p["status"] in ACTIVE for p in mine), "purchases": mine}
+                "active": any(p["status"] in ACTIVE for p in mine), "purchases": mine, "notify_me": s["id"] in notify_ids}
 
     async def _org_purchases(org_id: str) -> list:
         return await db.marketplace_purchases.find({"org_id": org_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
@@ -110,7 +133,49 @@ def build(db, deps: dict):
         await _seed()
         rows = await db.marketplace_services.find({"visible": True}, {"_id": 0}).sort("sort", 1).to_list(200)
         pur = await _org_purchases(user["org_id"])
-        return {"services": [_public(s, pur) for s in rows], "categories": CATEGORIES, "can_purchase": _can_purchase(user)}
+        ids = {i["service_id"] for i in await db.marketplace_interests.find(
+            {"org_id": user["org_id"], "user_id": user["user_id"], "notified_at": None}, {"_id": 0, "service_id": 1}).to_list(500)}
+        return {"services": [_public(s, pur, ids) for s in rows], "categories": CATEGORIES, "can_purchase": _can_purchase(user)}
+
+    @r.post("/marketplace/services/{sid}/notify")
+    async def toggle_notify(sid: str, user: dict = Depends(deps["require_admin"])):
+        svc = await db.marketplace_services.find_one({"id": sid, "visible": True}, {"_id": 0, "status": 1})
+        if not svc or svc["status"] != "coming_soon":
+            raise HTTPException(status_code=400, detail="Avviso disponibile solo per i servizi in arrivo")
+        q = {"service_id": sid, "org_id": user["org_id"], "user_id": user["user_id"], "notified_at": None}
+        if (await db.marketplace_interests.delete_one(q)).deleted_count:
+            return {"notify_me": False}
+        org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "nome": 1}) or {}
+        await db.marketplace_interests.insert_one({**q, "id": uuid.uuid4().hex, "org_name": org.get("nome"),
+                                                   "name": user.get("name"), "email": user.get("email"),
+                                                   "created_at": _now(), "notify_status": None})
+        return {"notify_me": True}
+
+    async def _notify_available(svc: dict) -> dict:
+        """Email Brevo agli interessati non ancora avvisati. Idempotente (notified_at)."""
+        rows = await db.marketplace_interests.find({"service_id": svc["id"], "notified_at": None}, {"_id": 0}).to_list(5000)
+        if not email_utils._provider_configured("brevo"):
+            logger.warning("marketplace notify: Brevo non configurato, %d avvisi in attesa", len(rows))
+            await db.marketplace_interests.update_many({"service_id": svc["id"], "notified_at": None}, {"$set": {"notify_status": "brevo_non_configurato"}})
+            return {"sent": 0, "failed": len(rows)}
+        url = f"{(os.environ.get('APP_URL') or '').rstrip('/')}/marketplace"
+        subject = f"{svc['name']} è ora disponibile su CRMEvent"
+        sent = failed = 0
+        for it in rows:
+            html = email_utils.link_email(
+                name=it.get("name") or "", cta_label="Vai al Marketplace", url=url,
+                intro=f"Il servizio «{svc['name']}» che stavi aspettando è ora disponibile nel Marketplace di CRMEvent. Accedi per scoprire dettagli e condizioni.",
+                footer_note="Ricevi questa email perché hai chiesto di essere avvisato della disponibilità di questo servizio.")
+            try:
+                email_utils._assert_safe_email(subject, html)
+                await email_utils._send_via_brevo(it["email"], subject, html)
+                await db.marketplace_interests.update_one({"id": it["id"]}, {"$set": {"notified_at": _now(), "notify_status": "inviato"}})
+                sent += 1
+            except Exception as e:  # noqa: BLE001
+                logger.warning("marketplace notify failed: %s", getattr(getattr(e, "response", None), "status_code", type(e).__name__))
+                await db.marketplace_interests.update_one({"id": it["id"]}, {"$set": {"notify_status": "errore"}})
+                failed += 1
+        return {"sent": sent, "failed": failed}
 
     @r.get("/marketplace/my")
     async def my(user: dict = Depends(deps["require_admin"])):
@@ -258,7 +323,21 @@ def build(db, deps: dict):
         await _seed()
         rows = await db.marketplace_services.find({}, {"_id": 0}).sort("sort", 1).to_list(500)
         counts = {c["_id"]: c["n"] for c in await db.marketplace_purchases.aggregate([{"$match": {"status": {"$in": list(ACTIVE)}}}, {"$group": {"_id": "$service_id", "n": {"$sum": 1}}}]).to_list(500)}
-        return {"services": [{**s, "active_count": counts.get(s["id"], 0), "purchasable_now": can_buy(s) is None} for s in rows], "categories": CATEGORIES}
+        intr = {c["_id"]: c["n"] for c in await db.marketplace_interests.aggregate([{"$group": {"_id": "$service_id", "n": {"$sum": 1}}}]).to_list(500)}
+        return {"services": [{**s, "active_count": counts.get(s["id"], 0), "interest_count": intr.get(s["id"], 0), "purchasable_now": can_buy(s) is None} for s in rows], "categories": CATEGORIES}
+
+    @r.get("/platform/marketplace/services/{sid}/interests")
+    async def admin_interests(sid: str, admin: dict = Depends(deps["require_superadmin"])):
+        return await db.marketplace_interests.find({"service_id": sid}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+    @r.post("/platform/marketplace/services/{sid}/interests/notify")
+    async def admin_notify(sid: str, admin: dict = Depends(deps["require_superadmin"])):
+        svc = await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
+        if not svc or svc.get("status") != "available" or not svc.get("visible"):
+            raise HTTPException(status_code=400, detail="Gli avvisi si inviano solo per servizi pubblicati e Disponibili")
+        res = await _notify_available(svc)
+        await deps["record_audit"](admin, "marketplace_interest_notify", detail=f"{svc['name']} · inviati {res['sent']} · errori {res['failed']}")
+        return res
 
     @r.post("/platform/marketplace/services")
     async def admin_create(body: ServiceIn, admin: dict = Depends(deps["require_superadmin"])):
@@ -270,9 +349,12 @@ def build(db, deps: dict):
     @r.put("/platform/marketplace/services/{sid}")
     async def admin_update(sid: str, body: ServiceIn, admin: dict = Depends(deps["require_superadmin"])):
         d = _clean(body)
+        prev = await db.marketplace_services.find_one({"id": sid}, {"_id": 0, "status": 1})
         res = await db.marketplace_services.update_one({"id": sid}, {"$set": {**d, "updated_at": _now()}})
         if not res.matched_count:
             raise HTTPException(status_code=404, detail="Servizio non trovato")
+        if prev.get("status") != "available" and d["status"] == "available" and d["visible"]:
+            asyncio.create_task(_notify_available({**d, "id": sid}))
         await deps["record_audit"](admin, "marketplace_service_update", detail=f"{d['name']} · {d['status']} · acquistabile {d['purchasable']}")
         return await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
 
