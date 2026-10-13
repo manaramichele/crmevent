@@ -1155,3 +1155,9 @@ Task 2 — Creatività manuale:
 - marketplace.py: ROADMAP_SEED (gestione-societa/Building2, archivio-iscritti/Contact, survey/ClipboardList), status coming_soon, purchasable/tech_ready False, credit_service_key=None (predisposizione crediti). Migrazione one-shot `marketplace_meta.roadmap_v1` (aggiunge ai cataloghi esistenti, imposta icon=Megaphone ai servizi con nome "Social"). Nuove categorie Gestione, Feedback.
 - lib/marketplace.js: aggiunte icone Building2, Contact, ClipboardList. Checkout bloccato ("Servizio non disponibile"). Verificato via curl + screenshot (desktop/mobile).
 
+
+## 2026-10-13 – Marketplace: pulsante "Avvisami"
+- Collezione `marketplace_interests` (service_id, org_id, org_name, user_id, name, email, created_at, notified_at, notify_status). POST /api/marketplace/services/{sid}/notify (toggle, solo coming_soon); `notify_me` in GET /marketplace/services.
+- Super Admin: interest_count nel catalogo, GET /api/platform/marketplace/services/{sid}/interests, POST .../interests/notify (reinvio avvisi in attesa). Dialog "Interessati" con export CSV.
+- Passaggio a "Disponibile" (admin_update) → email automatica Brevo (email_utils._send_via_brevo + link_email), idempotente via notified_at. Senza BREVO_API_KEY → notify_status "brevo_non_configurato" (in preview la chiave è vuota: invio reale non verificato, testato con mock).
+
