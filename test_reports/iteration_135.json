@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 135. Backend: 21/21 pytest pass (availability event-day + mandatory activity preference, Super Admin PATCH /api/platform/users/{id}/profile, unit tests for _brevo_profile_sync with brevo_funnel mocked). Partecipa UI tested in IT and EN on desktop and at 390px mobile: all blocking toasts work and full submits succeed (data checked in the DB). CRITICAL FRONTEND GAP: the Super Admin 'Modifica' (edit profile) dialog cannot be reached in the app. The OrgUsers component that has allowProfileEdit is only used in pages/PlatformCredits.jsx, and that page is not imported or routed anywhere. The real route /piattaforma/org/:id -> 'Utenti' tab (pages/OrgDetail.jsx, members-table) has no Modifica button. The browser test confirmed this: user-edit-<id> count = 0, any 'Modifica' button = 0. Because of this the edit dialog UI flow (confirm on email change) could not be tested.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "The rate limit (6/min per IP) uses the first X-Forwarded-For value, which the client can set. Sending a different spoofed XFF on each request bypassed the limit (8/8 requests not throttled, while the same IP got 429 after 6). This was already the case before this change."},
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "preferenza_attivita is not checked against the allowed options (Nessuna preferenza, the org's ruoli_staff, Altro), so any free string is accepted. Also, the backend error messages are Italian only (the frontend shows EN text itself, so this is acceptable)."},
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "Saved days keep the order the user clicked them, not date order (e.g. 08, 12, 10). This is cosmetic."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OrgDetail.jsx Utenti tab (/piattaforma/org/:id)", "issue": "There is no 'Modifica' (edit profile) button or dialog. The feature only exists in OrgUsers when allowProfileEdit is set, and the only page that sets it is the orphaned PlatformCredits.jsx, which is not routed. Super Admin therefore cannot edit name, surname, email or mobile from the UI.", "selector": "[data-testid^='user-edit-'], [data-testid='user-edit-dialog']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Super Admin -> Organizzazioni -> org -> Utenti -> Modifica", "issue": "The UI is not wired to PATCH /api/platform/users/{id}/profile on any reachable page.", "affected_selectors": ["user-edit-<user_id>", "user-edit-dialog", "edit-nome", "edit-cognome", "edit-email", "edit-telefono-input", "edit-submit"]}
+    ],
+    "design_issues": [
+      {"screen": "Partecipa", "issues": ["Data di nascita and the Dalle/Alle time fields use native browser date/time pickers, not the shadcn calendar. This was already the case."]},
+      {"screen": "OrgDetail Utenti tab", "issues": ["The role column uses a native <select>. This was already the case."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter135_avail_eventday_profile_edit.py", "/app/test_reports/pytest/pytest_iter135.xml"],
+  "action_items": [
+    "HIGH: Add the 'Modifica' profile-edit button and dialog to pages/OrgDetail.jsx Utenti tab (members-table rows, data-testid user-edit-<user_id>), or render <OrgUsers orgId={id} allowProfileEdit /> there. Reuse the submitEdit logic from OrgUsers.jsx (window.confirm on email change, confirm_email_change flag).",
+    "Optional: validate preferenza_attivita against the allowed options on the backend.",
+    "Optional: stop trusting a client-supplied X-Forwarded-For for the public rate limit (use the last trusted hop instead)."
+  ],
+  "critical_code_review_comments": [
+    "PlatformCredits.jsx (with OrgUsers allowProfileEdit) is dead code: it is not imported in App.js or any other page.",
+    "platform_user_profile_update: persons are updated only by users.person_id. If another persona in the org already has the new email, two persons will share that email (there is no clash check on persons).",
+    "platform_user_profile_update: sync_registered_user only runs for the first active membership. This is fine because the attributes are computed from all memberships."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter135_avail_eventday_profile_edit.py"],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "Partecipa 100%; Super Admin profile-edit UI 0% (cannot be reached)"},
+  "seed_data_creation": "All of the following was created and then deleted: TEST_ events, avail_links, availabilities and persons in org_qa_eventi; TEST_ orgs and users (register-organization with @example.com) plus their memberships. Audit entries were kept.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database pytest /app/backend/tests/test_iter135_avail_eventday_profile_edit.py. It creates and cleans up its own data, and uses a random X-Forwarded-For to avoid the rate limit. For UI retest, run /tmp/ui_setup.py if it still exists (creates a TEST_ event, link and TEST_ user/org). Then log in as SA (it redirects to /app), go to /piattaforma?sezione=organizzazioni, click platform-org-<id>, then org-tab-utenti, and check user-edit-<uid>. Clean up with /tmp/cleanup_iter135.py logic. Partecipa UI is verified in IT and EN on desktop and mobile.",
+  "rca of the issue": "Profile-edit UI: E1 added allowProfileEdit to the OrgUsers component and used it in PlatformCredits.jsx. However, the SA org page that is actually routed (/piattaforma/org/:id) is OrgDetail.jsx, which renders its own members-table and does not use OrgUsers. Reproduce: log in as SA, open Organizzazioni, open any org, open the Utenti tab: there is no Modifica button. Fix: add the edit action in OrgDetail.jsx."
+}

@@ -58,6 +58,8 @@ import PlatformDemoRequests from "@/pages/PlatformDemoRequests";
 import QuickActions from "@/pages/QuickActions";
 import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
+import Tickets from "@/pages/Tickets";
+import PlatformTickets from "@/pages/PlatformTickets";
 import PlatformPartners from "@/pages/PlatformPartners";
 import { captureReferral } from "@/lib/referral";
 
@@ -150,6 +152,8 @@ function Shell() {
         <Route path="/azioni-rapide" element={<Protected><QuickActions /></Protected>} />
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
+        <Route path="/piattaforma/segnalazioni" element={<Protected><SuperAdminOnly><PlatformTickets /></SuperAdminOnly></Protected>} />
         <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />
         <Route path="/piattaforma/prezzi" element={<Protected><SuperAdminOnly><PricingAdmin /></SuperAdminOnly></Protected>} />

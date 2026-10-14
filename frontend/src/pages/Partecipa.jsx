@@ -18,7 +18,7 @@ const PHONE_CCS = [
   ["+31", "🇳🇱 +31"], ["+351", "🇵🇹 +351"], ["+30", "🇬🇷 +30"], ["+386", "🇸🇮 +386"],
   ["+385", "🇭🇷 +385"], ["+1", "🇺🇸 +1"],
 ];
-const NONE = "__none__";
+const NONE = "Nessuna preferenza";
 const ALTRO = "Altro";
 
 const T = {
@@ -41,7 +41,9 @@ const T = {
     whenSubtitle: "Seleziona una o più giornate. Gli orari sono facoltativi.",
     phaseSetup: "Allestimento", phaseTeardown: "Disallestimento", phaseEvent: "Evento",
     from: "Dalle", to: "Alle",
-    prefLabel: "Che attività preferiresti svolgere? (facoltativo)",
+    prefLabel: "Che attività preferiresti svolgere? *", prefPlaceholder: "Seleziona un'opzione",
+    errPref: "Indica quale attività preferiresti svolgere", errPrefAltro: "Descrivi brevemente l'attività preferita",
+    errEventDay: "Seleziona almeno un giorno dell'evento in cui sei disponibile",
     prefNone: "Nessuna preferenza", prefOther: "Altro", prefOtherPlaceholder: "Descrivi brevemente",
     privacyPre: "Ho preso visione della", privacyLink: "Privacy Policy", privacyPost: ".",
     marketing: "Desidero ricevere via email aggiornamenti e comunicazioni relative agli eventi.",
@@ -76,7 +78,9 @@ const T = {
     whenSubtitle: "Select one or more days. Times are optional.",
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
     from: "From", to: "To",
-    prefLabel: "What activity would you prefer? (optional)",
+    prefLabel: "What activity would you prefer? *", prefPlaceholder: "Select an option",
+    errPref: "Please tell us which activity you would prefer", errPrefAltro: "Please briefly describe your preferred activity",
+    errEventDay: "Please select at least one event day on which you are available",
     prefNone: "No preference", prefOther: "Other", prefOtherPlaceholder: "Briefly describe",
     privacyPre: "I have read the", privacyLink: "Privacy Policy", privacyPost: ".",
     marketing: "I would like to receive updates and communications about events by email.",
@@ -118,7 +122,7 @@ export default function Partecipa() {
   const [form, setForm] = useState({ nome: "", cognome: "", cellulare: "", prefix: "+39", email: "", codice_fiscale: "", data_nascita: "" });
   const [noCf, setNoCf] = useState(false);
   const [days, setDays] = useState({});
-  const [pref, setPref] = useState(NONE);
+  const [pref, setPref] = useState("");
   const [prefAltro, setPrefAltro] = useState("");
   const [privacy, setPrivacy] = useState(false);
   const [marketing, setMarketing] = useState(false);
@@ -153,7 +157,10 @@ export default function Partecipa() {
       toast.error(t("errCf")); return;
     }
     const selDays = Object.entries(days).filter(([, v]) => v.disponibile).map(([date, v]) => ({ date, disponibile: true, dalle: v.dalle || "", alle: v.alle || "" }));
-    if (!selDays.length) { toast.error(t("errDay")); return; }
+    const eventDays = new Set((info?.days || []).filter((d) => d.fase === "evento").map((d) => d.date));
+    if (!selDays.some((d) => eventDays.has(d.date))) { toast.error(t("errEventDay")); return; }
+    if (!pref) { toast.error(t("errPref")); return; }
+    if (pref === ALTRO && !prefAltro.trim()) { toast.error(t("errPrefAltro")); return; }
     if (!privacy) { toast.error(t("errPrivacy")); return; }
     setSubmitting(true);
     try {
@@ -164,7 +171,7 @@ export default function Partecipa() {
         codice_fiscale: noCf ? null : (form.codice_fiscale || "").trim().toUpperCase(),
         data_nascita: noCf ? form.data_nascita : null,
         days: selDays,
-        preferenza_attivita: pref === NONE ? null : pref,
+        preferenza_attivita: pref,
         preferenza_altro: pref === ALTRO ? prefAltro : null,
         privacy: true,
         marketing_consent: marketing,
@@ -280,7 +287,7 @@ export default function Partecipa() {
 
         <F label={t("prefLabel")}>
           <Select value={pref} onValueChange={setPref}>
-            <SelectTrigger data-testid="pf-pref"><SelectValue /></SelectTrigger>
+            <SelectTrigger data-testid="pf-pref"><SelectValue placeholder={t("prefPlaceholder")} /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>{t("prefNone")}</SelectItem>
               {[...(info.attivita_options || [])].sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" })).map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}

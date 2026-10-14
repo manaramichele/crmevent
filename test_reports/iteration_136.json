@@ -1,0 +1,30 @@
+{
+  "summary": "Tested the Super Admin 'Modifica anagrafica' in OrgDetail > Utenti, on both backend and UI. Backend: 6 new tests plus the 21 regression tests from iteration 135 (availability /partecipa validations included) all pass, 27/27. The Persona linked through memberships.persona_id is updated (nome/cognome/email/cellulare), scoped to the membership's org. A persona with the same id in another org is untouched. Membership role/active/persona_id and google_sub are unchanged. Login works with the new email, and the old email gets 401. UI on desktop: the button shows for non-superadmin members and the dialog opens pre-filled. Changing name/surname/phone saves without the confirm dialog, the toast reads 'Anagrafica aggiornata' and the row refreshes. Changing the email shows the confirm dialog. Cancel closes only the confirm, keeps the edit dialog and its value, and nothing is saved. Confirm saves, and the row shows the new email. Email clash shows the error toast 'Esiste già un account con questa email'. On mobile (390px) the dialog is a full-width bottom sheet and usable. Fixed one testid: the phone input's testid was overridden.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "UserProfileEditDialog phone input", "issue": "The phone input's data-testid was 'edit-telefono', not the requested 'edit-telefono-input': the root data-testid prop overrode numberInputProps. FIXED by the testing agent.", "selector": "[data-testid='edit-telefono-input']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "UserProfileEditDialog (email clash)", "issues": ["The email clash is only detected after the user clicks 'Conferma modifica'. The confirm AlertDialog then stays open behind the error toast. Better: close the confirm when the API returns an error, or pre-check the clash. Minor UX."]},
+      {"screen": "Mobile 390px dialog", "issues": ["The floating accessibility/cookie icon at bottom-left slightly overlaps the full-width 'Annulla' button in the bottom-sheet dialog. Cosmetic."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter136_profile_edit_membership_persona.py", "/app/backend/tests/test_iter135_avail_eventday_profile_edit.py", "/app/test_reports/pytest/pytest_iter136.xml"],
+  "action_items": [
+    "Optional: close the email-confirm AlertDialog (setConfirm(false)) on save error so the error is visible in the edit dialog",
+    "Optional: add bottom padding or a higher z-index to the mobile dialog footer so the floating accessibility icon does not overlap 'Annulla'"
+  ],
+  "critical_code_review_comments": [
+    "platform_user_profile_update: users.person_id is matched without an org scope (org_scope None). This is fine if person ids are globally unique (uuid). Otherwise, consider scoping it to u.org_id.",
+    "_member_view prefers persona nome/cognome over the user's. Both are now synced by this endpoint, but earlier legacy mismatches could show different names in different orgs.",
+    "server.py is >13k lines; consider splitting the platform/users routes into a module."
+  ],
+  "updated_files": ["/app/frontend/src/components/UserProfileEditDialog.jsx", "/app/backend/tests/test_iter136_profile_edit_membership_persona.py"],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "100%"},
+  "seed_data_creation": "TEST_ orgs and users created via register-organization (@example.com), plus a TEST_p*136 persona linked via memberships.persona_id. All removed by /tmp/cleanup_iter136.py and the pytest fixture teardown. Verified 0 TEST_ orgs/users/events/personas left.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: export REACT_APP_BACKEND_URL, MONGO_URL=mongodb://localhost:27017 and DB_NAME=test_database, then pytest tests/test_iter136_*.py tests/test_iter135_*.py. Both self-clean. For UI: run /tmp/ui136_setup.py (creates 2 TEST_ orgs plus a linked persona). Log in as SA, go to /piattaforma/org/<org>, then org-tab-utenti, then user-edit-<uid>. PhoneInput is international with an IT default: clear it with Ctrl+A and Backspace (leaves '+39'), then type the digits only. Clean up with /tmp/cleanup_iter136.py."
+}

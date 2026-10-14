@@ -1,0 +1,44 @@
+{
+  "summary": "Tested the 'Segnalazioni e richieste' ticket module end to end. Backend: 15/15 pytest pass covering create with PNG, SA badge count, public reply, internal note with PDF, status changes, closing with a final message, reply on a closed ticket blocked, reopen request (once only), SA reopen, cross-org isolation, 403 on platform routes for org users, validation and SA filters. Frontend desktop (1920) and mobile (390): org new ticket dialog (shadcn select, attachment, confirmation #number), list, detail chat, reply, closed state with date and time, Chiedi la riapertura + pending flag; SA table, counters, search/org/category/status(riapertura)/date filters, detail actions, internal toggle, close dialog, Riapri richiesta, sidebar badge (3 -> 2 after close, +1 after reopen request), mobile drawer link with badge. No horizontal overflow at 390px. Everything works. Only minor UX/robustness issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/tickets", "issue": "When subject/description form fields are missing entirely, FastAPI returns 422 (pydantic detail list), not 400. Empty or whitespace values correctly return 400. The UI always sends the fields, so this is low impact."},
+      {"endpoint": "GET /api/platform/tickets?from&to", "issue": "The date range compares the raw date string with created_at stored as a UTC ISO string. For an Italian user, tickets opened between 00:00 and 01:00/02:00 local time end up on the previous day."},
+      {"endpoint": "POST /api/tickets (_store_files)", "issue": "Files are saved to storage before the ticket is inserted. If something fails afterwards (e.g. _next_number), the stored objects are orphaned. Each upload is also read fully into memory before the 10MB check (no streaming cap)."},
+      {"endpoint": "/api/tickets* via require_org_member", "issue": "A Super Admin with an acting org (X-Org-Id) can open, reply to and reopen-request tickets as an org (created_by = SA, side='org'). The org-level 'Segnalazioni e richieste' link also shows in the SA sidebar next to the platform one (two identical labels). Consider blocking role=superadmin on the org ticket endpoints or hiding the org link for the SA."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PlatformTickets filters", "issue": "Race condition: there is no request cancellation or sequence guard in load(). When filters change quickly (e.g. reset org then set category), an older response can arrive last and overwrite the newer one, so the table shows unfiltered rows. Reproduced once: category=altro showed all 3 rows. Re-checked in isolation and it works. The search input also fires a request on every keystroke with no debounce.", "selector": "[data-testid=sa-tickets-filter-category], [data-testid=sa-tickets-search]", "priority": "LOW"},
+      {"component": "SA detail Composer", "issue": "The 'Nota interna' switch stays ON after an internal note is sent. The next message the SA types is internal by default, so the org never sees it. Consider resetting it to public after sending or making the internal state more prominent.", "selector": "[data-testid=sa-ticket-internal-toggle]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PlatformTickets filters", "issues": ["Native <input type=date> shows browser-locale mm/dd/yyyy instead of an Italian format / shadcn Calendar date picker", "Native <select> elements look different from the shadcn Select used in the org dialog"]},
+      {"screen": "Mobile 390px (org detail / new ticket dialog)", "issues": ["The global floating green widget button (bottom-left) overlaps the 'Chiedi la riapertura' and 'Invia richiesta' buttons inside the dialogs. It does not fully block them but covers their left edge."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_tickets_module.py", "/app/test_reports/pytest/pytest_tickets.xml"],
+  "action_items": [
+    "Reset the internal-note toggle after sending (or warn clearly) in the SA ticket composer",
+    "Add a request-sequence guard or AbortController plus a search debounce in PlatformTickets load()",
+    "Optional: return 400 instead of 422 for missing form fields (default Form('') + manual check)",
+    "Optional: use the Europe/Rome day boundaries for the SA date filter; replace native date inputs with a shadcn Calendar",
+    "Optional: block superadmin on the org /api/tickets endpoints or hide the org 'Segnalazioni' link for the SA",
+    "Optional: check the floating widget overlapping the dialog buttons on mobile"
+  ],
+  "critical_code_review_comments": [
+    "tickets.py looks good overall: org scoping on every org query (tickets/messages/files with org_id + internal False), magic-byte validation, file Response with nosniff + CSP sandbox, an atomic counter for numbers, an audit on status changes, and _id excluded everywhere",
+    "sa_reply on an internal note does not update updated_at (correct). A public SA reply on a closed ticket is allowed and does not change status. Acceptable, but the org then sees a new message on a closed ticket.",
+    "Orphaned storage objects if insertion fails after _store_files; ticket files are never deleted from storage"
+  ],
+  "updated_files": ["/app/backend/tests/test_tickets_module.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "~95% (all flows working; minor UX issues)"},
+  "test_credentials": "Org admin qa.eventi@crmeventqa.it / QaEvents2026!; SA manara.michele.pro@gmail.com / CrmEvent2026! (both working)",
+  "seed_data_creation": "Created tickets #1002-#1004 and the org TEST_TicketOrg_* (user test_tk_*@example.com). All removed from the DB afterwards (tickets, ticket_messages, ticket_files, org, user, membership, related audit_logs/saas_usage/saas_emails/saas_brevo_sync). The ticket counter is now at seq=4, so the next number is #1005. 4 small uploaded objects remain in object storage (there is no delete API). Registering the org may have queued a welcome email or a Brevo sync record from the existing signup flow (record deleted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest /app/backend/tests/test_tickets_module.py. It creates its own TEST_ tickets and a TEST_ org; clean up afterwards with a mongo script (delete tickets with subject ^TEST_, plus their ticket_messages/ticket_files, the TEST_TicketOrg* org and test_tk_* users/memberships). The optional read-only (expired trial) case was not tested at runtime. Code review shows the endpoints use only require_org_member (no plan enforcement)."
+}
