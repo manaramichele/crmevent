@@ -1,6 +1,6 @@
-import { Globe, MonitorSmartphone, Mail, MessageCircle, FileSignature, Warehouse, Package, Sparkles, Megaphone, Camera, Ticket, ShoppingBag, Building2, Contact, ClipboardList } from "lucide-react";
+import { Globe, MonitorSmartphone, Mail, MessageCircle, FileSignature, Warehouse, Package, Sparkles, Megaphone, Camera, Ticket, ShoppingBag, Building2, Contact, ClipboardList, Newspaper, Map as MapIcon } from "lucide-react";
 
-export const MKT_ICONS = { Globe, MonitorSmartphone, Mail, MessageCircle, FileSignature, Warehouse, Package, Sparkles, Megaphone, Camera, Ticket, ShoppingBag, Building2, Contact, ClipboardList };
+export const MKT_ICONS = { Globe, MonitorSmartphone, Mail, MessageCircle, FileSignature, Warehouse, Package, Sparkles, Megaphone, Camera, Ticket, ShoppingBag, Building2, Contact, ClipboardList, Newspaper, Map: MapIcon };
 export const PRICE_TYPES = { one_time: "Una tantum", monthly: "Abbonamento mensile", yearly: "Abbonamento annuale", usage: "A consumo" };
 export const STATUS = { coming_soon: "Prossimamente", available: "Disponibile", active: "Attivo", suspended: "Sospeso", past_due: "Pagamento in sospeso", canceled: "Annullato", pending: "In attesa di pagamento" };
 export const priceLabel = (s) => {

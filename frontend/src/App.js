@@ -60,6 +60,7 @@ import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
 import Tickets from "@/pages/Tickets";
 import PlatformTickets from "@/pages/PlatformTickets";
+import PressReleases from "@/pages/PressReleases";
 import PlatformPartners from "@/pages/PlatformPartners";
 import { captureReferral } from "@/lib/referral";
 
@@ -153,6 +154,7 @@ function Shell() {
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
+        <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />
         <Route path="/piattaforma/segnalazioni" element={<Protected><SuperAdminOnly><PlatformTickets /></SuperAdminOnly></Protected>} />
         <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />

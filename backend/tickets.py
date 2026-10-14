@@ -134,7 +134,18 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
 
     @r.get("/tickets")
     async def org_list(user: dict = Depends(require_org_member)):
-        return await db.tickets.find({"org_id": user["org_id"]}, {"_id": 0, "description": 0}).sort("number", -1).to_list(1000)
+        rows = await db.tickets.find({"org_id": user["org_id"]}, {"_id": 0, "description": 0}).sort("number", -1).to_list(1000)
+        for t in rows:
+            t["unread"] = bool(t.pop("creator_unread", False)) and (t.get("created_by") or {}).get("user_id") == user["user_id"]
+        rows.sort(key=lambda t: not t["unread"])
+        return rows
+
+    def _unread_q(user: dict) -> dict:
+        return {"org_id": user["org_id"], "created_by.user_id": user["user_id"], "creator_unread": True}
+
+    @r.get("/tickets/unread-count")
+    async def org_unread_count(user: dict = Depends(require_org_member)):
+        return {"unread": await db.tickets.count_documents(_unread_q(user))}
 
     @r.post("/tickets")
     async def org_create(category: str = Form(""), subject: str = Form(""), description: str = Form(""),
@@ -162,7 +173,18 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
     async def org_get(tid: str, user: dict = Depends(require_org_member)):
         t = await _org_ticket(tid, user)
         msgs = await db.ticket_messages.find({"ticket_id": tid, "org_id": user["org_id"], "internal": False}, {"_id": 0}).sort("created_at", 1).to_list(2000)
+        mine = (t.get("created_by") or {}).get("user_id") == user["user_id"]
+        t["unread"] = bool(t.pop("creator_unread", False)) and mine
+        t["is_creator"] = mine
         return {**t, "messages": msgs}
+
+    @r.post("/tickets/{tid}/read")
+    async def org_mark_read(tid: str, user: dict = Depends(require_org_member)):
+        """Lettura effettiva: solo il richiedente (mai il Super Admin o altri membri)."""
+        res = await db.tickets.update_one({"id": tid, **_unread_q(user)}, {"$set": {"creator_unread": False, "creator_read_at": _now()}})
+        if not res.matched_count:
+            await _org_ticket(tid, user)
+        return {"marked": bool(res.modified_count)}
 
     @r.post("/tickets/{tid}/messages")
     async def org_reply(tid: str, text: str = Form(""), files: List[UploadFile] = File(default=[]), user: dict = Depends(require_org_member)):
@@ -249,7 +271,8 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
             raise HTTPException(status_code=400, detail="Scrivi un messaggio o allega un file")
         m = await _add_msg(t, _person(admin), "admin", text, await _store_files(files, t, internal), internal=internal)
         if not internal:
-            await db.tickets.update_one({"id": tid}, {"$set": {"updated_at": m["created_at"], "last_side": "admin"}})
+            await db.tickets.update_one({"id": tid}, {"$set": {"updated_at": m["created_at"], "last_side": "admin",
+                                                               "creator_unread": True, "creator_unread_since": m["created_at"]}})
         return m
 
     @r.post("/platform/tickets/{tid}/status")
@@ -260,7 +283,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
         if t["status"] == body.status:
             raise HTTPException(status_code=400, detail="La richiesta è già in questo stato")
         now = _now()
-        upd = {"status": body.status, "updated_at": now, "last_side": "admin"}
+        upd = {"status": body.status, "updated_at": now, "last_side": "admin", "creator_unread": True, "creator_unread_since": now}
         if body.status == "chiusa":
             upd.update({"closed_at": now, "closed_by": _person(admin), "reopen_requested": False})
         elif t["status"] == "chiusa":
@@ -281,6 +304,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
         await db.tickets.create_index("id", unique=True)
         await db.tickets.create_index([("org_id", 1), ("number", -1)])
         await db.ticket_messages.create_index([("ticket_id", 1), ("created_at", 1)])
+        await db.tickets.create_index([("org_id", 1), ("created_by.user_id", 1), ("creator_unread", 1)])
         await db.ticket_files.create_index("id", unique=True)
 
     return {"router": r, "ensure_indexes": ensure_indexes}

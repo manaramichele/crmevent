@@ -30,6 +30,7 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 import asyncio
 import news
 import tickets
+import press
 import brevo_org_lists
 import email_utils
 import permissions as P
@@ -13372,6 +13373,18 @@ app.include_router(demo_slots.build_router(db, require_org_member, require_super
 TICKETS = tickets.build_router(db, require_org_member, require_superadmin, record_audit)
 app.include_router(TICKETS["router"])
 app.add_event_handler("startup", TICKETS["ensure_indexes"])
+PRESS = press.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL, WEBHOOK_CRON_SECRET)
+app.include_router(PRESS["router"])
+app.add_event_handler("startup", PRESS["ensure_indexes"])
+
+
+@app.post("/api/cron/press-tick")
+async def cron_press_tick(authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", f"Bearer {WEBHOOK_CRON_SECRET}"):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(PRESS["tick"]())
+    return {"accepted": True}
 app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
 app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
                                                    "verify_password": verify_password, "user_payload": user_payload,

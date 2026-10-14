@@ -55,7 +55,7 @@ const ORG_NAV = [
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
 ];
 // Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
-const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni" }];
+const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", badge: "ticketsUnread" }];
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
 const SUPER_ORG_NAV = ORG_NAV;
@@ -269,6 +269,15 @@ export default function Layout({ children }) {
     window.addEventListener("tickets:changed", loadTickets);
     return () => { clearInterval(t); clearInterval(t2); window.removeEventListener("bookings:changed", load); window.removeEventListener("tickets:changed", loadTickets); };
   }, [isSuper]);
+  useEffect(() => {
+    if (isSuper || !user) return undefined;
+    const load = () => { if (document.visibilityState === "visible") api.get("/tickets/unread-count").then(({ data }) => setCounts((c) => ({ ...c, ticketsUnread: data.unread }))).catch(() => {}); };
+    load();
+    const t = setInterval(load, 30000);
+    window.addEventListener("tickets:unread-changed", load);
+    window.addEventListener("focus", load);
+    return () => { clearInterval(t); window.removeEventListener("tickets:unread-changed", load); window.removeEventListener("focus", load); };
+  }, [isSuper, user]);
   const multiOrg = !isSuper && (user?.organizations?.length || 0) > 1;
   const showSwitcher = isSuper || multiOrg;
 
@@ -345,7 +354,7 @@ export default function Layout({ children }) {
         <n.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-tiffany-active" : ""}`} />
         {!(collapsed && !onClick) && <span className="truncate flex-1">{n.label}</span>}
         {n.locked && !(collapsed && !onClick) && <Lock className="w-3.5 h-3.5 shrink-0" data-testid={`sidebar-lock-${n.id}`} />}
-        {n.badge && counts[n.badge] > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-tiffany text-slate-900 text-[11px] font-bold flex items-center justify-center shrink-0" aria-label={n.badge === "tickets" ? `${counts[n.badge]} richieste non chiuse` : `${counts[n.badge]} prenotazioni future`} data-testid={`sidebar-badge-${n.id}`}>{counts[n.badge]}</span>}
+        {n.badge && counts[n.badge] > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0 ${n.badge === "ticketsUnread" ? "bg-red-500 text-white" : "bg-tiffany text-slate-900"}`} aria-label={n.badge === "ticketsUnread" ? `${counts[n.badge]} aggiornamenti da leggere` : n.badge === "tickets" ? `${counts[n.badge]} richieste non chiuse` : `${counts[n.badge]} prenotazioni future`} data-testid={`sidebar-badge-${n.id}`}>{counts[n.badge]}</span>}
       </>)}
     </NavLink>
   );
@@ -401,7 +410,7 @@ export default function Layout({ children }) {
         <div className="sticky top-0 z-40">
         {user?.support && <SupportBanner />}
         <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-4 lg:px-6" data-testid="app-header">
-          <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><Menu className="w-5 h-5" /></button>
+          <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><span className="relative"><Menu className="w-5 h-5" />{counts.ticketsUnread > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white" data-testid="mobile-menu-unread-dot" />}</span></button>
           {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
           {!isSuper && <TrialButton saas={user?.saas} />}
           <div className="flex-1 min-w-0" />

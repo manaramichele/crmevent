@@ -1,0 +1,48 @@
+{
+  "summary": "Iter 140 – Marketplace 'Comunicati stampa'. Backend: new pytest suite (16 tests, all pass) covering SA activation/deactivation, 403 when inactive, cross-org isolation (404 on GET/PUT/approve of another org's release/contacts), real AI generation (3 calls total: 1 API + 1 UI generate + 1 UI regenerate; output used only provided data, missing data listed), save/versions/approve/approval reset on edit, preview HTML, contacts CRUD with case-insensitive dedupe, CSV import (added/duplicates/invalid counts), legal basis required, export, search/filters, recipients count (excludes sospeso/opposto/no-basis), public unsubscribe -> 'opposto' and PUT cannot reactivate, settings (@crmevent.it rejected, verify-sender 400 'Brevo non configurato sulla piattaforma'), test email + send blocked while sender unverified, scheduled past date rejected, schedule/cancel, send now -> release ends 'errore' with error 'Brevo non configurato' (no crash), automations persist + validation, member role 'user' can read but all writes 403, cron 401/200. Frontend (Playwright): SA tab toggle with confirm works (activate/deactivate + search); QA marketplace card 'Attivo' + 'Apri servizio' link; inactive org sees 'Attivazione a cura del team CRMEvent' and /comunicati-stampa shows press-inactive; dashboard KPIs/table; new release dialog shows data + missing list, generation opens editor; save/approve/reset/regenerate/send dialog (counts, media filter, test-email error toast, send now -> 'Errore'); contacts add/dup/edit/import/search/export/delete; settings save/@crmevent.it reject/verify error/automation toggle persists after reload; member read-only UI; mobile 390px no horizontal overflow, dialogs full width. Existing test_press_mock.py FAILS ~75% (race condition, see backend issues). Cleanup done as requested.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "press._ensure_list (via POST /api/press/contacts background tasks)", "issue": "Race condition: concurrent _sync_contact tasks (e.g. two contacts added quickly, or activation + first contact) both see no list and both POST /v3/contacts/lists -> duplicate Brevo lists per org. Reproduced by /app/backend/tests/test_press_mock.py: 'assert 2 == 1' at line 67 in 3 of 4 runs. Fix: per-org asyncio.Lock (or Mongo upsert 'creating' lock) around list creation."},
+      {"endpoint": "press.tick/_sync_lists_retry + test_press_mock.py", "issue": "tick() -> _sync_lists_retry() processes press_contacts of ALL orgs (no org filter, no service-active check). Running test_press_mock.py (which mocks Brevo and calls tick) against the real DB marked org_qa_eventi contacts 'sincronizzato' and wrote fake list_id 99/folder 7 into press_brevo_lists for org_qa_eventi. Scope the mock test (or the retry) to its TEST org; also skip orgs whose service is inactive."},
+      {"endpoint": "press._ensure_list", "issue": "If a list record with list_id exists it is returned without checking brevo_funnel.is_configured(); with Brevo key absent subsequent syncs call _request and mark contacts 'errore' instead of 'in_attesa'."},
+      {"endpoint": "PUT /api/press/releases/{rid} after 'errore'", "issue": "Editing an errored release resets status to bozza but leaves the stale 'error' field ('Brevo non configurato'). Also an 'errore' release keeps approved_at but cannot be re-sent/approved without an edit (no retry path)."},
+      {"endpoint": "POST /api/press/releases/{rid}/test", "issue": "When sender is verified but Brevo key absent, detail exposes internal message 'Invio di prova non riuscito: BREVO_API_KEY non configurata' to org admins; prefer a user-friendly message."},
+      {"endpoint": "PUT /api/press/automations/{eid}", "issue": "Enabling automation for an event that ended long ago immediately qualifies on next tick: AI draft generated (credit cost) with send_at in the past -> instantly approval_expired. Consider restricting to events ending after enabling or recent ones."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PressEditor (status errore)", "issue": "Release shows 'Errore' pill but the reason (rel.error e.g. 'Brevo non configurato') is never displayed in editor or dashboard, and no retry/send button is available.", "selector": "[data-testid='press-editor']", "priority": "MEDIUM"},
+      {"component": "PressEditor ListEditor (citazioni/foto)", "issue": "Quote/photo inputs and 'Aggiungi citazione/foto' buttons are not disabled when locked (member role / inviato / annullato) unlike other fields.", "selector": "[data-testid='press-editor-quotes'], [data-testid='press-editor-photos']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Comunicati stampa page", "issues": ["'Comunicati' tab renders exactly the same component as 'Dashboard' (KPIs + same table) – no distinct list/filters", "Send dialog uses native <select multiple> for media (requires Ctrl-click) and native datetime-local; automation uses native time input (shows 10:00 AM in en locale) – use shadcn components", "Contacts table does not flag contacts with no legal basis (shown as 'Attivo' though excluded from sends)"]},
+      {"screen": "Marketplace card (inactive org)", "issues": ["Card badge says 'Prossimamente' while the service is available on request ('Attivazione a cura del team CRMEvent' only in detail)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter140_press_releases.py", "/app/backend/tests/cleanup_iter140_press.py", "/app/test_reports/pytest/iter140_press.xml"],
+  "action_items": [
+    "Add per-org lock in press._ensure_list to prevent duplicate Brevo list creation (test_press_mock.py currently fails ~75%)",
+    "Scope test_press_mock.py tick/_sync_lists_retry to the TEST org (it pollutes real orgs' press_contacts/press_brevo_lists), and filter retry by active service",
+    "Show release.error in editor/dashboard for status 'errore' and provide a retry path; clear 'error' on edit",
+    "Disable ListEditor (citazioni/foto) when editor is locked",
+    "Optional: friendlier message on test email when Brevo key missing; replace native multi-select/datetime/time inputs with shadcn components"
+  ],
+  "critical_code_review_comments": [
+    "press._ensure_list not concurrency-safe (duplicate Brevo lists)",
+    "press._sync_lists_retry iterates all orgs without service-active check",
+    "SendDialog recipients useEffect ignores errors silently (count stays '…')",
+    "Editor preview uses window.open after an await – may be blocked by popup blockers (toast handles it)"
+  ],
+  "updated_files": ["/app/backend/tests/test_iter140_press_releases.py", "/app/backend/tests/cleanup_iter140_press.py"],
+  "success_rate": {"backend": "100% (16/16 new tests); test_press_mock.py flaky-fail 3/4 runs", "frontend": "95%"},
+  "flaky_tests": ["tests/test_press_mock.py – 75% failure rate (real race in _ensure_list)"],
+  "test_credentials": "QA admin qa.eventi@crmeventqa.it / QaEvents2026!; SA manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created TEST_PressOrg via register-organization + TEST member user (role user) in org_qa_eventi via Mongo; set press_settings.sender_verified=True via Mongo to reach delivery path. ALL cleaned: press_* for org_qa_eventi/TEST orgs, TEST users/memberships/org, org_services comunicati-stampa for org_qa_eventi deleted (service now inactive for QA).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=<url> pytest tests/test_iter140_press_releases.py -n 0 ; it requires org_qa_eventi to have comunicati-stampa ACTIVE (activate via SA POST /api/platform/press/orgs/org_qa_eventi/activate {active:true}) and makes 1 real AI call. Then run python3 tests/cleanup_iter140_press.py. Do NOT run test_press_mock.py while QA has pending contacts until it is scoped (pollutes real data). Member users need 'telefono' set or they are redirected to /completa-profilo. New orgs show a demo popup ('Non ora') on marketplace.",
+  "rca of the issue": "test_press_mock failure: add_contact spawns asyncio.create_task(_sync_contact) per contact; each calls _ensure_list which reads press_brevo_lists (empty), then lists Brevo folder lists (empty in mock) and POSTs a new list – two tasks interleave at the awaits so both create. Mitigation: asyncio.Lock keyed by org_id (single-process) plus re-read after acquiring; or atomic Mongo 'creating' flag."
+}

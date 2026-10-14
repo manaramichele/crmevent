@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader } from "@/components/crm";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Search, Store, CheckCircle2, Clock, Bell, BellRing } from "lucide-react
 import { ServiceIcon, PRICE_TYPES, STATUS, priceLabel } from "@/lib/marketplace";
 
 const badge = (s) => (s.active ? ["Attivo", "bg-emerald-100 text-emerald-800"] : s.status === "suspended" ? ["Sospeso", "bg-red-100 text-red-700"]
-  : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
+  : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "superadmin" && s.status === "available" ? ["Su attivazione", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
 
 function NotifyButton({ s, onToggle, full }) {
   const [busy, setBusy] = useState(false);
@@ -18,7 +18,7 @@ function NotifyButton({ s, onToggle, full }) {
   const click = async (e) => {
     e.stopPropagation();
     setBusy(true);
-    try { const { data } = await api.post(`/marketplace/services/${s.id}/notify`); onToggle(s.id, data.notify_me); toast.success("Ti avviseremo via email appena sarà disponibile"); }
+    try { const { data } = await api.post(`/marketplace/services/${s.id}/notify`); onToggle(s.id, data.notify_me); toast.success(s.notified_label ? `${s.notified_label}: ti avviseremo appena il servizio sarà disponibile` : "Ti avviseremo via email appena sarà disponibile"); }
     catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     setBusy(false);
   };
@@ -26,12 +26,12 @@ function NotifyButton({ s, onToggle, full }) {
   return on ? (
     <span data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`} onClick={(e) => e.stopPropagation()}
       className={`inline-flex items-center justify-center gap-1.5 rounded-full border border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A] text-xs font-semibold ${full ? "w-full h-11 text-sm" : "h-8 px-3"}`}>
-      <BellRing className="w-3.5 h-3.5" />Ti avviseremo
+      <BellRing className="w-3.5 h-3.5" />{s.notified_label || (s.key === "planimetrie-mappe" ? "Avviso attivato" : "Ti avviseremo")}
     </span>
   ) : (
     <button type="button" disabled={busy || on} onClick={click} onKeyDown={(e) => e.stopPropagation()} data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`}
       className={`inline-flex items-center justify-center gap-1.5 rounded-full border text-xs font-semibold transition-colors touch-manipulation disabled:cursor-default ${busy ? "opacity-60" : ""} ${full ? "w-full h-11 text-sm" : "h-10 sm:h-8 px-4 sm:px-3"} ${on ? "border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A]" : "border-slate-200 text-slate-700 hover:border-[#0ABAB5] hover:text-[#088F8A]"}`}>
-      {on ? <BellRing className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}{on ? "Ti avviseremo" : "Avvisami"}
+      {on ? <BellRing className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}{on ? "Ti avviseremo" : s.notify_label || "Avvisami"}
     </button>
   );
 }
@@ -73,10 +73,13 @@ function Detail({ s, canPurchase, onClose, onToggle }) {
           <div><div className="text-xs text-slate-400">Prezzo</div><b data-testid="mkt-detail-price">{priceLabel(s)}</b></div>
           <div><div className="text-xs text-slate-400">Modalità</div><b>{PRICE_TYPES[s.price_type]}</b></div>
           {s.usage_limits && <div className="col-span-2"><div className="text-xs text-slate-400">Limiti di utilizzo</div>{s.usage_limits}</div>}
-          {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">Condizioni e durata</div>{s.terms}</div>}
+          {s.features?.length > 0 && <div className="col-span-2 space-y-3" data-testid="mkt-detail-features"><div className="text-xs text-slate-400">Funzionalità previste</div>{s.features.map((g) => (
+            <div key={g.title}><div className="text-sm font-semibold text-slate-800">{g.title}</div>
+              <ul className="mt-1 space-y-0.5">{g.items.map((it) => <li key={it} className="flex gap-2 text-sm text-slate-600"><span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0ABAB5] shrink-0" />{it}</li>)}</ul></div>))}</div>}
+          {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">{s.status === "coming_soon" ? "Funzionalità previste" : "Condizioni e durata"}</div>{s.terms}</div>}
         </div>
         <p className="text-xs text-slate-500">Servizio extra a pagamento, non incluso negli abbonamenti BRONZE, SILVER e GOLD. Appartiene all'organizzazione.</p>
-        {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione</div>
+        {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}</div>
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">
