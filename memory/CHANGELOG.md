@@ -1205,6 +1205,11 @@ Task 2 — Creatività manuale:
 - Fix: card Comunicati stampa non attivo mostrava "Prossimamente" → ora "Su attivazione".
 
 
+## 2026-10-14 – Marketplace: Contratti e firme digitali (Prossimamente)
+- Seed one-shot contracts_staff_v1: key contratti-firme-digitali, service_code contratti_firme_digitali, FileSignature, nuova categoria "Gestione staff e volontari", features strutturate (5 sezioni, mostrate nel dettaglio), notify_label "Voglio essere avvisato" / notified_label "Richiesta registrata", brevo_attribute INTERESSE_CONTRATTI_FIRME_DIGITALI. "Generazione contratti" (sponsor) invariato.
+- Interessi: salvati anche nome, cognome, service_name, service_code; Brevo aggiunge MKT_ORG_ID (non tocca CRM_ORG_ID degli abbonamenti). SA: nuova tab "Interessi" (GET /api/platform/marketplace/interests?service_id=) con filtro servizio, stato Brevo, export CSV (components/MarketplaceInterests.jsx).
+
+
 
 - Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
 

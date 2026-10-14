@@ -15,7 +15,7 @@ import email_utils
 import brevo_funnel
 
 logger = logging.getLogger("marketplace")
-CATEGORIES = ["Siti web", "Comunicazione", "Documenti", "Logistica", "Gestione", "Feedback", "Altro"]
+CATEGORIES = ["Siti web", "Comunicazione", "Documenti", "Logistica", "Gestione", "Gestione staff e volontari", "Feedback", "Altro"]
 PRICE_TYPES = ("one_time", "monthly", "yearly", "usage")
 STATUSES = ("coming_soon", "available", "suspended")
 ACTIVE = ("active", "past_due")
@@ -50,6 +50,19 @@ def _now() -> str:
 
 BREVO_ATTR_FIXED = {"gestione-societa": "MKT_GESTIONE_SOCIETA", "archivio-iscritti": "MKT_ARCHIVIO_ISCRITTI", "survey": "MKT_SURVEY"}
 BREVO_LAST_REQ = "MKT_ULTIMA_RICHIESTA"
+CONTRACTS_FEATURES = [
+    {"title": "Modelli standard CRMEvent", "items": ["Libreria di accordi per volontari sportivi", "Modelli per volontari di eventi non sportivi",
+                                                  "Modelli di incarico per staff e collaboratori", "Documenti standard predisposti dal Super Admin e sottoposti a verifica legale prima della pubblicazione"]},
+    {"title": "Modelli personalizzati", "items": ["Caricamento dei propri contratti in formato Word (.docx)", "Riconoscimento automatico dei segnaposto",
+                                               "Associazione dei campi ai dati già presenti in CRMEvent", "Anteprima e generazione del documento PDF",
+                                               "Possibilità futura di caricare PDF e posizionare graficamente i campi"]},
+    {"title": "Compilazione automatica", "items": ["Nome, cognome e dati della persona", "Nome, luogo e date dell'evento", "Ruolo e team assegnato",
+                                                "Dati dell'organizzazione", "Campi personalizzati", "Richiesta dei dati mancanti prima della generazione"]},
+    {"title": "Invio e firma", "items": ["Invio individuale o multiplo via email", "Link personale per visualizzare e firmare il documento",
+                                     "Integrazione futura con un provider di firma elettronica", "Archiviazione del documento firmato", "Storico delle operazioni e delle versioni"]},
+    {"title": "Monitoraggio", "items": ["Stato dei documenti: da preparare, inviato, da firmare, firmato, scaduto", "Elenco delle persone che devono ancora firmare",
+                                     "Solleciti automatici", "Collegamento futuro con Persone, Eventi, Team & Turni e Dashboard"]},
+]
 
 
 def _attr_slug(name: str) -> str:
@@ -144,6 +157,16 @@ def build(db, deps: dict):
                 "status": "coming_soon", "visible": True, "purchasable": False, "tech_ready": False, "brevo_attribute": "INTERESSE_PLANIMETRIE_MAPPE",
                 "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 100, "created_at": _now()}}, upsert=True)
             await db.marketplace_meta.insert_one({"id": "maps_v1", "applied_at": _now()})
+        if not await db.marketplace_meta.find_one({"id": "contracts_staff_v1"}):
+            await db.marketplace_services.update_one({"key": "contratti-firme-digitali"}, {"$setOnInsert": {
+                "id": uuid.uuid4().hex, "key": "contratti-firme-digitali", "service_code": "contratti_firme_digitali",
+                "name": "Contratti e firme digitali", "icon": "FileSignature", "image": None, "category": "Gestione staff e volontari",
+                "description": "Crea, personalizza e gestisci contratti e accordi per staff e volontari. Compila automaticamente i documenti con i dati dell'evento e raccogli le firme online.",
+                "features": CONTRACTS_FEATURES, "notify_label": "Voglio essere avvisato", "notified_label": "Richiesta registrata",
+                "price": None, "price_type": "monthly", "usage_unit": None, "usage_limits": None, "terms": None,
+                "status": "coming_soon", "visible": True, "purchasable": False, "tech_ready": False, "brevo_attribute": "INTERESSE_CONTRATTI_FIRME_DIGITALI",
+                "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 110, "created_at": _now()}}, upsert=True)
+            await db.marketplace_meta.insert_one({"id": "contracts_staff_v1", "applied_at": _now()})
 
     def _can_purchase(user: dict) -> bool:
         p = user.get("perm") or {}
@@ -152,7 +175,7 @@ def build(db, deps: dict):
     def _public(s: dict, purchases: list, notify_ids: set = frozenset(), org_active: set = frozenset()) -> dict:
         mine = [p for p in purchases if p["service_id"] == s["id"]]
         return {**{k: s.get(k) for k in ("id", "key", "name", "description", "icon", "image", "category", "price", "price_type",
-                                          "usage_unit", "usage_limits", "terms", "status", "scope", "activation")},
+                                          "usage_unit", "usage_limits", "terms", "status", "scope", "activation", "features", "notify_label", "notified_label", "service_code")},
                 "purchasable_now": can_buy(s) is None, "reason": "Attivazione a cura del team CRMEvent" if s.get("activation") == "superadmin" else can_buy(s),
                 "active": any(p["status"] in ACTIVE for p in mine) or s.get("key") in org_active, "purchases": mine, "notify_me": s["id"] in notify_ids}
 
@@ -175,6 +198,9 @@ def build(db, deps: dict):
         if not svc or svc["status"] != "coming_soon":
             raise HTTPException(status_code=400, detail="Avviso disponibile solo per i servizi in arrivo")
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "nome": 1}) or {}
+        svc_full = await db.marketplace_services.find_one({"id": sid}, {"_id": 0, "name": 1, "key": 1, "service_code": 1}) or {}
+        urow = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "nome": 1, "cognome": 1}) or {}
+        parts = (user.get("name") or "").split()
         try:
             await db.marketplace_interests.create_index([("service_id", 1), ("org_id", 1)], unique=True, name="uniq_pending_interest",
                                                         partialFilterExpression={"notified_at": None})
@@ -183,6 +209,8 @@ def build(db, deps: dict):
         try:
             res = await db.marketplace_interests.update_one({"service_id": sid, "org_id": user["org_id"], "notified_at": None}, {"$setOnInsert": {
             "id": uuid.uuid4().hex, "org_name": org.get("nome"), "user_id": user["user_id"], "name": user.get("name"),
+            "nome": urow.get("nome") or (parts[0] if parts else None), "cognome": urow.get("cognome") or (" ".join(parts[1:]) or None),
+            "service_name": svc_full.get("name"), "service_code": svc_full.get("service_code") or svc_full.get("key"),
             "email": user.get("email"), "created_at": _now(), "notify_status": None, "brevo_status": None}}, upsert=True)
             if res.upserted_id:
                 asyncio.create_task(_sync_interest_safe(sid, user["org_id"]))
@@ -228,12 +256,12 @@ def build(db, deps: dict):
         if not svc:
             return
         attr = await _service_attr(svc)
-        await _ensure_attrs({attr: "boolean", BREVO_LAST_REQ: "date", "NOME": "text", "COGNOME": "text", "ORGANIZZAZIONE": "text"})
+        await _ensure_attrs({attr: "boolean", BREVO_LAST_REQ: "date", "NOME": "text", "COGNOME": "text", "ORGANIZZAZIONE": "text", "MKT_ORG_ID": "text"})
         u = await db.users.find_one({"user_id": it.get("user_id")}, {"_id": 0, "nome": 1, "cognome": 1, "name": 1}) or {}
         parts = (u.get("name") or it.get("name") or "").split()
         nome = u.get("nome") or (parts[0] if parts else None)
         cognome = u.get("cognome") or (" ".join(parts[1:]) or None)
-        attrs = {k: v for k, v in {"NOME": nome, "COGNOME": cognome, "ORGANIZZAZIONE": it.get("org_name"),
+        attrs = {k: v for k, v in {"NOME": nome, "COGNOME": cognome, "ORGANIZZAZIONE": it.get("org_name"), "MKT_ORG_ID": it.get("org_id"),
                                      attr: True, BREVO_LAST_REQ: (it.get("created_at") or _now())[:10]}.items() if v not in (None, "")}
         sc, _, err = await brevo_funnel._request("POST", "/v3/contacts", json={"email": it["email"], "updateEnabled": True, "attributes": attrs})
         if sc not in (200, 201, 204):
@@ -431,6 +459,14 @@ def build(db, deps: dict):
         counts = {c["_id"]: c["n"] for c in await db.marketplace_purchases.aggregate([{"$match": {"status": {"$in": list(ACTIVE)}}}, {"$group": {"_id": "$service_id", "n": {"$sum": 1}}}]).to_list(500)}
         intr = {c["_id"]: len(c["orgs"]) for c in await db.marketplace_interests.aggregate([{"$group": {"_id": "$service_id", "orgs": {"$addToSet": "$org_id"}}}]).to_list(500)}
         return {"services": [{**s, "active_count": counts.get(s["id"], 0), "interest_count": intr.get(s["id"], 0), "purchasable_now": can_buy(s) is None} for s in rows], "categories": CATEGORIES}
+
+    @r.get("/platform/marketplace/interests")
+    async def admin_all_interests(service_id: Optional[str] = None, admin: dict = Depends(deps["require_superadmin"])):
+        names = {s["id"]: s["name"] for s in await db.marketplace_services.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(500)}
+        rows = await db.marketplace_interests.find({"service_id": service_id} if service_id else {}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+        for x in rows:
+            x["service_name"] = names.get(x["service_id"]) or x.get("service_name")
+        return rows
 
     @r.get("/platform/marketplace/services/{sid}/interests")
     async def admin_interests(sid: str, admin: dict = Depends(deps["require_superadmin"])):
