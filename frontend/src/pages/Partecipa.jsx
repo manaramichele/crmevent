@@ -37,12 +37,13 @@ const T = {
     cf: "Codice Fiscale", dataNascita: "Data di nascita",
     cfPlaceholder: "es. RSSMRA85T10A562S", cellPlaceholder: "333 1234567",
     noCf: "Non ho un Codice Fiscale italiano",
-    whenTitle: "Quando sei disponibile?",
-    whenSubtitle: "Seleziona una o più giornate. Gli orari sono facoltativi.",
+    whenTitle: "Giorni dell'evento in cui sei disponibile",
+    whenSubtitle: "Seleziona almeno un giorno dell'evento. Allestimento, disallestimento e orari sono facoltativi.",
     phaseSetup: "Allestimento", phaseTeardown: "Disallestimento", phaseEvent: "Evento",
     from: "Dalle", to: "Alle",
-    prefLabel: "Che attività preferiresti svolgere? (facoltativo)", prefPlaceholder: "Nessuna preferenza",
-    errEventDay: "Seleziona almeno un giorno dell'evento in cui sei disponibile.",
+    prefLabel: "Che attività preferiresti svolgere?", prefPlaceholder: "Seleziona un'attività",
+    errEventDay: "Seleziona almeno un giorno dell'evento.",
+    errPref: "Seleziona almeno un'attività che preferiresti svolgere.", errPrefAltro: "Descrivi brevemente l'attività che preferiresti svolgere.",
     prefNone: "Nessuna preferenza", prefOther: "Altro", prefOtherPlaceholder: "Descrivi brevemente",
     privacyPre: "Ho preso visione della", privacyLink: "Privacy Policy", privacyPost: ".",
     marketing: "Desidero ricevere via email aggiornamenti e comunicazioni relative agli eventi.",
@@ -73,12 +74,13 @@ const T = {
     cf: "Italian Tax Code (Codice Fiscale)", dataNascita: "Date of birth",
     cfPlaceholder: "e.g. RSSMRA85T10A562S", cellPlaceholder: "333 1234567",
     noCf: "I don't have an Italian Tax Code",
-    whenTitle: "When are you available?",
-    whenSubtitle: "Select one or more days. Times are optional.",
+    whenTitle: "Event days when you are available",
+    whenSubtitle: "Select at least one event day. Set-up, tear-down and times are optional.",
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
     from: "From", to: "To",
-    prefLabel: "What activity would you prefer? (optional)", prefPlaceholder: "No preference",
-    errEventDay: "Please select at least one event day when you are available.",
+    prefLabel: "What activity would you prefer to do?", prefPlaceholder: "Select an activity",
+    errEventDay: "Please select at least one event day.",
+    errPref: "Please select at least one activity you would prefer to do.", errPrefAltro: "Please briefly describe the activity you would prefer to do.",
     prefNone: "No preference", prefOther: "Other", prefOtherPlaceholder: "Briefly describe",
     privacyPre: "I have read the", privacyLink: "Privacy Policy", privacyPost: ".",
     marketing: "I would like to receive updates and communications about events by email.",
@@ -120,9 +122,11 @@ export default function Partecipa() {
   const [form, setForm] = useState({ nome: "", cognome: "", cellulare: "", prefix: "+39", email: "", codice_fiscale: "", data_nascita: "" });
   const [noCf, setNoCf] = useState(false);
   const [days, setDays] = useState({});
-  const [pref, setPref] = useState(NONE);
+  const [pref, setPref] = useState("");
   const [dayErr, setDayErr] = useState(false);
+  const [prefErr, setPrefErr] = useState(false);
   const daysRef = useRef(null);
+  const prefRef = useRef(null);
   const [prefAltro, setPrefAltro] = useState("");
   const [privacy, setPrivacy] = useState(false);
   const [marketing, setMarketing] = useState(false);
@@ -150,8 +154,10 @@ export default function Partecipa() {
   const submit = async () => {
     const eventDays = new Set((info?.days || []).filter((d) => d.fase === "evento").map((d) => d.date));
     const hasEventDay = Object.entries(days).some(([date, v]) => v.disponibile && eventDays.has(date));
+    const prefOk = !!pref && pref !== NONE && (pref !== ALTRO || !!prefAltro.trim());
     setDayErr(!hasEventDay);
-    const failDays = () => { toast.error(t("errEventDay")); daysRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); };
+    setPrefErr(!prefOk);
+    const fail = (key, ref) => { toast.error(t(key)); ref.current?.scrollIntoView({ behavior: "smooth", block: "center" }); };
     for (const [k, lbl] of [["nome", t("nome")], ["cognome", t("cognome")], ["cellulare", t("cellulare")], ["email", t("email")]]) {
       if (!String(form[k] || "").trim()) { toast.error(`${t("reqField")} ${lbl}`); return; }
     }
@@ -161,7 +167,8 @@ export default function Partecipa() {
       toast.error(t("errCf")); return;
     }
     const selDays = Object.entries(days).filter(([, v]) => v.disponibile).map(([date, v]) => ({ date, disponibile: true, dalle: v.dalle || "", alle: v.alle || "" }));
-    if (!hasEventDay) { failDays(); return; }
+    if (!hasEventDay) { fail("errEventDay", daysRef); return; }
+    if (!prefOk) { fail(pref === ALTRO ? "errPrefAltro" : "errPref", prefRef); return; }
     if (!privacy) { toast.error(t("errPrivacy")); return; }
     setSubmitting(true);
     try {
@@ -172,7 +179,7 @@ export default function Partecipa() {
         codice_fiscale: noCf ? null : (form.codice_fiscale || "").trim().toUpperCase(),
         data_nascita: noCf ? form.data_nascita : null,
         days: selDays,
-        preferenza_attivita: pref === NONE ? null : pref,
+        preferenza_attivita: pref,
         preferenza_altro: pref === ALTRO ? prefAltro : null,
         privacy: true,
         marketing_consent: marketing,
@@ -287,17 +294,19 @@ export default function Partecipa() {
           {dayErr && <p role="alert" className="mt-2 text-sm font-medium text-red-600" data-testid="pf-days-error">{t("errEventDay")}</p>}
         </div>
 
-        <F label={t("prefLabel")}>
-          <Select value={pref} onValueChange={setPref}>
-            <SelectTrigger data-testid="pf-pref"><SelectValue placeholder={t("prefPlaceholder")} /></SelectTrigger>
+        <div ref={prefRef} className={`scroll-mt-24 rounded-xl transition-colors space-y-2 ${prefErr ? "ring-2 ring-red-400 bg-red-50/40 p-3 -mx-1" : ""}`} data-testid="pf-pref-section" aria-invalid={prefErr || undefined}>
+        <F label={t("prefLabel")} req>
+          <Select value={pref} onValueChange={(v) => { setPref(v); if (v !== ALTRO) setPrefErr(false); }}>
+            <SelectTrigger data-testid="pf-pref" className={prefErr ? "border-red-400" : ""}><SelectValue placeholder={t("prefPlaceholder")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value={NONE}>{t("prefNone")}</SelectItem>
               {[...(info.attivita_options || [])].sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" })).map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
               <SelectItem value={ALTRO}>{t("prefOther")}</SelectItem>
             </SelectContent>
           </Select>
         </F>
-        {pref === ALTRO && <Input placeholder={t("prefOtherPlaceholder")} value={prefAltro} onChange={(e) => setPrefAltro(e.target.value)} data-testid="pf-pref-altro" />}
+        {pref === ALTRO && <Input placeholder={t("prefOtherPlaceholder")} value={prefAltro} onChange={(e) => { setPrefAltro(e.target.value); if (e.target.value.trim()) setPrefErr(false); }} data-testid="pf-pref-altro" />}
+        {prefErr && <p role="alert" className="text-sm font-medium text-red-600" data-testid="pf-pref-error">{t(pref === ALTRO ? "errPrefAltro" : "errPref")}</p>}
+        </div>
 
         <label className="flex items-start gap-2.5 pt-2 cursor-pointer">
           <Checkbox checked={privacy} onCheckedChange={(v) => setPrivacy(!!v)} data-testid="pf-privacy" className="mt-0.5" />

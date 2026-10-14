@@ -1,0 +1,39 @@
+{
+  "summary": "Tested public volunteer form /partecipa/:code with REQUIRED event day + REQUIRED activity preference. Created 2 TEST_ events in org_qa_eventi (one with allestimento 08-09/11 + disallestimento 12-13/11 around event 10-11/11, one plain 01-03/12) + public links. Backend pytest 15/17 pass: only-allestimento, only-disallestimento, invalid preferences (None, '', spaces, 'Nessuna preferenza', '__none__', 'RandomRole', lowercase 'hostess'), Altro without text all return 400 with the correct IT messages; valid event-day-only, mixed phases and Altro+text return 200 and show up in the organizer GET /api/events/{id}/availabilities with correct days/fase/preferenza, and a person record is created. FAILED: payload with NO selected days returns the old message 'Seleziona almeno una giornata di disponibilità' instead of 'Seleziona almeno un giorno dell'evento.'. Frontend IT desktop 1920, EN mobile 390 and IT mobile 390: labels end with '*', no '(facoltativo)/(optional)' on days or activity; no days -> blocked, exact pf-days-error, red ring and scroll into view; days ok + no activity -> exact pf-pref-error + ring; only setup/teardown + activity -> blocked; Altro without text -> blocked; valid -> thank-you screen. The dropdown has the configured roles + Altro/Other only, no 'Nessuna preferenza'/'No preference'. All test data cleaned up (4+2 availabilities, 2 links, 2 events, 6 persons).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "When days is empty (or all disponibile=false), returns 400 'Seleziona almeno una giornata di disponibilità' instead of the required 'Seleziona almeno un giorno dell'evento.'. The check `if not days_clean` (server.py ~line 10475) fires before the event-phase check. Fix: delete that check or change its message to 'Seleziona almeno un giorno dell'evento.'.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "The rate limit (6/min per IP) uses the first value of X-Forwarded-For, which the client controls. Sending random X-Forwarded-For headers sent 17 requests in under 3s without any 429. Use the last trusted proxy hop (or the ingress-provided real IP) instead."},
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "When updating an existing record, preferenza_attivita is stored as `body.preferenza_attivita or None` without strip; validation uses the stripped value. Minor inconsistency (e.g. ' Hostess' would fail validation anyway, so low impact)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Partecipa EN", "issues": ["EN days subtitle says 'Select one or more days. Times are optional.' while IT says 'Seleziona almeno un giorno dell'evento. Allestimento, disallestimento e orari sono facoltativi.'. Suggest EN: 'Select at least one event day. Set-up, tear-down and times are optional.'"]},
+      {"screen": "Partecipa (event without setup/teardown)", "issues": ["IT subtitle still mentions 'Allestimento, disallestimento ... facoltativi' even when the event has no setup/teardown days; consider a conditional subtitle."]},
+      {"screen": "Partecipa thank-you", "issues": ["A validation error toast from a previous attempt can still be visible on the success screen (seen in EN mobile). Consider calling toast.dismiss() on success."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_avail_required_fields.py", "/app/backend/tests/ui138_setup.py", "/app/test_reports/pytest/pytest_iter138.xml"],
+  "action_items": [
+    "server.py pub_avail_submit: when no days are selected, return 'Seleziona almeno un giorno dell'evento.' (replace or drop the 'Seleziona almeno una giornata di disponibilità' check)",
+    "Optional: harden the rate-limit IP extraction against a spoofed X-Forwarded-For",
+    "Optional: align the EN days subtitle with IT; dismiss stale toasts on success"
+  ],
+  "critical_code_review_comments": [
+    "Backend message mismatch for empty days (see critical issue).",
+    "Frontend: setDayErr/setPrefErr run before the personal-field checks, so red highlights can show while the toast complains about a missing name. Acceptable, but the order of feedback is mixed.",
+    "Frontend leftover: unused NONE constant, plus prefNone/errDay strings in T dictionaries; dead code, can be removed."
+  ],
+  "updated_files": ["/app/backend/tests/test_avail_required_fields.py", "/app/backend/tests/ui138_setup.py"],
+  "success_rate": {"backend": "88% (15/17; both failures = same empty-days message bug)", "frontend": "100%"},
+  "seed_data_creation": "TEST_AV138_SETUP / TEST_AV138_PLAIN events + links + submissions created and fully cleaned up (python tests/ui138_setup.py cleanup).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: python backend/tests/ui138_setup.py (prints E1/C1/E2/C2), export AV138_C1/C2/E1/E2, then pytest backend/tests/test_avail_required_fields.py; cleanup with 'ui138_setup.py cleanup'. QA org ruoli_staff: Coordinatore, Hostess, Tecnico, Sicurezza, Accoglienza, Logistica. Tests vary X-Forwarded-For to avoid the rate limit.",
+  "rca of the issue": "pub_avail_submit has two sequential checks: `if not days_clean: raise 400 'Seleziona almeno una giornata di disponibilità'` and then `if not any(fase=='evento')`. The first (old) check catches the empty-days case, so the new message is never returned for it. Frontend not affected because it validates on the client first."
+}

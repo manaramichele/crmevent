@@ -1185,6 +1185,11 @@ Task 2 — Creatività manuale:
 - Layout: FOOTER_NAV "Segnalazioni e richieste" fissata in fondo alla sidebar (fuori dall'area scrollabile) desktop/collassata/mobile, per tutti i membri (nessun vincolo piano/permessi). Pulsante iubenda spostato a destra nell'app (copriva la sidebar).
 - /partecipa: errore inline sotto i giorni (pf-days-error), sezione evidenziata e scroll; messaggi IT "Seleziona almeno un giorno dell'evento in cui sei disponibile." / EN "Please select at least one event day when you are available."; preferenza attività di nuovo FACOLTATIVA (decisione utente più recente); backend: solo regola giorno evento. Prod verificata: il codice precedente era già pubblicato. Testato: iteration_137 (36/36 + UI tutti i ruoli).
 
+## 2026-10-14 – Modulo volontari: giorni evento + attività OBBLIGATORI
+- Partecipa.jsx: titolo "Giorni dell'evento in cui sei disponibile *" / "Event days when you are available *"; attività "Che attività preferiresti svolgere? *" / "What activity would you prefer to do? *", rimossa opzione "Nessuna preferenza", Altro richiede testo; errori inline + ring rosso + scroll (pf-days-error, pf-pref-error).
+- Backend pub_avail_submit: "Seleziona almeno un giorno dell'evento." (anche con zero giorni), preferenza obbligatoria e valida (settings.ruoli_staff o default, oppure Altro + testo). Testato iteration_138 (15/17 → fix messaggio giorni vuoti).
+
+
 - Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
 
 
