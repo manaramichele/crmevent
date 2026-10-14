@@ -24,7 +24,7 @@ export function UserProfileEditDialog({ member, onClose, onSaved }) {
       const { data } = await api.patch(`/platform/users/${member.user_id}/profile`, { nome: ef.nome.trim(), cognome: ef.cognome.trim(), email: ef.email.trim(), telefono: ef.telefono, confirm_email_change: emailChanged });
       toast.success(data.changes?.length ? `Anagrafica aggiornata${data.brevo === "errore" ? " (Brevo non aggiornato)" : ""}` : "Nessuna modifica");
       setConfirm(false); onSaved();
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
+    } catch (e) { setConfirm(false); toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
   const submit = () => {
     if (!ef.nome.trim()) return toast.error("Il nome è obbligatorio");
@@ -46,7 +46,7 @@ export function UserProfileEditDialog({ member, onClose, onSaved }) {
               <div className="space-y-1.5"><Label>Cognome</Label><Input value={ef.cognome} onChange={set("cognome")} data-testid="edit-cognome" /></div>
             </div>
             <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={ef.email} onChange={set("email")} data-testid="edit-email" /></div>
-            <div className="space-y-1.5"><Label>Cellulare *</Label><PhoneInput international defaultCountry="IT" value={ef.telefono} onChange={(v) => setEf((s) => ({ ...s, telefono: v || "" }))} className="phone-input" numberInputProps={{ "data-testid": "edit-telefono-input" }} data-testid="edit-telefono" /></div>
+            <div className="space-y-1.5"><Label>Cellulare *</Label><PhoneInput international defaultCountry="IT" value={ef.telefono} onChange={(v) => setEf((s) => ({ ...s, telefono: v || "" }))} className="phone-input" data-testid="edit-telefono-input" /></div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={onClose} data-testid="edit-cancel">Annulla</Button>

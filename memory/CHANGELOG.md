@@ -1175,6 +1175,11 @@ Task 2 — Creatività manuale:
 - backend/tickets.py: collezioni tickets (number progressivo da counters.tickets, 1001+), ticket_messages (side org/admin, internal, kind message/status/reopen_request), ticket_files (allegati JPG/PNG/WEBP/PDF ≤10MB, max 5, magic bytes, storage_utils, download autenticato; internal nascosti all'org).
 - Org (require_org_member, tutti gli utenti dell'org, funziona anche in sola lettura): GET/POST /api/tickets, GET /api/tickets/{id}, POST /messages (bloccato se chiusa), POST /reopen-request (flag reopen_requested), GET /api/tickets/files/{fid}.
 - SA: GET /api/platform/tickets (filtri q/org_id/category/status|riapertura/from/to in Europe/Rome + counters), /count (non chiuse + riapertura richiesta), GET /{id}, POST /messages (internal), POST /status (chiusa → closed_at/closed_by; da chiusa → riapertura), audit su cambi stato.
+
+## 2026-10-14 – Disponibilità volontari + Modifica anagrafica Super Admin
+- /partecipa: obbligatorio almeno un giorno con fase "evento" (allestimento/disallestimento facoltativi); "Che attività preferiresti svolgere?" ora OBBLIGATORIA (scelta utente; nessuna preselezione, "Nessuna preferenza" salvata letteralmente, "Altro" richiede testo). Validazione frontend (IT/EN) + backend pub_avail_submit. Disponibilità esistenti invariate.
+- Super Admin → Org → Utenti: pulsante "Modifica anagrafica" (components/UserProfileEditDialog.jsx in pages/OrgDetail.jsx). PATCH /api/platform/users/{id}/profile: confirm_email_change obbligatorio se cambia email, clash case-insensitive, audit con meta.changes {prima,dopo}, aggiorna Persona collegata (users.person_id + memberships.persona_id per org), Brevo: PUT /v3/contacts/{old} con EMAIL/NOME/COGNOME/CELLULARE (liste conservate; fallback su contatto esistente). Ruoli/membership/google_sub invariati, email utilizzabile subito. Testato: iteration_135 (21/21), iteration_136 (27/27 + UI).
+
 - Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
 
 
