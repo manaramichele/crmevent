@@ -75,7 +75,7 @@ const T = {
     cfPlaceholder: "e.g. RSSMRA85T10A562S", cellPlaceholder: "333 1234567",
     noCf: "I don't have an Italian Tax Code",
     whenTitle: "Event days when you are available",
-    whenSubtitle: "Select one or more days. Times are optional.",
+    whenSubtitle: "Select at least one event day. Set-up, tear-down and times are optional.",
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
     from: "From", to: "To",
     prefLabel: "What activity would you prefer to do?", prefPlaceholder: "Select an activity",
@@ -295,7 +295,7 @@ export default function Partecipa() {
         </div>
 
         <div ref={prefRef} className={`scroll-mt-24 rounded-xl transition-colors space-y-2 ${prefErr ? "ring-2 ring-red-400 bg-red-50/40 p-3 -mx-1" : ""}`} data-testid="pf-pref-section" aria-invalid={prefErr || undefined}>
-        <F label={<>{t("prefLabel")} <span className="text-red-500">*</span></>}>
+        <F label={t("prefLabel")} req>
           <Select value={pref} onValueChange={(v) => { setPref(v); if (v !== ALTRO) setPrefErr(false); }}>
             <SelectTrigger data-testid="pf-pref" className={prefErr ? "border-red-400" : ""}><SelectValue placeholder={t("prefPlaceholder")} /></SelectTrigger>
             <SelectContent>

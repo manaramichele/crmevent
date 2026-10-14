@@ -10469,7 +10469,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                            "dalle": (d.get("dalle") or "").strip() or None,
                            "alle": (d.get("alle") or "").strip() or None})
     if not days_clean:
-        raise HTTPException(status_code=400, detail="Seleziona almeno una giornata di disponibilità")
+        raise HTTPException(status_code=400, detail="Seleziona almeno un giorno dell'evento.")
     if not any(d["fase"] == "evento" for d in days_clean):
         raise HTTPException(status_code=400, detail="Seleziona almeno un giorno dell'evento.")
     pref = (body.preferenza_attivita or "").strip()
