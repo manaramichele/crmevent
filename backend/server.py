@@ -10471,7 +10471,14 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     if not days_clean:
         raise HTTPException(status_code=400, detail="Seleziona almeno una giornata di disponibilità")
     if not any(d["fase"] == "evento" for d in days_clean):
-        raise HTTPException(status_code=400, detail="Seleziona almeno un giorno dell'evento in cui sei disponibile.")
+        raise HTTPException(status_code=400, detail="Seleziona almeno un giorno dell'evento.")
+    pref = (body.preferenza_attivita or "").strip()
+    settings = await db.settings.find_one({"id": link["org_id"]}, {"_id": 0, "ruoli_staff": 1}) or {}
+    allowed = set(settings.get("ruoli_staff") or default_settings()["ruoli_staff"])
+    if not pref or (pref != "Altro" and pref not in allowed):
+        raise HTTPException(status_code=400, detail="Seleziona almeno un'attività che preferiresti svolgere.")
+    if pref == "Altro" and not (body.preferenza_altro or "").strip():
+        raise HTTPException(status_code=400, detail="Descrivi brevemente l'attività che preferiresti svolgere.")
     org_id = link["org_id"]
     email = (body.email or "").strip().lower()
     raw_cell = (body.cellulare or "").strip()
