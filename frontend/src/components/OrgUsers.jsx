@@ -56,8 +56,10 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
     if (!ef.telefono || !isValidPhoneNumber(ef.telefono)) return toast.error("Inserisci un cellulare valido");
     setEbusy(true);
     try {
-      await api.patch(`/platform/users/${edit.user_id}/profile`, { nome: ef.nome.trim(), cognome: ef.cognome.trim(), email: ef.email.trim(), telefono: ef.telefono });
-      toast.success("Anagrafica aggiornata");
+      const emailChanged = ef.email.trim().toLowerCase() !== (edit.email || "").toLowerCase();
+      if (emailChanged && !window.confirm(`Confermi la modifica dell'email da «${edit.email}» a «${ef.email.trim()}»? Il nuovo indirizzo sarà usato per l'accesso; ruoli, organizzazioni e storico restano invariati.`)) { setEbusy(false); return; }
+      const { data } = await api.patch(`/platform/users/${edit.user_id}/profile`, { nome: ef.nome.trim(), cognome: ef.cognome.trim(), email: ef.email.trim(), telefono: ef.telefono, confirm_email_change: emailChanged });
+      toast.success(data.changes?.length ? `Anagrafica aggiornata${data.brevo === "errore" ? " (Brevo non aggiornato)" : ""}` : "Nessuna modifica");
       setEdit(null); load();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setEbusy(false); }
   };
@@ -145,7 +147,7 @@ export default function OrgUsers({ orgId, allowProfileEdit = false }) {
 
       <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
         <DialogContent className="max-w-md" data-testid="user-edit-dialog">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5 text-tiffany-active" />Modifica anagrafica</DialogTitle><DialogDescription>Correggi i dati dell'account collegato. Il cellulare è salvato in formato internazionale (E.164).</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5 text-tiffany-active" />Modifica anagrafica</DialogTitle><DialogDescription>Correggi i dati dell'account. Ruoli, permessi, organizzazioni e storico non vengono modificati; le password non sono visibili. Ogni modifica è registrata nell'Audit Log.</DialogDescription></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Nome *</Label><Input value={ef.nome} onChange={(e) => setEf((s) => ({ ...s, nome: e.target.value }))} data-testid="edit-nome" /></div>

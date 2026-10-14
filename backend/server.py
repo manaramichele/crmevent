@@ -4529,6 +4529,34 @@ class PlatformUserProfileIn(BaseModel):
     cognome: Optional[str] = None
     email: str
     telefono: Optional[str] = None
+    confirm_email_change: bool = False
+
+
+async def _brevo_profile_sync(old_email: str, new_email: str, nome: str, cognome: str, phone: Optional[str]) -> str:
+    """Aggiorna il contatto Brevo esistente (stesso contatto: liste e attributi conservati). Mai eccezioni."""
+    if not brevo_funnel.is_configured():
+        return "non_configurato"
+    from urllib.parse import quote
+    attrs = {k: v for k, v in {"NOME": nome, "COGNOME": cognome, "CELLULARE": phone}.items() if v}
+    if new_email != old_email:
+        attrs["EMAIL"] = new_email
+    try:
+        sc, _, err = await brevo_funnel._request("PUT", f"/v3/contacts/{quote(old_email, safe='')}", json={"attributes": attrs})
+        if sc in (200, 204):
+            return "aggiornato"
+        if sc == 404:
+            return "contatto_assente"
+        if new_email != old_email:  # nuova email già presente su Brevo: aggiorna quel contatto senza toccare l'altro
+            attrs.pop("EMAIL", None)
+            sc2, _, err2 = await brevo_funnel._request("PUT", f"/v3/contacts/{quote(new_email, safe='')}", json={"attributes": attrs})
+            if sc2 in (200, 204):
+                return "aggiornato_contatto_esistente"
+            err = err2 or err
+        logger.warning(f"brevo profile sync failed: HTTP {sc} {err}")
+        return "errore"
+    except Exception as e:
+        logger.warning(f"brevo profile sync error: {e}")
+        return "errore"
 
 
 @api.patch("/platform/users/{user_id}/profile")
@@ -4546,21 +4574,34 @@ async def platform_user_profile_update(user_id: str, body: PlatformUserProfileIn
     if not nome:
         raise HTTPException(status_code=400, detail="Il nome è obbligatorio")
     email = (body.email or "").strip().lower()
-    if not email or "@" not in email or "." not in email.split("@")[-1]:
+    if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise HTTPException(status_code=400, detail="Email non valida")
-    if email != (u.get("email") or "").lower():
-        clash = await db.users.find_one({"email": email, "user_id": {"$ne": user_id}})
+    old_email = (u.get("email") or "").lower()
+    if email != old_email:
+        clash = await db.users.find_one({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "user_id": {"$ne": user_id}}, {"_id": 1})
         if clash:
             raise HTTPException(status_code=400, detail="Esiste già un account con questa email")
+        if not body.confirm_email_change:
+            raise HTTPException(status_code=400, detail="Conferma la modifica dell'indirizzo email")
     phone = _normalize_phone(body.telefono)
     full_name = f"{nome} {cognome}".strip()
-    changes = []
-    if full_name != (u.get("name") or ""): changes.append("nome")
-    if email != (u.get("email") or "").lower(): changes.append("email")
-    if phone != (u.get("telefono") or ""): changes.append("cellulare")
+    prev = {"nome": u.get("nome") or _split_name(u)[0], "cognome": u.get("cognome") or _split_name(u)[1],
+            "email": u.get("email"), "cellulare": u.get("telefono")}
+    new = {"nome": nome, "cognome": cognome, "email": email, "cellulare": phone}
+    diff = {k: {"prima": prev[k], "dopo": new[k]} for k in new if (prev[k] or "") != (new[k] or "")}
+    if not diff:
+        return {"ok": True, "changes": [], "brevo": None}
     await db.users.update_one({"user_id": user_id}, {"$set": {
         "name": full_name, "nome": nome, "cognome": cognome,
         "email": email, "telefono": phone, "updated_at": now_iso()}})
+    if u.get("person_id"):
+        pset = {"nome": nome, "cognome": cognome, "updated_at": now_iso()}
+        if "email" in diff:
+            pset["email"] = email
+        if "cellulare" in diff and phone:
+            pset["cellulare"] = phone
+        await db.persons.update_one({"id": u["person_id"]}, {"$set": pset})
+    brevo = await _brevo_profile_sync(old_email, email, nome, cognome, phone)
     mem = await db.memberships.find_one({"user_id": user_id, "active": True}, {"_id": 0})
     if mem and mem.get("org_id"):
         try:
@@ -4568,9 +4609,9 @@ async def platform_user_profile_update(user_id: str, body: PlatformUserProfileIn
         except Exception as e:
             logger.error(f"registered-user sync error: {e}")
     await record_audit(admin, "account_profile_updated", org_id=u.get("org_id"),
-                       target_email=email, target_name=full_name,
-                       detail="Anagrafica aggiornata: " + (", ".join(changes) if changes else "nessuna modifica"))
-    return {"ok": True}
+                       target_email=email, target_name=full_name, meta={"user_id": user_id, "changes": diff, "brevo": brevo},
+                       detail="Anagrafica aggiornata: " + "; ".join(f"{k}: «{v['prima'] or '—'}» → «{v['dopo'] or '—'}»" for k, v in diff.items()))
+    return {"ok": True, "changes": list(diff), "brevo": brevo}
 
 
 class OrgDeleteIn(BaseModel):
@@ -10426,6 +10467,13 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                            "alle": (d.get("alle") or "").strip() or None})
     if not days_clean:
         raise HTTPException(status_code=400, detail="Seleziona almeno una giornata di disponibilità")
+    if not any(d["fase"] == "evento" for d in days_clean):
+        raise HTTPException(status_code=400, detail="Seleziona almeno un giorno dell'evento in cui sei disponibile")
+    pref = (body.preferenza_attivita or "").strip()
+    if not pref:
+        raise HTTPException(status_code=400, detail="Indica quale attività preferiresti svolgere")
+    if pref == "Altro" and not (body.preferenza_altro or "").strip():
+        raise HTTPException(status_code=400, detail="Descrivi brevemente l'attività preferita")
     org_id = link["org_id"]
     email = (body.email or "").strip().lower()
     raw_cell = (body.cellulare or "").strip()
