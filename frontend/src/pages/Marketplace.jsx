@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader } from "@/components/crm";
 import { Input } from "@/components/ui/input";
@@ -76,7 +76,7 @@ function Detail({ s, canPurchase, onClose, onToggle }) {
           {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">Condizioni e durata</div>{s.terms}</div>}
         </div>
         <p className="text-xs text-slate-500">Servizio extra a pagamento, non incluso negli abbonamenti BRONZE, SILVER e GOLD. Appartiene all'organizzazione.</p>
-        {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione</div>
+        {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}</div>
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">

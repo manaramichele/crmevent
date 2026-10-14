@@ -126,17 +126,26 @@ def build(db, deps: dict):
             await db.marketplace_services.update_many({"name": {"$regex": r"^\s*social\s*$", "$options": "i"}},
                                                       {"$set": {"icon": "Megaphone", "updated_at": _now()}})
             await db.marketplace_meta.insert_one({"id": "roadmap_v1", "applied_at": _now()})
+        if not await db.marketplace_meta.find_one({"id": "press_v1"}):
+            await db.marketplace_services.update_one({"key": "comunicati-stampa"}, {"$setOnInsert": {
+                "id": uuid.uuid4().hex, "key": "comunicati-stampa", "name": "Comunicati stampa", "icon": "Newspaper", "image": None,
+                "description": "Crea comunicati stampa professionali con l'intelligenza artificiale, gestisci i contatti dei media e programma gli invii direttamente da CRMEvent.",
+                "category": "Comunicazione", "price": None, "price_type": "monthly", "usage_unit": None, "usage_limits": None,
+                "terms": "Funzionalità: Generazione AI · Rubrica stampa · Integrazione Brevo · Invio programmato · Automazione post-evento · Statistiche e storico. Attivazione a cura del team CRMEvent.",
+                "status": "available", "visible": True, "purchasable": False, "tech_ready": True, "activation": "superadmin",
+                "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 65, "created_at": _now()}}, upsert=True)
+            await db.marketplace_meta.insert_one({"id": "press_v1", "applied_at": _now()})
 
     def _can_purchase(user: dict) -> bool:
         p = user.get("perm") or {}
         return user.get("org_role") in ("admin_org", "superadmin") or bool(p.get("admin")) or bool(p.get("marketplace_purchase"))
 
-    def _public(s: dict, purchases: list, notify_ids: set = frozenset()) -> dict:
+    def _public(s: dict, purchases: list, notify_ids: set = frozenset(), org_active: set = frozenset()) -> dict:
         mine = [p for p in purchases if p["service_id"] == s["id"]]
         return {**{k: s.get(k) for k in ("id", "key", "name", "description", "icon", "image", "category", "price", "price_type",
-                                          "usage_unit", "usage_limits", "terms", "status", "scope")},
-                "purchasable_now": can_buy(s) is None, "reason": can_buy(s),
-                "active": any(p["status"] in ACTIVE for p in mine), "purchases": mine, "notify_me": s["id"] in notify_ids}
+                                          "usage_unit", "usage_limits", "terms", "status", "scope", "activation")},
+                "purchasable_now": can_buy(s) is None, "reason": "Attivazione a cura del team CRMEvent" if s.get("activation") == "superadmin" else can_buy(s),
+                "active": any(p["status"] in ACTIVE for p in mine) or s.get("key") in org_active, "purchases": mine, "notify_me": s["id"] in notify_ids}
 
     async def _org_purchases(org_id: str) -> list:
         return await db.marketplace_purchases.find({"org_id": org_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
@@ -148,7 +157,8 @@ def build(db, deps: dict):
         pur = await _org_purchases(user["org_id"])
         ids = {i["service_id"] for i in await db.marketplace_interests.find(
             {"org_id": user["org_id"], "notified_at": None}, {"_id": 0, "service_id": 1}).to_list(500)}
-        return {"services": [_public(s, pur, ids) for s in rows], "categories": CATEGORIES, "can_purchase": _can_purchase(user)}
+        act = {x["service"] for x in await db.org_services.find({"org_id": user["org_id"], "active": True}, {"_id": 0, "service": 1}).to_list(100)}
+        return {"services": [_public(s, pur, ids, act) for s in rows], "categories": CATEGORIES, "can_purchase": _can_purchase(user)}
 
     @r.post("/marketplace/services/{sid}/notify")
     async def toggle_notify(sid: str, user: dict = Depends(deps["require_admin"])):

@@ -21,3 +21,11 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: press-tick
+    description: "Comunicati stampa: bozze post-evento, invii programmati approvati, ripresa invii interrotti, sync Brevo"
+    cron: "*/10 * * * *"
+    endpoint: "{{BASE_URL}}/api/cron/press-tick"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
+
