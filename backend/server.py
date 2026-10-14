@@ -29,6 +29,7 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 
 import asyncio
 import news
+import tickets
 import brevo_org_lists
 import email_utils
 import permissions as P
@@ -13315,6 +13316,9 @@ async def require_org_member(request: Request, user: dict = Depends(get_current_
 
 
 app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
+TICKETS = tickets.build_router(db, require_org_member, require_superadmin, record_audit)
+app.include_router(TICKETS["router"])
+app.add_event_handler("startup", TICKETS["ensure_indexes"])
 app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
 app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
                                                    "verify_password": verify_password, "user_payload": user_payload,

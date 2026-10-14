@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, MessageSquareWarning,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
@@ -53,6 +53,7 @@ const ORG_NAV = [
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita", perm: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
+  { to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", perm: "*" },
 ];
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
@@ -74,6 +75,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },
   { to: "/piattaforma/partner", label: "Partner", icon: Handshake, id: "piattaforma-partner" },
+  { to: "/piattaforma/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "piattaforma-segnalazioni", badge: "tickets" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];
@@ -256,11 +258,15 @@ export default function Layout({ children }) {
   const [counts, setCounts] = useState({});
   useEffect(() => {
     if (!isSuper) return undefined;
-    const load = () => api.get("/platform/booking-counts").then(({ data }) => setCounts(data)).catch(() => {});
+    const load = () => api.get("/platform/booking-counts").then(({ data }) => setCounts((c) => ({ ...c, ...data }))).catch(() => {});
+    const loadTickets = () => api.get("/platform/tickets/count").then(({ data }) => setCounts((c) => ({ ...c, tickets: data.pending }))).catch(() => {});
     load();
+    loadTickets();
     const t = setInterval(load, 60000);
+    const t2 = setInterval(loadTickets, 30000);
     window.addEventListener("bookings:changed", load);
-    return () => { clearInterval(t); window.removeEventListener("bookings:changed", load); };
+    window.addEventListener("tickets:changed", loadTickets);
+    return () => { clearInterval(t); clearInterval(t2); window.removeEventListener("bookings:changed", load); window.removeEventListener("tickets:changed", loadTickets); };
   }, [isSuper]);
   const multiOrg = !isSuper && (user?.organizations?.length || 0) > 1;
   const showSwitcher = isSuper || multiOrg;
@@ -338,7 +344,7 @@ export default function Layout({ children }) {
         <n.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-tiffany-active" : ""}`} />
         {!(collapsed && !onClick) && <span className="truncate flex-1">{n.label}</span>}
         {n.locked && !(collapsed && !onClick) && <Lock className="w-3.5 h-3.5 shrink-0" data-testid={`sidebar-lock-${n.id}`} />}
-        {n.badge && counts[n.badge] > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-tiffany text-slate-900 text-[11px] font-bold flex items-center justify-center shrink-0" aria-label={`${counts[n.badge]} prenotazioni future`} data-testid={`sidebar-badge-${n.id}`}>{counts[n.badge]}</span>}
+        {n.badge && counts[n.badge] > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-tiffany text-slate-900 text-[11px] font-bold flex items-center justify-center shrink-0" aria-label={n.badge === "tickets" ? `${counts[n.badge]} richieste non chiuse` : `${counts[n.badge]} prenotazioni future`} data-testid={`sidebar-badge-${n.id}`}>{counts[n.badge]}</span>}
       </>)}
     </NavLink>
   );
