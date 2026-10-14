@@ -4594,13 +4594,16 @@ async def platform_user_profile_update(user_id: str, body: PlatformUserProfileIn
     await db.users.update_one({"user_id": user_id}, {"$set": {
         "name": full_name, "nome": nome, "cognome": cognome,
         "email": email, "telefono": phone, "updated_at": now_iso()}})
-    if u.get("person_id"):
-        pset = {"nome": nome, "cognome": cognome, "updated_at": now_iso()}
-        if "email" in diff:
-            pset["email"] = email
-        if "cellulare" in diff and phone:
-            pset["cellulare"] = phone
-        await db.persons.update_one({"id": u["person_id"]}, {"$set": pset})
+    pset = {"nome": nome, "cognome": cognome, "updated_at": now_iso()}
+    if "email" in diff:
+        pset["email"] = email
+    if "cellulare" in diff and phone:
+        pset["cellulare"] = phone
+    links = {(None, u["person_id"])} if u.get("person_id") else set()
+    for m in await db.memberships.find({"user_id": user_id, "persona_id": {"$nin": [None, ""]}}, {"_id": 0, "org_id": 1, "persona_id": 1}).to_list(200):
+        links.add((m["org_id"], m["persona_id"]))
+    for org_scope, pid in links:
+        await db.persons.update_one({"id": pid, **({"org_id": org_scope} if org_scope else {})}, {"$set": pset})
     brevo = await _brevo_profile_sync(old_email, email, nome, cognome, phone)
     mem = await db.memberships.find_one({"user_id": user_id, "active": True}, {"_id": 0})
     if mem and mem.get("org_id"):

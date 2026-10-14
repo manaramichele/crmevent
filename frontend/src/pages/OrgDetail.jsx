@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Building2, Users, CalendarDays, ScrollText, UserPlus, Mail, Trash2, RefreshCw, XCircle, Save, Database, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Building2, Users, CalendarDays, ScrollText, UserPlus, Mail, Trash2, RefreshCw, XCircle, Save, Database, AlertTriangle, Pencil } from "lucide-react";
 import StaffInviteDialog from "@/components/StaffInviteDialog";
+import { UserProfileEditDialog } from "@/components/UserProfileEditDialog";
 import { usePermMeta } from "@/pages/Permissions";
 import PlanBadge, { BILLING } from "@/components/PlanBadge";
 
@@ -36,6 +37,7 @@ export default function OrgDetail() {
   const [org, setOrg] = useState(null);
   const [form, setForm] = useState({ nome: "", type: "cliente", status: "active", formula: "" });
   const [members, setMembers] = useState([]);
+  const [editUser, setEditUser] = useState(null);
   const [invites, setInvites] = useState([]);
   const [events, setEvents] = useState([]);
   const [audit, setAudit] = useState([]);
@@ -212,6 +214,7 @@ export default function OrgDetail() {
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         {m.is_superadmin ? <span className="text-xs text-slate-400">—</span> : (
                           <>
+                            <Button variant="outline" size="sm" className="mr-1" onClick={() => setEditUser(m)} data-testid={`user-edit-${m.user_id}`}><Pencil className="w-3.5 h-3.5 mr-1" />Modifica anagrafica</Button>
                             <Button variant="outline" size="sm" className="mr-1" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`member-toggle-${m.user_id}`}>{m.active ? "Disabilita accesso" : "Riattiva accesso"}</Button>
                             <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDelUser(m)} data-testid={`member-delete-${m.user_id}`}><Trash2 className="w-4 h-4" /></Button>
                           </>
@@ -222,6 +225,7 @@ export default function OrgDetail() {
               </tbody>
             </table></div>
           </div>
+          <UserProfileEditDialog member={editUser} onClose={() => setEditUser(null)} onSaved={() => { setEditUser(null); loadMembers(); }} />
         </div>
       )}
 
