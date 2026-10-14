@@ -153,7 +153,14 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
         return e
 
     # ---------------- Brevo: lista per organizzazione ----------------
+    list_locks: dict = {}
+
     async def _ensure_list(org_id: str) -> Optional[dict]:
+        lock = list_locks.setdefault(org_id, asyncio.Lock())
+        async with lock:
+            return await _ensure_list_locked(org_id)
+
+    async def _ensure_list_locked(org_id: str) -> Optional[dict]:
         rec = await db.press_brevo_lists.find_one({"org_id": org_id}, {"_id": 0})
         if rec and rec.get("list_id"):
             return rec
@@ -340,7 +347,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
                                                  "contact_id": c["id"], "status": "in_corso", "created_at": _now()})
             except DuplicateKeyError:
                 prev = await db.press_sends.find_one({"release_id": rid, "email": c["email"]}, {"_id": 0, "status": 1})
-                if prev and prev["status"] != "rate_limit":
+                if prev and prev["status"] in ("inviato", "in_corso"):
                     continue
             unsub = f"{app_url.rstrip('/')}/api/public/press/unsubscribe/{c['unsub_token']}"
             sc, mid, err = await _send_one(c["email"], subject, _html(rel, st, event, unsub), st, f"press-{rid}")
@@ -434,8 +441,8 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
         rel = await _release(rid, user["org_id"])
         if rel["status"] in ("in_invio", "inviato"):
             raise HTTPException(status_code=400, detail="Comunicato già inviato: non modificabile")
-        upd = {**body.model_dump(), "updated_at": _now()}
-        if rel["status"] == "programmato" or rel.get("approved_at"):
+        upd = {**body.model_dump(), "updated_at": _now(), "error": None}
+        if rel["status"] in ("programmato", "errore") or rel.get("approved_at"):
             upd.update({"status": "da_approvare" if rel.get("automation") else "bozza", "approved_at": None, "approved_by": None})
         await db.press_releases.update_one({"id": rid}, {"$set": upd})
         rel.update(upd)
@@ -480,7 +487,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
     @r.post("/press/releases/{rid}/approve")
     async def approve(rid: str, user: dict = Depends(editor)):
         rel = await _release(rid, user["org_id"])
-        if rel["status"] not in ("bozza", "da_approvare"):
+        if rel["status"] not in ("bozza", "da_approvare", "errore"):
             raise HTTPException(status_code=400, detail="Questo comunicato non può essere approvato")
         if not (rel.get("titolo") and rel.get("testo")):
             raise HTTPException(status_code=400, detail="Titolo e testo sono obbligatori")
@@ -496,7 +503,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
         rel = await _release(rid, user["org_id"])
         if not rel.get("approved_at"):
             raise HTTPException(status_code=400, detail="Approva il comunicato prima di programmare l'invio")
-        if rel["status"] not in ("bozza", "da_approvare", "programmato"):
+        if rel["status"] not in ("bozza", "da_approvare", "programmato", "errore"):
             raise HTTPException(status_code=400, detail="Comunicato non programmabile")
         if (e := _sender_ok(await _settings(user["org_id"]))):
             raise HTTPException(status_code=400, detail=e)
@@ -512,7 +519,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
                 raise HTTPException(status_code=400, detail="Data e ora di invio non valide")
             if send_at <= _now():
                 raise HTTPException(status_code=400, detail="La data di invio deve essere futura")
-        upd = {"status": "programmato", "send_at": send_at, "filters": filters, "recipients_count": n, "scheduled_by": {"user_id": user["user_id"], "name": user.get("name")},
+        upd = {"status": "programmato", "send_at": send_at, "filters": filters, "recipients_count": n, "error": None, "scheduled_by": {"user_id": user["user_id"], "name": user.get("name")},
                "oggetto_email": body.oggetto_email or rel.get("oggetto_email") or rel.get("titolo"), "updated_at": _now()}
         await db.press_releases.update_one({"id": rid}, {"$set": upd})
         await record_audit(user, "press_release_scheduled", org_id=user["org_id"], detail=f"«{rel.get('titolo')}» · {n} destinatari · {send_at}")
@@ -760,7 +767,8 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
         return {"started": n}
 
     async def _sync_lists_retry() -> None:
-        for c in await db.press_contacts.find({"brevo_status": {"$in": ["in_attesa", "rate_limit"]}}, {"_id": 0}).limit(200).to_list(200):
+        active = [s["org_id"] for s in await db.org_services.find({"service": SERVICE_KEY, "active": True}, {"_id": 0, "org_id": 1}).to_list(5000)]
+        for c in await db.press_contacts.find({"org_id": {"$in": active}, "brevo_status": {"$in": ["in_attesa", "rate_limit"]}}, {"_id": 0}).limit(200).to_list(200):
             await _sync_contact(c)
 
     @r.get("/press/notifications")

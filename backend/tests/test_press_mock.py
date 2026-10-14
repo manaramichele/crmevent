@@ -65,7 +65,6 @@ async def main():
         adds = [c for c in calls if c[1] == "/v3/contacts"]
         assert adds and adds[0][2]["listIds"] == [99] and "emailBlacklisted" not in adds[0][2]
         assert sum(1 for c in calls if c[1] == "/v3/contacts/lists") == 1  # lista creata una sola volta
-        imp = await ep[("POST", "/api/press/contacts/import")](body=press.build_router.__globals__["BaseModel"].__subclasses__()[-1](csv_text="email;nome\nc@example.com;C\nb@example.com;B\nbad;X", base_giuridica="legittimo_interesse"), user=u) if False else None
         # disiscrizione per organizzazione: non riattivabile
         tok = (await db.press_contacts.find_one({"id": c1["id"]}))["unsub_token"]
         await ep[("GET", "/api/public/press/unsubscribe/{token}")](token=tok)

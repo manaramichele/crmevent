@@ -1195,6 +1195,12 @@ Task 2 — Creatività manuale:
 - Layout: badge rosso "ticketsUnread" sulla voce footer (anche collassata/mobile) + pallino sul pulsante menu mobile; polling 30s, focus, evento tickets:unread-changed. Tickets.jsx: pill "Da leggere", evidenziazione, lettura all'apertura dettaglio. Testato iteration_139 (8/8 + UI); fix compilazione Layout (riga multiOrg) fatto dal tester.
 
 
+## 2026-10-14 – Marketplace "Comunicati stampa" (blocchi 1+2)
+- backend/press.py (router + tick): attivazione per org solo da Super Admin (org_services service=comunicati-stampa, nessun prezzo/Stripe); AI gpt-5.6-terra con soli dati evento + info verificate (dati_mancanti); versioni (press_versions); approvazione obbligatoria (approved_by); rubrica press_contacts (dedupe email normalizzata per org, base giuridica, stato attivo/sospeso/opposto non riattivabile), import/export CSV; lista Brevo per org CRMEvent_STAMPA_{Nome}_{id} in cartella "CRMEvent Stampa" (press_brevo_lists, lock anti-duplicato), sync add/remove solo dalla lista; invio transazionale per destinatario (/v3/smtp/email, tag press-{id}, mittente org verificato via /v3/senders, disiscrizione per org /api/public/press/unsubscribe/{token}); press_sends unico (release,email) = idempotenza/ripresa; automazione post-evento (press_automations, automation_key unico, stato da_approvare, sospensione se non approvato in tempo, press_notifications); statistiche /v3/smtp/statistics/aggregatedReport?tag.
+- Cron press-tick ogni 10 min (.emergent/crons.yml, POST /api/cron/press-tick). Marketplace seed press_v1 + active da org_services. SA: tab "Comunicati stampa" in /piattaforma/marketplace. Frontend: pages/PressReleases.jsx, components/press/*.
+- Test: iteration_140 (16/16 backend + UI), tests/test_press_mock.py (Brevo simulato) 4/4 dopo fix lock.
+
+
 - Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
 
 

@@ -44,16 +44,16 @@ export function NewRelease({ events, onClose, onCreated }) {
   );
 }
 
-function ListEditor({ items, setItems, fields, addLabel, testid }) {
+function ListEditor({ items, setItems, fields, addLabel, testid, disabled }) {
   return (
     <div className="space-y-2" data-testid={testid}>
       {items.map((it, i) => (
         <div key={i} className="flex gap-2 items-start">
-          {fields.map(([k, ph]) => <Input key={k} placeholder={ph} value={it[k] || ""} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))} />)}
-          <Button type="button" variant="ghost" size="icon" onClick={() => setItems(items.filter((_, j) => j !== i))} aria-label="Rimuovi"><X className="w-4 h-4" /></Button>
+          {fields.map(([k, ph]) => <Input key={k} disabled={disabled} placeholder={ph} value={it[k] || ""} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))} />)}
+          {!disabled && <Button type="button" variant="ghost" size="icon" onClick={() => setItems(items.filter((_, j) => j !== i))} aria-label="Rimuovi"><X className="w-4 h-4" /></Button>}
         </div>
       ))}
-      <Button type="button" size="sm" variant="outline" onClick={() => setItems([...items, {}])}><Plus className="w-3.5 h-3.5 mr-1" />{addLabel}</Button>
+      {!disabled && <Button type="button" size="sm" variant="outline" onClick={() => setItems([...items, {}])}><Plus className="w-3.5 h-3.5 mr-1" />{addLabel}</Button>}
     </div>
   );
 }
@@ -120,12 +120,13 @@ export function Editor({ id, canEdit, onClose, onChanged }) {
             {r.approved_at && <span className="text-xs text-emerald-700" data-testid="press-editor-approved"><CheckCircle2 className="inline w-3.5 h-3.5 mr-0.5" />Approvato da {r.approved_by?.name} il {dt(r.approved_at)}</span>}
             {r.send_at && r.status === "programmato" && <span className="text-xs text-sky-700">Invio: {dt(r.send_at)}</span>}
             {r.approval_expired && <span className="text-xs text-red-600 font-semibold" data-testid="press-editor-expired">Invio sospeso: non approvato in tempo. Approva e programma di nuovo.</span>}</div>
+          {r.status === "errore" && r.error && <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700" data-testid="press-editor-error"><AlertTriangle className="inline w-3.5 h-3.5 mr-1" />Invio non riuscito: {r.error}. Correggi il problema e usa di nuovo "Prepara invio": i destinatari già raggiunti non riceveranno doppioni.</div>}
           {r.dati_mancanti?.length > 0 && <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800" data-testid="press-editor-missing"><AlertTriangle className="inline w-3.5 h-3.5 mr-1" />Dati non disponibili, da completare o verificare: {r.dati_mancanti.join(", ")}</div>}
           <Field label="Titolo"><Input disabled={locked} value={r.titolo || ""} onChange={set("titolo")} data-testid="press-editor-title" /></Field>
           <Field label="Sottotitolo"><Input disabled={locked} value={r.sottotitolo || ""} onChange={set("sottotitolo")} data-testid="press-editor-subtitle" /></Field>
           <Field label="Testo"><Textarea disabled={locked} rows={14} value={r.testo || ""} onChange={set("testo")} data-testid="press-editor-body" /></Field>
-          <Field label="Citazioni (testo esatto e autore)"><ListEditor items={r.citazioni || []} setItems={set("citazioni")} fields={[["testo", "Citazione"], ["autore", "Autore e ruolo"]]} addLabel="Aggiungi citazione" testid="press-editor-quotes" /></Field>
-          <Field label="Fotografie (URL https pubblico e didascalia)"><ListEditor items={r.foto || []} setItems={set("foto")} fields={[["url", "https://..."], ["didascalia", "Didascalia"]]} addLabel="Aggiungi foto" testid="press-editor-photos" /></Field>
+          <Field label="Citazioni (testo esatto e autore)"><ListEditor items={r.citazioni || []} setItems={set("citazioni")} fields={[["testo", "Citazione"], ["autore", "Autore e ruolo"]]} addLabel="Aggiungi citazione" testid="press-editor-quotes" disabled={locked} /></Field>
+          <Field label="Fotografie (URL https pubblico e didascalia)"><ListEditor items={r.foto || []} setItems={set("foto")} fields={[["url", "https://..."], ["didascalia", "Didascalia"]]} addLabel="Aggiungi foto" testid="press-editor-photos" disabled={locked} /></Field>
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Contatto stampa"><Input disabled={locked} value={r.contatto_stampa || ""} onChange={set("contatto_stampa")} placeholder="Nome · email · telefono" data-testid="press-editor-contact" /></Field>
             <Field label="Oggetto email"><Input disabled={locked} value={r.oggetto_email || ""} onChange={set("oggetto_email")} data-testid="press-editor-subject" /></Field>
@@ -136,8 +137,8 @@ export function Editor({ id, canEdit, onClose, onChanged }) {
             <Button onClick={() => preview(false)} variant="outline" data-testid="press-editor-preview"><Eye className="w-4 h-4 mr-1" />Anteprima email</Button>
             <Button onClick={() => preview(true)} variant="outline" data-testid="press-editor-pdf"><FileDown className="w-4 h-4 mr-1" />Esporta PDF</Button>
             <Button onClick={copy} variant="outline" data-testid="press-editor-copy"><Copy className="w-4 h-4 mr-1" />Copia testo</Button>
-            {canEdit && ["bozza", "da_approvare"].includes(r.status) && !r.approved_at && <Button onClick={() => run("approve", () => api.post(`/press/releases/${id}/approve`), "Comunicato approvato")} disabled={!!busy} className={TIFFANY_BTN} data-testid="press-editor-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva testo</Button>}
-            {canEdit && r.approved_at && ["bozza", "da_approvare", "programmato"].includes(r.status) && <Button onClick={() => setSending(true)} className={TIFFANY_BTN} data-testid="press-editor-send"><Send className="w-4 h-4 mr-1" />Prepara invio</Button>}
+            {canEdit && ["bozza", "da_approvare", "errore"].includes(r.status) && !r.approved_at && <Button onClick={() => run("approve", () => api.post(`/press/releases/${id}/approve`), "Comunicato approvato")} disabled={!!busy} className={TIFFANY_BTN} data-testid="press-editor-approve"><CheckCircle2 className="w-4 h-4 mr-1" />Approva testo</Button>}
+            {canEdit && r.approved_at && ["bozza", "da_approvare", "programmato", "errore"].includes(r.status) && <Button onClick={() => setSending(true)} className={TIFFANY_BTN} data-testid="press-editor-send"><Send className="w-4 h-4 mr-1" />Prepara invio</Button>}
             {canEdit && r.status === "programmato" && <Button variant="outline" onClick={() => run("cancel", () => api.post(`/press/releases/${id}/cancel`), "Invio annullato")} data-testid="press-editor-cancel">Annulla invio</Button>}
           </div>
           {r.versions?.length > 0 && <details className="text-xs text-slate-500"><summary className="cursor-pointer">Versioni salvate ({r.versions.length})</summary>{r.versions.map((v) => <div key={v.id}>{dt(v.created_at)} · {v.origin} · {v.by?.name || "Automazione"}</div>)}</details>}
