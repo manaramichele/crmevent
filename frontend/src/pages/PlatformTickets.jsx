@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
@@ -71,7 +71,7 @@ function Detail({ id, onClose, onChanged }) {
           <Conversation t={t} base="/platform/tickets" viewer="admin" />
           <div className={`border-t pt-3 ${internal ? "border-amber-200" : "border-slate-100"}`}>
             <Composer testid="sa-ticket-reply" placeholder={internal ? "Nota interna: visibile solo al Super Admin" : "Rispondi all'organizzatore..."}
-              onSend={async (fd) => { fd.append("internal", internal ? "true" : "false"); await api.post(`/platform/tickets/${t.id}/messages`, fd); refresh(); }}
+              onSend={async (fd) => { fd.append("internal", internal ? "true" : "false"); await api.post(`/platform/tickets/${t.id}/messages`, fd); setInternal(false); refresh(); }}
               extra={<label className="inline-flex items-center gap-2 text-xs text-slate-600"><Switch checked={internal} onCheckedChange={setInternal} data-testid="sa-ticket-internal-toggle" /><Lock className="w-3.5 h-3.5" />Nota interna</label>} />
           </div>
           {closing && <CloseDialog t={t} onClose={() => setClosing(false)} onDone={refresh} />}
@@ -100,8 +100,17 @@ export default function PlatformTickets() {
   const [data, setData] = useState(null);
   const [f, setF] = useState({ q: "", org_id: "", category: "", status: "", from: "", to: "" });
   const [open, setOpen] = useState(null);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const h = setTimeout(() => setF((x) => (x.q === q ? x : { ...x, q })), 350);
+    return () => clearTimeout(h);
+  }, [q]);
+  const seq = useRef(0);
   const params = useMemo(() => Object.fromEntries(Object.entries(f).filter(([, v]) => v)), [f]);
-  const load = useCallback(() => api.get("/platform/tickets", { params }).then(({ data: d }) => setData(d)).catch(err), [params]);
+  const load = useCallback(() => {
+    const n = ++seq.current;
+    return api.get("/platform/tickets", { params }).then(({ data: d }) => { if (n === seq.current) setData(d); }).catch(err);
+  }, [params]);
   usePoll(load, [load]);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target ? e.target.value : e }));
   return (
@@ -109,7 +118,7 @@ export default function PlatformTickets() {
       <PageHeader title="Segnalazioni e richieste" subtitle="Ticket inviati dalle organizzazioni: gestione, risposte e chiusura" />
       <Counters counts={data?.counts} reopen={data?.reopen_requests} status={f.status} setStatus={set("status")} />
       <div className="flex flex-wrap gap-2 mb-4">
-        <div className="relative flex-1 min-w-[200px]"><Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" /><Input value={f.q} onChange={set("q")} placeholder="Cerca per ID, oggetto, organizzazione, utente" className="pl-9" data-testid="sa-tickets-search" /></div>
+        <div className="relative flex-1 min-w-[200px]"><Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca per ID, oggetto, organizzazione, utente" className="pl-9" data-testid="sa-tickets-search" /></div>
         <select value={f.org_id} onChange={set("org_id")} className={sel} data-testid="sa-tickets-filter-org"><option value="">Tutte le organizzazioni</option>{(data?.orgs || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
         <select value={f.category} onChange={set("category")} className={sel} data-testid="sa-tickets-filter-category"><option value="">Tutte le categorie</option>{Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <select value={f.status} onChange={set("status")} className={sel} data-testid="sa-tickets-filter-status"><option value="">Tutti gli stati</option>{Object.entries(STATUS_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}<option value="riapertura">Riapertura richiesta</option></select>

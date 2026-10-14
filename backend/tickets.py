@@ -5,6 +5,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -32,6 +33,18 @@ ALLOWED = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp"
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+ROME = ZoneInfo("Europe/Rome")
+
+
+def _day_bound(day: str, end: bool) -> str:
+    try:
+        d = datetime.strptime(day, "%Y-%m-%d").replace(hour=23 if end else 0, minute=59 if end else 0,
+                                                        second=59 if end else 0, microsecond=999999 if end else 0, tzinfo=ROME)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data non valida")
+    return d.astimezone(timezone.utc).isoformat()
 
 
 def _magic_ok(ext: str, data: bytes) -> bool:
@@ -124,7 +137,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
         return await db.tickets.find({"org_id": user["org_id"]}, {"_id": 0, "description": 0}).sort("number", -1).to_list(1000)
 
     @r.post("/tickets")
-    async def org_create(category: str = Form(...), subject: str = Form(...), description: str = Form(...),
+    async def org_create(category: str = Form(""), subject: str = Form(""), description: str = Form(""),
                          files: List[UploadFile] = File(default=[]), user: dict = Depends(require_org_member)):
         subject, description = subject.strip(), description.strip()
         if category not in CATEGORIES:
@@ -200,7 +213,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
         elif status in STATUSES:
             f["status"] = status
         if date_from or date_to:
-            f["created_at"] = {**({"$gte": date_from} if date_from else {}), **({"$lte": date_to + "T23:59:59.999999+00:00"} if date_to else {})}
+            f["created_at"] = {**({"$gte": _day_bound(date_from, False)} if date_from else {}), **({"$lte": _day_bound(date_to, True)} if date_to else {})}
         if q and q.strip():
             rx = {"$regex": re.escape(q.strip()), "$options": "i"}
             ors = [{"subject": rx}, {"org_name": rx}, {"created_by.name": rx}, {"created_by.email": rx}]

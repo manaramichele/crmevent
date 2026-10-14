@@ -1171,5 +1171,12 @@ Task 2 — Creatività manuale:
 - Attributo per servizio salvato in marketplace_services.brevo_attribute (fisso anche se rinominato): MKT_GESTIONE_SOCIETA, MKT_ARCHIVIO_ISCRITTI, MKT_SURVEY, altri MKT_<NOME>. Creato automaticamente se mancante.
 - interests: brevo_status / brevo_synced_at / brevo_error / brevo_attribute. Super Admin: POST /api/platform/marketplace/brevo/verify (crea mancanti + report tipo) e /brevo/resync. Test mock: backend/tests/test_marketplace_brevo_mock.py.
 
+## 2026-10-14 – Modulo "Segnalazioni e richieste" (ticket interni, nessuna email)
+- backend/tickets.py: collezioni tickets (number progressivo da counters.tickets, 1001+), ticket_messages (side org/admin, internal, kind message/status/reopen_request), ticket_files (allegati JPG/PNG/WEBP/PDF ≤10MB, max 5, magic bytes, storage_utils, download autenticato; internal nascosti all'org).
+- Org (require_org_member, tutti gli utenti dell'org, funziona anche in sola lettura): GET/POST /api/tickets, GET /api/tickets/{id}, POST /messages (bloccato se chiusa), POST /reopen-request (flag reopen_requested), GET /api/tickets/files/{fid}.
+- SA: GET /api/platform/tickets (filtri q/org_id/category/status|riapertura/from/to in Europe/Rome + counters), /count (non chiuse + riapertura richiesta), GET /{id}, POST /messages (internal), POST /status (chiusa → closed_at/closed_by; da chiusa → riapertura), audit su cambi stato.
+- Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
+
+
 
 
