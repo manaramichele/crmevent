@@ -53,8 +53,9 @@ const ORG_NAV = [
   { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita", perm: "attivita" },
   { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
-  { to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", perm: "*" },
 ];
+// Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
+const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni" }];
 
 // Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
 const SUPER_ORG_NAV = ORG_NAV;
@@ -366,6 +367,7 @@ export default function Layout({ children }) {
           </div>
         ))}
       </nav>
+      <div className="shrink-0 px-3 pt-2 border-t border-slate-100" data-testid="sidebar-footer-nav">{FOOTER_NAV.map((n) => renderLink(n))}</div>
       <button onClick={() => setCollapsed((c) => !c)} data-testid="sidebar-toggle"
         className="m-3 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors">
         <ChevronLeft className={`w-5 h-5 transition-transform ${collapsed ? "rotate-180" : ""}`} />
@@ -391,6 +393,7 @@ export default function Layout({ children }) {
                 </div>
               ))}
             </nav>
+            <div className="shrink-0 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] border-t border-slate-100 bg-white" data-testid="mobile-footer-nav">{FOOTER_NAV.map((n) => renderLink(n, () => setMobileOpen(false)))}</div>
           </aside>
         </div>
       )}

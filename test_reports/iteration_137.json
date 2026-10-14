@@ -1,0 +1,50 @@
+{
+  "summary": "Tested (1) pinned 'Segnalazioni e richieste' footer link plus the ticket flow for every org role, and (2) the event-day rule on the public volunteer form with the activity preference optional again. Backend: 12/12 new tests pass. The iter135 tests and test_tickets_module also pass (36/36) after I updated 2 stale iter135 tests to the new rule. UI: the footer link (sidebar-footer-nav / mobile-footer-nav, sidebar-link-segnalazioni) shows for admin_org, user and collaboratore at 1920 expanded and collapsed (icon only, 55px wide) and in the 390 mobile drawer. It stays pinned when the nav scrolls (tested at 1920x600 and 390x560). It is visible even for a collaboratore with ALL section permissions empty, and it opens /segnalazioni. Ticket UI flow: a collaboratore created #1007 (date/time, creator, status Aperta). The SA closed it with a final message, and the SA badge went from 2 to 1 without a reload. After a refresh the org sees 'Chiusa 14/10/2026, 14:56', ticket-detail-closed-at and the final message. Volunteer form at 1920 and 390, IT and EN (via lang-en): empty submit, all fields but days, only allestimento and only disallestimento are all blocked. pf-days-error shows the exact IT/EN text, aria-invalid=true, the red ring and the toast, and the section scrolls into view. Ticking an event day clears the error. Empty preference and 'Altro'/'Other' with no text both submit OK, and the DB rows have preferenza_attivita null or 'Altro' with altro null.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/public/availability/{code} (and other _client_ip rate limits)", "issue": "_client_ip trusts the first X-Forwarded-For value from the client, so anyone can bypass the 6/min/IP rate limit by spoofing the header (the tests use this trick). Use the right-most trusted proxy hop, or the ingress-provided real IP."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Layout desktop sidebar (collapsed)", "issue": "The third-party iubenda consent floating button (bottom-left, .iubenda-tp-btn) sits on top of sidebar-toggle when the sidebar is collapsed and blocks pointer events. Playwright could not click sidebar-toggle (30s timeout: 'iubenda-tp-btn intercepts pointer events'), so a real user may be unable to expand the sidebar again. When expanded, the iubenda icon sits just left of the chevron.", "selector": "[data-testid=sidebar-toggle]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile drawer footer (390px)", "issues": ["The iubenda floating button covers the MessageSquareWarning icon of the pinned 'Segnalazioni e richieste' link. The link still works (elementFromPoint at its centre hits the link), but the icon is hidden. Add left/bottom offset, or move the iubenda button (e.g. bottom-right, or raise the footer above it)."]},
+      {"screen": "Partecipa form mobile", "issues": ["The iubenda floating button overlaps the 'Che attività preferiresti...' label area at the bottom-left while scrolling (cosmetic)."]},
+      {"screen": "Super Admin sidebar", "issues": ["The SA sees both the platform link 'Segnalazioni e richieste' (/piattaforma/segnalazioni) and the org footer link (sidebar-link-segnalazioni -> /segnalazioni), with the same label and icon, which is confusing. Consider hiding FOOTER_NAV for isSuper, or only showing it when acting in an org."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter137_tickets_roles_avail_optional_pref.py",
+    "/app/backend/tests/seed_iter137_members.py",
+    "/app/backend/tests/ui137_setup.py",
+    "/app/backend/tests/test_iter135_avail_eventday_profile_edit.py",
+    "/app/test_reports/pytest/pytest_iter137.xml"
+  ],
+  "action_items": [
+    "Fix the iubenda floating button overlapping sidebar-toggle (collapsed desktop) and the mobile footer link icon: offset the iubenda widget, or add left padding / raise z-index of the sidebar bottom area.",
+    "Optional: hide the org footer link 'Segnalazioni e richieste' for Super Admin (they already have /piattaforma/segnalazioni).",
+    "Optional hardening: do not trust a client-supplied X-Forwarded-For in _client_ip for rate limiting.",
+    "Optional: test_tickets_module.py org2 fixture does not delete the TEST_TicketOrg_* org/user it registers. Add teardown (I cleaned it manually this run)."
+  ],
+  "critical_code_review_comments": [
+    "Partecipa.submit: setDayErr runs before the other-field checks, so the inline error shows even when other fields are missing (as requested). The scroll to the days section only happens once the earlier field checks pass. That is acceptable, but note it.",
+    "Partecipa.toggleDay only clears dayErr when an event day is checked; unchecking keeps state. This works correctly.",
+    "Backend event-day check runs after day filtering against _avail_days, so dates outside the event range are ignored. Verified: a 2030 date returns 400.",
+    "tickets.org_create requires a category (backend 400 if missing). The UI enforces it via the ticket-new-category Select. The review brief mentioned only subject and description; this works and is consistent."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter137_tickets_roles_avail_optional_pref.py (new)",
+    "/app/backend/tests/seed_iter137_members.py (new)",
+    "/app/backend/tests/ui137_setup.py (new)",
+    "/app/backend/tests/test_iter135_avail_eventday_profile_edit.py (updated the 2 stale preference-required tests to preference-optional, and the detail text now ends with '.')"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "95% (all functional checks pass; iubenda overlay issue on the collapsed toggle)"},
+  "seed_data_creation": "Temporary TEST_ users user_test137_user (membership role user) and user_test137_collaboratore (collaboratore, empty permissions) in org_qa_eventi, TEST_ events/links, and TEST_ tickets #1005-#1007 plus those from test_tickets_module. ALL cleaned up: users, memberships, tickets, ticket_messages, ticket_files, events, avail_links, availabilities, persons, TEST_Iso137 and TEST_TicketOrg orgs (with saas_* docs). Verified 0 leftovers.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Seed role users: python3 tests/seed_iter137_members.py (password TestPass2026!: test_iter137_user@crmeventqa.it / test_iter137_collab@crmeventqa.it); remove with the 'cleanup' arg. UI event + link: python3 tests/ui137_setup.py prints the link code; remove with 'cleanup'. Export REACT_APP_BACKEND_URL, MONGO_URL and DB_NAME first. pytest.ini uses xdist (-n), so don't pass -p no:xdist. Ticket category is a shadcn Select: click ticket-new-category, then [data-testid^=ticket-category-]. The iubenda button blocks clicks on sidebar-toggle when collapsed (use force or JS click). The public submit rate limit can be bypassed in tests with a random X-Forwarded-For header."
+}

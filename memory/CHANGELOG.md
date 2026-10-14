@@ -1180,6 +1180,11 @@ Task 2 — Creatività manuale:
 - /partecipa: obbligatorio almeno un giorno con fase "evento" (allestimento/disallestimento facoltativi); "Che attività preferiresti svolgere?" ora OBBLIGATORIA (scelta utente; nessuna preselezione, "Nessuna preferenza" salvata letteralmente, "Altro" richiede testo). Validazione frontend (IT/EN) + backend pub_avail_submit. Disponibilità esistenti invariate.
 - Super Admin → Org → Utenti: pulsante "Modifica anagrafica" (components/UserProfileEditDialog.jsx in pages/OrgDetail.jsx). PATCH /api/platform/users/{id}/profile: confirm_email_change obbligatorio se cambia email, clash case-insensitive, audit con meta.changes {prima,dopo}, aggiorna Persona collegata (users.person_id + memberships.persona_id per org), Brevo: PUT /v3/contacts/{old} con EMAIL/NOME/COGNOME/CELLULARE (liste conservate; fallback su contatto esistente). Ruoli/membership/google_sub invariati, email utilizzabile subito. Testato: iteration_135 (21/21), iteration_136 (27/27 + UI).
 
+
+## 2026-10-14 – Fix voce Segnalazioni + giorni evento volontari
+- Layout: FOOTER_NAV "Segnalazioni e richieste" fissata in fondo alla sidebar (fuori dall'area scrollabile) desktop/collassata/mobile, per tutti i membri (nessun vincolo piano/permessi). Pulsante iubenda spostato a destra nell'app (copriva la sidebar).
+- /partecipa: errore inline sotto i giorni (pf-days-error), sezione evidenziata e scroll; messaggi IT "Seleziona almeno un giorno dell'evento in cui sei disponibile." / EN "Please select at least one event day when you are available."; preferenza attività di nuovo FACOLTATIVA (decisione utente più recente); backend: solo regola giorno evento. Prod verificata: il codice precedente era già pubblicato. Testato: iteration_137 (36/36 + UI tutti i ruoli).
+
 - Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
 
 

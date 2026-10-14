@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ const PHONE_CCS = [
   ["+31", "🇳🇱 +31"], ["+351", "🇵🇹 +351"], ["+30", "🇬🇷 +30"], ["+386", "🇸🇮 +386"],
   ["+385", "🇭🇷 +385"], ["+1", "🇺🇸 +1"],
 ];
-const NONE = "Nessuna preferenza";
+const NONE = "__none__";
 const ALTRO = "Altro";
 
 const T = {
@@ -41,9 +41,8 @@ const T = {
     whenSubtitle: "Seleziona una o più giornate. Gli orari sono facoltativi.",
     phaseSetup: "Allestimento", phaseTeardown: "Disallestimento", phaseEvent: "Evento",
     from: "Dalle", to: "Alle",
-    prefLabel: "Che attività preferiresti svolgere? *", prefPlaceholder: "Seleziona un'opzione",
-    errPref: "Indica quale attività preferiresti svolgere", errPrefAltro: "Descrivi brevemente l'attività preferita",
-    errEventDay: "Seleziona almeno un giorno dell'evento in cui sei disponibile",
+    prefLabel: "Che attività preferiresti svolgere? (facoltativo)", prefPlaceholder: "Nessuna preferenza",
+    errEventDay: "Seleziona almeno un giorno dell'evento in cui sei disponibile.",
     prefNone: "Nessuna preferenza", prefOther: "Altro", prefOtherPlaceholder: "Descrivi brevemente",
     privacyPre: "Ho preso visione della", privacyLink: "Privacy Policy", privacyPost: ".",
     marketing: "Desidero ricevere via email aggiornamenti e comunicazioni relative agli eventi.",
@@ -78,9 +77,8 @@ const T = {
     whenSubtitle: "Select one or more days. Times are optional.",
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
     from: "From", to: "To",
-    prefLabel: "What activity would you prefer? *", prefPlaceholder: "Select an option",
-    errPref: "Please tell us which activity you would prefer", errPrefAltro: "Please briefly describe your preferred activity",
-    errEventDay: "Please select at least one event day on which you are available",
+    prefLabel: "What activity would you prefer? (optional)", prefPlaceholder: "No preference",
+    errEventDay: "Please select at least one event day when you are available.",
     prefNone: "No preference", prefOther: "Other", prefOtherPlaceholder: "Briefly describe",
     privacyPre: "I have read the", privacyLink: "Privacy Policy", privacyPost: ".",
     marketing: "I would like to receive updates and communications about events by email.",
@@ -122,7 +120,9 @@ export default function Partecipa() {
   const [form, setForm] = useState({ nome: "", cognome: "", cellulare: "", prefix: "+39", email: "", codice_fiscale: "", data_nascita: "" });
   const [noCf, setNoCf] = useState(false);
   const [days, setDays] = useState({});
-  const [pref, setPref] = useState("");
+  const [pref, setPref] = useState(NONE);
+  const [dayErr, setDayErr] = useState(false);
+  const daysRef = useRef(null);
   const [prefAltro, setPrefAltro] = useState("");
   const [privacy, setPrivacy] = useState(false);
   const [marketing, setMarketing] = useState(false);
@@ -144,10 +144,14 @@ export default function Partecipa() {
   }, [lang, info]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ch = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const toggleDay = (date, on) => setDays((d) => ({ ...d, [date]: { ...(d[date] || {}), disponibile: on } }));
+  const toggleDay = (date, on) => { setDays((d) => ({ ...d, [date]: { ...(d[date] || {}), disponibile: on } })); if (on && info?.days?.some((x) => x.date === date && x.fase === "evento")) setDayErr(false); };
   const setDayTime = (date, k, v) => setDays((d) => ({ ...d, [date]: { ...(d[date] || {}), [k]: v } }));
 
   const submit = async () => {
+    const eventDays = new Set((info?.days || []).filter((d) => d.fase === "evento").map((d) => d.date));
+    const hasEventDay = Object.entries(days).some(([date, v]) => v.disponibile && eventDays.has(date));
+    setDayErr(!hasEventDay);
+    const failDays = () => { toast.error(t("errEventDay")); daysRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); };
     for (const [k, lbl] of [["nome", t("nome")], ["cognome", t("cognome")], ["cellulare", t("cellulare")], ["email", t("email")]]) {
       if (!String(form[k] || "").trim()) { toast.error(`${t("reqField")} ${lbl}`); return; }
     }
@@ -157,10 +161,7 @@ export default function Partecipa() {
       toast.error(t("errCf")); return;
     }
     const selDays = Object.entries(days).filter(([, v]) => v.disponibile).map(([date, v]) => ({ date, disponibile: true, dalle: v.dalle || "", alle: v.alle || "" }));
-    const eventDays = new Set((info?.days || []).filter((d) => d.fase === "evento").map((d) => d.date));
-    if (!selDays.some((d) => eventDays.has(d.date))) { toast.error(t("errEventDay")); return; }
-    if (!pref) { toast.error(t("errPref")); return; }
-    if (pref === ALTRO && !prefAltro.trim()) { toast.error(t("errPrefAltro")); return; }
+    if (!hasEventDay) { failDays(); return; }
     if (!privacy) { toast.error(t("errPrivacy")); return; }
     setSubmitting(true);
     try {
@@ -171,7 +172,7 @@ export default function Partecipa() {
         codice_fiscale: noCf ? null : (form.codice_fiscale || "").trim().toUpperCase(),
         data_nascita: noCf ? form.data_nascita : null,
         days: selDays,
-        preferenza_attivita: pref,
+        preferenza_attivita: pref === NONE ? null : pref,
         preferenza_altro: pref === ALTRO ? prefAltro : null,
         privacy: true,
         marketing_consent: marketing,
@@ -248,8 +249,8 @@ export default function Partecipa() {
           <span className="text-sm text-slate-600">{t("noCf")}</span>
         </label>
 
-        <div className="pt-2">
-          <h2 className="text-base font-semibold text-slate-800">{t("whenTitle")}</h2>
+        <div ref={daysRef} className={`pt-2 scroll-mt-24 rounded-xl transition-colors ${dayErr ? "ring-2 ring-red-400 bg-red-50/40 p-3 -mx-1" : ""}`} data-testid="pf-days-section" aria-invalid={dayErr || undefined}>
+          <h2 className="text-base font-semibold text-slate-800">{t("whenTitle")} <span className="text-red-500">*</span></h2>
           <p className="text-xs text-slate-400 mb-3">{t("whenSubtitle")}</p>
           <div className="space-y-2.5">
             {(info.days || []).map((d) => {
@@ -283,6 +284,7 @@ export default function Partecipa() {
               );
             })}
           </div>
+          {dayErr && <p role="alert" className="mt-2 text-sm font-medium text-red-600" data-testid="pf-days-error">{t("errEventDay")}</p>}
         </div>
 
         <F label={t("prefLabel")}>

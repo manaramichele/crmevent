@@ -68,7 +68,7 @@ class TestAvailability:
         r = requests.post(f"{BASE_URL}/api/public/availability/{avail_ctx['code']}",
                           json=_body(["2026-11-08", "2026-11-12"]), headers=_xff())
         assert r.status_code == 400, r.text
-        assert r.json()["detail"] == "Seleziona almeno un giorno dell'evento in cui sei disponibile"
+        assert r.json()["detail"] == "Seleziona almeno un giorno dell'evento in cui sei disponibile."
 
     def test_one_event_day_ok(self, avail_ctx):
         r = requests.post(f"{BASE_URL}/api/public/availability/{avail_ctx['code']}",
@@ -85,16 +85,16 @@ class TestAvailability:
         assert a and len(a["days"]) == 4
         assert a["preferenza_attivita"] == "Altro" and a["preferenza_altro"] == "Fotografo"
 
-    def test_missing_pref_rejected(self, avail_ctx):
+    # iter137: activity preference is OPTIONAL again (user decision)
+    def test_missing_pref_accepted(self, avail_ctx):
         r = requests.post(f"{BASE_URL}/api/public/availability/{avail_ctx['code']}",
                           json=_body(["2026-11-10"], pref=None), headers=_xff())
-        assert r.status_code == 400, r.text
-        assert "attività" in r.json()["detail"]
+        assert r.status_code == 200, r.text
 
-    def test_altro_without_text_rejected(self, avail_ctx):
+    def test_altro_without_text_accepted(self, avail_ctx):
         r = requests.post(f"{BASE_URL}/api/public/availability/{avail_ctx['code']}",
                           json=_body(["2026-11-10"], pref="Altro", altro="  "), headers=_xff())
-        assert r.status_code == 400, r.text
+        assert r.status_code == 200, r.text
 
     def test_no_days_rejected(self, avail_ctx):
         r = requests.post(f"{BASE_URL}/api/public/availability/{avail_ctx['code']}",
