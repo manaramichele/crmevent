@@ -113,7 +113,7 @@ function Row({ t, onOpen }) {
   return (
     <button type="button" onClick={() => onOpen(t.id)} data-testid={`ticket-row-${t.number}`} data-unread={t.unread ? "true" : undefined}
       className={`w-full text-left grid grid-cols-1 md:grid-cols-[80px_140px_1fr_170px_170px_150px] gap-1 md:gap-3 items-center px-4 py-3 transition-colors ${t.unread ? "bg-[#0ABAB5]/10 hover:bg-[#0ABAB5]/15 border-l-4 border-[#0ABAB5]" : "hover:bg-slate-50"}`}>
-      <span className="text-sm font-semibold text-slate-900 flex items-center gap-2">#{t.number}
+      <span className="text-sm font-semibold text-slate-900 flex flex-wrap md:flex-col md:items-start items-center gap-1">#{t.number}
         {t.unread && <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-red-500 text-white text-[10px] font-bold whitespace-nowrap" data-testid={`ticket-unread-${t.number}`}><span className="w-1.5 h-1.5 rounded-full bg-white" />Da leggere</span>}</span>
       <span className="text-xs text-slate-500 md:text-sm">{dt(t.created_at)}</span>
       <span className={`min-w-0 ${t.unread ? "font-semibold" : ""}`}><span className="block text-sm font-medium text-slate-800 truncate">{t.subject}</span><span className="block text-xs text-slate-500 truncate">{t.created_by?.name}</span></span>

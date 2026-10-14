@@ -1,0 +1,42 @@
+{
+  "summary": "Tested creator-only in-app unread notifications for 'Segnalazioni e richieste'. Found and FIXED a blocking frontend compile error in Layout.jsx (line 280 merged/corrupted: `}, [isSuper, user]); && (user?.organizations?.length || 0) > 1;` – the `const multiOrg = !isSuper` line was lost, the whole app failed to compile). After fix: backend 8/8 pytest pass (internal note no unread, public reply/close/reopen set unread for creator only, counts tickets not messages, SA GET and other member /read don't mark, creator GET alone doesn't mark, /read marks, closed_at+final message saved, member ticket B isolated, cross-org GET 404 and count 0). Frontend desktop 1920 + mobile 390: red badge '1' in footer link (expanded, collapsed, mobile drawer), list pill 'Da leggere' + highlight + sorted on top, opening detail removes pill & badge without reload, polling picks up new SA reply (~27s), window focus refreshes badge, logout/login and reload keep correct count.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/tickets/{id}/read", "issue": "Cross-org user (or nonexistent id) gets 200 {marked:false} instead of 404 (no data leak, no state change; spec said 404). org_mark_read doesn't call _org_ticket first."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Layout.jsx", "issue": "Syntax error at line 280 broke the whole frontend build (FIXED by tester by restoring `const multiOrg = !isSuper && (user?.organizations?.length || 0) > 1;`)", "selector": "n/a", "priority": "CRITICAL (fixed)"}
+    ],
+    "integration_issues": [
+      {"flow": "Tickets list while page is open", "issue": "When the sidebar badge refreshes via focus event, the list on /segnalazioni is not refreshed (only on its own 30s poll), so badge shows 1 while list shows no 'Da leggere' pill/stale status for up to 30s. Consider listening to focus/'tickets:unread-changed' in the list too.", "affected_selectors": ["ticket-unread-{n}"]}
+    ],
+    "design_issues": [
+      {"screen": "Tickets list desktop", "issues": ["'Da leggere' pill doesn't fit in 80px Ticket column and overlaps/hides the 'Apertura' date (e.g. '14/10/2026' covered)"]},
+      {"screen": "Collapsed sidebar desktop", "issues": ["iubenda floating preferences button (bottom-left) intercepts clicks on sidebar-toggle when collapsed - user can't re-expand the sidebar by normal click"]},
+      {"screen": "Mobile header", "issues": ["No unread indicator on mobile-menu-button/header; badge only visible after opening the drawer (enhancement)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_tickets_unread.py", "/app/test_reports/pytest/pytest_tickets_unread.xml"],
+  "action_items": [
+    "Verify Layout.jsx line ~280 fix (tester restored lost multiOrg line) - frontend did not compile before",
+    "Widen Ticket column or move 'Da leggere' pill so it doesn't overlap Apertura date",
+    "Optional: make POST /api/tickets/{id}/read return 404 for tickets outside caller org",
+    "Optional: refresh tickets list on focus / tickets:unread-changed; fix iubenda float overlapping collapsed sidebar toggle; add unread dot on mobile menu button"
+  ],
+  "critical_code_review_comments": [
+    "Layout.jsx had a corrupted edit (lost line) - check for other merge damage after edits",
+    "org_mark_read skips _org_ticket existence check (returns 200 for any id)",
+    "Backend logic in tickets.py is clean: unread computed server-side, creator_unread popped from responses, index on (org_id, created_by.user_id, creator_unread) present"
+  ],
+  "updated_files": ["/app/frontend/src/components/Layout.jsx", "/app/backend/tests/test_tickets_unread.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "test_credentials": "QA org admin qa.eventi@crmeventqa.it / QaEvents2026!; SA manara.michele.pro@gmail.com / CrmEvent2026!",
+  "seed_data_creation": "Created TEST member (user_TEST_*, membership role 'user' in org_qa_eventi, bcrypt pw) and TEST_UnreadOrg via register-organization; all cleaned up (tickets, ticket_messages, ticket_files =0; users/memberships/orgs/saas_usage/saas_emails/saas_brevo_sync removed). Audit log entries for ticket_status remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with `pytest tests/test_tickets_unread.py -n 0` (pytest.ini uses xdist; module-level state requires single worker). Test creates its own member via Mongo and an extra org; cleanup must be done manually (delete tickets + user_TEST_* + TEST_UnreadOrg docs in saas_* collections). Cookie banner reappears after clearing cookies and blocks sidebar footer link.",
+  "rca of the issue": "Frontend build failure: Layout.jsx line 280 – the inserted unread-count useEffect was pasted over the beginning of `const multiOrg = !isSuper && ...`, leaving `}, [isSuper, user]); && (...)` -> Babel parse error. Mitigation: restored the line."
+}

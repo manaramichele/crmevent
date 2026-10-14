@@ -1190,6 +1190,11 @@ Task 2 — Creatività manuale:
 - Backend pub_avail_submit: "Seleziona almeno un giorno dell'evento." (anche con zero giorni), preferenza obbligatoria e valida (settings.ruoli_staff o default, oppure Altro + testo). Testato iteration_138 (15/17 → fix messaggio giorni vuoti).
 
 
+## 2026-10-14 – Notifiche interne ticket (solo richiedente)
+- tickets.creator_unread/creator_unread_since/creator_read_at: impostato a true su risposta pubblica SA, cambio stato (chiusura/riapertura). GET /api/tickets/unread-count, POST /api/tickets/{id}/read (solo creatore; 404 fuori org). Lista: campo unread, non letti in cima.
+- Layout: badge rosso "ticketsUnread" sulla voce footer (anche collassata/mobile) + pallino sul pulsante menu mobile; polling 30s, focus, evento tickets:unread-changed. Tickets.jsx: pill "Da leggere", evidenziazione, lettura all'apertura dettaglio. Testato iteration_139 (8/8 + UI); fix compilazione Layout (riga multiOrg) fatto dal tester.
+
+
 - Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
 
 

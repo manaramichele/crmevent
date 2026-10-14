@@ -182,6 +182,8 @@ def build_router(db, require_org_member, require_superadmin, record_audit):
     async def org_mark_read(tid: str, user: dict = Depends(require_org_member)):
         """Lettura effettiva: solo il richiedente (mai il Super Admin o altri membri)."""
         res = await db.tickets.update_one({"id": tid, **_unread_q(user)}, {"$set": {"creator_unread": False, "creator_read_at": _now()}})
+        if not res.matched_count:
+            await _org_ticket(tid, user)
         return {"marked": bool(res.modified_count)}
 
     @r.post("/tickets/{tid}/messages")
