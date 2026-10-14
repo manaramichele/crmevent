@@ -1200,6 +1200,11 @@ Task 2 — Creatività manuale:
 - Cron press-tick ogni 10 min (.emergent/crons.yml, POST /api/cron/press-tick). Marketplace seed press_v1 + active da org_services. SA: tab "Comunicati stampa" in /piattaforma/marketplace. Frontend: pages/PressReleases.jsx, components/press/*.
 - Test: iteration_140 (16/16 backend + UI), tests/test_press_mock.py (Brevo simulato) 4/4 dopo fix lock.
 
+## 2026-10-14 – Marketplace: Planimetrie & Mappe (Prossimamente)
+- marketplace.py seed one-shot maps_v1: key planimetrie-mappe, icona Map (lucide Map as MapIcon), coming_soon, nessun prezzo, brevo_attribute fisso INTERESSE_PLANIMETRIE_MAPPE (riusa sistema Avvisami/Brevo/interessi SA). Etichetta "Avviso attivato" solo per questo servizio; dettaglio mostra "Funzionalità previste".
+- Fix: card Comunicati stampa non attivo mostrava "Prossimamente" → ora "Su attivazione".
+
+
 
 - Frontend: pages/Tickets.jsx (/segnalazioni, voce ORG_NAV in fondo), pages/PlatformTickets.jsx (/piattaforma/segnalazioni, badge "tickets" nel PLATFORM_NAV, polling 30s + evento tickets:changed), components/tickets/TicketShared.jsx. Testato: iteration_134 (15/15 backend, frontend desktop+mobile), fix successivi (reset nota interna, debounce ricerca, 400 su campi mancanti, date Europe/Rome).
 

@@ -10,7 +10,7 @@ import { Search, Store, CheckCircle2, Clock, Bell, BellRing } from "lucide-react
 import { ServiceIcon, PRICE_TYPES, STATUS, priceLabel } from "@/lib/marketplace";
 
 const badge = (s) => (s.active ? ["Attivo", "bg-emerald-100 text-emerald-800"] : s.status === "suspended" ? ["Sospeso", "bg-red-100 text-red-700"]
-  : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
+  : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "superadmin" && s.status === "available" ? ["Su attivazione", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
 
 function NotifyButton({ s, onToggle, full }) {
   const [busy, setBusy] = useState(false);
@@ -26,7 +26,7 @@ function NotifyButton({ s, onToggle, full }) {
   return on ? (
     <span data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`} onClick={(e) => e.stopPropagation()}
       className={`inline-flex items-center justify-center gap-1.5 rounded-full border border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A] text-xs font-semibold ${full ? "w-full h-11 text-sm" : "h-8 px-3"}`}>
-      <BellRing className="w-3.5 h-3.5" />Ti avviseremo
+      <BellRing className="w-3.5 h-3.5" />{s.key === "planimetrie-mappe" ? "Avviso attivato" : "Ti avviseremo"}
     </span>
   ) : (
     <button type="button" disabled={busy || on} onClick={click} onKeyDown={(e) => e.stopPropagation()} data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`}
@@ -73,7 +73,7 @@ function Detail({ s, canPurchase, onClose, onToggle }) {
           <div><div className="text-xs text-slate-400">Prezzo</div><b data-testid="mkt-detail-price">{priceLabel(s)}</b></div>
           <div><div className="text-xs text-slate-400">Modalità</div><b>{PRICE_TYPES[s.price_type]}</b></div>
           {s.usage_limits && <div className="col-span-2"><div className="text-xs text-slate-400">Limiti di utilizzo</div>{s.usage_limits}</div>}
-          {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">Condizioni e durata</div>{s.terms}</div>}
+          {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">{s.status === "coming_soon" ? "Funzionalità previste" : "Condizioni e durata"}</div>{s.terms}</div>}
         </div>
         <p className="text-xs text-slate-500">Servizio extra a pagamento, non incluso negli abbonamenti BRONZE, SILVER e GOLD. Appartiene all'organizzazione.</p>
         {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}</div>

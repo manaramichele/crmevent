@@ -135,6 +135,15 @@ def build(db, deps: dict):
                 "status": "available", "visible": True, "purchasable": False, "tech_ready": True, "activation": "superadmin",
                 "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 65, "created_at": _now()}}, upsert=True)
             await db.marketplace_meta.insert_one({"id": "press_v1", "applied_at": _now()})
+        if not await db.marketplace_meta.find_one({"id": "maps_v1"}):
+            await db.marketplace_services.update_one({"key": "planimetrie-mappe"}, {"$setOnInsert": {
+                "id": uuid.uuid4().hex, "key": "planimetrie-mappe", "name": "Planimetrie & Mappe", "icon": "Map", "image": None,
+                "description": "Progetta e gestisci gli spazi del tuo evento con planimetrie interattive e mappe geografiche. Organizza Expo Village, segreteria, partenza, arrivo, percorsi e tutte le aree operative.",
+                "category": "Logistica", "price": None, "price_type": "monthly", "usage_unit": None, "usage_limits": None,
+                "terms": "Caricamento di planimetrie PDF, JPG e PNG · disegno di aree e posizionamento di elementi · mappe geografiche interattive tipo OpenRunner · importazione e gestione di percorsi GPX · marker e punti operativi · collegamento con staff, volontari, team e attività · esportazione e condivisione delle planimetrie.",
+                "status": "coming_soon", "visible": True, "purchasable": False, "tech_ready": False, "brevo_attribute": "INTERESSE_PLANIMETRIE_MAPPE",
+                "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 100, "created_at": _now()}}, upsert=True)
+            await db.marketplace_meta.insert_one({"id": "maps_v1", "applied_at": _now()})
 
     def _can_purchase(user: dict) -> bool:
         p = user.get("perm") or {}
