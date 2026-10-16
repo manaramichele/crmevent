@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import Footer from "@/components/Footer";
 
-const LAST_UPDATED = "Giugno 2026";
+const LAST_UPDATED = "16 ottobre 2026";
 
-function Section({ title, children }) {
+function Section({ title, children, id }) {
   return (
-    <section className="mt-8">
+    <section className="mt-8 scroll-mt-20" id={id}>
       <h2 className="font-display text-xl font-bold text-slate-900 mb-3">{title}</h2>
       <div className="space-y-3 text-slate-600 leading-relaxed text-sm sm:text-base">{children}</div>
     </section>
@@ -103,8 +103,11 @@ function PrivacyPolicy() {
           L'accesso avviene solo previa esplicita autorizzazione dell'utente e può essere revocato in qualsiasi
           momento, sia dalle impostazioni di CRMEvent sia dalle impostazioni di sicurezza del proprio account
           Google. CRMEvent non effettua operazioni sul tuo calendario diverse da quelle sopra descritte.
+          Il dettaglio completo sul trattamento dei dati Google è riportato nella sezione 6-bis.
         </p>
       </Section>
+
+      <GoogleDataSection />
 
       <Section title="7. Funzionalità basate su Intelligenza Artificiale">
         <p>
@@ -136,7 +139,7 @@ function PrivacyPolicy() {
         <p>Per erogare il servizio ci avvaliamo dei seguenti fornitori/servizi, ciascuno per le finalità indicate:</p>
         <ul className="list-disc pl-6 space-y-1">
           <li><strong>Google</strong> – autenticazione tramite Google OAuth 2.0 e integrazione opzionale con
-              Google Calendar (vedi sezione 6);</li>
+              Google Calendar (vedi sezioni 6 e 6-bis; i dati Google non sono condivisi con gli altri fornitori elencati);</li>
           <li><strong>OpenAI</strong> – servizio LLM per l'Assistente AI e per le funzionalità AI testuali del
               modulo Social (vedi sezione 7);</li>
           <li><strong>Google Gemini</strong> – generazione di immagini/elementi grafici nel modulo Social, dove
@@ -222,6 +225,122 @@ function PrivacyPolicy() {
         </p>
       </Section>
     </>
+  );
+}
+
+const A = ({ href, children }) => (
+  <a href={href} target="_blank" rel="noopener noreferrer" className="text-tiffany-active font-semibold hover:underline">{children}</a>
+);
+
+function GoogleDataSection() {
+  return (
+    <Section id="google-calendar" title="6-bis. Integrazione Google Calendar e utilizzo dei dati Google">
+      <div data-testid="privacy-google-calendar-section" className="space-y-3">
+        <p>
+          Questa sezione descrive in modo specifico come CRMEvent accede, utilizza, conserva, condivide e cancella i
+          dati ottenuti tramite le API di Google (di seguito "dati Google") quando l'utente collega volontariamente il
+          proprio account Google Calendar.
+        </p>
+
+        <h3 className="font-semibold text-slate-800 pt-2">Dati raccolti</h3>
+        <p>Con l'autorizzazione dell'utente, CRMEvent richiede esclusivamente i seguenti permessi (scope) Google:</p>
+        <ul className="list-disc pl-6 space-y-1">
+          <li><code>openid</code> e <code>userinfo.email</code>: indirizzo email dell'account Google, identificativo
+              univoco dell'account Google e stato di verifica dell'email, usati per associare il calendario all'utente CRMEvent;</li>
+          <li><code>calendar.readonly</code>: elenco dei calendari dell'utente (identificativo, nome, indicazione del
+              calendario principale) e, solo per il calendario utilizzato dal team CRMEvent per demo e assistenza,
+              gli intervalli di tempo occupati/liberi (free/busy), senza titoli, descrizioni, partecipanti o altri
+              dettagli degli appuntamenti;</li>
+          <li><code>calendar.events</code>: creazione, aggiornamento ed eliminazione degli eventi generati da CRMEvent sul
+              calendario scelto dall'utente.</li>
+        </ul>
+        <p>
+          CRMEvent <strong>non legge il contenuto degli eventi già presenti</strong> nel calendario dell'utente
+          (titoli, descrizioni, partecipanti, allegati) e non accede ad altri servizi Google (es. Gmail, Drive, Contatti).
+        </p>
+
+        <h3 className="font-semibold text-slate-800 pt-2">Finalità</h3>
+        <p>I dati Google sono utilizzati unicamente per:</p>
+        <ul className="list-disc pl-6 space-y-1">
+          <li>collegare l'account Google all'account CRMEvent e mostrare all'utente quale account è collegato;</li>
+          <li>consentire all'utente di selezionare il calendario su cui operare;</li>
+          <li>sincronizzare su richiesta dell'utente eventi, turni, attività e follow-up gestiti in CRMEvent (titolo,
+              descrizione, luogo, data e orario), aggiornandoli o rimuovendoli senza creare duplicati;</li>
+          <li>per il calendario del team CRMEvent: calcolare le fasce orarie disponibili per prenotare demo e assistenza
+              video e creare il relativo appuntamento con link Google Meet, invitando l'utente che ha prenotato.</li>
+        </ul>
+        <p>I dati Google non sono utilizzati per finalità pubblicitarie, di profilazione o di marketing.</p>
+
+        <h3 className="font-semibold text-slate-800 pt-2">Conservazione e protezione dei token</h3>
+        <p>
+          Nel database MongoDB di CRMEvent, ospitato sull'infrastruttura Aruba, vengono salvati per ciascun utente
+          collegato: email e identificativo dell'account Google, stato di verifica dell'email, calendario selezionato,
+          stato e date di collegamento e di ultima sincronizzazione, e i token OAuth (access token e refresh token). Per
+          gli eventi sincronizzati vengono salvati solo l'identificativo dell'evento Google, il calendario e il link
+          all'evento; per le prenotazioni di demo e assistenza anche il link Google Meet.
+        </p>
+        <p>
+          I token OAuth sono <strong>cifrati con algoritmo AES-256-GCM</strong> prima del salvataggio, con chiave
+          conservata separatamente nella configurazione protetta del server; non vengono mai salvati in chiaro, non
+          sono registrati nei log e non vengono mai inviati al browser. I dati temporanei della procedura di
+          autorizzazione (PKCE) sono monouso e scadono automaticamente dopo 10 minuti. Tutte le comunicazioni avvengono
+          tramite HTTPS e l'accesso è limitato al singolo utente che ha effettuato il collegamento.
+        </p>
+
+        <h3 className="font-semibold text-slate-800 pt-2">Condivisione, trasferimento e comunicazione dei dati Google</h3>
+        <p>
+          CRMEvent <strong>non vende, non cede, non noleggia e non condivide i dati Google con terze parti</strong>, né li
+          trasferisce a servizi di analisi, pubblicità, email marketing (es. Brevo) o intelligenza artificiale. I dati
+          Google sono trattati esclusivamente:
+        </p>
+        <ul className="list-disc pl-6 space-y-1">
+          <li><strong>da Google</strong>, in quanto destinatario delle richieste API necessarie alla funzione (gli eventi
+              creati da CRMEvent, inclusi gli eventuali invitati alle demo e assistenze, sono inviati a Google Calendar);</li>
+          <li><strong>da Aruba</strong>, quale fornitore di hosting che ospita il backend e il database di CRMEvent in cui
+              i dati sono conservati, che agisce come fornitore di infrastruttura per conto di CRMEvent;</li>
+          <li><strong>dall'utente stesso</strong>, che visualizza nella propria area i dati del proprio collegamento.
+              Il frontend dell'applicazione, erogato tramite Emergent, mostra tali informazioni nel browser dell'utente
+              ma non conserva i dati Google né i token.</li>
+        </ul>
+        <p>
+          I dati Google possono inoltre essere comunicati solo se richiesto dalla legge o da un ordine dell'autorità,
+          oppure se necessario per la sicurezza del servizio, sempre nei limiti consentiti dalle norme Google.
+        </p>
+
+        <h3 className="font-semibold text-slate-800 pt-2">Intelligenza artificiale e machine learning</h3>
+        <p>
+          I dati Google <strong>non vengono inviati alle funzionalità AI</strong> di CRMEvent (Assistente AI, modulo
+          Social, Comunicati stampa) né a fornitori di modelli AI (es. OpenAI, Google Gemini), e non vengono utilizzati
+          per sviluppare, migliorare o addestrare modelli di intelligenza artificiale o machine learning generalizzati.
+        </p>
+
+        <h3 className="font-semibold text-slate-800 pt-2">Disconnessione, conservazione e cancellazione</h3>
+        <ul className="list-disc pl-6 space-y-1">
+          <li>Quando l'utente scollega Google Calendar da CRMEvent, il token viene <strong>revocato presso Google</strong> e
+              il record del collegamento (token cifrati, email e identificativo Google, calendario selezionato) viene
+              <strong> eliminato immediatamente</strong> dal database.</li>
+          <li>Se l'utente collega un account Google diverso, il token dell'account precedente viene revocato e sostituito.</li>
+          <li>Gli eventi già creati sul calendario dell'utente restano nel suo Google Calendar, dove l'utente può gestirli
+              o eliminarli; le singole sincronizzazioni di attività e follow-up possono anche essere rimosse da CRMEvent,
+              eliminando l'evento da Google Calendar.</li>
+          <li>Con l'eliminazione dell'account CRMEvent vengono cancellati il collegamento Google e i riferimenti agli eventi
+              sincronizzati.</li>
+          <li>L'utente può revocare l'accesso in qualsiasi momento anche dalle impostazioni di sicurezza del proprio account
+              Google (<A href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</A>); in tal caso
+              CRMEvent non può più accedere al calendario e chiede di ricollegare l'account.</li>
+          <li>Per richiedere la cancellazione di eventuali dati Google residui è possibile scrivere a{" "}
+              <a href="mailto:support@crmevent.it" className="text-tiffany-active font-semibold hover:underline">support@crmevent.it</a>.</li>
+        </ul>
+
+        <h3 className="font-semibold text-slate-800 pt-2">Conformità alle norme Google (Limited Use)</h3>
+        <p>
+          L'utilizzo e il trasferimento ad altre applicazioni delle informazioni ricevute dalle API di Google da parte di
+          CRMEvent rispettano le{" "}
+          <A href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</A>,
+          inclusi i requisiti di Limited Use (utilizzo limitato).
+        </p>
+      </div>
+    </Section>
   );
 }
 
