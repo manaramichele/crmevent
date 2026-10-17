@@ -13407,7 +13407,7 @@ async def require_org_member(request: Request, user: dict = Depends(get_current_
     return {**user, "org_id": org_id, "org_role": org_role}
 
 
-app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL))
+app.include_router(demo_slots.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL, get_current_user))
 TICKETS = tickets.build_router(db, require_org_member, require_superadmin, record_audit)
 app.include_router(TICKETS["router"])
 app.add_event_handler("startup", TICKETS["ensure_indexes"])

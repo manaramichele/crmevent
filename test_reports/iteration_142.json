@@ -1,0 +1,41 @@
+{
+  "summary": "Tested Super Admin 'book a demo on behalf of an org user' end to end: backend (pytest, 10 tests) and UI (Playwright, desktop and 390px mobile). Flow A (normal user request unchanged), Flow B (support mode, header-demo-button, user prefilled, confirmed booking with simulated Meet, via 'assistenza'), Flow C (/piattaforma/demo 'Prenota per un utente' with org select, via 'prenotazioni_demo'), duplicate 409 and onbehalf-already warning with confirm disabled, overlap 409 with the booked slot hidden, permissions 403, /demo/mine scoping, platform bookings list, 'Prenotata dal Super Admin' badges, and audit log entries all work. Only the recipient gets an email ('Demo CRMEvent confermata'); no admin email is sent. Two gaps: (1) a pending normal request's slot is not locked, so it is still offered and someone else can book over it; (2) the on-behalf dialog is wider than a 390px screen, so the right side of the form is cut off.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/demo/requests + POST /api/demo/on-behalf", "issue": "A normal request (status 'nuova', lead 'da_confermare') does not create a demo_slot_locks entry. Its slot stays in /api/demo/slots and /api/demo/on-behalf/context, so the SA (or another user) can book the same time. Reproduced: m2 asked for 17/10 11:30 and 11:30 was still offered in the on-behalf picker (demo-time-2026-10-17T11:30 visible). The requirement 'no overlaps' is only met between confirmed bookings and assistance. Either lock the slot at request time, or leave it as is if the request time is only a preference."},
+      {"endpoint": "POST /api/demo/on-behalf", "issue": "Race window: _active_demo() (duplicate check) runs before _lock(), and the lock is per slot, not per user. Two simultaneous on-behalf bookings for the same user on different slots could both succeed. Low risk."},
+      {"endpoint": "demo_booking.send_operational", "issue": "In preview one confirmation email failed with 429 (rate limit). demo_email_key is then not set and nothing retries it. Expected in preview, but there is no retry path for operational emails."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "WelcomeDemo dialog (support mode) / OnBehalfDemo on mobile 390px", "issue": "The content is wider than the dialog (scrollWidth 428 vs clientWidth 388; welcome-demo-onbehalf is 396px wide inside the 390px dialog, right edge at 413px). The select, inputs, warning text and the 'Do' calendar column are cut off on the right. The confirm button is still reachable, so the form is usable but clipped. Likely cause: DialogContent is a CSS grid, and the grid item takes the min-content width of the <select> with the long 'Nome · email' option. Fix: add min-w-0 to the welcome-demo-onbehalf wrapper, onbehalf-form and the select (or truncate the option text). Probably the same in demo-book-for-user-dialog.", "selector": "[data-testid='welcome-demo-onbehalf'], [data-testid='onbehalf-user-select']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "OnBehalfDemo banner", "issues": ["onbehalf-banner uses 'flex items-center gap-2' with loose text nodes plus a <strong>, so the text is laid out as 3 flex columns ('Prenotazione per conto di un utente di' | ORG | ': la demo viene confermata subito.'). It looks broken on desktop and is very cramped on mobile. Wrap the text in a single <span>."]},
+      {"screen": "Cookie banner overlay", "issues": ["The cookie banner (z-[10000]) sits on top of the open demo dialog and its overlay, covering the lower-left of the screen. On mobile it blocks the login submit button until it is dismissed. This was not added by this feature."]},
+      {"screen": "/piattaforma/demo availability", "issues": ["Native <input type=time> shows '09:00 AM / 06:00 PM' in an Italian UI. This was not added by this feature."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_demo_on_behalf.py", "/app/backend/tests/demo_onbehalf_helpers.py", "/app/test_reports/pytest/demo_on_behalf.xml"],
+  "action_items": [
+    "Fix the mobile overflow of the on-behalf form: add min-w-0 to the [data-testid=welcome-demo-onbehalf] wrapper, OnBehalfDemo root and the select; check the demo-book-for-user-dialog at 390px too.",
+    "Wrap the onbehalf-banner text in a single <span> so it does not split into 3 flex columns.",
+    "Decide whether pending normal requests should lock their slot. Today the on-behalf picker offers them and SA bookings can overlap them."
+  ],
+  "critical_code_review_comments": [
+    "demo_slots.on_behalf_book: if _do(lead,'confirm') raises after demo_requests.insert_one and the leads upsert, a request is left as 'confermata' while the lead is 'da_confermare'. Consider wrapping it and rolling back or marking an error.",
+    "on_behalf_book overwrites demo_event_id with None on an existing lead (prev) without cancelling a previous calendar event. Only harmless if that previous demo is in the past or cancelled (_active_demo guards active future ones).",
+    "_members() runs an N+1 users query per membership, and on_behalf_context then runs _active_demo per member (2N queries). Fine for small orgs; use a $in batch for larger ones.",
+    "my_demos checks org_role 'superadmin', which never occurs for require_member in support mode (the real member role is used). Harmless.",
+    "In support mode the WelcomeDemo dialog shows only the on-behalf form, not the 'Demo prenotate' (MyDemos) list. The SA sees existing demos only through the onbehalf-already warning per user."
+  ],
+  "updated_files": ["/app/backend/tests/test_demo_on_behalf.py", "/app/backend/tests/demo_onbehalf_helpers.py"],
+  "success_rate": {"backend": "90% (9/10; the failing test documents the pending-request lock gap)", "frontend": "90% (all flows pass; mobile layout clipped)"},
+  "seed_data_creation": "Temporary TEST_DemoOrg_* org with an owner (via register-organization) and 2 members (inserted into users and memberships with role 'user'), plus the demo config. All removed after the run: users, memberships, org, subscriptions, leads, demo_requests, demo_slot_locks, support_sessions, audit_logs for the org, brevo sync logs. The demo_slot_config document was deleted, which restores the original state (there was no config doc before). Verified that 0 leftovers remain.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_demo_on_behalf.py -v -n 0 (pytest.ini adds xdist; -n 0 is needed because the tests depend on each other in order). The fixture opens 09-18 availability on all 7 days with min_notice 0, creates an org with 3 users, cleans up and deletes demo_slot_config. Support mode via POST /api/platform/impersonate {user_id}. Users inserted directly need telefono and accepted_terms_at, otherwise login redirects to /completa-profilo. Dismiss the cookie banner (cookie-accept-all) on mobile before clicking login. A one-off desktop observation (onbehalf-already not shown after switching to a user with a pending demo) could not be reproduced in 2 later runs."
+}

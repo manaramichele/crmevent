@@ -55,9 +55,17 @@ class NoteIn(BaseModel):
     admin_note: str = ""
 
 
+class OnBehalfIn(BaseModel):
+    org_id: Optional[str] = None
+    user_id: str
+    slot_key: str
+    telefono: Optional[str] = None
+    note: Optional[str] = None
+
+
 BOOKING_FIELDS = {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "organizzazione": 1, "email": 1, "telefono": 1, "demo_slot": 1, "demo_status": 1,
                   "demo_meet_link": 1, "demo_meet_status": 1, "demo_meet_error": 1, "demo_meet_simulated": 1, "demo_admin_note": 1,
-                  "demo_source": 1, "demo_request_id": 1, "updated_at": 1}
+                  "demo_source": 1, "demo_request_id": 1, "updated_at": 1, "org_id": 1, "user_id": 1, "demo_booked_by_admin": 1, "demo_booked_by": 1}
 
 
 REQ_STATUS = {"nuova", "da_confermare", "confermata", "completata", "annullata"}
@@ -71,7 +79,7 @@ def _iso(d):
     return d.astimezone(timezone.utc).isoformat()
 
 
-def build_router(db, require_member, require_superadmin, record_audit, app_url: str) -> APIRouter:
+def build_router(db, require_member, require_superadmin, record_audit, app_url: str, get_user=None) -> APIRouter:
     r = APIRouter(prefix="/api")
     st = {"idx": False}
 
@@ -156,14 +164,18 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
                "telefono": (body.telefono or "").strip(), "organizzazione": (body.organizzazione or "").strip(),
                "preferred_slot": body.slot_key, "note": (body.note or "").strip()[:2000], "status": "nuova",
                "created_at": now, "updated_at": now}
-        await db.demo_requests.insert_one(dict(req))
-        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"welcome_demo": "requested", "welcome_demo_seen_at": now}})
         prev = await db.leads.find_one({"email": email}, {"_id": 0})
         lead = {**(prev or {"id": uuid.uuid4().hex, "created_at": now, "source": "richiesta_demo_app", "stato": "nuovo", "note": "",
                             "funnel_status": "demo_requested", "requested_at": now}),
                 "nome": nome, "cognome": cognome, "email": email, "telefono": req["telefono"], "organizzazione": req["organizzazione"],
                 "user_id": user["user_id"], "org_id": user["org_id"], "demo_slot": body.slot_key, "demo_status": "da_confermare",
                 "demo_source": "richiesta_demo_app", "demo_request_id": req["id"], "updated_at": now}
+        try:
+            await demo_booking._lock(db, lead["id"], body.slot_key)  # anche la preferenza blocca l'orario: nessuna sovrapposizione
+        except demo_booking.SlotTaken:
+            raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile, scegline un altro")
+        await db.demo_requests.insert_one(dict(req))
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"welcome_demo": "requested", "welcome_demo_seen_at": now}})
         await db.leads.update_one({"id": lead["id"]}, {"$set": lead}, upsert=True)
         try:
             await demo_booking.sync_lead(db, lead)
@@ -309,6 +321,97 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
                "min_notice_hours": max(0, body.min_notice_hours), "horizon_days": min(max(1, body.horizon_days), 120), "updated_at": _iso(_now())}
         await db.demo_slot_config.update_one({"id": "config"}, {"$set": doc}, upsert=True)
         await record_audit(admin, "demo_config", meta={"windows": len(doc["weekly"])})
-        return await get_cfg(admin)
+    # ---------- Prenotazione per conto di un utente (Super Admin diretto o in modalità assistenza) ----------
+    async def _operator(user: dict, org_id: Optional[str]):
+        """Solo il Super Admin: in assistenza l'organizzazione è quella visualizzata, altrimenti quella scelta."""
+        sup = user.get("support")
+        if sup:
+            s = await db.support_sessions.find_one({"id": sup["session_id"]}, {"_id": 0, "superadmin_id": 1})
+            sa = await db.users.find_one({"user_id": (s or {}).get("superadmin_id")}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "role": 1})
+            if not sa or sa.get("role") != "superadmin":
+                raise HTTPException(status_code=403, detail="Operazione riservata al Super Admin")
+            return {**sa, "via": "assistenza"}, sup["org_id"], sup.get("target_user_id")
+        if user.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Solo il Super Admin può prenotare per conto di altri utenti")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="Seleziona l'organizzazione")
+        return {**user, "via": "prenotazioni_demo"}, org_id, None
+
+    async def _members(org_id: str) -> list:
+        out = []
+        for m in await db.memberships.find({"org_id": org_id, "active": True}, {"_id": 0, "user_id": 1, "role": 1}).to_list(500):
+            u = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "nome": 1, "cognome": 1, "telefono": 1, "role": 1})
+            if u and u.get("email") and u.get("role") not in ("superadmin", "volunteer", "staff"):
+                nome = u.get("nome") or (u.get("name") or "").partition(" ")[0]
+                cognome = u.get("cognome") or (u.get("name") or "").partition(" ")[2]
+                out.append({"user_id": u["user_id"], "email": u["email"], "nome": nome, "cognome": cognome,
+                            "telefono": u.get("telefono") or "", "org_role": m.get("role")})
+        return sorted(out, key=lambda x: (x["cognome"] or x["email"]).lower())
+
+    async def _active_demo(email: str):
+        return await db.leads.find_one({"email": email, "demo_status": {"$in": list(demo_booking.ACTIVE)}, "demo_slot": {"$gte": _now_key()}},
+                                       {"_id": 0, "demo_slot": 1, "demo_status": 1})
+
+    @r.get("/demo/on-behalf/context")
+    async def on_behalf_context(org_id: Optional[str] = None, user: dict = Depends(get_user)):
+        _, oid, target = await _operator(user, org_id)
+        org = await db.organizations.find_one({"id": oid}, {"_id": 0, "id": 1, "nome": 1})
+        if not org:
+            raise HTTPException(status_code=404, detail="Organizzazione non trovata")
+        members = await _members(oid)
+        for m in members:
+            a = await _active_demo(m["email"])
+            m["active_demo"] = a
+        return {"org": org, "members": members, "default_user_id": target if any(m["user_id"] == target for m in members) else (members[0]["user_id"] if members else None),
+                "slots": await slots(enforce_notice=False), "duration_min": DURATION_MIN}
+
+    @r.post("/demo/on-behalf")
+    async def on_behalf_book(body: OnBehalfIn, user: dict = Depends(get_user)):
+        actor, oid, _ = await _operator(user, body.org_id)
+        org = await db.organizations.find_one({"id": oid}, {"_id": 0, "id": 1, "nome": 1})
+        target = next((m for m in await _members(oid) if m["user_id"] == body.user_id), None) if org else None
+        if not target:
+            raise HTTPException(status_code=400, detail="L'utente selezionato non appartiene all'organizzazione")
+        email = target["email"].lower()
+        if await _active_demo(email):
+            raise HTTPException(status_code=409, detail="Questo utente ha già una demo in programma: riprogrammala da Prenotazioni demo")
+        if body.slot_key not in {s["slot_key"] for s in await slots(enforce_notice=False)}:
+            raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile, scegline un altro")
+        now = _iso(_now())
+        by = {"user_id": actor["user_id"], "email": actor.get("email"), "name": actor.get("name"), "via": actor["via"], "at": now}
+        nome_full = " ".join(x for x in (target["nome"], target["cognome"]) if x) or email
+        tel = (body.telefono or target["telefono"] or "").strip()
+        req = {"id": uuid.uuid4().hex, "user_id": target["user_id"], "org_id": oid, "nome": nome_full, "email": email, "telefono": tel,
+               "organizzazione": org["nome"], "preferred_slot": body.slot_key, "note": (body.note or "").strip()[:2000], "status": "confermata",
+               "booked_by_admin": True, "booked_by": by, "created_at": now, "updated_at": now}
+        prev = await db.leads.find_one({"email": email}, {"_id": 0})
+        lead = {**(prev or {"id": uuid.uuid4().hex, "created_at": now, "source": "richiesta_demo_app", "stato": "nuovo", "note": "",
+                            "funnel_status": "demo_requested", "requested_at": now}),
+                "nome": target["nome"], "cognome": target["cognome"], "email": email, "telefono": tel, "organizzazione": org["nome"],
+                "user_id": target["user_id"], "org_id": oid, "demo_slot": body.slot_key, "demo_status": "da_confermare",
+                "demo_source": "richiesta_demo_app", "demo_request_id": req["id"], "demo_booked_by_admin": True, "demo_booked_by": by,
+                "demo_meet_link": None, "demo_event_id": None, "demo_email_key": None, "updated_at": now}
+        try:
+            await demo_booking._lock(db, lead["id"], body.slot_key)
+        except demo_booking.SlotTaken:
+            raise HTTPException(status_code=409, detail="Orario già occupato da un'altra demo o assistenza: scegline un altro")
+        await db.demo_requests.insert_one(dict(req))
+        await db.leads.update_one({"id": lead["id"]}, {"$set": lead}, upsert=True)
+        await db.users.update_one({"user_id": target["user_id"], "welcome_demo": {"$in": [None, "pending", "dismissed"]}},
+                                  {"$set": {"welcome_demo": "requested", "welcome_demo_seen_at": now}})
+        lead = await _do(lead, "confirm")  # stesso flusso di conferma: Meet, email al destinatario, Brevo
+        await record_audit(actor, "demo_booked_on_behalf", org_id=oid, org_name=org["nome"], target_email=email, target_name=nome_full,
+                           detail=f"{demo_booking.fmt_slot(body.slot_key)} · via {actor['via']}", meta={"request_id": req["id"], "lead_id": lead["id"]})
+        return {k: lead.get(k) for k in BOOKING_FIELDS if k != "_id"}
+
+    @r.get("/demo/mine")
+    async def my_demos(user: dict = Depends(require_member)):
+        """Demo dell'organizzazione: il destinatario vede le proprie, gli amministratori tutte quelle dell'organizzazione."""
+        q = {"org_id": user["org_id"], "demo_slot": {"$gte": _now_key()}, "demo_status": {"$in": list(demo_booking.ACTIVE)}}
+        if user.get("org_role") not in ("admin_org", "superadmin"):
+            q["user_id"] = user["user_id"]
+        rows = await db.leads.find(q, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1, "demo_slot": 1, "demo_status": 1,
+                                       "demo_meet_link": 1, "demo_meet_simulated": 1, "demo_booked_by_admin": 1}).sort("demo_slot", 1).to_list(50)
+        return {"demos": rows}
 
     return r

@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, Video } from "lucide-react";
+import { OnBehalfDemo } from "@/components/OnBehalfDemo";
 
 const WD = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
 const pad = (n) => String(n).padStart(2, "0");
@@ -40,7 +41,7 @@ function MonthCalendar({ days, value, onChange }) {
   );
 }
 
-function Picker({ slots, value, onPick }) {
+export function Picker({ slots, value, onPick }) {
   const days = useMemo(() => [...new Set(slots.map((s) => s.slot_key.slice(0, 10)))], [slots]);
   const [day, setDay] = useState(null);
   const d = day || value?.slice(0, 10) || days[0];
@@ -86,6 +87,23 @@ function DemoForm({ f, setF, slots, busy, onSubmit, onClose }) {
   );
 }
 
+function MyDemos({ demos }) {
+  if (!demos.length) return null;
+  return (
+    <div className="rounded-xl border border-[#0ABAB5]/40 bg-[#0ABAB5]/5 p-3 space-y-2" data-testid="my-demos">
+      <div className="text-sm font-semibold">Demo prenotate</div>
+      {demos.map((d) => (
+        <div key={d.id} className="text-sm flex flex-wrap items-center gap-2" data-testid={`my-demo-${d.id}`}>
+          <span className="capitalize">{longDay(d.demo_slot.slice(0, 10))} · ore {d.demo_slot.slice(11)}</span>
+          <span className="text-slate-500">{[d.nome, d.cognome].filter(Boolean).join(" ") || d.email}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-white border">{d.demo_status === "da_confermare" ? "Da confermare" : d.demo_status === "riprogrammata" ? "Riprogrammata" : "Confermata"}</span>
+          {d.demo_meet_link && <a href={d.demo_meet_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-[#078a86] hover:underline" data-testid={`my-demo-meet-${d.id}`}><Video className="w-3.5 h-3.5" />Google Meet</a>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function WelcomeDemo() {
   const { user, checkAuth } = useAuth();
   const [open, setOpen] = useState(false);
@@ -93,13 +111,17 @@ export default function WelcomeDemo() {
   const [slots, setSlots] = useState([]);
   const [f, setF] = useState({});
   const [busy, setBusy] = useState(false);
-  const eligible = user && user.role !== "superadmin" && !user.support && !!user.org_id;
-  const autoOpen = eligible && user.welcome_demo === "pending";
+  const [mine, setMine] = useState([]);
+  const support = !!user?.support;
+  const eligible = user && !!user.org_id && (support || user.role !== "superadmin");
+  const autoOpen = eligible && !support && user.welcome_demo === "pending";
 
   const start = useCallback(async () => {
-    const [w, s] = await Promise.all([api.get("/demo/welcome"), api.get("/demo/slots").catch(() => ({ data: { slots: [] } }))]);
-    setF(w.data.prefill); setSlots(s.data.slots || []); setDone(false); setOpen(true);
-  }, []);
+    if (support) { setDone(false); setOpen(true); return; }
+    const [w, s, m] = await Promise.all([api.get("/demo/welcome"), api.get("/demo/slots").catch(() => ({ data: { slots: [] } })),
+      api.get("/demo/mine").catch(() => ({ data: { demos: [] } }))]);
+    setF(w.data.prefill); setSlots(s.data.slots || []); setMine(m.data.demos || []); setDone(false); setOpen(true);
+  }, [support]);
   useEffect(() => { if (autoOpen) start().catch(() => {}); }, [autoOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const h = () => start().catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
@@ -109,7 +131,7 @@ export default function WelcomeDemo() {
 
   const close = async () => {
     setOpen(false);
-    if (user?.welcome_demo === "pending") { await api.post("/demo/welcome/dismiss").catch(() => {}); await checkAuth?.(); }
+    if (!support && user?.welcome_demo === "pending") { await api.post("/demo/welcome/dismiss").catch(() => {}); await checkAuth?.(); }
   };
   const submit = async () => {
     setBusy(true);
@@ -127,11 +149,17 @@ export default function WelcomeDemo() {
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
       <DialogContent className="max-w-2xl w-[calc(100vw-1.5rem)] max-h-[92dvh] overflow-y-auto p-5 sm:p-7" data-testid="welcome-demo-dialog">
         <img src="/logo-crmevent-header.png?v=1" alt="CRMEvent" className="h-10 w-auto" />
-        {done ? (
+        {support && !done ? (
+          <div className="space-y-4 min-w-0" data-testid="welcome-demo-onbehalf">
+            <DialogTitle className="font-display text-2xl font-bold">Prenota una demo per conto dell'utente</DialogTitle>
+            <DialogDescription className="text-slate-600 text-sm">Modalità assistenza: scegli l'utente e l'orario, poi conferma.</DialogDescription>
+            <OnBehalfDemo onDone={() => setDone(true)} onCancel={close} />
+          </div>
+        ) : done ? (
           <div className="space-y-4 text-center py-2" data-testid="welcome-demo-done">
             <CheckCircle2 className="w-12 h-12 text-[#0ABAB5] mx-auto" />
-            <DialogTitle className="font-display text-2xl font-bold">Richiesta inviata!</DialogTitle>
-            <DialogDescription className="text-slate-600">Ti contatteremo per confermare la demo.</DialogDescription>
+            <DialogTitle className="font-display text-2xl font-bold">{support ? "Demo prenotata!" : "Richiesta inviata!"}</DialogTitle>
+            <DialogDescription className="text-slate-600">{support ? "La demo è confermata e compare in Prenotazioni demo; il destinatario riceve l'email con il link Meet." : "Ti contatteremo per confermare la demo."}</DialogDescription>
             <Button onClick={close} className="h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="welcome-demo-dashboard">Chiudi</Button>
           </div>
         ) : (
@@ -143,6 +171,7 @@ export default function WelcomeDemo() {
                 <p>Prenota una breve dimostrazione personalizzata. Ti mostreremo come utilizzare CRMEvent per i tuoi eventi.</p>
               </div>
             </DialogDescription>
+            <MyDemos demos={mine} />
             <DemoForm f={f} setF={setF} slots={slots} busy={busy} onSubmit={submit} onClose={close} />
           </div>
         )}
