@@ -700,3 +700,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Basata su analisi codice: scope openid/userinfo.email/calendar.events/calendar.readonly; salvati in calendar_connections (token AES-256-GCM, email, sub, calendar_id) e calendar_event_links; free/busy solo calendario Super Admin; nessun uso AI; nessuna condivisione oltre Google + hosting Aruba; disconnect = revoke Google + delete record; eliminazione account cancella connessioni e link; dichiarazione Limited Use.
 - Richiede deploy frontend per pubblicazione su crmevent.it.
 
+
+
+## Brevo Tracker (SDK 2.0 + eventi server-side) — 2026-10-17 ✅ (verifica manuale + Brevo mock)
+- index.html: coda window.Brevo + init SDK 2.0 (client key pubblica k9vpo2b6t6r859eigzo79xki) bloccato da iubenda (`_iub_cs_activate-inline`, finalità 5 Marketing), solo host *.crmevent.it, caricato una volta.
+- lib/brevoTracker.js: page su ogni cambio rotta SPA; identify (email + NOME/COGNOME/CRM_*) via GET /api/brevo-tracker/identity; esclusi superadmin/staff/volontari/impersonazione.
+- backend/brevo_tracker.py: eventi via POST /v3/events (chiave solo server): registration_completed, login_completed, trial_started, event_created (primo evento), first_activity (primo tra persons/deals/activities/shifts/teams), subscription_started/renewed (hook record_payment in subscriptions.py, solo fatture Stripe pagate >0; prima = started). Dedup `brevo_tracker_once` (unique key), log `brevo_tracker_log` TTL 90gg; su errore la chiave viene rilasciata.
+- Super Admin: Marketing → Email & Brevo → tab "Tracker & eventi" (GET /api/platform/brevo-tracker).
+- Test: tests/check_brevo_tracker.py (mock). Da fare in produzione: aggiungere Brevo come servizio Marketing in iubenda, deploy, verificare eventi nei log Brevo.

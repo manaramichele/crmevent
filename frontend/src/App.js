@@ -30,6 +30,7 @@ import PipelineTemplates from "@/pages/PipelineTemplates";
 import PipelineAttentionPage from "@/pages/PipelineAttentionPage";
 import Invite from "@/pages/Invite";
 import { trackPageView } from "@/lib/analytics";
+import { brevoPage, brevoIdentify } from "@/lib/brevoTracker";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
@@ -197,7 +198,12 @@ function Shell() {
 
 function RouteTracker() {
   const location = useLocation();
-  useEffect(() => { trackPageView(location.pathname + location.search); }, [location.pathname, location.search]);
+  const { user } = useAuth();
+  useEffect(() => {
+    trackPageView(location.pathname + location.search);
+    brevoPage(location.pathname + location.search);
+  }, [location.pathname, location.search]);
+  useEffect(() => { if (user) { brevoIdentify(user); } }, [user]);
   return null;
 }
 

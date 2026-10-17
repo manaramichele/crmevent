@@ -4,10 +4,11 @@ import { RegisteredUsersPanel } from "@/components/RegisteredUsersPanel";
 import { OrgListsPanel } from "@/components/OrgListsPanel";
 import { FunnelPanel } from "@/components/FunnelPanel";
 import { SubscriptionSyncPanel } from "@/components/SubscriptionSyncPanel";
+import { BrevoTrackerPanel } from "@/components/BrevoTrackerPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MailCheck } from "lucide-react";
 
-const TABS = ["funnel", "staff", "liste", "abbonamenti"];
+const TABS = ["funnel", "staff", "liste", "abbonamenti", "tracker"];
 
 export default function MarketingBrevo() {
   const [params, setParams] = useSearchParams();
@@ -25,11 +26,13 @@ export default function MarketingBrevo() {
           <TabsTrigger value="staff" className="h-9" data-testid="brevo-tab-staff">Staff &amp; Volontari</TabsTrigger>
           <TabsTrigger value="liste" className="h-9" data-testid="brevo-tab-liste">Liste e contatti</TabsTrigger>
           <TabsTrigger value="abbonamenti" className="h-9" data-testid="brevo-tab-abbonamenti">Abbonamenti</TabsTrigger>
+          <TabsTrigger value="tracker" className="h-9" data-testid="brevo-tab-tracker">Tracker &amp; eventi</TabsTrigger>
         </TabsList>
         <TabsContent value="funnel"><FunnelPanel /></TabsContent>
         <TabsContent value="staff"><AvailabilityEmailPanel /></TabsContent>
         <TabsContent value="liste" className="space-y-6"><RegisteredUsersPanel /><OrgListsPanel /></TabsContent>
         <TabsContent value="abbonamenti"><SubscriptionSyncPanel /></TabsContent>
+        <TabsContent value="tracker"><BrevoTrackerPanel /></TabsContent>
       </Tabs>
     </div>
   );

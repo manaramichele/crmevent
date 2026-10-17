@@ -40,6 +40,7 @@ import gcal_tokens
 import video_support
 import subscriptions
 import brevo_subscriptions
+import brevo_tracker
 import pipeline_seed_sports
 import demo_booking
 import demo_slots
@@ -735,6 +736,18 @@ class CompleteOrgIn(BaseModel):
 TERMS_VERSION = "2026-10"
 
 
+def _track_signup(uid: str, org_id: str, method: str) -> None:
+    """Brevo: registrazione completata (una volta per utente) e inizio prova (una volta per organizzazione)."""
+    BRT["track"]("registration_completed", uid, org_id, {"method": method}, once=f"registration_completed:{uid}")
+
+    async def _trial():
+        st = await SAAS["state_for"](org_id)
+        if st.get("sub_status") == "trial":
+            BRT["track"]("trial_started", uid, org_id, {"trial_start": (st.get("activated_at") or st.get("trial_start") or "")[:10] or None,
+                                                       "trial_end": (st.get("expires_at") or "")[:10] or None}, once=f"trial_started:{org_id}")
+    asyncio.create_task(_trial())
+
+
 @api.post("/auth/register-organization")
 async def register_organization(body: OrgRegisterIn, response: Response):
     if not body.accept_terms:
@@ -772,6 +785,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
         await sync_registered_user(uid, org["id"], nome=body.nome, cognome=body.cognome, source="registration")
     except Exception as e:
         logger.error(f"registered-user sync error: {e}")
+    _track_signup(uid, org["id"], "password")
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
@@ -805,6 +819,7 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
     except Exception:
         await db.users.update_one({"user_id": user["user_id"]}, {"$unset": {"org_onboarding_lock": ""}})
         raise
+    _track_signup(user["user_id"], org["id"], user.get("auth_provider") or "google")
     now = now_iso()
     upd = {"org_id": org["id"], "role": "admin", "telefono": phone, "self_registered": True, "registered_at": now,
            "accepted_terms_at": now, "terms_version": TERMS_VERSION, "privacy_version": TERMS_VERSION,
@@ -863,6 +878,7 @@ async def login(body: LoginIn, response: Response):
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     response.delete_cookie("session_token", path="/", secure=True, samesite="none")
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login_at": now_iso()}})
+    BRT["track"]("login_completed", user["user_id"], user.get("org_id"), {"method": "password"})
     return await user_payload(user)
 
 
@@ -893,6 +909,7 @@ async def google_session(request: Request, response: Response):
     set_auth_cookie(response, "session_token", session_token, 7 * 24 * 3600)
     await db.users.update_one({"user_id": uid}, {"$set": {"last_login_at": now_iso()}})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
+    BRT["track"]("login_completed", uid, u.get("org_id"), {"method": "google"})
     return await user_payload(u)
 
 
@@ -1474,7 +1491,12 @@ def crud_routes(path, coll, model, org_scoped=True):
                 await _assert_event_operational(user["org_id"], data["evento_id"])
             if coll == "staff":
                 await SAAS["check_people"](user["org_id"], data.get("persona_id"))
-        return await _create(coll, data)
+        doc = await _create(coll, data)
+        try:
+            await BRT["on_created"](user, coll, user["org_id"])
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"brevo tracker on_created: {type(e).__name__}")
+        return doc
 
     @api.get(f"/{path}/{{item_id}}", name=f"get_{path}")
     async def _g(item_id: str, user: dict = Depends(require_admin)):
@@ -13358,6 +13380,10 @@ SAAS.update(subscriptions.build(db, {
 BREVO_SUBS = brevo_subscriptions.build(db, {"state_for": SAAS["state_for"], "require_superadmin": require_superadmin, "record_audit": record_audit})
 SAAS["hooks"].update({"on_change": BREVO_SUBS["sync_org"], "daily": BREVO_SUBS["daily"]})
 app.include_router(BREVO_SUBS["router"])
+BRT = brevo_tracker.build(db, {"state_for": SAAS["state_for"], "get_current_user": get_current_user, "require_superadmin": require_superadmin})
+SAAS["hooks"]["on_payment"] = BRT["on_payment"]
+app.include_router(BRT["router"])
+app.add_event_handler("startup", BRT["ensure_indexes"])
 PARTNER = partner_portal.build(db, {"hash_password": hash_password, "verify_password": verify_password, "person_name": TN.person_name,
                                     "require_superadmin": require_superadmin, "record_audit": record_audit, "saas_config": SAAS["get_config"]})
 app.include_router(PARTNER["router"])
@@ -13389,7 +13415,8 @@ app.include_router(home_widgets.build_router(db, require_admin, get_current_user
 app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
                                                    "verify_password": verify_password, "user_payload": user_payload,
                                                    "person_name": TN.person_name, "now_iso": now_iso,
-                                                   "partner_identity": PARTNER["google_identity"]}), prefix="/api")
+                                                   "partner_identity": PARTNER["google_identity"],
+                                                   "on_login": lambda u: BRT["track"]("login_completed", u["user_id"], u.get("org_id"), {"method": "google"})}), prefix="/api")
 app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,

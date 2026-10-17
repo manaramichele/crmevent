@@ -94,6 +94,8 @@ def build_router(db, deps: dict) -> APIRouter:
         resp.delete_cookie("session_token", path="/", secure=True, samesite="none")
         resp.delete_cookie(STATE_COOKIE, path="/api/oauth/google")
         log.info("google login ok user=%s", user["user_id"])
+        if deps.get("on_login"):
+            deps["on_login"](user)
         return resp
 
     @r.get("/oauth/google/config")

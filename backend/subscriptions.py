@@ -583,6 +583,11 @@ def build(db, deps: dict):
             asyncio.create_task(notify(org["id"], "renewal", f"renewal:{inv.get('id')}", label))
         elif reason == "subscription_create":
             asyncio.create_task(notify(org["id"], "purchase", f"purchase:{inv.get('id')}", label))
+        if status == "paid" and hooks.get("on_payment") and reason in ("subscription_create", "subscription_cycle"):
+            try:
+                await hooks["on_payment"](org, inv, s.get("plan"), s.get("billing_cycle"), test)
+            except Exception as e:  # noqa: BLE001 - il tracking non blocca il pagamento
+                logger.error("brevo tracker payment hook: %s", type(e).__name__)
 
     async def _live_sub(org: dict):
         sid = (org.get("saas") or {}).get("stripe_subscription_id")
