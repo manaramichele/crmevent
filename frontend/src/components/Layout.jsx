@@ -416,7 +416,7 @@ export default function Layout({ children }) {
           {!isSuper && <TrialButton saas={user?.saas} />}
           <div className="flex-1 min-w-0" />
           {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
-          {!isSuper && user?.saas?.enabled && user.saas.trial_active ? (
+          {!isSuper && (user?.support || (user?.saas?.enabled && user.saas.trial_active)) ? (
             <button type="button" onClick={() => window.dispatchEvent(new Event("welcome-demo:open"))} data-testid="header-demo-button" aria-label="Prenota una demo"
               className="shrink-0 inline-flex items-center gap-1.5 h-10 w-10 sm:w-auto justify-center sm:px-3 rounded-lg bg-[#0ABAB5] text-black text-sm font-semibold shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#09A8A3] hover:shadow active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ABAB5]/50 focus-visible:ring-offset-1">
               <Video className="w-4 h-4" aria-hidden="true" /><span className="hidden sm:inline">Prenota una demo</span>
