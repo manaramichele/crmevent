@@ -57,6 +57,22 @@
             }
         </script>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
+        <!-- Brevo Tracker SDK 2.0: la coda window.Brevo raccoglie identify/page dall'app; lo script reale
+             viene eseguito da iubenda SOLO dopo il consenso Marketing (finalità 5), una sola volta. -->
+        <script>window.Brevo = window.Brevo || [];</script>
+        <script type="text/plain" class="_iub_cs_activate-inline" data-iub-purposes="5">
+            (function () {
+                if (window.__brevoSdkLoaded || !/(^|\.)crmevent\.it$/.test(location.hostname)) return;
+                window.__brevoSdkLoaded = true;
+                window.__brevoConsent = true;
+                window.Brevo = window.Brevo || [];
+                window.Brevo.push(["init", { client_key: "k9vpo2b6t6r859eigzo79xki" }]);
+                var s = document.createElement("script");
+                s.async = true;
+                s.src = "https://cdn.brevo.com/js/sdk-loader.js";
+                document.head.appendChild(s);
+            })();
+        </script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
     </head>
     <body>
