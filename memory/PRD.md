@@ -708,3 +708,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - backend/brevo_tracker.py: eventi via POST /v3/events (chiave solo server): registration_completed, login_completed, trial_started, event_created (primo evento), first_activity (primo tra persons/deals/activities/shifts/teams), subscription_started/renewed (hook record_payment in subscriptions.py, solo fatture Stripe pagate >0; prima = started). Dedup `brevo_tracker_once` (unique key), log `brevo_tracker_log` TTL 90gg; su errore la chiave viene rilasciata.
 - Super Admin: Marketing → Email & Brevo → tab "Tracker & eventi" (GET /api/platform/brevo-tracker).
 - Test: tests/check_brevo_tracker.py (mock). Da fare in produzione: aggiungere Brevo come servizio Marketing in iubenda, deploy, verificare eventi nei log Brevo.
+
+
+## Consent Manager proprietario (sostituisce Iubenda) — 2026-10-17 ✅ (testing agent iteration_141 + fix)
+- index.html: primo script = Consent Mode v2 default denied (4 chiavi), loader GA4 (solo crmevent.it), PostHog (solo con Analitici), Brevo SDK 2.0 (solo Marketing, *.crmevent.it); purge cookie ph_/_ga/sib_/brevo se consenso assente. Iubenda rimosso ovunque (anche CSS).
+- lib/consent.js (localStorage crmevent_consent, 6 mesi o nuova versione → banner); revoca = opt-out PostHog + purge + reload.
+- components/Cookie/*: banner IT/EN (lingua browser + switch), 3 pulsanti pari evidenza, finestra Preferenze con servizi/cookie; link footer + menu utente area riservata.
+- backend/privacy_consent.py: GET /api/privacy/config, POST /api/privacy/consents (registro pseudonimo, TTL 24 mesi, no IP/UA), Super Admin /api/platform/privacy/{settings,publish,consents,stats} (registro audit-logged; servizi ga4/posthog/brevo/crmevent_core bloccati).
+- Super Admin: /piattaforma/privacy-cookie. Pagine /privacy-policy e /cookie-policy (anche /privacy, /cookie). Copia testi precedenti: /app/memory/legal_archive/Legal_iubenda_2026-10-17.jsx.
+- Da fare: revisione legale testi, deploy, verifica produzione (GA4 DebugView, Brevo rilevamento tracker), poi chiudere account Iubenda.

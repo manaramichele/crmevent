@@ -4,9 +4,8 @@
 // polluting the production property from preview/dev/test environments.
 export const GA_ID = "G-PZK7J854DS";
 
-// Consent is managed EXCLUSIVELY by iubenda (Google Consent Mode v2 + preventive blocking),
-// loaded first in index.html. We only push page_views/events to gtag; Consent Mode governs
-// whether cookies/identifiers are used, so CRMEvent no longer runs a second consent system.
+// Consent: Consent Manager proprietario (index.html + lib/consent.js). gtag.js viene caricato solo
+// dopo il consenso Analitici; prima di allora i comandi restano in dataLayer e non vengono inviati.
 const g = (...args) => { if (typeof window !== "undefined" && window.gtag) window.gtag(...args); };
 
 // SPA page_view. Consent Mode decides cookie usage (cookieless ping when denied).

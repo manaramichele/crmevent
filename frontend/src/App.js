@@ -30,7 +30,10 @@ import PipelineTemplates from "@/pages/PipelineTemplates";
 import PipelineAttentionPage from "@/pages/PipelineAttentionPage";
 import Invite from "@/pages/Invite";
 import { trackPageView } from "@/lib/analytics";
-import { brevoPage, brevoIdentify } from "@/lib/brevoTracker";
+import { brevoPage, brevoIdentify, brevoReset } from "@/lib/brevoTracker";
+import { CHANGE_EVENT } from "@/lib/consent";
+import CookieBanner from "@/components/Cookie/CookieBanner";
+import PrivacyCookieAdmin from "@/pages/PrivacyCookieAdmin";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
@@ -128,6 +131,7 @@ function Shell() {
   return (
     <>
       <RouteTracker />
+      <CookieBanner />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/demo" element={<DemoPage />} />
@@ -137,8 +141,9 @@ function Shell() {
         <Route path="/completa-organizzazione" element={<CompleteOrg />} />
         <Route path="/completa-profilo" element={<CompleteProfile />} />
         <Route path="/privacy" element={<Legal type="privacy" />} />
-        <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
+        <Route path="/privacy-policy" element={<Legal type="privacy" />} />
         <Route path="/cookie" element={<Legal type="cookie" />} />
+        <Route path="/cookie-policy" element={<Legal type="cookie" />} />
         <Route path="/termini" element={<Legal type="termini" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -154,6 +159,7 @@ function Shell() {
         <Route path="/azioni-rapide" element={<Protected><QuickActions /></Protected>} />
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
         <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />
         <Route path="/piattaforma/segnalazioni" element={<Protected><SuperAdminOnly><PlatformTickets /></SuperAdminOnly></Protected>} />
@@ -203,7 +209,17 @@ function RouteTracker() {
     trackPageView(location.pathname + location.search);
     brevoPage(location.pathname + location.search);
   }, [location.pathname, location.search]);
-  useEffect(() => { if (user) { brevoIdentify(user); } }, [user]);
+  useEffect(() => {
+    if (user) { brevoIdentify(user); } else { brevoReset(); }
+  }, [user]);
+  useEffect(() => {
+    const onChange = () => {
+      brevoPage(window.location.pathname + window.location.search);
+      if (user) { brevoIdentify(user); }
+    };
+    window.addEventListener(CHANGE_EVENT, onChange);
+    return () => window.removeEventListener(CHANGE_EVENT, onChange);
+  }, [user]);
   return null;
 }
 
