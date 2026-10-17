@@ -35,15 +35,15 @@ export function OnBehalfDemo({ orgId, onDone, onCancel }) {
     } finally { setBusy(false); }
   };
   return (
-    <div className="space-y-4" data-testid="onbehalf-form">
-      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 flex items-center gap-2" data-testid="onbehalf-banner">
-        <ShieldCheck className="w-4 h-4 shrink-0" />Prenotazione per conto di un utente di <strong>{ctx.org.nome}</strong>: la demo viene confermata subito.
+    <div className="space-y-4 min-w-0 w-full" data-testid="onbehalf-form">
+      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 flex items-start gap-2" data-testid="onbehalf-banner">
+        <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" /><span>Prenotazione per conto di un utente di <strong>{ctx.org.nome}</strong>: la demo viene confermata subito.</span>
       </div>
       {ctx.members.length === 0 ? <p className="text-sm text-slate-500" data-testid="onbehalf-no-members">Nessun utente attivo in questa organizzazione.</p> : (
         <>
-          <div>
+          <div className="min-w-0">
             <label className="text-sm font-semibold block mb-1" htmlFor="onbehalf-user">Utente destinatario*</label>
-            <select id="onbehalf-user" value={uid} onChange={(e) => setUid(e.target.value)} className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm bg-white" data-testid="onbehalf-user-select">
+            <select id="onbehalf-user" value={uid} onChange={(e) => setUid(e.target.value)} className="w-full min-w-0 max-w-full truncate h-10 rounded-md border border-slate-200 px-3 text-sm bg-white" data-testid="onbehalf-user-select">
               {ctx.members.map((x) => <option key={x.user_id} value={x.user_id}>{[x.nome, x.cognome].filter(Boolean).join(" ") || x.email} · {x.email}</option>)}
             </select>
           </div>
@@ -56,7 +56,7 @@ export function OnBehalfDemo({ orgId, onDone, onCancel }) {
           {m?.active_demo && (
             <p className="text-sm text-amber-800 flex items-center gap-1" data-testid="onbehalf-already"><AlertTriangle className="w-4 h-4" />Ha già una demo il {longDay(m.active_demo.demo_slot.slice(0, 10))} alle {m.active_demo.demo_slot.slice(11)}: riprogrammala da Prenotazioni demo.</p>
           )}
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-semibold mb-2">Data e ora*</div>
             <Picker slots={ctx.slots} value={f.slot_key} onPick={(k) => setF({ ...f, slot_key: k })} />
             {f.slot_key && <div className="mt-2 rounded-lg bg-[#0ABAB5]/10 px-3 py-2 text-sm capitalize" data-testid="onbehalf-selected">{longDay(f.slot_key.slice(0, 10))} · ore {f.slot_key.slice(11)}</div>}

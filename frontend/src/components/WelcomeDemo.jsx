@@ -150,7 +150,7 @@ export default function WelcomeDemo() {
       <DialogContent className="max-w-2xl w-[calc(100vw-1.5rem)] max-h-[92dvh] overflow-y-auto p-5 sm:p-7" data-testid="welcome-demo-dialog">
         <img src="/logo-crmevent-header.png?v=1" alt="CRMEvent" className="h-10 w-auto" />
         {support && !done ? (
-          <div className="space-y-4" data-testid="welcome-demo-onbehalf">
+          <div className="space-y-4 min-w-0" data-testid="welcome-demo-onbehalf">
             <DialogTitle className="font-display text-2xl font-bold">Prenota una demo per conto dell'utente</DialogTitle>
             <DialogDescription className="text-slate-600 text-sm">Modalità assistenza: scegli l'utente e l'orario, poi conferma.</DialogDescription>
             <OnBehalfDemo onDone={() => setDone(true)} onCancel={close} />

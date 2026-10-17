@@ -59,7 +59,7 @@ function BookForUser({ open, onOpenChange, onDone }) {
       <DialogContent className="max-w-2xl w-[calc(100vw-1.5rem)] max-h-[92dvh] overflow-y-auto" data-testid="demo-book-for-user-dialog">
         <DialogHeader><DialogTitle>Prenota per un utente</DialogTitle><DialogDescription>Stesso calendario e stesso flusso delle prenotazioni degli utenti; la demo nasce già confermata.</DialogDescription></DialogHeader>
         <label className="text-sm font-semibold" htmlFor="demo-book-org">Organizzazione*</label>
-        <select id="demo-book-org" value={org} onChange={(e) => setOrg(e.target.value)} className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm bg-white" data-testid="demo-book-org-select">
+        <select id="demo-book-org" value={org} onChange={(e) => setOrg(e.target.value)} className="w-full min-w-0 max-w-full truncate h-10 rounded-md border border-slate-200 px-3 text-sm bg-white" data-testid="demo-book-org-select">
           <option value="">Seleziona l'organizzazione...</option>
           {orgs.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
         </select>

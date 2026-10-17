@@ -717,3 +717,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - backend/privacy_consent.py: GET /api/privacy/config, POST /api/privacy/consents (registro pseudonimo, TTL 24 mesi, no IP/UA), Super Admin /api/platform/privacy/{settings,publish,consents,stats} (registro audit-logged; servizi ga4/posthog/brevo/crmevent_core bloccati).
 - Super Admin: /piattaforma/privacy-cookie. Pagine /privacy-policy e /cookie-policy (anche /privacy, /cookie). Copia testi precedenti: /app/memory/legal_archive/Legal_iubenda_2026-10-17.jsx.
 - Da fare: revisione legale testi, deploy, verifica produzione (GA4 DebugView, Brevo rilevamento tracker), poi chiudere account Iubenda.
+
+## Demo prenotata dal Super Admin per conto degli utenti — 2026-10-17 ✅ (iteration_142 + fix)
+- backend/demo_slots.py: GET /api/demo/on-behalf/context, POST /api/demo/on-behalf (solo SA diretto o in assistenza; org = quella visualizzata in assistenza), crea demo_request "confermata" + lead con demo_booked_by_admin/demo_booked_by, conferma via demo_booking.apply_action (Meet, email destinatario, Brevo; nessuna email admin), 409 su duplicato utente/slot occupato, audit demo_booked_on_behalf. GET /api/demo/mine (destinatario; admin org vede tutte).
+- Anche le richieste utente bloccano subito l'orario (demo_slot_locks) → nessuna sovrapposizione.
+- Frontend: OnBehalfDemo.jsx condiviso; WelcomeDemo in assistenza (pulsante header sempre visibile in assistenza) + sezione "Demo prenotate"; PlatformDemo "+ Prenota per un utente" e badge "Prenotata dal Super Admin".
+

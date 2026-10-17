@@ -164,14 +164,18 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
                "telefono": (body.telefono or "").strip(), "organizzazione": (body.organizzazione or "").strip(),
                "preferred_slot": body.slot_key, "note": (body.note or "").strip()[:2000], "status": "nuova",
                "created_at": now, "updated_at": now}
-        await db.demo_requests.insert_one(dict(req))
-        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"welcome_demo": "requested", "welcome_demo_seen_at": now}})
         prev = await db.leads.find_one({"email": email}, {"_id": 0})
         lead = {**(prev or {"id": uuid.uuid4().hex, "created_at": now, "source": "richiesta_demo_app", "stato": "nuovo", "note": "",
                             "funnel_status": "demo_requested", "requested_at": now}),
                 "nome": nome, "cognome": cognome, "email": email, "telefono": req["telefono"], "organizzazione": req["organizzazione"],
                 "user_id": user["user_id"], "org_id": user["org_id"], "demo_slot": body.slot_key, "demo_status": "da_confermare",
                 "demo_source": "richiesta_demo_app", "demo_request_id": req["id"], "updated_at": now}
+        try:
+            await demo_booking._lock(db, lead["id"], body.slot_key)  # anche la preferenza blocca l'orario: nessuna sovrapposizione
+        except demo_booking.SlotTaken:
+            raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile, scegline un altro")
+        await db.demo_requests.insert_one(dict(req))
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"welcome_demo": "requested", "welcome_demo_seen_at": now}})
         await db.leads.update_one({"id": lead["id"]}, {"$set": lead}, upsert=True)
         try:
             await demo_booking.sync_lead(db, lead)
