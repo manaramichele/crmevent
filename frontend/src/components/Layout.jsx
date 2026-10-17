@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, Handshake,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, MessageSquareWarning,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
@@ -77,6 +77,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },
   { to: "/piattaforma/partner", label: "Partner", icon: Handshake, id: "piattaforma-partner" },
   { to: "/piattaforma/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "piattaforma-segnalazioni", badge: "tickets" },
+  { to: "/piattaforma/privacy-cookie", label: "Privacy e Cookie", icon: Cookie, id: "piattaforma-privacy-cookie" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];
@@ -444,6 +445,9 @@ export default function Layout({ children }) {
                 {!isSuper && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("tutorial:open-index")); }} data-testid="tutorial-menu-link" className="sm:hidden w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <HelpCircle className="w-4 h-4" />Tutorial
                 </button>}
+                <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("open-cookie-preferences")); }} data-testid="cookie-prefs-menu-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
+                  <Cookie className="w-4 h-4" />Preferenze cookie
+                </button>
                 <button onClick={logout} data-testid="logout-button" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <LogOut className="w-4 h-4" />Esci
                 </button>

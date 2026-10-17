@@ -41,6 +41,7 @@ import video_support
 import subscriptions
 import brevo_subscriptions
 import brevo_tracker
+import privacy_consent
 import pipeline_seed_sports
 import demo_booking
 import demo_slots
@@ -13384,6 +13385,17 @@ BRT = brevo_tracker.build(db, {"state_for": SAAS["state_for"], "get_current_user
 SAAS["hooks"]["on_payment"] = BRT["on_payment"]
 app.include_router(BRT["router"])
 app.add_event_handler("startup", BRT["ensure_indexes"])
+
+
+async def _optional_user(request: Request):
+    try:
+        return await _get_base_user(request)
+    except HTTPException:
+        return None
+
+PRIVACY = privacy_consent.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "optional_user": _optional_user})
+app.include_router(PRIVACY["router"])
+app.add_event_handler("startup", PRIVACY["ensure_indexes"])
 PARTNER = partner_portal.build(db, {"hash_password": hash_password, "verify_password": verify_password, "person_name": TN.person_name,
                                     "require_superadmin": require_superadmin, "record_audit": record_audit, "saas_config": SAAS["get_config"]})
 app.include_router(PARTNER["router"])

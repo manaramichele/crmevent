@@ -88,7 +88,7 @@ export default function Register() {
 
             <label className="flex items-start gap-2.5 text-sm text-slate-600 cursor-pointer">
               <Checkbox checked={accept} onCheckedChange={(v) => setAccept(!!v)} data-testid="reg-accept" className="mt-0.5" />
-              <span>Ho letto e accetto i <Link to="/termini" target="_blank" className="text-tiffany-active underline">Termini e Condizioni</Link>, la <Link to="/privacy-policy" target="_blank" className="text-tiffany-active underline">Privacy Policy</Link> e la <Link to="/cookie" target="_blank" className="text-tiffany-active underline">Cookie Policy</Link>.</span>
+              <span>Ho letto e accetto i <Link to="/termini" target="_blank" className="text-tiffany-active underline">Termini e Condizioni</Link>, la <Link to="/privacy-policy" target="_blank" className="text-tiffany-active underline">Privacy Policy</Link> e la <Link to="/cookie-policy" target="_blank" className="text-tiffany-active underline">Cookie Policy</Link>.</span>
             </label>
 
             <Button type="submit" disabled={loading} data-testid="reg-submit"

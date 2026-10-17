@@ -70,8 +70,6 @@ h1, h2, h3, h4, .font-display {
   html, body { overflow-x: hidden; }
   /* sito pubblico: clip non rompe l'header sticky */
   html:not(:has(body.app-shell)), body:not(.app-shell) { overflow-x: clip; }
-  /* Nell'app il pulsante preferenze cookie iubenda copriva il fondo della sidebar: spostato a destra. */
-  html body.app-shell .iubenda-tp-btn.iubenda-cs-preferences-link:not(#_a):not(#_b):not(#_c) { left: auto !important; right: 16px !important; bottom: 16px !important; }
 
 }
 

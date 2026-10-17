@@ -184,7 +184,7 @@ function DemoForm() {
       <textarea className="sm:col-span-2 min-h-[90px] p-3 rounded-lg border border-slate-200 bg-white focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 outline-none text-sm" placeholder="Messaggio" value={f.messaggio} onChange={ch("messaggio")} data-testid="lead-msg" />
       <label className="sm:col-span-2 flex items-start gap-2 text-xs text-slate-500">
         <input type="checkbox" checked={f.privacy} onChange={ch("privacy")} className="mt-0.5 accent-tiffany" data-testid="lead-privacy" />
-        Ho letto e accetto la <Link to="/privacy" className="text-tiffany-active underline">Privacy Policy</Link> e acconsento al trattamento dei dati per essere ricontattato.
+        Ho letto e accetto la <Link to="/privacy-policy" className="text-tiffany-active underline">Privacy Policy</Link> e acconsento al trattamento dei dati per essere ricontattato.
       </label>
       <label className="sm:col-span-2 flex items-start gap-2 text-xs text-slate-500">
         <input type="checkbox" checked={f.marketing_consent} onChange={ch("marketing_consent")} className="mt-0.5 accent-tiffany" data-testid="lead-marketing" />

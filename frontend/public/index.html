@@ -1,9 +1,64 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
     <head>
-        <!-- iubenda Unified Embedding Code — MUST be the first element in <head> so its
-             preventive blocking + Google Consent Mode v2 run before any cookie-setting script. -->
-        <script type="text/javascript" src="https://embeds.iubenda.com/widgets/a411033f-bef4-4836-94d4-8a0d2697f51f.js"></script>
+        <!-- CRMEvent Consent Manager (proprietario). DEVE restare il primo script: imposta Google Consent Mode v2
+             su "denied" e blocca preventivamente GA4, PostHog e Brevo finché l'utente non sceglie dal banner. -->
+        <script>
+            (function () {
+                window.dataLayer = window.dataLayer || [];
+                function gtag() { dataLayer.push(arguments); }
+                window.gtag = gtag;
+                gtag('consent', 'default', {
+                    analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied',
+                    functionality_storage: 'granted', security_storage: 'granted', wait_for_update: 500
+                });
+                gtag('set', 'ads_data_redaction', true);
+                gtag('js', new Date());
+                gtag('config', 'G-PZK7J854DS', { send_page_view: false, anonymize_ip: true });
+                window.Brevo = window.Brevo || [];
+                window.__crmTrackers = { ga: 'blocked', posthog: 'blocked', brevo: 'blocked' };
+                var PROD = /(^|\.)crmevent\.it$/.test(location.hostname);
+                function add(src) { var s = document.createElement('script'); s.async = true; s.src = src; document.head.appendChild(s); }
+                var L = {
+                    ga: function () {
+                        if (window.__crmTrackers.ga === 'loaded') return;
+                        if (location.hostname !== 'crmevent.it') { window.__crmTrackers.ga = 'allowed_host_skipped'; return; }
+                        window.__crmTrackers.ga = 'loaded';
+                        add('https://www.googletagmanager.com/gtag/js?id=G-PZK7J854DS');
+                    },
+                    brevo: function () {
+                        if (window.__crmTrackers.brevo === 'loaded') return;
+                        if (!PROD) { window.__crmTrackers.brevo = 'allowed_host_skipped'; return; }
+                        window.__crmTrackers.brevo = 'loaded';
+                        window.Brevo.unshift(['init', { client_key: 'k9vpo2b6t6r859eigzo79xki' }]);
+                        add('https://cdn.brevo.com/js/sdk-loader.js');
+                    },
+                    posthog: function () {
+                        if (window.__crmTrackers.posthog === 'loaded') return;
+                        window.__crmTrackers.posthog = 'loaded';
+                        !(function (t, e) { var o, n, p, r; e.__SV || ((window.posthog = e), (e._i = []), (e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && ((t = t[o[0]]), (e = o[1])), (t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))); }); } ((p = t.createElement("script")).type = "text/javascript"), (p.crossOrigin = "anonymous"), (p.async = !0), (p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js"), (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? (u = e[a] = []) : (a = "posthog"), u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e; }, u.people.toString = function () { return u.toString(1) + ".people (stub)"; }, o = "init capture identify register reset opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing startSessionRecording stopSessionRecording get_distinct_id".split(" "), n = 0; n < o.length; n++) g(u, o[n]); e._i.push([i, s, a]); }), (e.__SV = 1)); })(document, window.posthog || []);
+                        window.posthog.init("phc_DbsPb39SRc8z3EiQ6Dhj6ikv4H4rTKcht9d4sZSesceP", {
+                            api_host: "https://ap.emergent.sh", person_profiles: "identified_only",
+                            session_recording: { recordCrossOriginIframes: true, capturePerformance: false }
+                        });
+                    }
+                };
+                window.__crmApplyConsent = function (c) {
+                    gtag('consent', 'update', {
+                        analytics_storage: c.analytics ? 'granted' : 'denied',
+                        ad_storage: c.marketing ? 'granted' : 'denied',
+                        ad_user_data: c.marketing ? 'granted' : 'denied',
+                        ad_personalization: c.marketing ? 'granted' : 'denied'
+                    });
+                    if (c.analytics) { L.ga(); L.posthog(); }
+                    if (c.marketing) { L.brevo(); }
+                };
+                try {
+                    var st = JSON.parse(localStorage.getItem('crmevent_consent'));
+                    if (st && st.choices && Date.now() - st.ts < 180 * 864e5) window.__crmApplyConsent(st.choices);
+                } catch (e) {}
+            })();
+        </script>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#0ABAB5" />
@@ -26,138 +81,12 @@
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
-        <!--
-        manifest.json provides metadata used when your web app is installed on a
-        user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-        -->
-        <!--
-        Notice the use of %PUBLIC_URL% in the tags above.
-        It will be replaced with the URL of the `public` folder during the build.
-        Only files inside the `public` folder can be referenced from the HTML.
-
-        Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-        work correctly both with client-side routing and a non-root public URL.
-        Learn how to configure a non-root public URL by running `npm run build`.
-        -->
         <title>CRMEvent | Il CRM per organizzare eventi</title>
-        <!-- Google Analytics 4. Consent (Consent Mode v2) is managed exclusively by iubenda
-             above — CRMEvent no longer sets consent defaults/updates to avoid a double system.
-             The GA library loads on production only to keep the property clean. -->
-        <script>
-            window.dataLayer = window.dataLayer || [];
-            function gtag() { dataLayer.push(arguments); }
-            window.gtag = gtag;
-            gtag('js', new Date());
-            gtag('config', 'G-PZK7J854DS', { send_page_view: false, anonymize_ip: true });
-            if (location.hostname === 'crmevent.it') {
-                var gaS = document.createElement('script');
-                gaS.async = true;
-                gaS.src = 'https://www.googletagmanager.com/gtag/js?id=G-PZK7J854DS';
-                document.head.appendChild(gaS);
-            }
-        </script>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
-        <!-- Brevo Tracker SDK 2.0: la coda window.Brevo raccoglie identify/page dall'app; lo script reale
-             viene eseguito da iubenda SOLO dopo il consenso Marketing (finalità 5), una sola volta. -->
-        <script>window.Brevo = window.Brevo || [];</script>
-        <script type="text/plain" class="_iub_cs_activate-inline" data-iub-purposes="5">
-            (function () {
-                if (window.__brevoSdkLoaded || !/(^|\.)crmevent\.it$/.test(location.hostname)) return;
-                window.__brevoSdkLoaded = true;
-                window.__brevoConsent = true;
-                window.Brevo = window.Brevo || [];
-                window.Brevo.push(["init", { client_key: "k9vpo2b6t6r859eigzo79xki" }]);
-                var s = document.createElement("script");
-                s.async = true;
-                s.src = "https://cdn.brevo.com/js/sdk-loader.js";
-                document.head.appendChild(s);
-            })();
-        </script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
         <div id="root"></div>
-        <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
-        <script>
-            !(function (t, e) {
-                var o, n, p, r;
-                e.__SV ||
-                    ((window.posthog = e),
-                    (e._i = []),
-                    (e.init = function (i, s, a) {
-                        function g(t, e) {
-                            var o = e.split(".");
-                            2 == o.length && ((t = t[o[0]]), (e = o[1])),
-                                (t[e] = function () {
-                                    t.push(
-                                        [e].concat(
-                                            Array.prototype.slice.call(
-                                                arguments,
-                                                0,
-                                            ),
-                                        ),
-                                    );
-                                });
-                        }
-                        ((p = t.createElement("script")).type =
-                            "text/javascript"),
-                            (p.crossOrigin = "anonymous"),
-                            (p.async = !0),
-                            (p.src =
-                                s.api_host.replace(
-                                    ".i.posthog.com",
-                                    "-assets.i.posthog.com",
-                                ) + "/static/array.js"),
-                            (r =
-                                t.getElementsByTagName(
-                                    "script",
-                                )[0]).parentNode.insertBefore(p, r);
-                        var u = e;
-                        for (
-                            void 0 !== a ? (u = e[a] = []) : (a = "posthog"),
-                                u.people = u.people || [],
-                                u.toString = function (t) {
-                                    var e = "posthog";
-                                    return (
-                                        "posthog" !== a && (e += "." + a),
-                                        t || (e += " (stub)"),
-                                        e
-                                    );
-                                },
-                                u.people.toString = function () {
-                                    return u.toString(1) + ".people (stub)";
-                                },
-                                o =
-                                    "init me ws ys ps bs capture je Di ks register register_once register_for_session unregister unregister_for_session Ps getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey canRenderSurveyAsync identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty Es $s createPersonProfile Is opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing Ss debug xs getPageViewId captureTraceFeedback captureTraceMetric".split(
-                                        " ",
-                                    ),
-                                n = 0;
-                            n < o.length;
-                            n++
-                        )
-                            g(u, o[n]);
-                        e._i.push([i, s, a]);
-                    }),
-                    (e.__SV = 1));
-            })(document, window.posthog || []);
-            posthog.init("phc_DbsPb39SRc8z3EiQ6Dhj6ikv4H4rTKcht9d4sZSesceP", {
-                api_host: "https://ap.emergent.sh",
-                person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
-                session_recording: {
-                    recordCrossOriginIframes: true,
-                    capturePerformance: false,
-                },
-            });
-        </script>
     </body>
 </html>

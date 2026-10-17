@@ -18,7 +18,7 @@ export function BrevoTrackerPanel() {
         <div className="flex items-center gap-2"><Activity className="w-4 h-4 text-[#0ABAB5]" /><h2 className="font-semibold text-slate-800">Brevo Tracker · eventi personalizzati</h2></div>
         <Button size="sm" variant="outline" onClick={load} data-testid="brevo-tracker-refresh"><RefreshCw className="w-4 h-4 mr-1" />Aggiorna</Button>
       </div>
-      <p className="text-sm text-slate-600">Tracker di navigazione attivo su crmevent.it solo con consenso Marketing (iubenda). Gli eventi sono inviati dal server tramite API Brevo Events; quelli "primo" una sola volta per organizzazione, gli abbonamenti solo da pagamenti Stripe confermati.</p>
+      <p className="text-sm text-slate-600">Tracker di navigazione attivo su crmevent.it solo con consenso Marketing (banner cookie CRMEvent). Gli eventi sono inviati dal server tramite API Brevo Events; quelli "primo" una sola volta per organizzazione, gli abbonamenti solo da pagamenti Stripe confermati.</p>
       {!d.configured && <p className="text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-900 p-3" data-testid="brevo-tracker-not-configured">Brevo non configurato in questo ambiente: gli eventi vengono registrati come "non configurato" e non inviati.</p>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" data-testid="brevo-tracker-counts">
         {d.events.map((ev) => {

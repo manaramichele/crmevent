@@ -1,7 +1,17 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Footer from "@/components/Footer";
+import api from "@/lib/api";
+import { openCookiePreferences } from "@/lib/consent";
 
-const LAST_UPDATED = "16 ottobre 2026";
+const LAST_UPDATED = "17 ottobre 2026";
+const CAT_LABEL = { necessary: "Necessari", analytics: "Analitici", marketing: "Marketing" };
+
+function usePrivacyConfig() {
+  const [cfg, setCfg] = useState(null);
+  useEffect(() => { api.get("/privacy/config").then(({ data }) => setCfg(data)).catch(() => {}); }, []);
+  return cfg;
+}
 
 function Section({ title, children, id }) {
   return (
@@ -75,7 +85,7 @@ function PrivacyPolicy() {
           <li><strong>Sicurezza, prevenzione abusi e log tecnici</strong>: legittimo interesse (art. 6.1.f GDPR).</li>
           <li><strong>Adempimenti di legge</strong> (fiscali, contabili): obbligo legale (art. 6.1.c GDPR).</li>
           <li><strong>Cookie e strumenti di analisi/marketing</strong>: consenso (art. 6.1.a GDPR) – vedi
-              la <Link to="/cookie" className="text-tiffany-active font-semibold hover:underline">Cookie Policy</Link>.</li>
+              la <Link to="/cookie-policy" className="text-tiffany-active font-semibold hover:underline">Cookie Policy</Link>.</li>
         </ul>
       </Section>
 
@@ -144,13 +154,15 @@ function PrivacyPolicy() {
               modulo Social (vedi sezione 7);</li>
           <li><strong>Google Gemini</strong> – generazione di immagini/elementi grafici nel modulo Social, dove
               effettivamente utilizzato (vedi sezione 7);</li>
-          <li><strong>Brevo</strong> – invio di email e comunicazioni e gestione dei relativi contatti;</li>
+          <li><strong>Brevo</strong> – invio di email e comunicazioni, gestione dei relativi contatti, eventi di utilizzo
+              dell'account per le comunicazioni di onboarding e, solo previo consenso Marketing, Brevo Tracker;</li>
           <li><strong>Stripe</strong> – gestione dei pagamenti;</li>
           <li><strong>Fatture in Cloud</strong> – emissione e gestione dei documenti di fatturazione;</li>
           <li><strong>Meta/Instagram</strong> – funzionalità di pubblicazione e gestione dei contenuti social;</li>
           <li><strong>Google Analytics 4</strong> – statistiche di utilizzo in forma aggregata, previo consenso
-              (vedi <Link to="/cookie" className="text-tiffany-active font-semibold hover:underline">Cookie Policy</Link>);</li>
-          <li><strong>Iubenda</strong> – gestione del consenso e delle preferenze sui cookie (Consent Management Platform);</li>
+              (vedi <Link to="/cookie-policy" className="text-tiffany-active font-semibold hover:underline">Cookie Policy</Link>);</li>
+          <li><strong>Gestione dei consensi cookie</strong> – sistema proprietario di CRMEvent: banner, preferenze e
+              registro consensi pseudonimo conservato nel database della piattaforma (nessun fornitore terzo);</li>
           <li><strong>Servizio di object storage</strong> – archiviazione dei file caricati dagli utenti;</li>
           <li><strong>Database MongoDB</strong> – archiviazione dei dati della piattaforma, ospitato
               sull'infrastruttura Aruba;</li>
@@ -344,67 +356,113 @@ function GoogleDataSection() {
   );
 }
 
+function ServicesTable({ cfg }) {
+  if (!cfg) return <p className="text-sm text-slate-400">Caricamento elenco servizi...</p>;
+  return (
+    <div className="space-y-4" data-testid="cookie-policy-services">
+      {["necessary", "analytics", "marketing"].map((cat) => (
+        <div key={cat}>
+          <h3 className="font-semibold text-slate-800">{CAT_LABEL[cat]}</h3>
+          <ul className="mt-2 space-y-2">
+            {cfg.services.filter((s) => s.category === cat).map((s) => (
+              <li key={s.id} className="border border-slate-200 rounded-lg p-3 text-sm">
+                <div><strong>{s.name}</strong> – {s.provider}</div>
+                <div className="text-slate-600">{s.purpose_it}</div>
+                {s.cookies?.length > 0 && (
+                  <ul className="mt-1 list-disc pl-5 text-slate-600">
+                    {s.cookies.map((c) => <li key={c.name}><code>{c.name}</code> – {c.duration_it} – {c.description_it}</li>)}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CookiePolicy() {
+  const cfg = usePrivacyConfig();
   return (
     <>
       <p className="text-slate-600 leading-relaxed">
         La presente Cookie Policy spiega cosa sono i cookie e le tecnologie simili, quali tipologie sono
         utilizzate da <strong>CRMEvent</strong> e come è possibile gestirne le preferenze.
+        {cfg && <span className="block text-xs text-slate-400 mt-1" data-testid="cookie-policy-version">Versione {cfg.versions.cookie}</span>}
       </p>
 
       <Section title="1. Cosa sono i cookie">
         <p>
           I cookie sono piccoli file di testo che i siti web salvano sul dispositivo dell'utente per
-          memorizzare informazioni. Possono essere di prima parte (impostati dal sito) o di terze parti
-          (impostati da servizi esterni), e possono avere durata di sessione o persistente.
+          memorizzare informazioni. Tecnologie simili (come il localStorage del browser) sono trattate allo
+          stesso modo. Possono essere di prima parte o di terze parti, di sessione o persistenti.
         </p>
       </Section>
 
-      <Section title="2. Cookie tecnici / necessari">
+      <Section title="2. Categorie utilizzate">
+        <ul className="list-disc pl-6 space-y-1">
+          <li><strong>Necessari</strong>: indispensabili per autenticazione, sicurezza e memorizzazione delle scelte sui
+              cookie. Sono sempre attivi e non richiedono consenso.</li>
+          <li><strong>Analitici</strong> (facoltativi): statistiche di utilizzo tramite Google Analytics 4 (IP anonimizzato) e
+              analisi tecnica dell'applicazione. Attivati <strong>solo previo consenso</strong>.</li>
+          <li><strong>Marketing</strong> (facoltativi): Brevo Tracker, che associa la navigazione al contatto per comunicazioni
+              e automazioni email. Attivato <strong>solo previo consenso</strong>.</li>
+        </ul>
+      </Section>
+
+      <Section title="3. Servizi e cookie utilizzati">
+        <ServicesTable cfg={cfg} />
+      </Section>
+
+      <Section title="4. Gestione del consenso">
         <p>
-          Sono indispensabili per il funzionamento della piattaforma e non richiedono consenso. Vengono
-          utilizzati, ad esempio, per l'autenticazione e il mantenimento della sessione dell'utente
-          (cookie di sessione con token). Senza questi cookie il servizio non può funzionare correttamente.
+          Il consenso è raccolto tramite il banner proprietario di CRMEvent. Nessuna categoria facoltativa è preselezionata,
+          lo scorrimento o la chiusura della pagina non valgono come consenso e il rifiuto non limita l'uso della piattaforma.
+          Prima della scelta Google Consent Mode v2 è impostato su "negato" (analytics_storage, ad_storage, ad_user_data,
+          ad_personalization) e gli script di Google Analytics, dell'analisi applicativa e di Brevo non vengono caricati.
         </p>
-      </Section>
-
-      <Section title="3. Cookie analitici">
         <p>
-          Utilizzati per raccogliere informazioni aggregate su come gli utenti utilizzano il sito, al fine di
-          migliorare il servizio. CRMEvent utilizza <strong>Google Analytics 4</strong> con IP anonimizzato e
-          in conformità alla modalità "Consent Mode". Questi cookie vengono installati
-          <strong> solo previo consenso</strong> dell'utente.
+          Puoi modificare o revocare le tue scelte in qualsiasi momento tramite il link "Preferenze cookie" nel footer, nel menu
+          dell'area riservata oppure{" "}
+          <button type="button" onClick={openCookiePreferences} className="text-tiffany-active font-semibold hover:underline" data-testid="cookie-policy-open-prefs">da qui</button>.
+          In caso di revoca i cookie dei servizi interessati vengono eliminati e il tracciamento si interrompe.
+          Il banner viene riproposto dopo 6 mesi o quando pubblichiamo una nuova versione di questa policy, della Privacy Policy o del banner.
         </p>
       </Section>
 
-      <Section title="4. Cookie di marketing / profilazione">
+      <Section title="5. Registro dei consensi">
         <p>
-          Eventuali cookie di marketing o profilazione vengono installati <strong>solo previo consenso</strong>
-          dell'utente e servono a misurare l'efficacia delle comunicazioni e a mostrare contenuti in linea con
-          gli interessi. L'elenco aggiornato e i dettagli dei singoli strumenti sono sempre consultabili tramite
-          lo strumento di gestione del consenso.
+          Per dimostrare il consenso conserviamo, per ogni scelta: un identificativo pseudonimo generato dal browser, l'ID utente
+          solo se hai effettuato l'accesso, data e ora, preferenze espresse, versioni di Privacy Policy, Cookie Policy e banner,
+          origine della scelta (banner o preferenze), lingua ed eventuale modifica o revoca. Non registriamo indirizzo IP né
+          informazioni sul dispositivo. I dati sono accessibili solo agli amministratori della piattaforma e vengono cancellati
+          automaticamente dopo 24 mesi.
         </p>
       </Section>
 
-      <Section title="5. Gestione del consenso">
+      <Section title="6. Eventi di utilizzo dell'account">
         <p>
-          Per i cookie non tecnici (analitici e di marketing) il consenso viene raccolto e gestito tramite
-          lo strumento di gestione del consenso (Consent Management Platform) <strong>Iubenda</strong>, integrato
-          con la modalità Google Consent Mode v2. L'utente può in ogni momento modificare o revocare le proprie
-          preferenze tramite il link "Preferenze cookie" presente nel footer del sito.
+          Indipendentemente dai cookie, per gli utenti registrati CRMEvent comunica a Brevo dal proprio server alcuni eventi
+          legati all'uso dell'account (registrazione, accesso, inizio prova, primo evento, prima attività, abbonamento) per
+          l'invio di comunicazioni di servizio e di onboarding, come descritto nella{" "}
+          <Link to="/privacy-policy" className="text-tiffany-active font-semibold hover:underline">Privacy Policy</Link>.
+          Questi eventi non usano cookie né tracciano la navigazione.
         </p>
       </Section>
 
-      <Section title="6. Come gestire i cookie dal browser">
+      <Section title="7. Come gestire i cookie dal browser">
         <p>
-          È inoltre possibile gestire o disabilitare i cookie direttamente dalle impostazioni del proprio
-          browser (Chrome, Firefox, Safari, Edge, ecc.). La disabilitazione dei cookie tecnici può tuttavia
-          compromettere il corretto funzionamento della piattaforma.
+          È inoltre possibile gestire o disabilitare i cookie dalle impostazioni del browser (Chrome, Firefox, Safari, Edge, ecc.).
+          La disabilitazione dei cookie tecnici può compromettere il funzionamento della piattaforma.
         </p>
       </Section>
 
-      <Section title="7. Aggiornamenti">
-        <p>La presente Cookie Policy può essere aggiornata; le modifiche saranno pubblicate su questa pagina.</p>
+      <Section title="8. Titolare e aggiornamenti">
+        <p>
+          Titolare del trattamento: Michele Manara – P. IVA 02671780340 – <a href="mailto:support@crmevent.it" className="text-tiffany-active font-semibold hover:underline">support@crmevent.it</a>.
+          La presente Cookie Policy può essere aggiornata; le modifiche sono pubblicate su questa pagina con una nuova versione.
+        </p>
       </Section>
     </>
   );
@@ -454,7 +512,7 @@ function Termini() {
           L'organizzatore garantisce di avere una base giuridica adeguata per il trattamento di tali dati e si
           impegna a rispettare la normativa applicabile in materia di protezione dei dati personali. Rispetto a
           tali dati, i ruoli di Titolare e Responsabile del trattamento sono disciplinati nella
-          <Link to="/privacy" className="text-tiffany-active font-semibold hover:underline"> Privacy Policy</Link>.
+          <Link to="/privacy-policy" className="text-tiffany-active font-semibold hover:underline"> Privacy Policy</Link>.
         </p>
       </Section>
 
@@ -542,7 +600,7 @@ function Termini() {
           uso illecito o di rischio per la sicurezza. L'utente può richiedere la chiusura del proprio account
           secondo le modalità rese disponibili sulla piattaforma o contattando il Titolare. A seguito della
           chiusura, i dati vengono trattati secondo quanto indicato nella
-          <Link to="/privacy" className="text-tiffany-active font-semibold hover:underline"> Privacy Policy</Link>.
+          <Link to="/privacy-policy" className="text-tiffany-active font-semibold hover:underline"> Privacy Policy</Link>.
         </p>
       </Section>
 
@@ -557,9 +615,9 @@ function Termini() {
       <Section title="16. Privacy e trattamento dei dati">
         <p>
           Il trattamento dei dati personali è disciplinato dalla
-          <Link to="/privacy" className="text-tiffany-active font-semibold hover:underline"> Privacy Policy</Link> e,
+          <Link to="/privacy-policy" className="text-tiffany-active font-semibold hover:underline"> Privacy Policy</Link> e,
           per quanto riguarda i cookie, dalla
-          <Link to="/cookie" className="text-tiffany-active font-semibold hover:underline"> Cookie Policy</Link>.
+          <Link to="/cookie-policy" className="text-tiffany-active font-semibold hover:underline"> Cookie Policy</Link>.
         </p>
       </Section>
 

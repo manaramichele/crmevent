@@ -1,21 +1,13 @@
 import api from "@/lib/api";
+import { hasConsent } from "@/lib/consent";
 
-// Codice partner (?ref=&cmp=): conservato e tracciato SOLO dopo il consenso iubenda (misurazione o marketing).
+// Codice partner (?ref=&cmp=): conservato e tracciato SOLO dopo il consenso cookie (analitici o marketing).
 // Senza consenso resta in memoria per la sola visita corrente.
 const KEY = "crmevent_ref";
 const DAYS = 30;
 let pending = null;
 
-function consentGiven() {
-  try {
-    const prefs = window._iub?.cs?.api?.getPreferences?.();
-    if (prefs?.purposes) return !!(prefs.purposes["4"] || prefs.purposes["5"]);
-    const c = document.cookie.split("; ").find((x) => x.startsWith("_iub_cs-"));
-    if (!c) return false;
-    const v = JSON.parse(decodeURIComponent(c.split("=").slice(1).join("=")));
-    return !!(v.purposes ? v.purposes["4"] || v.purposes["5"] : v.consent);
-  } catch { return false; }
-}
+const consentGiven = () => hasConsent("analytics") || hasConsent("marketing");
 
 function persist() {
   if (!pending || !consentGiven()) return false;
