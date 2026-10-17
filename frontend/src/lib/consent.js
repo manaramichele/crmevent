@@ -52,7 +52,9 @@ export async function saveConsent({ analytics, marketing }, action, source, lang
   const revoked = ["analytics", "marketing"].filter((c) => prev?.choices?.[c] && !choices[c]);
   if (revoked.length) {
     if (window.__crmApplyConsent) window.__crmApplyConsent(choices);
-    if (revoked.includes("marketing") && window.posthog?.opt_out_capturing && !choices.analytics) window.posthog.opt_out_capturing();
+    if (revoked.includes("analytics") && window.posthog?.opt_out_capturing) {
+      try { window.posthog.opt_out_capturing(); window.posthog.reset?.(); window.posthog.set_config?.({ persistence: "memory", disable_persistence: true }); } catch {}
+    }
     revoked.forEach(purge);
     window.location.reload(); // gli script già caricati vengono scaricati solo ricaricando la pagina
     return next;

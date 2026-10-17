@@ -5,14 +5,14 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 CATEGORIES = ("necessary", "analytics", "marketing")
 # Servizi collegati a script reali: categoria bloccata (non spostabili tra i "necessari").
 LOCKED_SERVICES = {"ga4": "analytics", "posthog": "analytics", "brevo": "marketing", "crmevent_core": "necessary"}
 RETENTION_DAYS = 730
 REASK_DAYS = 180
-CONSENT_ID_RE = re.compile(r"^[a-f0-9-]{36}$")
+CONSENT_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 def _now() -> datetime:
@@ -179,10 +179,12 @@ def build(db, deps: dict):
 
     @r.put("/platform/privacy/settings")
     async def put_settings(body: SettingsIn, admin: dict = Depends(sa)):
-        banner = {lang: LangText(**(body.banner.get(lang) or {})).model_dump() for lang in ("it", "en")}
-        cats = {}
-        for c in CATEGORIES:
-            cats[c] = {lang: CatText(**((body.categories.get(c) or {}).get(lang) or {})).model_dump() for lang in ("it", "en")}
+        try:
+            banner = {lang: LangText(**(body.banner.get(lang) or {})).model_dump() for lang in ("it", "en")}
+            cats = {c: {lang: CatText(**((body.categories.get(c) or {}).get(lang) or {})).model_dump() for lang in ("it", "en")}
+                    for c in CATEGORIES}
+        except ValidationError:
+            raise HTTPException(400, "Testi non validi: titolo banner 3-120 caratteri, testo banner almeno 40, nome categoria almeno 2 e descrizione almeno 10, in italiano e inglese")
         ids = [s.id for s in body.services]
         if len(ids) != len(set(ids)):
             raise HTTPException(400, "ID servizio duplicato")

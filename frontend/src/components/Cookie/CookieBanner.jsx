@@ -40,7 +40,7 @@ export default function CookieBanner() {
         <div role="dialog" aria-modal="false" aria-labelledby="cookie-banner-title" data-testid="cookie-banner"
           className="fixed z-[10000] bottom-0 inset-x-0 sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-[440px] bg-white sm:rounded-2xl border-t-4 sm:border-t-0 sm:border-l-4 border-[#0ABAB5] shadow-[0_12px_40px_rgba(15,23,42,0.18)] p-5 animate-in slide-in-from-bottom-4 fade-in duration-300">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <img src="/logo-crmevent.png?v=5" alt="CRMEvent" className="h-6 w-auto" />
+            <img src="/logo-crmevent.png?v=5" alt="CRMEvent" className="h-8 w-auto" />
             <div className="flex rounded-full border border-slate-200 p-0.5 text-xs" role="group" aria-label={t.lang} data-testid="cookie-lang-switch">
               {["it", "en"].map((l) => (
                 <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l} data-testid={`cookie-lang-${l}`}
@@ -53,7 +53,7 @@ export default function CookieBanner() {
           <p className="text-xs text-slate-500 mt-2">
             <a href="/privacy-policy" className="underline hover:text-slate-800" data-testid="cookie-banner-privacy-link">{t.privacy}</a> · <a href="/cookie-policy" className="underline hover:text-slate-800" data-testid="cookie-banner-cookie-link">{t.cookie}</a>
           </p>
-          <div className="flex flex-wrap gap-2 mt-4">
+          <div className="grid grid-cols-1 gap-2 mt-4">
             <button type="button" className={BTN} onClick={() => save({ analytics: true, marketing: true }, "accept_all", "banner")} data-testid="cookie-accept-all">{t.accept}</button>
             <button type="button" className={BTN} onClick={() => save({ analytics: false, marketing: false }, "reject_all", "banner")} data-testid="cookie-reject-all">{t.reject}</button>
             <button type="button" className={BTN} onClick={() => { setSource("preferences"); setPrefs(true); }} data-testid="cookie-customize">{t.customize}</button>

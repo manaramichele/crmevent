@@ -52,7 +52,7 @@ export function ConsentRegistry() {
   const load = useCallback((p = 1) => api.get("/platform/privacy/consents", { params: { q: q || undefined, page: p, limit: 50 } })
     .then(({ data }) => { setD(data); setPage(p); }).catch((e) => toast.error(formatApiError(e.response?.data?.detail))), [q]);
   return (
-    <div className={`${CARD} space-y-4`} data-testid="privacy-registry">
+    <div className={`${CARD} space-y-4 min-w-0 max-w-full overflow-hidden`} data-testid="privacy-registry">
       <p className="text-sm text-slate-600">Accesso riservato al Super Admin; ogni consultazione viene registrata nell'Audit Log. I record vengono cancellati automaticamente dopo 24 mesi.</p>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); load(1); }}>
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ID consenso o ID utente (vuoto = tutti)" className="max-w-sm" data-testid="privacy-registry-search" />
@@ -61,7 +61,7 @@ export function ConsentRegistry() {
       {d && (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="privacy-registry-table">
+            <table className="w-full min-w-[980px] text-sm" data-testid="privacy-registry-table">
               <thead><tr className="text-left text-xs text-slate-500 border-b"><th className="py-2 pr-3">Data</th><th className="pr-3">ID consenso</th><th className="pr-3">Utente</th><th className="pr-3">Scelta</th><th className="pr-3">Analitici</th><th className="pr-3">Marketing</th><th className="pr-3">Evento</th><th className="pr-3">Origine</th><th>Versioni P/C/B</th></tr></thead>
               <tbody>
                 {d.items.length === 0 && <tr><td colSpan={9} className="py-4 text-slate-400">Nessun record.</td></tr>}

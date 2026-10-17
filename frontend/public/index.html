@@ -53,9 +53,22 @@
                     if (c.analytics) { L.ga(); L.posthog(); }
                     if (c.marketing) { L.brevo(); }
                 };
+                function purge(res) {
+                    var h = location.hostname, p = h.split('.'), ds = ['', h, '.' + h];
+                    if (p.length > 2) ds.push('.' + p.slice(-2).join('.'));
+                    document.cookie.split('; ').forEach(function (c) {
+                        var n = c.split('=')[0];
+                        if (res.some(function (r) { return r.test(n); })) ds.forEach(function (d) {
+                            document.cookie = n + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/' + (d ? '; domain=' + d : '');
+                        });
+                    });
+                }
                 try {
                     var st = JSON.parse(localStorage.getItem('crmevent_consent'));
-                    if (st && st.choices && Date.now() - st.ts < 180 * 864e5) window.__crmApplyConsent(st.choices);
+                    var fresh = st && st.choices && Date.now() - st.ts < 180 * 864e5;
+                    if (!fresh || !st.choices.analytics) purge([/^_ga/, /^_gid$/, /^ph_/]);
+                    if (!fresh || !st.choices.marketing) purge([/^sib_/, /^brevo/, /^_brevo/]);
+                    if (fresh) window.__crmApplyConsent(st.choices);
                 } catch (e) {}
             })();
         </script>
