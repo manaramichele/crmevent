@@ -59,11 +59,13 @@ function ListEditor({ items, setItems, fields, addLabel, testid, disabled }) {
 }
 
 function SendDialog({ rel, onClose, onDone }) {
-  const [f, setF] = useState({ mode: "now", send_at: "", oggetto_email: rel.oggetto_email || rel.titolo || "", media: [], regioni: [] });
+  const [f, setF] = useState({ mode: "now", send_at: "", oggetto_email: rel.oggetto_email || rel.titolo || "", media: [], regioni: [], iscritti: null });
+  const [eds, setEds] = useState(null);
   const [rc, setRc] = useState(null);
   const [test, setTest] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { api.post(`/press/releases/${rel.id}/recipients`, f).then(({ data }) => setRc(data)).catch(() => {}); }, [f.media, f.regioni]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { api.post(`/press/releases/${rel.id}/recipients`, f).then(({ data }) => setRc(data)).catch(() => {}); }, [f.media, f.regioni, f.iscritti]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (rc?.iscritti_available && !eds) { api.get("/iscritti/edizioni").then(({ data }) => setEds(data.edizioni)).catch(() => setEds([])); } }, [rc, eds]);
   const go = async () => {
     setBusy(true);
     try { await api.post(`/press/releases/${rel.id}/send`, { ...f, send_at: f.mode === "scheduled" ? new Date(f.send_at).toISOString() : null }); toast.success(f.mode === "now" ? "Invio avviato" : "Invio programmato"); onDone(); } catch (e) { pErr(e); }
@@ -78,14 +80,22 @@ function SendDialog({ rel, onClose, onDone }) {
         <Field label="Oggetto email"><Input value={f.oggetto_email} onChange={(e) => setF({ ...f, oggetto_email: e.target.value })} data-testid="press-send-subject" /></Field>
         <Field label="Tipologia media (vuoto = tutte)"><select multiple className={`${SEL} w-full h-24`} value={f.media} onChange={(e) => setF({ ...f, media: [...e.target.selectedOptions].map((o) => o.value) })} data-testid="press-send-media">{MEDIA.map((m) => <option key={m}>{m}</option>)}</select></Field>
         <Field label="Regioni (separate da virgola, vuoto = tutte)"><Input onChange={(e) => setF({ ...f, regioni: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} data-testid="press-send-regioni" /></Field>
-        <div className="text-sm font-medium text-slate-700" data-testid="press-send-count">Destinatari idonei: {rc ? rc.count : "…"}{rc?.excluded ? <span className="text-xs text-slate-500"> · {rc.excluded} esclusi (disiscritti, sospesi o senza base giuridica)</span> : null}</div>
+        {rc?.iscritti_available && (
+          <Field label="Aggiungi iscritti con consenso marketing (Elenco Iscritti)">
+            <select className={`${SEL} w-full`} value={f.iscritti?.edizione_id || ""} onChange={(e) => setF({ ...f, iscritti: e.target.value ? { edizione_id: e.target.value } : null })} data-testid="press-send-iscritti">
+              <option value="">Nessun iscritto</option>
+              {(eds || []).map((e) => <option key={e.id} value={e.id}>{e.event_nome} {e.anno} {e.edizione}</option>)}
+            </select>
+          </Field>
+        )}
+        <div className="text-sm font-medium text-slate-700" data-testid="press-send-count">Destinatari idonei: {rc ? rc.count + (rc.iscritti || 0) : "…"}{rc?.iscritti ? <span className="text-xs text-slate-500"> (di cui {rc.iscritti} iscritti)</span> : null}{rc?.excluded ? <span className="text-xs text-slate-500"> · {rc.excluded} esclusi (disiscritti, sospesi o senza base giuridica)</span> : null}</div>
         <div className="flex gap-2"><Input placeholder="Email per la prova" value={test} onChange={(e) => setTest(e.target.value)} data-testid="press-test-email" /><Button variant="outline" onClick={sendTest} disabled={!test} data-testid="press-test-send">Invia prova</Button></div>
         <div className="flex gap-4 text-sm">
           <label className="flex items-center gap-2"><input type="radio" checked={f.mode === "now"} onChange={() => setF({ ...f, mode: "now" })} data-testid="press-mode-now" />Invia subito</label>
           <label className="flex items-center gap-2"><input type="radio" checked={f.mode === "scheduled"} onChange={() => setF({ ...f, mode: "scheduled" })} data-testid="press-mode-scheduled" />Programma</label>
         </div>
         {f.mode === "scheduled" && <Input type="datetime-local" value={f.send_at} onChange={(e) => setF({ ...f, send_at: e.target.value })} data-testid="press-send-at" />}
-        <Button disabled={busy || !rc?.count || (f.mode === "scheduled" && !f.send_at)} onClick={go} className={`w-full h-11 ${TIFFANY_BTN}`} data-testid="press-send-confirm"><Send className="w-4 h-4 mr-2" />{f.mode === "now" ? `Conferma invio a ${rc?.count || 0} destinatari` : "Conferma programmazione"}</Button>
+        <Button disabled={busy || !(rc?.count + (rc?.iscritti || 0)) || (f.mode === "scheduled" && !f.send_at)} onClick={go} className={`w-full h-11 ${TIFFANY_BTN}`} data-testid="press-send-confirm"><Send className="w-4 h-4 mr-2" />{f.mode === "now" ? `Conferma invio a ${(rc?.count || 0) + (rc?.iscritti || 0)} destinatari` : "Conferma programmazione"}</Button>
       </DialogContent>
     </Dialog>
   );

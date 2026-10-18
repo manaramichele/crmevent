@@ -34,6 +34,7 @@ import { brevoPage, brevoIdentify, brevoReset } from "@/lib/brevoTracker";
 import { CHANGE_EVENT } from "@/lib/consent";
 import CookieBanner from "@/components/Cookie/CookieBanner";
 import PrivacyCookieAdmin from "@/pages/PrivacyCookieAdmin";
+import Iscritti from "@/pages/Iscritti";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
@@ -162,6 +163,7 @@ function Shell() {
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
         <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />
+        <Route path="/iscritti" element={<Protected><Iscritti /></Protected>} />
         <Route path="/piattaforma/segnalazioni" element={<Protected><SuperAdminOnly><PlatformTickets /></SuperAdminOnly></Protected>} />
         <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />

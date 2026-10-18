@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
-  LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, Handshake,
+  LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, Handshake, Contact,
   ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
@@ -64,6 +64,14 @@ const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
   if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...n, locked: true }];
   return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [n] : [];
 });
+
+// Moduli Marketplace attivi: voce di menu dopo "Anagrafiche".
+const ISCRITTI_NAV = { to: "/iscritti", label: "Elenco Iscritti", icon: Contact, id: "iscritti", perm: "*" };
+const withIscritti = (items, on) => {
+  if (!on) return items;
+  const i = items.findIndex((n) => n.id === "persone");
+  return i < 0 ? [...items, ISCRITTI_NAV] : [...items.slice(0, i + 1), ISCRITTI_NAV, ...items.slice(i + 1)];
+};
 
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
@@ -257,6 +265,11 @@ export default function Layout({ children }) {
   }, []);
 
   const isSuper = user?.role === "superadmin";
+  const [iscrittiOn, setIscrittiOn] = useState(false);
+  useEffect(() => {
+    if (isSuper || !user?.org_id) { setIscrittiOn(false); return; }
+    api.get("/iscritti/status").then(({ data }) => setIscrittiOn(!!data.active)).catch(() => setIscrittiOn(false));
+  }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
   const [counts, setCounts] = useState({});
   useEffect(() => {
     if (!isSuper) return undefined;
@@ -339,7 +352,7 @@ export default function Layout({ children }) {
 
   const navGroups = isSuper
     ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }, { title: "Marketing CRMEvent — Piattaforma", items: MARKETING_NAV }]
-    : [{ items: orgNavFor(user) }];
+    : [{ items: withIscritti(orgNavFor(user), iscrittiOn) }];
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !isPlatformRoute && (!orgsLoaded || !validActing);

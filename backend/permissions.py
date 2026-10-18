@@ -59,6 +59,7 @@ ROUTE_RULES = [
     ("/video-support", "*", None),
     ("/demo/", "*", None),
     ("/marketplace", "*", None),
+    ("/iscritti", "*", None),
     ("/saas/", "*", None),
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),

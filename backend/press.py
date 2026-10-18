@@ -113,6 +113,17 @@ class SendIn(BaseModel):
     media: Optional[List[str]] = []
     regioni: Optional[List[str]] = []
     province: Optional[List[str]] = []
+    iscritti: Optional[dict] = None  # filtri Elenco Iscritti (event_id/anno/edizione_id/gara): solo con consenso marketing
+
+
+ISCRITTI: dict = {}  # servizio centrale Elenco Iscritti, collegato da server.py
+
+
+async def _iscritti_recips(org_id: str, f: Optional[dict], press_emails: set) -> list:
+    if not f or not ISCRITTI or not await ISCRITTI["is_active"](org_id):
+        return []
+    f = {k: str(v) for k, v in f.items() if k in ("event_id", "anno", "edizione_id", "gara", "stato") and v}
+    return [{**p, "_iscritto": True} for p in await ISCRITTI["select_recipients"](org_id, f) if p["email"] not in press_emails]
 
 
 class TestIn(BaseModel):
@@ -338,6 +349,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
         event = await db.events.find_one({"id": rel.get("event_id"), "org_id": rel["org_id"]}, {"_id": 0}) or {}
         subject = rel.get("oggetto_email") or rel.get("titolo") or "Comunicato stampa"
         contacts = await db.press_contacts.find(_recipients_q(rel["org_id"], rel.get("filters") or {}), {"_id": 0}).to_list(10000)
+        contacts += await _iscritti_recips(rel["org_id"], (rel.get("filters") or {}).get("iscritti"), {c["email"] for c in contacts})
         if not brevo_funnel.is_configured():
             await db.press_releases.update_one({"id": rid}, {"$set": {"status": "errore", "error": "Brevo non configurato"}})
             return
@@ -349,7 +361,7 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
                 prev = await db.press_sends.find_one({"release_id": rid, "email": c["email"]}, {"_id": 0, "status": 1})
                 if prev and prev["status"] in ("inviato", "in_corso"):
                     continue
-            unsub = f"{app_url.rstrip('/')}/api/public/press/unsubscribe/{c['unsub_token']}"
+            unsub = ISCRITTI["unsub_url"](c["unsub_token"]) if c.get("_iscritto") else f"{app_url.rstrip('/')}/api/public/press/unsubscribe/{c['unsub_token']}"
             sc, mid, err = await _send_one(c["email"], subject, _html(rel, st, event, unsub), st, f"press-{rid}")
             stt = "inviato" if sc in (200, 201) else ("rate_limit" if sc == 429 else "errore")
             await db.press_sends.update_one({"release_id": rid, "email": c["email"]}, {"$set": {"status": stt, "message_id": mid, "error": None if stt == "inviato" else (err or f"HTTP {sc}")[:200], "sent_at": _now()}})
@@ -481,7 +493,9 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
     async def recipients(rid: str, body: SendIn, user: dict = Depends(member)):
         await _release(rid, user["org_id"])
         q = _recipients_q(user["org_id"], body.model_dump())
-        return {"count": await db.press_contacts.count_documents(q),
+        press_emails = set(await db.press_contacts.distinct("email", q))
+        return {"count": len(press_emails), "iscritti": len(await _iscritti_recips(user["org_id"], body.iscritti, press_emails)),
+                "iscritti_available": bool(ISCRITTI) and await ISCRITTI["is_active"](user["org_id"]),
                 "excluded": await db.press_contacts.count_documents({"org_id": user["org_id"]}) - await db.press_contacts.count_documents(_recipients_q(user["org_id"], {}))}
 
     @r.post("/press/releases/{rid}/approve")
@@ -507,8 +521,9 @@ def build_router(db, require_org_member, require_superadmin, record_audit, app_u
             raise HTTPException(status_code=400, detail="Comunicato non programmabile")
         if (e := _sender_ok(await _settings(user["org_id"]))):
             raise HTTPException(status_code=400, detail=e)
-        filters = {"media": body.media or [], "regioni": body.regioni or [], "province": body.province or []}
-        n = await db.press_contacts.count_documents(_recipients_q(user["org_id"], filters))
+        filters = {"media": body.media or [], "regioni": body.regioni or [], "province": body.province or [], "iscritti": body.iscritti or None}
+        press_emails = set(await db.press_contacts.distinct("email", _recipients_q(user["org_id"], filters)))
+        n = len(press_emails) + len(await _iscritti_recips(user["org_id"], body.iscritti, press_emails))
         if not n:
             raise HTTPException(status_code=400, detail="Nessun destinatario idoneo (attivo e con base giuridica)")
         send_at = _now()

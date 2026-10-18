@@ -1,4 +1,12 @@
 crons:
+  - name: iscritti-tick
+    description: "Elenco Iscritti: riprova le sincronizzazioni Brevo fallite e anonimizza gli iscritti senza partecipazioni da oltre 5 anni"
+    cron: "30 3 * * *"
+    timezone: "Europe/Rome"
+    endpoint: "{{BASE_URL}}/api/cron/iscritti-tick"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
   - name: calendar-availability-tick
     description: "Controlla ogni 15 minuti la disponibilità sui calendari Google monitorati (solo free/busy) e aggiorna stato ed errori"
     cron: "*/15 * * * *"

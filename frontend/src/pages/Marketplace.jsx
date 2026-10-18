@@ -79,7 +79,7 @@ function Detail({ s, canPurchase, onClose, onToggle }) {
           {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">{s.status === "coming_soon" ? "Funzionalità previste" : "Condizioni e durata"}</div>{s.terms}</div>}
         </div>
         <p className="text-xs text-slate-500">Servizio extra a pagamento, non incluso negli abbonamenti BRONZE, SILVER e GOLD. Appartiene all'organizzazione.</p>
-        {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}</div>
+        {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}{s.key === "archivio-iscritti" && <Link to="/iscritti" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-iscritti">Apri servizio</Link>}</div>
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">
@@ -106,7 +106,8 @@ export default function Marketplace() {
     }).catch(() => {}).finally(() => { setParams({}, { replace: true }); load(); });
     else load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const list = useMemo(() => (data?.services || []).filter((s) => (!cat || s.category === cat) && (!q || `${s.name} ${s.description}`.toLowerCase().includes(q.toLowerCase()))), [data, q, cat]);
+  const list = useMemo(() => (data?.services || []).filter((s) => (!cat || s.category === cat) && (!q || `${s.name} ${s.description}`.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => Number(!!b.active) - Number(!!a.active)), [data, q, cat]);
   const cats = [...new Set((data?.services || []).map((s) => s.category))];
   const toggle = (id, v) => {
     setData((d) => ({ ...d, services: d.services.map((x) => (x.id === id ? { ...x, notify_me: v } : x)) }));
