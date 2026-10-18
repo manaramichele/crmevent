@@ -127,14 +127,16 @@ class PurchaseStatusIn(BaseModel):
     status: str
 
 
-def can_buy(svc: dict) -> Optional[str]:
-    """Motivo per cui il servizio NON è acquistabile (None = acquistabile)."""
+def can_buy(svc: dict, demo: bool = False) -> Optional[str]:
+    """Motivo per cui il servizio NON è acquistabile (None = acquistabile). demo = organizzazione Demo ufficiale (gratis a prescindere dal prezzo)."""
     if not svc.get("visible") or svc.get("status") != "available":
         return "Servizio non disponibile"
     if not svc.get("tech_ready"):
         return "Servizio non ancora pronto"
     if not svc.get("purchasable"):
         return "Acquisto non abilitato"
+    if demo:
+        return None
     if svc.get("price_type") == "usage":
         return "Servizio a consumo: attivazione commerciale da approvare"
     if svc.get("price") is None or float(svc["price"]) < 0:
@@ -145,7 +147,18 @@ def can_buy(svc: dict) -> Optional[str]:
 def build(db, deps: dict):
     r = APIRouter(prefix="/api")
 
+    async def _bootstrap_demo_flag():
+        """Una tantum: contrassegna come 'Demo ufficiale' l'org Demo di tipo Test creata da seed_demo (poi gestito solo dal Super Admin)."""
+        if await db.schema_meta.find_one({"id": "demo_official_v1"}):
+            return
+        if not await db.organizations.find_one({"is_demo_official": {"$exists": True}}, {"_id": 1}):
+            cands = await db.organizations.find({"nome": "Demo", "type": "test"}, {"_id": 0, "id": 1}).to_list(2)
+            if len(cands) == 1:
+                await db.organizations.update_one({"id": cands[0]["id"]}, {"$set": {"is_demo_official": True}})
+        await db.schema_meta.insert_one({"id": "demo_official_v1", "applied_at": _now()})
+
     async def _seed():
+        await _bootstrap_demo_flag()
         if await db.marketplace_services.count_documents({}) == 0:
             for i, (key, name, cat, icon, scope, desc) in enumerate(SEED):
                 await db.marketplace_services.update_one({"key": key}, {"$setOnInsert": {
@@ -198,13 +211,19 @@ def build(db, deps: dict):
         p = user.get("perm") or {}
         return user.get("org_role") in ("admin_org", "superadmin") or bool(p.get("admin")) or bool(p.get("marketplace_purchase"))
 
-    def _public(s: dict, purchases: list, notify_ids: set = frozenset(), org_active: set = frozenset()) -> dict:
+    async def _is_demo_org(org_id: str) -> bool:
+        """Gratuità legata al tipo di organizzazione (contrassegno 'Demo ufficiale' su org di tipo Test), mai al ruolo dell'utente."""
+        o = await db.organizations.find_one({"id": org_id}, {"_id": 0, "type": 1, "is_demo_official": 1}) or {}
+        return bool(o.get("is_demo_official")) and o.get("type") == "test"
+
+    def _public(s: dict, purchases: list, notify_ids: set = frozenset(), org_active: set = frozenset(), demo: bool = False) -> dict:
         mine = [p for p in purchases if p["service_id"] == s["id"]]
+        why = can_buy(s, demo)
         return {**{k: s.get(k) for k in ("id", "key", "name", "description", "icon", "image", "category", "price", "price_type",
                                           "usage_unit", "usage_limits", "terms", "status", "scope", "activation", "features", "notify_label", "notified_label", "service_code",
                                           "video_url", "video_id", "video_title")},
                 "free": s.get("price") is not None and float(s["price"]) == 0,
-                "purchasable_now": can_buy(s) is None, "reason": "Attivazione a cura del team CRMEvent" if s.get("activation") == "superadmin" else can_buy(s),
+                "demo_free": demo, "purchasable_now": why is None, "reason": "Attivazione a cura del team CRMEvent" if s.get("activation") == "superadmin" else why,
                 "active": any(p["status"] in ACTIVE for p in mine) or s.get("key") in org_active, "purchases": mine, "notify_me": s["id"] in notify_ids}
 
     async def _org_purchases(org_id: str) -> list:
@@ -218,7 +237,8 @@ def build(db, deps: dict):
         ids = {i["service_id"] for i in await db.marketplace_interests.find(
             {"org_id": user["org_id"], "notified_at": None}, {"_id": 0, "service_id": 1}).to_list(500)}
         act = {x["service"] for x in await db.org_services.find({"org_id": user["org_id"], "active": True}, {"_id": 0, "service": 1}).to_list(100)}
-        return {"services": [_public(s, pur, ids, act) for s in rows], "categories": CATEGORIES, "can_purchase": _can_purchase(user)}
+        demo = await _is_demo_org(user["org_id"])
+        return {"services": [_public(s, pur, ids, act, demo) for s in rows], "categories": CATEGORIES, "can_purchase": _can_purchase(user), "demo_org": demo}
 
     @r.post("/marketplace/services/{sid}/notify")
     async def toggle_notify(sid: str, user: dict = Depends(deps["require_admin"])):
@@ -354,7 +374,8 @@ def build(db, deps: dict):
         svc = await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
         if not svc:
             raise HTTPException(status_code=404, detail="Servizio non trovato")
-        why = can_buy(svc)
+        demo = await _is_demo_org(user["org_id"])
+        why = can_buy(svc, demo)
         if why:
             raise HTTPException(status_code=400, detail=why)
         ev = None
@@ -365,10 +386,19 @@ def build(db, deps: dict):
         dup = {"org_id": user["org_id"], "service_id": sid, "status": {"$in": list(ACTIVE)}}
         if ev:
             dup["event_id"] = ev["id"]
-        free = float(svc["price"]) == 0
+        free = demo or float(svc["price"]) == 0
         if (svc["price_type"] != "one_time" or free) and await db.marketplace_purchases.find_one(dup):
             raise HTTPException(status_code=400, detail="Servizio già attivo")
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+        if demo:
+            await db.marketplace_purchases.insert_one({
+                "id": uuid.uuid4().hex, "org_id": org["id"], "service_id": sid, "service_name": svc["name"], "event_id": (ev or {}).get("id"),
+                "status": "active", "source": "demo", "causale": "DEMO", "note": "DEMO", "price": 0.0, "list_price": svc.get("price"),
+                "price_type": svc.get("price_type") or "one_time", "stripe_session_id": None, "stripe_subscription_id": None,
+                "activated_at": _now(), "current_period_end": None, "created_by": user["user_id"], "created_at": _now(),
+                "history": [{"at": _now(), "status": "active", "by": user.get("email"), "note": "Attivazione gratuita organizzazione Demo"}]})
+            await deps["record_audit"](user, "marketplace_demo_activation", org_id=org["id"], detail=f"{svc['name']} · DEMO · 0 €")
+            return {"activated": True, "demo": True}
         if free:
             await db.marketplace_purchases.insert_one({
                 "id": uuid.uuid4().hex, "org_id": org["id"], "service_id": sid, "service_name": svc["name"], "event_id": (ev or {}).get("id"),

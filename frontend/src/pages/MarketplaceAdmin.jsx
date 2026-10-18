@@ -208,7 +208,7 @@ function Catalog() {
   );
 }
 
-const SOURCE = { stripe: "Stripe", free: "Gratuito", manual: "Manuale (Super Admin)" };
+const SOURCE = { stripe: "Stripe", free: "Gratuito", manual: "Manuale (Super Admin)", demo: "DEMO (0 €)" };
 
 function GrantDialog({ onClose, onDone }) {
   const [orgs, setOrgs] = useState([]);

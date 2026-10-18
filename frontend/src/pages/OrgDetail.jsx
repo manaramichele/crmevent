@@ -35,7 +35,7 @@ export default function OrgDetail() {
   const nav = useNavigate();
   const [tab, setTab] = useState("dati");
   const [org, setOrg] = useState(null);
-  const [form, setForm] = useState({ nome: "", type: "cliente", status: "active", formula: "" });
+  const [form, setForm] = useState({ nome: "", type: "cliente", status: "active", formula: "", is_demo_official: false });
   const [members, setMembers] = useState([]);
   const [editUser, setEditUser] = useState(null);
   const [invites, setInvites] = useState([]);
@@ -48,7 +48,7 @@ export default function OrgDetail() {
   const [delUser, setDelUser] = useState(null); const [working, setWorking] = useState(false); const [cleaning, setCleaning] = useState(false);
 
   const loadOrg = useCallback(() => api.get(`/platform/organizations/${id}/detail`).then(({ data }) => {
-    setOrg(data); setForm({ nome: data.nome, type: data.type, status: data.status, formula: data.formula || "" });
+    setOrg(data); setForm({ nome: data.nome, type: data.type, status: data.status, formula: data.formula || "", is_demo_official: !!data.is_demo_official });
   }).catch((e) => toast.error(formatApiError(e.response?.data?.detail))), [id]);
   const loadMembers = useCallback(() => api.get(`/platform/organizations/${id}/members`).then(({ data }) => setMembers(data)).catch(() => {}), [id]);
   const loadInvites = useCallback(() => api.get(`/platform/organizations/${id}/invites`).then(({ data }) => setInvites(data)).catch(() => {}), [id]);
@@ -60,7 +60,7 @@ export default function OrgDetail() {
   }, [tab, id]);
 
   const saveOrg = async () => {
-    const body = { ...form };
+    const body = { ...form, is_demo_official: form.type === "test" ? form.is_demo_official : false };
     if (form.formula === (org.formula || "")) delete body.formula;
     try { const { data } = await api.patch(`/platform/organizations/${id}`, body); setOrg(data); setForm((f) => ({ ...f, formula: data.formula || "" })); toast.success("Organizzazione aggiornata"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -114,6 +114,7 @@ export default function OrgDetail() {
         <h1 className="text-2xl font-bold text-slate-900">{org.nome}</h1>
         <StatusBadge color={TYPE_COLOR[org.type]}>{TYPE_LABEL[org.type]}</StatusBadge>
         <StatusBadge color={org.status === "active" ? "green" : "red"}>{org.status === "active" ? "Attiva" : "Disattivata"}</StatusBadge>
+        {org.is_demo_official && <StatusBadge color="amber" data-testid="org-demo-official-badge">Demo ufficiale</StatusBadge>}
       </div>
 
       <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
@@ -135,6 +136,12 @@ export default function OrgDetail() {
               <option value="interna">Interna (nessun abbonamento)</option>
               <option value="test">Test</option>
             </select></div>
+          {form.type === "test" && (
+            <label className="flex items-start gap-2 text-sm text-slate-700" data-testid="org-edit-demo-official-label">
+              <input type="checkbox" className="mt-1 accent-[#0ABAB5]" checked={form.is_demo_official} onChange={(e) => setForm((f) => ({ ...f, is_demo_official: e.target.checked }))} data-testid="org-edit-demo-official" />
+              <span><span className="font-medium">Demo ufficiale CRMEvent</span><span className="block text-xs text-slate-500">Tutti i servizi Marketplace si attivano gratuitamente (causale DEMO, 0 €, nessuna fattura né Stripe).</span></span>
+            </label>
+          )}
           <div className="space-y-1.5"><label className="text-sm font-medium text-slate-600">Formula abbonamento</label>
             <select className={`${inputCls} w-full`} value={form.formula} onChange={(e) => setForm((f) => ({ ...f, formula: e.target.value }))} data-testid="org-edit-formula">
               <option value="">Nessuna formula</option><option value="bronze">BRONZE</option><option value="silver">SILVER</option><option value="gold">GOLD</option>
