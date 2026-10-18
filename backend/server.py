@@ -41,6 +41,7 @@ import video_support
 import subscriptions
 import brevo_subscriptions
 import brevo_tracker
+import iscritti
 import gcal_availability
 import privacy_consent
 import pipeline_seed_sports
@@ -13457,6 +13458,11 @@ TICKETS = tickets.build_router(db, require_org_member, require_superadmin, recor
 app.include_router(TICKETS["router"])
 app.add_event_handler("startup", TICKETS["ensure_indexes"])
 PRESS = press.build_router(db, require_org_member, require_superadmin, record_audit, APP_URL, WEBHOOK_CRON_SECRET)
+ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_superadmin": require_superadmin, "record_audit": record_audit,
+                               "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET})
+press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
+app.include_router(ISCRITTI["router"])
+app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
 app.include_router(PRESS["router"])
 app.add_event_handler("startup", PRESS["ensure_indexes"])
 

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { IscrittiAdminPanel } from "@/components/iscritti/IscrittiAdminPanel";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Bell, Download, Send, ShieldCheck, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
@@ -190,11 +191,12 @@ export default function MarketplaceAdmin() {
   return (
     <div className="animate-fade-up space-y-4" data-testid="mkt-admin-page">
       <PageHeader title="Marketplace" subtitle="Catalogo dei servizi extra (non inclusi negli abbonamenti), pubblicazione, disponibilità tecnica e acquisti delle organizzazioni" />
-      <Tabs defaultValue="catalog"><TabsList className="mb-4"><TabsTrigger value="catalog" data-testid="mkt-admin-tab-catalog">Catalogo</TabsTrigger><TabsTrigger value="purchases" data-testid="mkt-admin-tab-purchases">Acquisti</TabsTrigger><TabsTrigger value="interests" data-testid="mkt-admin-tab-interests">Interessi</TabsTrigger><TabsTrigger value="press" data-testid="mkt-admin-tab-press">Comunicati stampa</TabsTrigger></TabsList>
+      <Tabs defaultValue="catalog"><TabsList className="mb-4"><TabsTrigger value="catalog" data-testid="mkt-admin-tab-catalog">Catalogo</TabsTrigger><TabsTrigger value="purchases" data-testid="mkt-admin-tab-purchases">Acquisti</TabsTrigger><TabsTrigger value="interests" data-testid="mkt-admin-tab-interests">Interessi</TabsTrigger><TabsTrigger value="press" data-testid="mkt-admin-tab-press">Comunicati stampa</TabsTrigger><TabsTrigger value="iscritti" data-testid="mkt-admin-tab-iscritti">Elenco Iscritti</TabsTrigger></TabsList>
         <TabsContent value="catalog"><SectionCard title="Servizi"><Catalog /></SectionCard></TabsContent>
         <TabsContent value="purchases"><SectionCard title="Storico acquisti"><Purchases /></SectionCard></TabsContent>
         <TabsContent value="interests"><SectionCard title="Interessi Marketplace"><MarketplaceInterests /></SectionCard></TabsContent>
         <TabsContent value="press"><SectionCard title="Comunicati stampa · organizzazioni"><PressAdminPanel /></SectionCard></TabsContent>
+        <TabsContent value="iscritti"><SectionCard title="Elenco Iscritti · organizzazioni"><IscrittiAdminPanel /></SectionCard></TabsContent>
       </Tabs>
     </div>
   );
