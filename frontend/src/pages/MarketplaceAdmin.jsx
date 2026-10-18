@@ -11,21 +11,56 @@ import { toast } from "sonner";
 import { Plus, Bell, Download, Send, ShieldCheck, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import { MKT_ICONS, PRICE_TYPES, STATUS, ServiceIcon, priceLabel } from "@/lib/marketplace";
 import { PressAdminPanel } from "@/components/press/PressAdminPanel";
+import { YouTubeTutorial, youtubeId } from "@/components/marketplace/YouTubeTutorial";
 import { MarketplaceInterests } from "@/components/MarketplaceInterests";
 
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
-const EMPTY = { name: "", description: "", icon: "Package", image: null, category: "Altro", price: null, price_type: "one_time", usage_unit: "", usage_limits: "", terms: "", status: "coming_soon", visible: true, purchasable: false, tech_ready: false, billing_method: "stripe", scope: "org", sort: 100 };
+const EMPTY = { name: "", description: "", icon: "Package", image: null, category: "Altro", price: null, price_type: "one_time", usage_unit: "", usage_limits: "", terms: "", status: "coming_soon", visible: true, purchasable: false, tech_ready: false, billing_method: "stripe", scope: "org", sort: 100, video_url: "", video_title: "", stripe_price_id: "" };
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
 const Sel = ({ value, onChange, opts, testid }) => <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid} className="w-full h-10 rounded-md border border-slate-200 px-2 text-sm">{Object.entries(opts).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>;
 const Chk = ({ label, value, onChange, testid }) => <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} data-testid={testid} />{label}</label>;
 
-function Editor({ svc, cats, onClose, onSaved }) {
-  const [f, setF] = useState({ ...EMPTY, ...svc });
+function StripeBox({ f, set, svc, mode }) {
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState(svc?.stripe || null);
+  const sync = async () => {
+    setBusy(true);
+    try { const { data } = await api.post(`/platform/marketplace/services/${svc.id}/stripe-sync`); setInfo(data); set("stripe_price_id")(data.price_id); toast.success("Prodotto e prezzo Stripe aggiornati"); }
+    catch (e) { err(e); }
+    setBusy(false);
+  };
+  return (
+    <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 space-y-2" data-testid="mkt-admin-stripe">
+      <div className="font-semibold text-slate-700">Stripe ({mode === "live" ? "LIVE" : "TEST"})</div>
+      <label className="block">Price ID Stripe (opzionale: se vuoto viene creato in automatico al primo acquisto)<Input value={f.stripe_price_id || ""} onChange={(e) => set("stripe_price_id")(e.target.value.trim())} placeholder="price_..." data-testid="mkt-admin-stripe-price" /></label>
+      {info?.price_id && <div className="text-slate-500" data-testid="mkt-admin-stripe-info">Prodotto {info.product_id} · Prezzo {info.price_id} · {(info.amount_cents / 100).toFixed(2)} € {info.interval ? `/ ${info.interval === "month" ? "mese" : "anno"}` : "una tantum"} · {info.source === "manual" ? "inserito manualmente" : "creato da CRMEvent"}</div>}
+      {svc?.id && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={sync} data-testid="mkt-admin-stripe-sync"><RefreshCw className="w-3.5 h-3.5 mr-1" />{busy ? "Sincronizzazione..." : "Crea/aggiorna su Stripe"}</Button>}
+      <p className="text-slate-400">Salva prima il prezzo. Se cambi prezzo o modalità, CRMEvent crea un nuovo prezzo Stripe: gli abbonamenti già attivi mantengono il prezzo originale.</p>
+    </div>
+  );
+}
+
+function VideoBox({ f, set }) {
+  const id = youtubeId(f.video_url);
+  return (
+    <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 space-y-2" data-testid="mkt-admin-video">
+      <div className="font-semibold text-slate-700">Video tutorial YouTube (opzionale)</div>
+      <label className="block">URL video YouTube<Input value={f.video_url || ""} onChange={(e) => set("video_url")(e.target.value)} placeholder="https://www.youtube.com/watch?v=... · youtu.be/... · /shorts/..." data-testid="mkt-admin-video-url" /></label>
+      <label className="block">Titolo video<Input value={f.video_title || ""} onChange={(e) => set("video_title")(e.target.value)} data-testid="mkt-admin-video-title" /></label>
+      {f.video_url && !id && <p className="text-red-600" data-testid="mkt-admin-video-invalid">Link YouTube non riconosciuto</p>}
+      {id && <div className="max-w-sm"><YouTubeTutorial id={id} title={f.video_title} heading="Anteprima" testid="mkt-admin-video-preview" /></div>}
+      {f.video_url && <button type="button" className="text-red-600" onClick={() => { set("video_url")(""); set("video_title")(""); }} data-testid="mkt-admin-video-remove">Rimuovi video</button>}
+    </div>
+  );
+}
+
+function Editor({ svc, cats, mode, onClose, onSaved }) {
+  const [f, setF] = useState({ ...EMPTY, ...svc, stripe_price_id: svc?.stripe?.price_id || "", video_url: svc?.video_url || "", video_title: svc?.video_title || "" });
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const img = (e) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 300000) { toast.error("Immagine max 300 KB"); return; } const r = new FileReader(); r.onload = () => set("image")(r.result); r.readAsDataURL(file); };
   const save = async () => {
     const body = { ...f, price: f.price === "" || f.price == null ? null : Number(f.price), sort: Number(f.sort) || 100 };
-    ["id", "key", "created_at", "updated_at", "active_count", "interest_count", "purchasable_now", "brevo_attribute"].forEach((k) => delete body[k]);
+    ["id", "key", "created_at", "updated_at", "active_count", "interest_count", "purchasable_now", "brevo_attribute", "stripe", "stripe_prices", "video_id"].forEach((k) => delete body[k]);
     try { if (svc?.id) await api.put(`/platform/marketplace/services/${svc.id}`, body); else await api.post("/platform/marketplace/services", body); toast.success("Servizio salvato"); onSaved(); }
     catch (e) { err(e); }
   };
@@ -48,13 +83,15 @@ function Editor({ svc, cats, onClose, onSaved }) {
           <label className="sm:col-span-2">Condizioni e durata<Input value={f.terms || ""} onChange={(e) => set("terms")(e.target.value)} data-testid="mkt-admin-terms" /></label>
           <label>Stato commerciale<Sel value={f.status} onChange={set("status")} opts={{ coming_soon: "Prossimamente", available: "Disponibile", suspended: "Sospeso" }} testid="mkt-admin-status" /></label>
           <label>Ordine<Input type="number" value={f.sort} onChange={(e) => set("sort")(e.target.value)} /></label>
+          <StripeBox f={f} set={set} svc={svc} mode={mode} />
+          <VideoBox f={f} set={set} />
         </div>
         <div className="flex flex-wrap gap-4 rounded-lg bg-slate-50 p-3">
           <Chk label="Pubblicato (visibile)" value={f.visible} onChange={set("visible")} testid="mkt-admin-visible" />
           <Chk label="Modulo tecnicamente pronto" value={f.tech_ready} onChange={(v) => setF((s) => ({ ...s, tech_ready: v, purchasable: v ? s.purchasable : false }))} testid="mkt-admin-tech" />
           <Chk label="Acquisto abilitato" value={f.purchasable} onChange={set("purchasable")} testid="mkt-admin-purchasable" />
         </div>
-        <p className="text-xs text-slate-500">Un servizio è acquistabile solo se pubblicato, "Disponibile", tecnicamente pronto, con acquisto abilitato e prezzo configurato. I servizi a consumo non sono acquistabili finché il sistema di addebito non è approvato.</p>
+        <p className="text-xs text-slate-500">Un servizio è acquistabile solo se pubblicato, "Disponibile", tecnicamente pronto, con acquisto abilitato e prezzo configurato (0 € = attivazione gratuita senza Stripe). I servizi a consumo non sono acquistabili finché il sistema di addebito non è approvato.</p>
         <Button onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-save">Salva</Button>
       </DialogContent>
     </Dialog>
@@ -166,24 +203,60 @@ function Catalog() {
         ))}
       </div>
       {intr && <Interests svc={intr} onClose={() => { setIntr(null); load(); }} />}
-      {edit && <Editor svc={edit} cats={data.categories} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+      {edit && <Editor svc={edit} cats={data.categories} mode={data.stripe_mode} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
     </div>
+  );
+}
+
+const SOURCE = { stripe: "Stripe", free: "Gratuito", manual: "Manuale (Super Admin)" };
+
+function GrantDialog({ onClose, onDone }) {
+  const [orgs, setOrgs] = useState([]);
+  const [svcs, setSvcs] = useState([]);
+  const [f, setF] = useState({ org_id: "", service_id: "", note: "" });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.get("/platform/marketplace/orgs").then(({ data }) => setOrgs(data)).catch(err);
+    api.get("/platform/marketplace/services").then(({ data }) => setSvcs(data.services.filter((s) => s.scope === "org"))).catch(err);
+  }, []);
+  const save = async () => {
+    setBusy(true);
+    try { await api.post(`/platform/marketplace/services/${f.service_id}/grant`, { org_id: f.org_id, note: f.note }); toast.success("Servizio attivato gratuitamente"); onDone(); }
+    catch (e) { err(e); setBusy(false); }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]" data-testid="mkt-admin-grant">
+        <DialogTitle>Attivazione gratuita</DialogTitle>
+        <label className="text-xs">Organizzazione<Sel value={f.org_id} onChange={(v) => setF({ ...f, org_id: v })} opts={{ "": "Seleziona…", ...Object.fromEntries(orgs.map((o) => [o.id, o.nome])) }} testid="mkt-admin-grant-org" /></label>
+        <label className="text-xs">Servizio<Sel value={f.service_id} onChange={(v) => setF({ ...f, service_id: v })} opts={{ "": "Seleziona…", ...Object.fromEntries(svcs.map((s) => [s.id, s.name])) }} testid="mkt-admin-grant-service" /></label>
+        <label className="text-xs">Nota (opzionale)<Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} data-testid="mkt-admin-grant-note" /></label>
+        <p className="text-xs text-slate-500">Nessun addebito Stripe. Il servizio resta attivo finché non lo sospendi.</p>
+        <Button disabled={busy || !f.org_id || !f.service_id} onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-grant-save">Attiva gratuitamente</Button>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function Purchases() {
   const [rows, setRows] = useState(null);
+  const [grant, setGrant] = useState(false);
   const load = useCallback(() => api.get("/platform/marketplace/purchases").then(({ data }) => setRows(data)).catch(err), []);
   useEffect(() => { load(); }, [load]);
   const setStatus = async (p, status) => { try { await api.put(`/platform/marketplace/purchases/${p.id}/status`, { status }); load(); } catch (e) { err(e); } };
   if (!rows) return <p className="text-sm text-slate-400">Caricamento...</p>;
-  if (!rows.length) return <p className="text-sm text-slate-500" data-testid="mkt-admin-purchases-empty">Nessun acquisto registrato.</p>;
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[760px] text-sm" data-testid="mkt-admin-purchases">
-      <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Servizio", "Stato", "Prezzo", "Data", "Rinnovo", ""].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
-      <tbody>{rows.map((p) => <tr key={p.id} className="border-t border-slate-100"><td className="px-3 py-2">{p.org_name}</td><td className="px-3 py-2">{p.service_name}</td><td className="px-3 py-2">{STATUS[p.status]}</td><td className="px-3 py-2">{priceLabel(p)}</td><td className="px-3 py-2">{d(p.activated_at || p.created_at)}</td><td className="px-3 py-2">{d(p.current_period_end)}</td>
+    <div className="space-y-3">
+      <Button onClick={() => setGrant(true)} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-grant-open"><Plus className="w-4 h-4 mr-1" />Attiva gratuitamente per un'organizzazione</Button>
+      {grant && <GrantDialog onClose={() => setGrant(false)} onDone={() => { setGrant(false); load(); }} />}
+      {!rows.length ? <p className="text-sm text-slate-500" data-testid="mkt-admin-purchases-empty">Nessun acquisto registrato.</p> : (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[900px] text-sm" data-testid="mkt-admin-purchases">
+      <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Servizio", "Stato", "Origine", "Prezzo", "Data", "Rinnovo / scadenza", "Pagamenti", ""].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
+      <tbody>{rows.map((p) => <tr key={p.id} className="border-t border-slate-100" data-testid={`mkt-admin-purchase-${p.id}`}><td className="px-3 py-2">{p.org_name}</td><td className="px-3 py-2">{p.service_name}</td><td className="px-3 py-2">{STATUS[p.status] || p.status}{p.cancel_at_period_end ? " · disdetto" : ""}{p.duplicate_of_active ? " · DOPPIO (verificare rimborso)" : ""}</td><td className="px-3 py-2">{SOURCE[p.source || "stripe"]}{p.note ? ` · ${p.note}` : ""}</td><td className="px-3 py-2">{priceLabel(p)}</td><td className="px-3 py-2">{d(p.activated_at || p.created_at)}</td><td className="px-3 py-2">{d(p.current_period_end)}</td>
+        <td className="px-3 py-2 text-xs">{p.last_payment_error ? <span className="text-red-600" title={p.last_payment_error}>Fallito {d(p.last_payment_failed_at)}</span> : p.last_payment_at ? `Ultimo ${d(p.last_payment_at)}` : "—"}</td>
         <td className="px-3 py-2">{p.status === "active" ? <Button size="sm" variant="outline" onClick={() => setStatus(p, "suspended")}>Sospendi</Button> : p.status === "suspended" ? <Button size="sm" variant="outline" onClick={() => setStatus(p, "active")}>Riattiva</Button> : null}</td></tr>)}</tbody>
-    </table></div>
+    </table></div>)}
+    </div>
   );
 }
 

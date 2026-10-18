@@ -17,6 +17,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 import brevo_client
+import iscritti_demo
+import iscritti_stats
 import brevo_org_lists
 
 log = logging.getLogger("iscritti")
@@ -286,6 +288,7 @@ def build(db, deps: dict):
         """Iscritti con email valida per i filtri dati; di default solo con consenso marketing e non disiscritti."""
         q = await person_query(org_id, filters)
         q["email"] = {"$nin": [None, ""]}
+        q["demo"] = {"$ne": True}
         if require_consent:
             q["consenso_marketing"] = True
             q["unsubscribed"] = {"$ne": True}
@@ -590,6 +593,14 @@ def build(db, deps: dict):
                 "by_event": [{"event_id": x["_id"], "nome": evs.get(x["_id"], "—"), "n": x["n"]} for x in by_event],
                 "by_edition": [{"edizione_id": x["_id"], "label": f"{(eds.get(x['_id']) or {}).get('event_nome', '—')} {(eds.get(x['_id']) or {}).get('anno', '')} {(eds.get(x['_id']) or {}).get('edizione', '')}".strip(), "n": x["n"]} for x in by_ed]}
 
+    @r.get("/iscritti/stats")
+    async def stats(user: dict = Depends(member), event_id: str = "", anni: str = "", edizione_id: str = "", gara: str = "", stato: str = "", mode: str = "days"):
+        years = [int(a) for a in anni.split(",") if a.strip().isdigit()]
+        org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "nome": 1}) or {}
+        out = await iscritti_stats.compute(db, user["org_id"], {"event_id": event_id, "anni": years, "edizione_id": edizione_id, "gara": gara, "stato": stato,
+                                                               "mode": "months" if mode == "months" else "days"})
+        return {**out, "org_nome": org.get("nome"), "demo": bool((await settings(user["org_id"])).get("demo"))}
+
     @r.get("/iscritti/export")
     async def export(user: dict = Depends(editor), format: str = "csv", q: str = "", event_id: str = "", anno: str = "", edizione_id: str = "", gara: str = "", stato: str = "", consenso: str = ""):
         f = _filters(q=q, event_id=event_id, anno=anno, edizione_id=edizione_id, gara=gara, stato=stato, consenso=consenso)
@@ -691,6 +702,8 @@ def build(db, deps: dict):
                 pass
         upd["brevo_status"] = "da_sincronizzare" if (upd.get("consenso_marketing", cur.get("consenso_marketing")) and d["email"]) else (
             "da_rimuovere" if cur.get("brevo_status") == "sincronizzato" else "escluso_consenso")
+        if cur.get("demo"):
+            upd["brevo_status"] = "demo_escluso"
         await db.iscritti.update_one({"id": pid}, {"$set": upd, **({"$push": push} if push else {})})
         if body.partecipazione and body.partecipazione.get("edizione_id"):
             await _add_part(user["org_id"], pid, body.partecipazione, now)
@@ -763,7 +776,7 @@ def build(db, deps: dict):
             out = {"status": "non_configurato", "at": now, "error": "Brevo non configurato"}
             await db.iscritti_settings.update_one({"org_id": org_id}, {"$set": {"brevo_last_sync": out}}, upsert=True)
             return out
-        q = {"org_id": org_id, "anonymized": {"$ne": True}, "email": {"$nin": [None, ""]}}
+        q = {"org_id": org_id, "anonymized": {"$ne": True}, "email": {"$nin": [None, ""]}, "demo": {"$ne": True}}
         q.update({"id": {"$in": force_ids}} if force_ids else {"brevo_status": {"$in": ["da_sincronizzare", "errore", "rate_limit", "da_rimuovere"]}})
         counts = {"sincronizzati": 0, "disiscritti": 0, "rimossi": 0, "errori": 0}
         status, error = "ok", None
@@ -895,10 +908,20 @@ def build(db, deps: dict):
     @r.post("/platform/iscritti/orgs/{org_id}/force-sync")
     async def sa_force(org_id: str, admin: dict = Depends(sa)):
         """Sincronizza su Brevo anche gli iscritti senza consenso registrato (mai i disiscritti): azione tracciata."""
-        ids = await db.iscritti.distinct("id", {"org_id": org_id, "brevo_status": "escluso_consenso", "email": {"$nin": [None, ""]},
+        ids = await db.iscritti.distinct("id", {"org_id": org_id, "brevo_status": "escluso_consenso", "email": {"$nin": [None, ""]}, "demo": {"$ne": True},
                                                 "unsubscribed": {"$ne": True}, "anonymized": {"$ne": True}})
         res = await sync_org(org_id, force_ids=ids) if ids else {"status": "ok", "counts": {"sincronizzati": 0}}
         await record_audit(admin, "iscritti_brevo_force_sync", org_id=org_id, detail=f"{len(ids)} iscritti senza consenso inviati a Brevo dal Super Admin")
+        return res
+
+    @r.post("/platform/iscritti/demo-seed")
+    async def sa_demo_seed(admin: dict = Depends(sa)):
+        """Popola (idempotente) l'organizzazione Demo con iscritti fittizi della Maratona Demo 2024-2026. Nessun Brevo/Stripe/email."""
+        try:
+            res = await iscritti_demo.seed(db, _dedup_key)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        await record_audit(admin, "iscritti_demo_seed", org_id=res["org_id"], detail=f"{res['iscritti']} iscritti DEMO · {res['totale_partecipazioni']} partecipazioni")
         return res
 
     # ---------------- cron giornaliero: retry sync + conservazione ----------------
@@ -916,7 +939,7 @@ def build(db, deps: dict):
             limit_year = datetime.now(timezone.utc).year - RETENTION_YEARS
             grace = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()  # storico appena importato: 90 giorni per verificarlo
             await db.iscritti_import_files.delete_many({"created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()}})
-            async for p in db.iscritti.find({"anonymized": {"$ne": True}, "last_year": {"$lt": limit_year}, "created_at": {"$lt": grace}}, {"_id": 0, "id": 1, "org_id": 1}):
+            async for p in db.iscritti.find({"anonymized": {"$ne": True}, "demo": {"$ne": True}, "last_year": {"$lt": limit_year}, "created_at": {"$lt": grace}}, {"_id": 0, "id": 1, "org_id": 1}):
                 await _anonymize(p["org_id"], p["id"], f"conservazione: nessuna partecipazione da oltre {RETENTION_YEARS} anni")
         asyncio.create_task(_run())
         return {"accepted": True}

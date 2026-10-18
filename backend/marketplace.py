@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -65,6 +66,18 @@ CONTRACTS_FEATURES = [
 ]
 
 
+YT_RE = re.compile(r"(?:youtube(?:-nocookie)?\.com/(?:watch\?(?:[^#]*&)?v=|embed/|shorts/|live/|v/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+
+
+def youtube_id(url: str) -> Optional[str]:
+    m = YT_RE.search((url or "").strip())
+    return m.group(1) if m else None
+
+
+def _interval(price_type: str) -> Optional[str]:
+    return {"monthly": "month", "yearly": "year"}.get(price_type)
+
+
 def _attr_slug(name: str) -> str:
     import unicodedata
     s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().upper()
@@ -90,6 +103,19 @@ class ServiceIn(BaseModel):
     billing_method: str = "stripe"
     scope: str = "org"
     sort: int = 100
+    video_url: Optional[str] = None
+    video_title: Optional[str] = None
+    stripe_price_id: Optional[str] = None
+
+
+class GrantIn(BaseModel):
+    org_id: str
+    event_id: Optional[str] = None
+    note: Optional[str] = None
+
+
+class PortalIn(BaseModel):
+    origin_url: str
 
 
 class CheckoutIn(BaseModel):
@@ -111,7 +137,7 @@ def can_buy(svc: dict) -> Optional[str]:
         return "Acquisto non abilitato"
     if svc.get("price_type") == "usage":
         return "Servizio a consumo: attivazione commerciale da approvare"
-    if not svc.get("price") or float(svc["price"]) <= 0:
+    if svc.get("price") is None or float(svc["price"]) < 0:
         return "Prezzo non configurato"
     return None
 
@@ -175,7 +201,9 @@ def build(db, deps: dict):
     def _public(s: dict, purchases: list, notify_ids: set = frozenset(), org_active: set = frozenset()) -> dict:
         mine = [p for p in purchases if p["service_id"] == s["id"]]
         return {**{k: s.get(k) for k in ("id", "key", "name", "description", "icon", "image", "category", "price", "price_type",
-                                          "usage_unit", "usage_limits", "terms", "status", "scope", "activation", "features", "notify_label", "notified_label", "service_code")},
+                                          "usage_unit", "usage_limits", "terms", "status", "scope", "activation", "features", "notify_label", "notified_label", "service_code",
+                                          "video_url", "video_id", "video_title")},
+                "free": s.get("price") is not None and float(s["price"]) == 0,
                 "purchasable_now": can_buy(s) is None, "reason": "Attivazione a cura del team CRMEvent" if s.get("activation") == "superadmin" else can_buy(s),
                 "active": any(p["status"] in ACTIVE for p in mine) or s.get("key") in org_active, "purchases": mine, "notify_me": s["id"] in notify_ids}
 
@@ -329,8 +357,6 @@ def build(db, deps: dict):
         why = can_buy(svc)
         if why:
             raise HTTPException(status_code=400, detail=why)
-        if deps["stripe_mode"] == "live" and os.environ.get("MARKETPLACE_STRIPE_LIVE_ENABLED", "").strip() != "1":
-            raise HTTPException(status_code=503, detail="Acquisti Marketplace non ancora attivi per i pagamenti reali")
         ev = None
         if svc.get("scope") == "event":
             ev = await db.events.find_one({"id": body.event_id or "", "org_id": user["org_id"]}, {"_id": 0, "id": 1, "nome": 1})
@@ -339,50 +365,113 @@ def build(db, deps: dict):
         dup = {"org_id": user["org_id"], "service_id": sid, "status": {"$in": list(ACTIVE)}}
         if ev:
             dup["event_id"] = ev["id"]
-        if svc["price_type"] != "one_time" and await db.marketplace_purchases.find_one(dup):
+        free = float(svc["price"]) == 0
+        if (svc["price_type"] != "one_time" or free) and await db.marketplace_purchases.find_one(dup):
             raise HTTPException(status_code=400, detail="Servizio già attivo")
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+        if free:
+            await db.marketplace_purchases.insert_one({
+                "id": uuid.uuid4().hex, "org_id": org["id"], "service_id": sid, "service_name": svc["name"], "event_id": (ev or {}).get("id"),
+                "status": "active", "source": "free", "price": 0.0, "price_type": svc["price_type"], "stripe_session_id": None,
+                "stripe_subscription_id": None, "activated_at": _now(), "current_period_end": None, "created_by": user["user_id"],
+                "created_at": _now(), "history": [{"at": _now(), "status": "active", "by": user.get("email"), "note": "Attivazione gratuita"}]})
+            await deps["record_audit"](user, "marketplace_free_activation", org_id=org["id"], detail=svc["name"])
+            return {"activated": True}
+        await _expire_pending(dup)
         missing = deps["billing_missing"](org.get("billing") or {})
         if missing:
             raise HTTPException(status_code=400, detail="Completa i dati di fatturazione: " + ", ".join(missing))
         pid = uuid.uuid4().hex
         md = {"kind": "marketplace", "purchase_id": pid, "org_id": org["id"], "service_id": sid}
-        cents = int(round(float(svc["price"]) * 100))
-        pdata = {"currency": "eur", "unit_amount": cents, "product_data": {"name": f"CRMEvent · {svc['name']}", "tax_code": "txcd_10103001"}}
-        if svc["price_type"] in ("monthly", "yearly"):
-            pdata["recurring"] = {"interval": "month" if svc["price_type"] == "monthly" else "year"}
         origin = body.origin_url.rstrip("/")
-        kw = dict(customer=await deps["ensure_customer"](org, user), line_items=[{"price_data": pdata, "quantity": 1}], metadata=md,
-                  success_url=f"{origin}/marketplace?purchase={pid}&session_id={{CHECKOUT_SESSION_ID}}", cancel_url=f"{origin}/marketplace")
-        if svc["price_type"] == "one_time":
-            kw.update(mode="payment", invoice_creation={"enabled": True, "invoice_data": {"metadata": md}})
-        else:
-            kw.update(mode="subscription", subscription_data={"metadata": md})
         try:
+            price_id = await _stripe_price(svc)
+            kw = dict(customer=await deps["ensure_customer"](org, user), line_items=[{"price": price_id, "quantity": 1}], metadata=md,
+                      client_reference_id=org["id"], locale="it",
+                      success_url=f"{origin}/marketplace?purchase={pid}&session_id={{CHECKOUT_SESSION_ID}}", cancel_url=f"{origin}/marketplace?canceled={pid}")
+            if svc["price_type"] == "one_time":
+                kw.update(mode="payment", invoice_creation={"enabled": True, "invoice_data": {"metadata": md}}, payment_intent_data={"metadata": md})
+            else:
+                kw.update(mode="subscription", subscription_data={"metadata": md})
             sess = stripe_sdk.checkout.Session.create(**kw)
         except stripe_sdk.error.StripeError as e:
             logger.error(f"marketplace checkout: {e}")
             raise HTTPException(status_code=502, detail="Non è stato possibile avviare il pagamento. Riprova più tardi.")
         await db.marketplace_purchases.insert_one({
             "id": pid, "org_id": org["id"], "service_id": sid, "service_name": svc["name"], "event_id": (ev or {}).get("id"),
-            "status": "pending", "price": float(svc["price"]), "price_type": svc["price_type"], "stripe_session_id": sess.id,
+            "status": "pending", "source": "stripe", "stripe_mode": deps["stripe_mode"], "stripe_price_id": price_id,
+            "price": float(svc["price"]), "price_type": svc["price_type"], "stripe_session_id": sess.id,
             "stripe_subscription_id": None, "activated_at": None, "current_period_end": None, "created_by": user["user_id"],
             "created_at": _now(), "history": [{"at": _now(), "status": "pending", "by": user.get("email")}]})
         return {"checkout_url": sess.url}
+
+    async def _expire_pending(dup: dict) -> None:
+        """Una sola sessione di pagamento aperta per org+servizio(+evento): chiude su Stripe quelle precedenti."""
+        q = {**dup, "status": "pending"}
+        for old in await db.marketplace_purchases.find(q, {"_id": 0, "id": 1, "stripe_session_id": 1}).to_list(50):
+            try:
+                if old.get("stripe_session_id"):
+                    stripe_sdk.checkout.Session.expire(old["stripe_session_id"])
+            except stripe_sdk.error.StripeError:
+                pass
+            await db.marketplace_purchases.update_one({"id": old["id"], "status": "pending"}, {"$set": {"status": "expired", "updated_at": _now()},
+                                                      "$push": {"history": {"at": _now(), "status": "expired", "by": "system", "note": "Sostituita da una nuova richiesta"}}})
+
+    async def _stripe_price(svc: dict) -> str:
+        """Price Stripe del servizio per la modalità corrente: riusa quello salvato se coerente col prezzo, altrimenti lo crea."""
+        mode, cents, itv = deps["stripe_mode"], int(round(float(svc["price"]) * 100)), _interval(svc["price_type"])
+        cur = (svc.get("stripe_prices") or {}).get(mode) or {}
+        if cur.get("price_id") and cur.get("amount_cents") == cents and cur.get("interval") == itv:
+            return cur["price_id"]
+        prod = cur.get("product_id")
+        meta = {"kind": "marketplace", "service_id": svc["id"], "service_key": svc.get("key") or ""}
+        if not prod:
+            prod = stripe_sdk.Product.create(name=f"CRMEvent · {svc['name']}", tax_code="txcd_10103001", metadata=meta).id
+        kw = dict(product=prod, currency="eur", unit_amount=cents, metadata=meta)
+        if itv:
+            kw["recurring"] = {"interval": itv}
+        price = stripe_sdk.Price.create(**kw)
+        if cur.get("price_id") and cur.get("source") == "auto":
+            try:
+                stripe_sdk.Price.modify(cur["price_id"], active=False)
+            except stripe_sdk.error.StripeError:
+                pass
+        await db.marketplace_services.update_one({"id": svc["id"]}, {"$set": {f"stripe_prices.{mode}": {
+            "product_id": prod, "price_id": price.id, "amount_cents": cents, "interval": itv, "source": "auto", "updated_at": _now()}}})
+        return price.id
+
+    async def _set_manual_price(svc: dict, price_id: str) -> None:
+        mode, cents, itv = deps["stripe_mode"], int(round(float(svc.get("price") or 0) * 100)), _interval(svc["price_type"])
+        try:
+            p = stripe_sdk.Price.retrieve(price_id)
+        except stripe_sdk.error.StripeError:
+            raise HTTPException(status_code=400, detail=f"Price ID non trovato su Stripe ({mode})")
+        if not p.get("active") or p.get("currency") != "eur" or p.get("unit_amount") != cents or ((p.get("recurring") or {}).get("interval")) != itv:
+            raise HTTPException(status_code=400, detail="Il Price ID Stripe non corrisponde a prezzo, valuta (EUR) o modalità del servizio")
+        await db.marketplace_services.update_one({"id": svc["id"]}, {"$set": {f"stripe_prices.{mode}": {
+            "product_id": p.get("product"), "price_id": p["id"], "amount_cents": cents, "interval": itv, "source": "manual", "updated_at": _now()}}})
 
     async def _activate_from_session(sess) -> Optional[dict]:
         """Attivazione solo dopo verifica server-side su Stripe (pagamento riuscito). Idempotente."""
         pid = (sess.get("metadata") or {}).get("purchase_id")
         p = await db.marketplace_purchases.find_one({"id": pid}, {"_id": 0}) if pid else None
+        if p and (sess.get("metadata") or {}).get("org_id") != p["org_id"]:
+            logger.error("marketplace: org mismatch su sessione %s", sess.get("id"))
+            return None
         if not p or sess.get("status") != "complete" or sess.get("payment_status") not in ("paid", "no_payment_required"):
             return p
         upd = {"status": "active", "activated_at": p.get("activated_at") or _now(), "updated_at": _now()}
+        other = await db.marketplace_purchases.find_one({"org_id": p["org_id"], "service_id": p["service_id"], "event_id": p.get("event_id"),
+                                                         "status": {"$in": list(ACTIVE)}, "id": {"$ne": pid}}, {"_id": 1})
+        if other and p.get("price_type") != "one_time":
+            upd["duplicate_of_active"] = True
+            logger.warning("marketplace: acquisto %s pagato con servizio già attivo (da verificare/rimborsare)", pid)
         if sess.get("subscription"):
             sub = stripe_sdk.Subscription.retrieve(sess["subscription"])
             it = sub["items"]["data"][0]
             cpe = sub.get("current_period_end") or it.get("current_period_end")
             upd.update(stripe_subscription_id=sub["id"], current_period_end=datetime.fromtimestamp(cpe, timezone.utc).isoformat() if cpe else None)
-        res = await db.marketplace_purchases.update_one({"id": pid, "status": "pending"}, {"$set": upd, "$push": {"history": {"at": _now(), "status": "active", "by": "stripe"}}})
+        res = await db.marketplace_purchases.update_one({"id": pid, "status": {"$in": ["pending", "expired", "failed"]}}, {"$set": upd, "$push": {"history": {"at": _now(), "status": "active", "by": "stripe"}}})
         if res.modified_count:
             await deps["record_audit"]({"user_id": "stripe", "email": "stripe", "role": "system"}, "marketplace_activated",
                                        org_id=p["org_id"], detail=p.get("service_name"))
@@ -397,16 +486,34 @@ def build(db, deps: dict):
         return {"status": (p or {}).get("status")}
 
     async def _invoice(inv, status: str):
-        md = inv.get("metadata") or {}
-        sid = inv.get("subscription") or ((inv.get("parent") or {}).get("subscription_details") or {}).get("subscription")
-        p = await db.marketplace_purchases.find_one({"id": md.get("purchase_id")} if md.get("kind") == "marketplace" else {"stripe_subscription_id": sid or "-"}, {"_id": 0})
+        sd = (inv.get("parent") or {}).get("subscription_details") or inv.get("subscription_details") or {}
+        line = (((inv.get("lines") or {}).get("data") or [{}])[0]) or {}
+        md = next((m for m in (inv.get("metadata"), sd.get("metadata"), line.get("metadata")) if (m or {}).get("kind") == "marketplace"), {})
+        sid = inv.get("subscription") or sd.get("subscription")
+        p = await db.marketplace_purchases.find_one({"id": md.get("purchase_id")} if md.get("purchase_id") else {"stripe_subscription_id": sid or "-"}, {"_id": 0})
         if not p:
             return False
+        org = await db.organizations.find_one({"id": p["org_id"]}, {"_id": 0, "subscription": 1}) or {}
+        if inv.get("customer") and inv.get("customer") != (org.get("subscription") or {}).get("stripe_customer_id"):
+            logger.error("marketplace invoice %s: cliente non corrispondente all'organizzazione", inv.get("id"))
+            return True
+        per = line.get("period") or {}
+        if status == "paid":
+            pu = {"last_payment_at": _now(), "last_payment_error": None}
+            if p["price_type"] in ("monthly", "yearly") and per.get("end"):
+                pu["current_period_end"] = datetime.fromtimestamp(per["end"], timezone.utc).isoformat()
+            await db.marketplace_purchases.update_one({"id": p["id"]}, {"$set": pu})
+            res = await db.marketplace_purchases.update_one({"id": p["id"], "status": "past_due"}, {"$set": {"status": "active"}, "$push": {"history": {"at": _now(), "status": "active", "by": "stripe", "note": "Pagamento riuscito"}}})
+            if res.modified_count:
+                logger.info("marketplace purchase %s back to active", p["id"])
         if status == "paid" and (inv.get("total") or 0) > 0:
             await deps["record_invoice"](inv, status)
             test = deps["stripe_mode"] != "live"
-            upd = {"kind": "marketplace", "marketplace_purchase_id": p["id"], "descrizione": f"CRMEvent · {p.get('service_name')}",
+            upd = {"kind": "marketplace", "marketplace_purchase_id": p["id"], "marketplace_service_id": p["service_id"], "descrizione": f"CRMEvent · {p.get('service_name')}",
                    "regime_fiscale": "forfettario", "aliquota_iva": 0.0, "importo_iva": 0.0, "iva": 0.0, "is_test": test}
+            if per.get("start") and per.get("end") and p["price_type"] in ("monthly", "yearly"):
+                upd.update({"periodo_inizio": datetime.fromtimestamp(per["start"], timezone.utc).isoformat(),
+                            "periodo_fine": datetime.fromtimestamp(per["end"], timezone.utc).isoformat()})
             if test:
                 upd.update({"fic_stato_documento": "test_non_inviata", "fic_stato_sdi": "non_inviato"})
             await db.invoices.update_one({"stripe_invoice_id": inv.get("id"), "fic_document_id": None}, {"$set": upd})
@@ -414,13 +521,20 @@ def build(db, deps: dict):
             if row and not test:
                 await deps["emit_invoice"](row["id"])
         elif status == "payment_failed":
+            err = ((inv.get("last_finalization_error") or {}).get("message")) or "Pagamento non riuscito"
+            await db.marketplace_purchases.update_one({"id": p["id"]}, {"$set": {"last_payment_error": err[:200], "last_payment_failed_at": _now()}})
             await db.marketplace_purchases.update_one({"id": p["id"], "status": "active"}, {"$set": {"status": "past_due"}, "$push": {"history": {"at": _now(), "status": "past_due", "by": "stripe"}}})
         return True
 
     async def handle_webhook(t: str, obj) -> bool:
         md = obj.get("metadata") or {}
-        if t == "checkout.session.completed" and md.get("kind") == "marketplace":
+        if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded") and md.get("kind") == "marketplace":
             await _activate_from_session(obj)
+            return True
+        if t in ("checkout.session.expired", "checkout.session.async_payment_failed") and md.get("kind") == "marketplace":
+            st = "expired" if t.endswith("expired") else "failed"
+            await db.marketplace_purchases.update_one({"id": md.get("purchase_id"), "status": "pending"}, {"$set": {"status": st, "updated_at": _now()},
+                                                                                                     "$push": {"history": {"at": _now(), "status": st, "by": "stripe"}}})
             return True
         if t.startswith("customer.subscription.") and md.get("kind") == "marketplace":
             sub = stripe_sdk.Subscription.retrieve(obj["id"])
@@ -429,18 +543,84 @@ def build(db, deps: dict):
             st = {"active": "active", "trialing": "active", "past_due": "past_due", "unpaid": "past_due", "canceled": "canceled"}.get(sub["status"])
             upd = {"current_period_end": datetime.fromtimestamp(cpe, timezone.utc).isoformat() if cpe else None,
                    "cancel_at_period_end": bool(sub.get("cancel_at_period_end")), "stripe_subscription_id": sub["id"]}
-            q = {"id": md.get("purchase_id"), "status": {"$nin": ["pending", "suspended"]}}
+            q = {"id": md.get("purchase_id"), "status": {"$nin": ["pending", "suspended", "expired", "failed"]}}
             if st:
                 upd["status"] = st
+            if st == "canceled":
+                upd["canceled_at"] = _now()
             await db.marketplace_purchases.update_one(q, {"$set": upd})
             return True
         if t in ("invoice.paid", "invoice.payment_failed"):
             return await _invoice(obj, "paid" if t == "invoice.paid" else "payment_failed")
         return False
 
+    async def _own_purchase(pid: str, user: dict) -> dict:
+        if not _can_purchase(user):
+            raise HTTPException(status_code=403, detail="Non hai il permesso di gestire i servizi Marketplace")
+        p = await db.marketplace_purchases.find_one({"id": pid, "org_id": user["org_id"]}, {"_id": 0})
+        if not p:
+            raise HTTPException(status_code=404, detail="Acquisto non trovato")
+        return p
+
+    @r.post("/marketplace/purchases/{pid}/cancel")
+    async def cancel_purchase(pid: str, user: dict = Depends(deps["require_admin"])):
+        """Disdetta del singolo servizio: gli abbonamenti Stripe restano attivi fino a fine periodo; gli altri servizi non cambiano."""
+        p = await _own_purchase(pid, user)
+        if p["status"] not in ACTIVE:
+            raise HTTPException(status_code=400, detail="Servizio non attivo")
+        if p.get("stripe_subscription_id"):
+            try:
+                stripe_sdk.Subscription.modify(p["stripe_subscription_id"], cancel_at_period_end=True)
+            except stripe_sdk.error.StripeError as e:
+                logger.error(f"marketplace cancel: {e}")
+                raise HTTPException(status_code=502, detail="Disdetta non riuscita su Stripe. Riprova più tardi.")
+            await db.marketplace_purchases.update_one({"id": pid}, {"$set": {"cancel_at_period_end": True}, "$push": {"history": {"at": _now(), "status": "cancel_requested", "by": user.get("email")}}})
+        elif p.get("source") == "free":
+            await db.marketplace_purchases.update_one({"id": pid}, {"$set": {"status": "canceled", "canceled_at": _now()}, "$push": {"history": {"at": _now(), "status": "canceled", "by": user.get("email")}}})
+        else:
+            raise HTTPException(status_code=400, detail="Questo servizio non prevede disdetta: contatta il supporto CRMEvent")
+        await deps["record_audit"](user, "marketplace_cancel", org_id=user["org_id"], detail=p.get("service_name"))
+        return await db.marketplace_purchases.find_one({"id": pid}, {"_id": 0})
+
+    @r.post("/marketplace/purchases/{pid}/resume")
+    async def resume_purchase(pid: str, user: dict = Depends(deps["require_admin"])):
+        p = await _own_purchase(pid, user)
+        if p["status"] not in ACTIVE or not p.get("stripe_subscription_id") or not p.get("cancel_at_period_end"):
+            raise HTTPException(status_code=400, detail="Nessuna disdetta da annullare")
+        try:
+            stripe_sdk.Subscription.modify(p["stripe_subscription_id"], cancel_at_period_end=False)
+        except stripe_sdk.error.StripeError as e:
+            logger.error(f"marketplace resume: {e}")
+            raise HTTPException(status_code=502, detail="Operazione non riuscita su Stripe. Riprova più tardi.")
+        await db.marketplace_purchases.update_one({"id": pid}, {"$set": {"cancel_at_period_end": False}, "$push": {"history": {"at": _now(), "status": "cancel_revoked", "by": user.get("email")}}})
+        return await db.marketplace_purchases.find_one({"id": pid}, {"_id": 0})
+
+    @r.post("/marketplace/portal")
+    async def portal(body: PortalIn, user: dict = Depends(deps["require_admin"])):
+        if not _can_purchase(user):
+            raise HTTPException(status_code=403, detail="Non hai il permesso di gestire i servizi Marketplace")
+        org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "subscription": 1}) or {}
+        cust = (org.get("subscription") or {}).get("stripe_customer_id")
+        if not cust:
+            raise HTTPException(status_code=400, detail="Nessun pagamento Stripe associato all'organizzazione")
+        try:
+            ps = stripe_sdk.billing_portal.Session.create(customer=cust, return_url=f"{body.origin_url.rstrip('/')}/marketplace")
+        except stripe_sdk.error.StripeError as e:
+            logger.error(f"marketplace portal: {e}")
+            raise HTTPException(status_code=502, detail="Portale Stripe non disponibile. Riprova più tardi.")
+        return {"url": ps.url}
+
     # ---------------- Super Admin ----------------
     def _clean(body: ServiceIn) -> dict:
         d = body.model_dump()
+        d.pop("stripe_price_id", None)
+        if d["price"] is not None and d["price"] < 0:
+            raise HTTPException(status_code=400, detail="Il prezzo non può essere negativo")
+        d["video_url"] = (d.get("video_url") or "").strip() or None
+        d["video_title"] = (d.get("video_title") or "").strip()[:150] or None
+        d["video_id"] = youtube_id(d["video_url"]) if d["video_url"] else None
+        if d["video_url"] and not d["video_id"]:
+            raise HTTPException(status_code=400, detail="Link YouTube non valido (usa un link youtube.com, youtu.be o Shorts)")
         if d["price_type"] not in PRICE_TYPES or d["status"] not in STATUSES or d["scope"] not in ("org", "event") \
                 or d["billing_method"] != "stripe":
             raise HTTPException(status_code=400, detail="Valori non validi")
@@ -458,7 +638,9 @@ def build(db, deps: dict):
         rows = await db.marketplace_services.find({}, {"_id": 0}).sort("sort", 1).to_list(500)
         counts = {c["_id"]: c["n"] for c in await db.marketplace_purchases.aggregate([{"$match": {"status": {"$in": list(ACTIVE)}}}, {"$group": {"_id": "$service_id", "n": {"$sum": 1}}}]).to_list(500)}
         intr = {c["_id"]: len(c["orgs"]) for c in await db.marketplace_interests.aggregate([{"$group": {"_id": "$service_id", "orgs": {"$addToSet": "$org_id"}}}]).to_list(500)}
-        return {"services": [{**s, "active_count": counts.get(s["id"], 0), "interest_count": intr.get(s["id"], 0), "purchasable_now": can_buy(s) is None} for s in rows], "categories": CATEGORIES}
+        mode = deps["stripe_mode"]
+        return {"services": [{**s, "active_count": counts.get(s["id"], 0), "interest_count": intr.get(s["id"], 0), "purchasable_now": can_buy(s) is None,
+                              "stripe": (s.get("stripe_prices") or {}).get(mode)} for s in rows], "categories": CATEGORIES, "stripe_mode": mode}
 
     @r.get("/platform/marketplace/interests")
     async def admin_all_interests(service_id: Optional[str] = None, admin: dict = Depends(deps["require_superadmin"])):
@@ -485,8 +667,10 @@ def build(db, deps: dict):
     async def admin_create(body: ServiceIn, admin: dict = Depends(deps["require_superadmin"])):
         d = {**_clean(body), "id": uuid.uuid4().hex, "key": uuid.uuid4().hex[:10], "created_at": _now()}
         await db.marketplace_services.insert_one({**d})
+        if (body.stripe_price_id or "").strip():
+            await _set_manual_price(d, body.stripe_price_id.strip())
         await deps["record_audit"](admin, "marketplace_service_create", detail=d["name"])
-        return d
+        return await db.marketplace_services.find_one({"id": d["id"]}, {"_id": 0})
 
     @r.put("/platform/marketplace/services/{sid}")
     async def admin_update(sid: str, body: ServiceIn, admin: dict = Depends(deps["require_superadmin"])):
@@ -495,6 +679,11 @@ def build(db, deps: dict):
         res = await db.marketplace_services.update_one({"id": sid}, {"$set": {**d, "updated_at": _now()}})
         if not res.matched_count:
             raise HTTPException(status_code=404, detail="Servizio non trovato")
+        pid_in = (body.stripe_price_id or "").strip()
+        cur = await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
+        cur_pid = ((cur.get("stripe_prices") or {}).get(deps["stripe_mode"]) or {}).get("price_id")
+        if pid_in and pid_in != cur_pid:
+            await _set_manual_price(cur, pid_in)
         if prev.get("status") != "available" and d["status"] == "available" and d["visible"]:
             asyncio.create_task(_notify_available({**d, "id": sid}))
         await deps["record_audit"](admin, "marketplace_service_update", detail=f"{d['name']} · {d['status']} · acquistabile {d['purchasable']}")
@@ -527,6 +716,53 @@ def build(db, deps: dict):
             ok += await _sync_one(it)
         await deps["record_audit"](admin, "marketplace_brevo_resync", detail=f"sincronizzati {ok}/{len(rows)}")
         return {"synced": ok, "failed": len(rows) - ok}
+
+    @r.post("/platform/marketplace/services/{sid}/stripe-sync")
+    async def admin_stripe_sync(sid: str, admin: dict = Depends(deps["require_superadmin"])):
+        """Crea/aggiorna su Stripe prodotto e prezzo del servizio (modalità corrente)."""
+        svc = await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
+        if not svc:
+            raise HTTPException(status_code=404, detail="Servizio non trovato")
+        if svc.get("price") is None or float(svc["price"]) <= 0 or svc.get("price_type") == "usage":
+            raise HTTPException(status_code=400, detail="Configura un prezzo maggiore di 0 € (una tantum, mensile o annuale) prima di collegare Stripe")
+        try:
+            await _stripe_price(svc)
+            cur = ((await db.marketplace_services.find_one({"id": sid}, {"_id": 0, "stripe_prices": 1})).get("stripe_prices") or {})[deps["stripe_mode"]]
+            stripe_sdk.Product.modify(cur["product_id"], name=f"CRMEvent · {svc['name']}")
+        except stripe_sdk.error.StripeError as e:
+            logger.error(f"marketplace stripe sync: {e}")
+            raise HTTPException(status_code=502, detail="Stripe non raggiungibile. Riprova più tardi.")
+        await deps["record_audit"](admin, "marketplace_stripe_sync", detail=f"{svc['name']} · {cur['price_id']}")
+        return {**cur, "stripe_mode": deps["stripe_mode"]}
+
+    @r.get("/platform/marketplace/orgs")
+    async def admin_orgs(admin: dict = Depends(deps["require_superadmin"])):
+        return await db.organizations.find({"type": {"$ne": "platform"}}, {"_id": 0, "id": 1, "nome": 1}).sort("nome", 1).to_list(5000)
+
+    @r.post("/platform/marketplace/services/{sid}/grant")
+    async def admin_grant(sid: str, body: GrantIn, admin: dict = Depends(deps["require_superadmin"])):
+        """Attivazione manuale gratuita per una specifica organizzazione (nessun addebito Stripe)."""
+        svc = await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
+        org = await db.organizations.find_one({"id": body.org_id}, {"_id": 0, "id": 1, "nome": 1})
+        if not svc or not org:
+            raise HTTPException(status_code=404, detail="Servizio o organizzazione non trovati")
+        ev = None
+        if svc.get("scope") == "event":
+            ev = await db.events.find_one({"id": body.event_id or "", "org_id": org["id"]}, {"_id": 0, "id": 1})
+            if not ev:
+                raise HTTPException(status_code=400, detail="Seleziona l'evento dell'organizzazione")
+        dup = {"org_id": org["id"], "service_id": sid, "status": {"$in": list(ACTIVE)}, **({"event_id": ev["id"]} if ev else {})}
+        if await db.marketplace_purchases.find_one(dup):
+            raise HTTPException(status_code=400, detail="Servizio già attivo per questa organizzazione")
+        await _expire_pending({k: v for k, v in dup.items() if k != "status"})
+        note = (body.note or "").strip()[:300] or None
+        doc = {"id": uuid.uuid4().hex, "org_id": org["id"], "service_id": sid, "service_name": svc["name"], "event_id": (ev or {}).get("id"),
+               "status": "active", "source": "manual", "note": note, "price": 0.0, "price_type": svc.get("price_type") or "one_time",
+               "stripe_session_id": None, "stripe_subscription_id": None, "activated_at": _now(), "current_period_end": None,
+               "created_by": admin["user_id"], "created_at": _now(), "history": [{"at": _now(), "status": "active", "by": admin.get("email"), "note": "Attivazione manuale gratuita"}]}
+        await db.marketplace_purchases.insert_one({**doc})
+        await deps["record_audit"](admin, "marketplace_manual_grant", org_id=org["id"], detail=f"{svc['name']}{' · ' + note if note else ''}")
+        return doc
 
     @r.get("/platform/marketplace/purchases")
     async def admin_purchases(admin: dict = Depends(deps["require_superadmin"])):
