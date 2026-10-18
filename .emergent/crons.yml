@@ -1,4 +1,11 @@
 crons:
+  - name: calendar-availability-tick
+    description: "Controlla ogni 15 minuti la disponibilità sui calendari Google monitorati (solo free/busy) e aggiorna stato ed errori"
+    cron: "*/15 * * * *"
+    endpoint: "{{BASE_URL}}/api/cron/calendar-availability-tick"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
   - name: brevo-funnel-tick
     description: "Processes due Demo funnel emails every 15 min, re-checking stop conditions before each send"
     cron: "*/15 * * * *"

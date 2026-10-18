@@ -14,6 +14,7 @@ import email_utils
 import text_normalize as TN
 import gcal_utils
 import gcal_tokens
+import gcal_availability
 import video_support
 
 logger = logging.getLogger("demo_slots")
@@ -93,28 +94,18 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
             "id": "config", "weekly": [], "closed_dates": [], "min_notice_hours": 12, "horizon_days": 30}
 
     async def _busy(tmin, tmax) -> list:
-        if video_support.simulation():
+        if video_support.simulation() or not gcal_utils.is_configured():
             return []
         vcfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0}) or {}
-        conn = None
-        if vcfg.get("calendar_user_id") and gcal_utils.is_configured():
-            try:
-                conn = await gcal_tokens.load(db, vcfg["calendar_user_id"])
-            except gcal_tokens.GCalError as e:
-                logger.warning(f"demo freebusy calendar unavailable: {e.code}")
-        if not conn:
+        if not vcfg.get("calendar_user_id"):
             return []
-        try:
-            return gcal_utils.freebusy(conn["tokens"], conn.get("calendar_id") or "primary", _iso(tmin), _iso(tmax))
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"demo freebusy failed: {type(e).__name__}")
-            return []
+        return await gcal_availability.busy(db, vcfg["calendar_user_id"], tmin, tmax)
 
     async def slots(enforce_notice: bool = True, exclude_lead: Optional[str] = None) -> list:
         cfg, now = await _cfg(), _now()
         start_min, horizon = now + timedelta(hours=cfg.get("min_notice_hours", 12) if enforce_notice else 0), now + timedelta(days=cfg.get("horizon_days", 30))
         taken = set(await db.demo_slot_locks.distinct("slot", {"lead_id": {"$ne": exclude_lead}} if exclude_lead else {})) | set(await db.video_support_bookings.distinct("slot_lock", {"slot_lock": {"$type": "string"}}))
-        busy = [(datetime.fromisoformat(s.replace("Z", "+00:00")), datetime.fromisoformat(e.replace("Z", "+00:00"))) for s, e in await _busy(now, horizon)]
+        busy = await _busy(now, horizon)
         closed, out, day = set(cfg.get("closed_dates") or []), [], now.astimezone(ROME).date()
         while datetime.combine(day, datetime.min.time(), ROME) <= horizon:
             if day.isoformat() not in closed:
@@ -216,6 +207,10 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
         return lead
 
     async def _do(lead: dict, action: str, slot=None) -> dict:
+        if action in ("confirm", "reschedule") and (slot or lead.get("demo_slot")):
+            vcfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0, "calendar_user_id": 1}) or {}
+            start = datetime.strptime(slot or lead["demo_slot"], "%Y-%m-%dT%H:%M").replace(tzinfo=ROME)
+            await video_support.assert_calendar_free(db, vcfg.get("calendar_user_id"), start)
         try:
             return (await demo_booking.apply_action(db, lead, action, app_url, slot))["lead"]
         except demo_booking.SlotTaken:
@@ -392,6 +387,8 @@ def build_router(db, require_member, require_superadmin, record_audit, app_url: 
                 "demo_source": "richiesta_demo_app", "demo_request_id": req["id"], "demo_booked_by_admin": True, "demo_booked_by": by,
                 "demo_meet_link": None, "demo_event_id": None, "demo_email_key": None, "updated_at": now}
         try:
+            vcfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0, "calendar_user_id": 1}) or {}
+            await video_support.assert_calendar_free(db, vcfg.get("calendar_user_id"), datetime.strptime(body.slot_key, "%Y-%m-%dT%H:%M").replace(tzinfo=ROME))
             await demo_booking._lock(db, lead["id"], body.slot_key)
         except demo_booking.SlotTaken:
             raise HTTPException(status_code=409, detail="Orario già occupato da un'altra demo o assistenza: scegline un altro")

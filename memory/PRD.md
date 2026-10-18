@@ -723,3 +723,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Anche le richieste utente bloccano subito l'orario (demo_slot_locks) → nessuna sovrapposizione.
 - Frontend: OnBehalfDemo.jsx condiviso; WelcomeDemo in assistenza (pulsante header sempre visibile in assistenza) + sezione "Demo prenotate"; PlatformDemo "+ Prenota per un utente" e badge "Prenotata dal Super Admin".
 
+
+
+## Google Calendar – calendari multipli per la disponibilità — 2026-10-18 ✅ (test con Google simulato)
+- backend/gcal_availability.py: free/busy in tempo reale su tutti i calendari monitorati (availability_calendar_ids, default = calendario di destinazione), stato in calendar_connections.availability {status ok/partial/error, last_ok_at, monitored, errors}; nessun evento salvato.
+- gcal_utils.freebusy_multi; video_support.assert_calendar_free (strict alla conferma: 409 conflitto, 503 se Google non risponde) usato da assistenza (_assert_free_slot) e demo (_do confirm/reschedule, on-behalf prima dei salvataggi).
+- API: POST /api/calendar/availability, POST /api/calendar/sync-now, cron /api/cron/calendar-availability-tick ogni 15 min (crons.yml).
+- UI Profilo → Integrazioni Google Calendar: "Calendario di destinazione" + checkbox "Calendari da controllare", Salva, Sincronizza ora, stato/ultima riuscita/numero/errori.
+- Test: tests/check_gcal_availability.py. In preview Google Calendar non è configurato: verifica reale da fare in produzione.

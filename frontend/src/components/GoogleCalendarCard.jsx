@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { AlertTriangle, CalendarCheck2, Link2, RefreshCw, Unplug } from "lucide-react";
+import { CalendarAvailability } from "@/components/CalendarAvailability";
 
 const REASONS = {
   access_denied: "Non hai autorizzato l'accesso a Google Calendar. Puoi riprovare quando vuoi.",
@@ -72,10 +73,14 @@ export function GoogleCalendarCard() {
       {cal.message && <p className="text-sm text-red-700 flex items-start gap-1.5" data-testid="gcal-message"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />{cal.message}</p>}
       {linked && <p className="text-xs text-slate-500" data-testid="gcal-last-sync">Collegato il {when(cal.connected_at)} · ultima sincronizzazione {when(cal.last_sync_at)}</p>}
       {cal.connected && cals.length > 0 && (
-        <div className="max-w-xs space-y-1.5"><Label className="text-xs">Calendario selezionato</Label>
-          <Select value={cal.calendar_id} onValueChange={selectCal}><SelectTrigger data-testid="calendar-select"><SelectValue /></SelectTrigger>
-            <SelectContent>{cals.map((c) => <SelectItem key={c.id} value={c.id}>{c.summary}</SelectItem>)}</SelectContent></Select>
-        </div>
+        <>
+          <div className="max-w-xs space-y-1.5"><Label className="text-xs">Calendario di destinazione</Label>
+            <Select value={cal.calendar_id} onValueChange={selectCal}><SelectTrigger data-testid="calendar-select"><SelectValue /></SelectTrigger>
+              <SelectContent>{cals.map((c) => <SelectItem key={c.id} value={c.id}>{c.summary}</SelectItem>)}</SelectContent></Select>
+            <p className="text-xs text-slate-500">Qui CRMEvent crea, aggiorna e cancella i propri appuntamenti (demo, assistenza, sincronizzazioni).</p>
+          </div>
+          <CalendarAvailability cal={cal} cals={cals} onSaved={load} />
+        </>
       )}
       {cal.redirect_uri && <p className="text-xs text-slate-400 break-all" data-testid="gcal-redirect-uri">Redirect URI (solo Super Admin): {cal.redirect_uri}{cal.key_configured === false ? " · chiave di cifratura MANCANTE" : ""}</p>}
       <div className="flex flex-wrap gap-2">
