@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the Elenco Iscritti DEMO deliverable for org Demo (b7f40862230441b9a0bedabefe8dab49). Backend: 13/13 pytest pass. The demo-seed is idempotent (ran 4 times, via API x2 and the UI button x2): 6220 iscritti, 2024:1850 / 2025:2640 / 2026:3420 = 7910 partecipazioni, 3 edizioni, 1 event 'Maratona Demo', module active. All emails are @example.com, all records have demo:true + brevo_status demo_escluso. The DB cross-check of /api/iscritti/stats passes: evolution, distance per edition, distanza_top, nationality count, variazione +29.5%, new/recurring (2025 Ricorrenti = 610), cumulative trend end values, and the anni/edizione_id/gara/mode filters (anni=2025,2026 + gara=10K = 1664, matching the DB). Brevo exclusion: sync_org, sa_force, select_recipients (used by press _iscritti_recips) and the GDPR cron all filter demo != True. After /iscritti/brevo/sync, 0 demo records changed status. Frontend: the SA Marketplace > Elenco Iscritti 'Popola organizzazione Demo' button works (toast 'Demo popolata: 6220 iscritti · 7910 partecipazioni'). /iscritti list shows 6220; the anno filter gives 2640; the edizione filter works; the Excel export downloads iscritti.xlsx; a row click opens the scheda with storico partecipazioni. Statistiche tab: DEMO badge, 7 KPI, 7 charts rendered, anno toggles, gara/edizione/event filters, days/months trend toggle all work. At 390px mobile there is no horizontal overflow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/iscritti/kpi (list tab)", "issue": "'Nuovi (30 giorni)' KPI shows 2640 for the 2025 filter (all demo records), because demo iscritti have created_at = seed time. This is misleading for a demo dataset. The list-tab 'Ricorrenti' (1165 for 2025) also uses a different definition from Statistiche 'Ricorrenti' (610 in 2025, 1510 overall), so the two tabs show inconsistent numbers."},
+      {"endpoint": "PATCH /api/iscritti/{pid} on a demo record", "issue": "Code review: the update sets brevo_status to da_sincronizzare/escluso_consenso and overwrites 'demo_escluso'. sync_org still excludes demo:true, so nothing is sent, but the 'DEMO (escluso)' badge is lost on edited demo records. Keep brevo_status 'demo_escluso' when cur.demo is true."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StatsPanel KPI variazione", "issue": "The hint shows '2025 · 2ª edizione vs 2026 · 3ª edizione' (previous vs current). Since the value is the current edition's change vs the previous one, it should read '2026 … vs 2025 …' (reverse variazione_rif).", "selector": "[data-testid='stats-kpi-variazione']", "priority": "LOW"},
+      {"component": "StatsPanel KPI genere", "issue": "Percentages use a dot decimal (63.5% / 36.5%) while the other KPIs use the it-IT comma (43,2 anni, +29,5%).", "selector": "[data-testid='stats-kpi-genere']", "priority": "LOW"},
+      {"component": "StatsPanel bar charts (eta/nazionalita)", "issue": "After toggling the year filters and resetting to all, the order of bars inside each group changed (2026 bar rendered first) while the colors stayed correct. Probable Recharts child-reorder quirk; consider key={labels.join()} on the BarChart to force a remount.", "selector": "[data-testid='stats-chart-eta']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Statistiche mobile 390px", "issues": ["The Nazionalità chart x-axis labels overlap (Germania/Francia/Svizzera/Regno Unito) because of interval={0}. Use angled ticks, a horizontal layout on mobile, or abbreviations.", "Nuovi e ricorrenti x-axis labels touch each other ('2024 · 1ª edizione2025 · 2ª edizione')."]},
+      {"screen": "Scheda iscritto dialog", "issue_note": "Data di nascita uses a native <input type=date>, not the shadcn calendar (pre-existing).", "issues": ["Native date picker for data_nascita"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iscritti_demo_stats.py", "/app/test_reports/pytest/iscritti_demo_stats.xml"],
+  "action_items": [
+    "Reverse the variazione hint order in StatsPanel (current vs previous)",
+    "Format the genere KPI with it-IT decimals",
+    "Fix overlapping x-axis labels on mobile for the Nazionalità and Nuovi/Ricorrenti charts",
+    "Preserve brevo_status 'demo_escluso' when a demo iscritto is updated (PATCH)",
+    "Align the list-tab Ricorrenti/Nuovi 30gg KPIs with the stats definitions, or hide 'Nuovi (30 giorni)' for demo data"
+  ],
+  "critical_code_review_comments": [
+    "iscritti_stats.compute loads all partecipazioni and people into memory (to_list(300000)). Fine for 7910 rows but will not scale for large orgs; consider aggregation pipelines.",
+    "Stats include all stati (annullata/ritirato count towards the totals). Acceptable, but consider defaulting to confermata or exposing the stato filter in the UI.",
+    "iscritti.py is 963 lines (>700); consider splitting the Brevo sync and platform admin endpoints."
+  ],
+  "updated_files": ["/app/backend/tests/test_iscritti_demo_stats.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "No new data. Re-ran the demo-seed 4x (idempotent, counts unchanged). The demo dataset was not modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_iscritti_demo_stats.py -v. It reads Mongo directly to cross-check stats, and the stats endpoint needs header X-Org-Id with the SA cookie. Without an org, the endpoint returns 428 by design. UI: login SA, set localStorage acting_org_id=b7f40862230441b9a0bedabefe8dab49, then go to /iscritti; dismiss cookie-reject-all/welcome-demo-skip."
+}

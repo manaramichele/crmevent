@@ -702,6 +702,8 @@ def build(db, deps: dict):
                 pass
         upd["brevo_status"] = "da_sincronizzare" if (upd.get("consenso_marketing", cur.get("consenso_marketing")) and d["email"]) else (
             "da_rimuovere" if cur.get("brevo_status") == "sincronizzato" else "escluso_consenso")
+        if cur.get("demo"):
+            upd["brevo_status"] = "demo_escluso"
         await db.iscritti.update_one({"id": pid}, {"$set": upd, **({"$push": push} if push else {})})
         if body.partecipazione and body.partecipazione.get("edizione_id"):
             await _add_part(user["org_id"], pid, body.partecipazione, now)

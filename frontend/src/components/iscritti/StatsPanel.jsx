@@ -27,11 +27,12 @@ function Kpi({ label, v, id, hint }) {
 }
 
 const ax = { tick: { fontSize: 11, fill: "#64748B" }, tickLine: false, axisLine: false };
+const short = (v) => String(v).replace(/ · (\d)ª edizione$/, " · $1ª");
 const Bars = ({ data, xKey, keys, stacked, unit }) => (
   <ResponsiveContainer width="100%" height="100%">
-    <BarChart data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+    <BarChart key={keys.join("|")} data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-      <XAxis dataKey={xKey} {...ax} interval={0} />
+      <XAxis dataKey={xKey} {...ax} tickFormatter={short} minTickGap={2} angle={data.length > 4 ? -35 : 0} textAnchor={data.length > 4 ? "end" : "middle"} height={data.length > 4 ? 56 : 30} />
       <YAxis {...ax} unit={unit} />
       <Tooltip formatter={(v) => `${fmt(v)}${unit || ""}`} />
       {keys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
@@ -83,9 +84,9 @@ export function StatsPanel({ eds }) {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
             <Kpi id="totale" label="Totale iscritti" v={fmt(k.totale)} hint={`${fmt(k.unici)} persone uniche`} />
-            <Kpi id="variazione" label="Variazione vs precedente" v={k.variazione == null ? "—" : `${k.variazione > 0 ? "+" : ""}${k.variazione.toLocaleString("it-IT")}%`} hint={k.variazione_rif.join(" vs ")} />
+            <Kpi id="variazione" label="Variazione vs precedente" v={k.variazione == null ? "—" : `${k.variazione > 0 ? "+" : ""}${k.variazione.toLocaleString("it-IT")}%`} hint={[...k.variazione_rif].reverse().join(" vs ")} />
             <Kpi id="ricorrenti" label="Partecipanti ricorrenti" v={fmt(k.ricorrenti)} />
-            <Kpi id="genere" label="Uomini / Donne" v={`${k.uomini_pct}% / ${k.donne_pct}%`} />
+            <Kpi id="genere" label="Uomini / Donne" v={`${k.uomini_pct.toLocaleString("it-IT")}% / ${k.donne_pct.toLocaleString("it-IT")}%`} />
             <Kpi id="eta" label="Età media" v={k.eta_media == null ? "—" : `${k.eta_media.toLocaleString("it-IT")} anni`} />
             <Kpi id="nazionalita" label="Nazionalità" v={fmt(k.nazionalita)} />
             <Kpi id="distanza" label="Distanza più scelta" v={k.distanza_top || "—"} />

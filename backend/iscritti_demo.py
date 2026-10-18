@@ -130,16 +130,19 @@ async def seed(db, dedup_key) -> dict:
         await db.iscritti.bulk_write(ops[i:i + 1000], ordered=False)
     ids = {x["dedup_key"]: x["id"] for x in await db.iscritti.find({"org_id": oid, "demo": True}, {"_id": 0, "id": 1, "dedup_key": 1}).to_list(50000)}
     pid_of = [ids[dedup_key(p)] for p in people]
-    ops, last = [], {}
+    ops, last, first = [], {}, {}
     for i, anno, gara, stato, d in parts:
         ed, pid = eds[anno], pid_of[i]
         last[pid] = max(last.get(pid, 0), anno)
+        first[pid] = min(first.get(pid, d), d)
         ops.append(UpdateOne({"org_id": oid, "iscritto_id": pid, "edizione_id": ed["id"], "gara": gara}, {"$setOnInsert": {
             "id": uuid.uuid4().hex, "org_id": oid, "iscritto_id": pid, "edizione_id": ed["id"], "event_id": ev["id"], "anno": anno,
             "edizione": ed["edizione"], "gara": gara, "tipologia": "Individuale", "stato": stato, "data_iscrizione": d, "demo": True, "created_at": now}}, upsert=True))
     for i in range(0, len(ops), 1000):
         await db.iscritti_partecipazioni.bulk_write(ops[i:i + 1000], ordered=False)
     lops = [UpdateOne({"id": pid, "$or": [{"last_year": {"$lt": y}}, {"last_year": None}]}, {"$set": {"last_year": y}}) for pid, y in last.items()]
+    # data di creazione = prima iscrizione (realistica per i KPI "nuovi")
+    lops += [UpdateOne({"id": pid, "demo": True}, {"$set": {"created_at": f"{d}T09:00:00+00:00", "updated_at": f"{d}T09:00:00+00:00"}}) for pid, d in first.items()]
     for i in range(0, len(lops), 1000):
         await db.iscritti.bulk_write(lops[i:i + 1000], ordered=False)
     counts = {str(a): await db.iscritti_partecipazioni.count_documents({"org_id": oid, "edizione_id": eds[a]["id"]}) for a, *_ in EDITIONS}

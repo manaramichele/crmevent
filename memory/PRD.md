@@ -751,3 +751,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Video: video_url/video_title per servizio (youtube.com, youtu.be, Shorts → video_id), anteprima nell'editor SA; nel dettaglio "Scopri come funziona", player youtube-nocookie 16:9 caricato solo al Play, "Guarda su YouTube"; azioni sticky.
 - Nota: l'account Stripe TEST ha Managed Payments (tasse automatiche obbligatorie); il record fattura resta forfettario 0% come per gli abbonamenti SaaS → da verificare con il commercialista/config account LIVE.
 
+
+
+## 2026-10-18 · Elenco Iscritti: dati DEMO + Statistiche (testato iteration_145: backend 13/13, frontend OK)
+- iscritti_demo.py: seed deterministico idempotente per org "Demo" (type test): evento "Maratona Demo", edizioni 2024 (1850), 2025 (2640), 2026 (3420) = 7910 partecipazioni, 6220 persone (ricorrenti 610 nel 2025, 1080 nel 2026), email @example.com, demo:true, brevo_status demo_escluso; modulo attivato via org_services (nessuno Stripe). Endpoint SA POST /api/platform/iscritti/demo-seed + pulsante "Popola organizzazione Demo" (Marketplace admin › Elenco Iscritti).
+- Record demo esclusi da sync Brevo, force-sync, select_recipients (Comunicati stampa) e cron conservazione; l'aggiornamento mantiene demo_escluso.
+- iscritti_stats.py + GET /api/iscritti/stats (event_id, anni multipli, edizione_id, gara, stato, mode days|months): 7 KPI e 7 grafici calcolati dal DB; edizioni con data_evento per l'allineamento "giorni mancanti".
+- Frontend: tab "Statistiche" (components/iscritti/StatsPanel.jsx, recharts), badge DEMO, responsive.
+

@@ -102,7 +102,7 @@ export default function Iscritti() {
           <Filters f={f} setF={setF} eds={eds.edizioni} />
           {kpi && (
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
-              <Kpi id="total" label="Iscritti (selezione)" v={kpi.total} /><Kpi id="new" label="Nuovi (30 giorni)" v={kpi.new_30d} /><Kpi id="recurring" label="Ricorrenti" v={kpi.recurring} />
+              <Kpi id="total" label="Iscritti (selezione)" v={kpi.total} /><Kpi id="new" label="Nuovi (30 giorni)" v={kpi.new_30d} /><Kpi id="recurring" label="Con più partecipazioni" v={kpi.recurring} />
               <Kpi id="consent" label="Con consenso" v={kpi.with_consent} /><Kpi id="events" label="Eventi / edizioni" v={`${kpi.by_event.length} / ${kpi.by_edition.length}`} />
             </div>
           )}
