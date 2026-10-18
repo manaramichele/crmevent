@@ -30,6 +30,7 @@ function ActivePurchase({ s, canPurchase, onChanged }) {
   return (
     <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-600 space-y-2" data-testid="mkt-detail-subscription">
       {p.status === "past_due" && <div className="font-semibold text-red-600" data-testid="mkt-detail-pastdue">Pagamento non riuscito: aggiorna il metodo di pagamento per non perdere il servizio.</div>}
+      {p.source === "demo" && <div data-testid="mkt-detail-demo-active">Attivato gratuitamente (organizzazione Demo) il {fmtDate(p.activated_at)}, senza scadenza.</div>}
       {p.source === "manual" && <div>Attivato gratuitamente dal team CRMEvent.</div>}
       {p.source === "free" && <div>Servizio gratuito attivato il {fmtDate(p.activated_at)}.</div>}
       {p.current_period_end && <div data-testid="mkt-detail-renewal">{p.cancel_at_period_end ? `Disdetto: resta attivo fino al ${fmtDate(p.current_period_end)}` : `Rinnovo automatico il ${fmtDate(p.current_period_end)}`}</div>}
@@ -84,6 +85,7 @@ function Card({ s, onOpen, onToggle }) {
       <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
         <span className="font-semibold text-slate-800">{priceLabel(s)}</span><span className="text-slate-500">{PRICE_TYPES[s.price_type]}</span>
       </div>
+      {s.demo_free && s.purchasable_now && !s.active && <div className="mt-2 text-[11px] font-semibold text-amber-700" data-testid={`mkt-card-demo-free-${s.key}`}>Gratuito per organizzazione Demo</div>}
       {s.status === "coming_soon" && <div className="mt-3"><NotifyButton s={s} onToggle={onToggle} /></div>}
     </div>
   );
@@ -111,7 +113,7 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
         <DialogDescription className="text-sm text-slate-600">{s.description}</DialogDescription>
         <YouTubeTutorial id={s.video_id} title={s.video_title} />
         <div className="grid grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 p-3">
-          <div><div className="text-xs text-slate-400">Prezzo</div><b data-testid="mkt-detail-price">{priceLabel(s)}</b></div>
+          <div><div className="text-xs text-slate-400">Prezzo{s.demo_free ? " di listino" : ""}</div><b data-testid="mkt-detail-price">{priceLabel(s)}</b>{s.demo_free && <div className="text-xs font-semibold text-amber-700" data-testid="mkt-detail-demo-free">Gratuito per organizzazione Demo</div>}</div>
           <div><div className="text-xs text-slate-400">Modalità</div><b>{PRICE_TYPES[s.price_type]}</b></div>
           {s.usage_limits && <div className="col-span-2"><div className="text-xs text-slate-400">Limiti di utilizzo</div>{s.usage_limits}</div>}
           {s.features?.length > 0 && <div className="col-span-2 space-y-3" data-testid="mkt-detail-features"><div className="text-xs text-slate-400">Funzionalità previste</div>{s.features.map((g) => (
@@ -126,7 +128,7 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">
                 {s.scope === "event" && <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm" data-testid="mkt-detail-event"><option value="">Seleziona l'evento…</option>{events.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>}
-                <Button disabled={busy || (s.scope === "event" && !eventId)} onClick={buy} className="w-full h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-detail-buy">{busy ? "Attendi..." : s.free ? "Attiva gratuitamente" : "Conferma e vai al pagamento"}</Button>
+                <Button disabled={busy || (s.scope === "event" && !eventId)} onClick={buy} className="w-full h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-detail-buy">{busy ? "Attendi..." : s.free || s.demo_free ? "Attiva gratuitamente" : "Conferma e vai al pagamento"}</Button>
               </div>)}
         {s.active && <ActivePurchase s={s} canPurchase={canPurchase} onChanged={onChanged} />}
         {s.status === "coming_soon" && !s.active && <NotifyButton s={s} onToggle={onToggle} full />}

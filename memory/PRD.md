@@ -759,3 +759,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - iscritti_stats.py + GET /api/iscritti/stats (event_id, anni multipli, edizione_id, gara, stato, mode days|months): 7 KPI e 7 grafici calcolati dal DB; edizioni con data_evento per l'allineamento "giorni mancanti".
 - Frontend: tab "Statistiche" (components/iscritti/StatsPanel.jsx, recharts), badge DEMO, responsive.
 
+
+
+
+## 2026-10-18 · Marketplace gratuito per Demo ufficiale (verificato via API + screenshot)
+- Contrassegno org `is_demo_official` (solo org type "test"; toggle in OrgDetail SA, badge "Demo ufficiale"; bootstrap una tantum su org "Demo"/test se unica — schema_meta demo_official_v1).
+- marketplace: gratuità decisa dall'org attiva (_is_demo_org), mai dal ruolo SA. Demo: prezzo di listino + "Gratuito per organizzazione Demo", "Attiva gratuitamente", nessuno Stripe/fattura, purchase source "demo", causale DEMO, price 0, list_price, nessuna scadenza. Nova Events (test senza flag), clienti e SA che impersona un cliente → Stripe.

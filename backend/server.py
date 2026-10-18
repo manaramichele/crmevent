@@ -4247,7 +4247,7 @@ async def _org_detail(org_id: str) -> dict:
     return {"id": org["id"], "nome": org.get("nome"), "type": org.get("type", "cliente"),
             "status": org.get("status", "active"), "created_at": org.get("created_at"),
             "members": members, "events": events, "subscription": _sub_summary(org),
-            "formula": st.get("assigned_plan") if st.get("enabled") else None, "saas": st}
+            "formula": st.get("assigned_plan") if st.get("enabled") else None, "saas": st, "is_demo_official": bool(org.get("is_demo_official"))}
 
 
 class OrgCreateIn(BaseModel):
@@ -4261,6 +4261,7 @@ class OrgUpdateIn(BaseModel):
     type: Optional[str] = None
     status: Optional[str] = None
     formula: Optional[str] = None  # "" = nessuna formula
+    is_demo_official: Optional[bool] = None
 
 
 class MemberAddIn(BaseModel):
@@ -4306,6 +4307,14 @@ async def update_organization_admin(org_id: str, body: OrgUpdateIn, admin: dict 
         upd["type"] = body.type; changes.append(f"tipo: {org.get('type')} → {body.type}")
     if body.status and body.status in ("active", "disabled") and body.status != org.get("status"):
         upd["status"] = body.status; changes.append(f"stato: {org.get('status')} → {body.status}")
+    new_type = upd.get("type", org.get("type"))
+    demo = bool(org.get("is_demo_official")) if body.is_demo_official is None else body.is_demo_official
+    if demo and new_type != "test":
+        if body.is_demo_official:
+            raise HTTPException(status_code=400, detail="Il contrassegno 'Demo ufficiale' è disponibile solo per organizzazioni di tipo Test")
+        demo = False
+    if demo != bool(org.get("is_demo_official")):
+        upd["is_demo_official"] = demo; changes.append(f"demo ufficiale: {'sì' if demo else 'no'}")
     if upd:
         upd["updated_at"] = now_iso()
         await db.organizations.update_one({"id": org_id}, {"$set": upd})
