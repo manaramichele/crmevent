@@ -9,12 +9,13 @@ import { Contact, Upload, Plus, RefreshCw, Download, ListPlus } from "lucide-rea
 import { ImportWizard } from "@/components/iscritti/ImportWizard";
 import { IscrittoDialog } from "@/components/iscritti/IscrittoDialog";
 import { EdizioniPanel, ImportsPanel } from "@/components/iscritti/EdizioniPanel";
+import { StatsPanel } from "@/components/iscritti/StatsPanel";
 
 const SEL = "h-10 rounded-md border border-slate-200 px-3 text-sm bg-white min-w-0";
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 const COLS = [["cognome", "Cognome"], ["nome", "Nome"], ["email", "Email"], ["cellulare", "Cellulare"], ["societa", "Società"], ["last_year", "Ultimo anno"], ["partecipazioni", "Partecipazioni"], ["consenso_marketing", "Consenso"], ["brevo_status", "Brevo"]];
 const SYNC = { ok: "Sincronizzato", parziale: "Parziale", errore: "Errore", rate_limit: "In attesa (limite Brevo)", non_configurato: "Brevo non configurato" };
-const BREVO = { sincronizzato: "Sincronizzato", da_sincronizzare: "In coda", escluso_consenso: "Senza consenso", disiscritto: "Disiscritto", errore: "Errore", rate_limit: "In coda", da_rimuovere: "In rimozione", anonimizzato: "Anonimizzato" };
+const BREVO = { sincronizzato: "Sincronizzato", da_sincronizzare: "In coda", escluso_consenso: "Senza consenso", disiscritto: "Disiscritto", errore: "Errore", rate_limit: "In coda", da_rimuovere: "In rimozione", anonimizzato: "Anonimizzato", demo_escluso: "DEMO (escluso)" };
 
 function Kpi({ label, v, id }) {
   return <div className="bg-white border border-slate-200 rounded-xl p-3" data-testid={`iscritti-kpi-${id}`}><div className="text-xs text-slate-500">{label}</div><div className="text-xl font-bold text-slate-900">{v}</div></div>;
@@ -96,7 +97,7 @@ export default function Iscritti() {
         )}
       </div>
       <Tabs defaultValue="list">
-        <TabsList className="flex-wrap h-auto"><TabsTrigger value="list" data-testid="iscritti-tab-list">Iscritti</TabsTrigger><TabsTrigger value="edizioni" data-testid="iscritti-tab-edizioni">Edizioni</TabsTrigger><TabsTrigger value="imports" data-testid="iscritti-tab-imports">Storico importazioni</TabsTrigger></TabsList>
+        <TabsList className="flex-wrap h-auto"><TabsTrigger value="list" data-testid="iscritti-tab-list">Iscritti</TabsTrigger><TabsTrigger value="stats" data-testid="iscritti-tab-stats">Statistiche</TabsTrigger><TabsTrigger value="edizioni" data-testid="iscritti-tab-edizioni">Edizioni</TabsTrigger><TabsTrigger value="imports" data-testid="iscritti-tab-imports">Storico importazioni</TabsTrigger></TabsList>
         <TabsContent value="list" className="space-y-4">
           <Filters f={f} setF={setF} eds={eds.edizioni} />
           {kpi && (
@@ -133,6 +134,7 @@ export default function Iscritti() {
             </div>
           )}
         </TabsContent>
+        <TabsContent value="stats"><StatsPanel eds={eds.edizioni} /></TabsContent>
         <TabsContent value="edizioni"><EdizioniPanel data={eds} canEdit={meta.can_edit} onChanged={loadMeta} /></TabsContent>
         <TabsContent value="imports"><ImportsPanel rows={imports} /></TabsContent>
       </Tabs>
