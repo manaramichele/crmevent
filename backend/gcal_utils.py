@@ -123,6 +123,21 @@ def delete_event(tokens: dict, calendar_id: str, event_id: str):
     return service_for(tokens).events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="none").execute()
 
 
+def freebusy_multi(tokens: dict, calendar_ids: list, time_min: str, time_max: str):
+    """Free/busy su più calendari (gestisce ricorrenze, giornata intera, fusi; ignora cancellati e "Libero").
+    Ritorna (intervalli occupati uniti, errori per calendario). Mai titoli o dettagli."""
+    res = service_for(tokens).freebusy().query(body={"timeMin": time_min, "timeMax": time_max, "timeZone": "Europe/Rome",
+                                                     "items": [{"id": c} for c in calendar_ids]}).execute()
+    busy, errors = [], {}
+    for cid in calendar_ids:
+        info = (res.get("calendars") or {}).get(cid) or {}
+        if info.get("errors"):
+            errors[cid] = ",".join(e.get("reason", "error") for e in info["errors"])
+            continue
+        busy += [(b["start"], b["end"]) for b in info.get("busy") or []]
+    return busy, errors
+
+
 def freebusy(tokens: dict, calendar_id: str, time_min: str, time_max: str) -> list:
     """Solo intervalli occupati [(start, end)], senza dettagli degli appuntamenti."""
     res = service_for(tokens).freebusy().query(body={"timeMin": time_min, "timeMax": time_max, "items": [{"id": calendar_id}]}).execute()

@@ -41,6 +41,7 @@ import video_support
 import subscriptions
 import brevo_subscriptions
 import brevo_tracker
+import gcal_availability
 import privacy_consent
 import pipeline_seed_sports
 import demo_booking
@@ -3440,7 +3441,8 @@ async def calendar_status(user: dict = Depends(get_current_user)):
         status, msg = "reauthorization_required", "Account da riconnettere: email dell'account Google non disponibile."
     return {"configured": True, "connected": status == "connected", "status": status, "message": msg, "google_email": conn.get("google_email"),
             "calendar_id": conn.get("calendar_id", "primary"), "connected_at": conn.get("connected_at") or conn.get("updated_at"),
-            "last_sync_at": conn.get("last_sync_at"), **extra}
+            "last_sync_at": conn.get("last_sync_at"), "availability_calendar_ids": gcal_availability.monitored(conn),
+            "availability": conn.get("availability") or {}, **extra}
 
 
 @api.get("/calendar/connect")
@@ -3559,6 +3561,49 @@ class SelectCalIn(BaseModel):
 async def calendar_select(body: SelectCalIn, user: dict = Depends(get_current_user)):
     await db.calendar_connections.update_one({"user_id": user["user_id"]}, {"$set": {"calendar_id": body.calendar_id}})
     return {"ok": True}
+
+
+class AvailabilityCalIn(BaseModel):
+    calendar_ids: List[str]
+
+
+@api.post("/calendar/availability")
+async def calendar_availability(body: AvailabilityCalIn, user: dict = Depends(get_current_user)):
+    """Calendari da controllare per la disponibilità (solo free/busy), salvati per l'account collegato."""
+    ids = list(dict.fromkeys(i for i in body.calendar_ids if i))
+    if not ids:
+        raise HTTPException(status_code=400, detail="Seleziona almeno un calendario da controllare")
+    if len(ids) > gcal_availability.MAX_CALENDARS:
+        raise HTTPException(status_code=400, detail=f"Puoi monitorare al massimo {gcal_availability.MAX_CALENDARS} calendari")
+    try:
+        own = {c["id"] for c in await gcal_tokens.run(db, user["user_id"], lambda c: gcal_utils.list_calendars(c["tokens"]))}
+    except Exception as e:
+        raise _gcal_http(e)
+    if not set(ids) <= own:
+        raise HTTPException(status_code=400, detail="Uno o più calendari non appartengono all'account Google collegato")
+    await db.calendar_connections.update_one({"user_id": user["user_id"]}, {"$set": {"availability_calendar_ids": ids, "updated_at": now_iso()}})
+    return {"ok": True, "availability": await gcal_availability.check_now(db, user["user_id"])}
+
+
+@api.post("/calendar/sync-now")
+async def calendar_sync_now(user: dict = Depends(get_current_user)):
+    if not await db.calendar_connections.find_one({"user_id": user["user_id"]}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail="Google Calendar non collegato")
+    return {"availability": await gcal_availability.check_now(db, user["user_id"])}
+
+
+@api.post("/cron/calendar-availability-tick")
+async def cron_calendar_availability(authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", f"Bearer {WEBHOOK_CRON_SECRET}"):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    async def _run():
+        vcfg = await db.video_support_config.find_one({"id": "config"}, {"_id": 0, "calendar_user_id": 1}) or {}
+        if vcfg.get("calendar_user_id") and gcal_utils.is_configured():
+            await gcal_availability.check_now(db, vcfg["calendar_user_id"])
+    asyncio.create_task(_run())
+    return {"accepted": True}
 
 
 @api.post("/calendar/disconnect")

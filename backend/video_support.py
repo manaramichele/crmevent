@@ -12,6 +12,7 @@ from pymongo.errors import DuplicateKeyError
 
 import gcal_utils
 import gcal_tokens
+import gcal_availability
 from email_utils import link_email, send_email
 
 logger = logging.getLogger("video_support")
@@ -31,6 +32,18 @@ def simulation() -> bool:
 
 def _now():
     return datetime.now(timezone.utc)
+
+
+async def assert_calendar_free(db, calendar_user_id, start: datetime):
+    """Controllo in tempo reale su tutti i calendari monitorati, condiviso da demo e assistenza."""
+    if simulation() or not calendar_user_id or not gcal_utils.is_configured():
+        return
+    try:
+        ok = await gcal_availability.assert_free(db, calendar_user_id, start, start + timedelta(minutes=DURATION_MIN))
+    except gcal_availability.CheckFailed:
+        raise HTTPException(status_code=503, detail="Impossibile verificare la disponibilità su Google Calendar in questo momento: riprova tra qualche minuto")
+    if not ok:
+        raise HTTPException(status_code=409, detail="Conflitto con un appuntamento nel calendario: scegli un altro orario")
 
 
 def _iso(d: datetime) -> str:
@@ -114,15 +127,10 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits, p
         return simulation() or (gcal_utils.is_configured() and bool(await _calendar(cfg)))
 
     async def _busy(cfg: dict, tmin: datetime, tmax: datetime) -> list:
-        """Solo intervalli occupati (free/busy): mai titoli o dettagli degli appuntamenti."""
-        conn = None if simulation() else await _calendar(cfg)
-        if not conn:
+        """Solo intervalli occupati (free/busy) su tutti i calendari monitorati: mai titoli o dettagli."""
+        if simulation() or not cfg.get("calendar_user_id") or not gcal_utils.is_configured():
             return []
-        try:
-            return gcal_utils.freebusy(conn["tokens"], conn.get("calendar_id") or "primary", _iso(tmin), _iso(tmax))
-        except Exception as e:
-            logger.warning(f"video_support freebusy failed: {type(e).__name__}")
-            return []
+        return await gcal_availability.busy(db, cfg["calendar_user_id"], tmin, tmax)
 
     async def _policy(org_id: str) -> dict:
         return await plan["video_policy"](org_id) if plan else {"mode": "credits"}
@@ -138,8 +146,7 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits, p
         if exclude_booking:
             q["id"] = {"$ne": exclude_booking}
         taken = set(await db.video_support_bookings.distinct("slot_lock", q)) | set(await db.demo_slot_locks.distinct("slot"))
-        busy = [(datetime.fromisoformat(s.replace("Z", "+00:00")), datetime.fromisoformat(e.replace("Z", "+00:00")))
-                for s, e in await _busy(cfg, now, horizon)]
+        busy = await _busy(cfg, now, horizon)
         closed = set(cfg.get("closed_dates") or [])
         out, day = [], now.astimezone(ROME).date()
         while datetime.combine(day, datetime.min.time(), ROME) <= horizon:
@@ -161,6 +168,7 @@ def build_router(db, require_admin, require_superadmin, record_audit, credits, p
     async def _assert_free_slot(cfg, slot_key, enforce_notice=True, exclude_booking=None, priority=False):
         if slot_key not in {s["slot_key"] for s in await _slots(cfg, enforce_notice, exclude_booking, priority)}:
             raise HTTPException(status_code=409, detail="L'orario selezionato non è più disponibile")
+        await assert_calendar_free(db, cfg.get("calendar_user_id"), _slot_dt(slot_key))
 
     def _event_body(b: dict, start: datetime) -> dict:
         end = start + timedelta(minutes=DURATION_MIN)
