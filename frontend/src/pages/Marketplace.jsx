@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader } from "@/components/crm";
@@ -143,7 +143,10 @@ export default function Marketplace() {
   const [open, setOpen] = useState(null);
   const [params, setParams] = useSearchParams();
   const load = () => api.get("/marketplace/services").then(({ data }) => { setData(data); setOpen((o) => (o ? data.services.find((x) => x.id === o.id) || null : o)); }).catch(() => setData({ services: [], categories: [] }));
+  const handled = useRef(false);
   useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
     const sid = params.get("session_id");
     if (params.get("canceled")) { toast.info("Pagamento annullato: nessun addebito, il servizio non è stato attivato"); setParams({}, { replace: true }); }
     if (sid) api.get("/marketplace/checkout-confirmation", { params: { session_id: sid } }).then(({ data }) => {

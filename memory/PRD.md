@@ -740,3 +740,14 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Servizio centrale select_recipients → Comunicati stampa (destinatari iscritti con consenso per edizione).
 - Frontend: /iscritti (Iscritti.jsx + components/iscritti/*), menu dopo Anagrafiche solo se attivo, Marketplace attivi in testa + "Apri servizio", SA tab "Elenco Iscritti" in Marketplace admin.
 
+
+
+## 2026-10-18 · Marketplace Stripe LIVE + Video tutorial YouTube (testato iteration_144: backend 26/26, frontend 100%)
+- Rimosso blocco "Acquisti Marketplace non ancora attivi per i pagamenti reali". Marketplace/iscritti/press esenti dalla sola lettura piano (subscriptions.WRITE_EXEMPT): acquistabili e utilizzabili con piano gratuito/prova/scaduto.
+- Checkout Stripe con Price ID per servizio e per modalità (stripe_prices.{test|live}): creato in automatico (prodotto+prezzo) o inserito manualmente dal SA (validato su importo/valuta/intervallo); "Crea/aggiorna su Stripe". Attivazione solo da webhook/conferma verificata, controllo org_id. Una sola sessione aperta per org+servizio (le precedenti vengono chiuse); acquisto doppio segnalato duplicate_of_active.
+- Webhook: completed/async_succeeded → attivo; expired/async_failed → expired/failed; invoice.paid → rinnovo, current_period_end, fattura kind "marketplace" (FIC, nessun doppio, controllo cliente); invoice.payment_failed → past_due + errore; subscription.* → stato/disdetta.
+- Prezzo 0 € → "Attiva gratuitamente" (source free, nessuno Stripe). Disdetta per singolo servizio (cancel_at_period_end) / annulla disdetta / Customer Portal (/marketplace/portal).
+- SA: attivazione gratuita per organizzazione (grant, source manual), tab Acquisti con Origine/Pagamenti.
+- Video: video_url/video_title per servizio (youtube.com, youtu.be, Shorts → video_id), anteprima nell'editor SA; nel dettaglio "Scopri come funziona", player youtube-nocookie 16:9 caricato solo al Play, "Guarda su YouTube"; azioni sticky.
+- Nota: l'account Stripe TEST ha Managed Payments (tasse automatiche obbligatorie); il record fattura resta forfettario 0% come per gli abbonamenti SaaS → da verificare con il commercialista/config account LIVE.
+

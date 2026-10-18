@@ -377,6 +377,7 @@ def build(db, deps: dict):
                 "created_at": _now(), "history": [{"at": _now(), "status": "active", "by": user.get("email"), "note": "Attivazione gratuita"}]})
             await deps["record_audit"](user, "marketplace_free_activation", org_id=org["id"], detail=svc["name"])
             return {"activated": True}
+        await _expire_pending(dup)
         missing = deps["billing_missing"](org.get("billing") or {})
         if missing:
             raise HTTPException(status_code=400, detail="Completa i dati di fatturazione: " + ", ".join(missing))
@@ -403,6 +404,18 @@ def build(db, deps: dict):
             "stripe_subscription_id": None, "activated_at": None, "current_period_end": None, "created_by": user["user_id"],
             "created_at": _now(), "history": [{"at": _now(), "status": "pending", "by": user.get("email")}]})
         return {"checkout_url": sess.url}
+
+    async def _expire_pending(dup: dict) -> None:
+        """Una sola sessione di pagamento aperta per org+servizio(+evento): chiude su Stripe quelle precedenti."""
+        q = {**dup, "status": "pending"}
+        for old in await db.marketplace_purchases.find(q, {"_id": 0, "id": 1, "stripe_session_id": 1}).to_list(50):
+            try:
+                if old.get("stripe_session_id"):
+                    stripe_sdk.checkout.Session.expire(old["stripe_session_id"])
+            except stripe_sdk.error.StripeError:
+                pass
+            await db.marketplace_purchases.update_one({"id": old["id"], "status": "pending"}, {"$set": {"status": "expired", "updated_at": _now()},
+                                                      "$push": {"history": {"at": _now(), "status": "expired", "by": "system", "note": "Sostituita da una nuova richiesta"}}})
 
     async def _stripe_price(svc: dict) -> str:
         """Price Stripe del servizio per la modalità corrente: riusa quello salvato se coerente col prezzo, altrimenti lo crea."""
@@ -448,6 +461,11 @@ def build(db, deps: dict):
         if not p or sess.get("status") != "complete" or sess.get("payment_status") not in ("paid", "no_payment_required"):
             return p
         upd = {"status": "active", "activated_at": p.get("activated_at") or _now(), "updated_at": _now()}
+        other = await db.marketplace_purchases.find_one({"org_id": p["org_id"], "service_id": p["service_id"], "event_id": p.get("event_id"),
+                                                         "status": {"$in": list(ACTIVE)}, "id": {"$ne": pid}}, {"_id": 1})
+        if other and p.get("price_type") != "one_time":
+            upd["duplicate_of_active"] = True
+            logger.warning("marketplace: acquisto %s pagato con servizio già attivo (da verificare/rimborsare)", pid)
         if sess.get("subscription"):
             sub = stripe_sdk.Subscription.retrieve(sess["subscription"])
             it = sub["items"]["data"][0]
@@ -475,6 +493,10 @@ def build(db, deps: dict):
         p = await db.marketplace_purchases.find_one({"id": md.get("purchase_id")} if md.get("purchase_id") else {"stripe_subscription_id": sid or "-"}, {"_id": 0})
         if not p:
             return False
+        org = await db.organizations.find_one({"id": p["org_id"]}, {"_id": 0, "subscription": 1}) or {}
+        if inv.get("customer") and inv.get("customer") != (org.get("subscription") or {}).get("stripe_customer_id"):
+            logger.error("marketplace invoice %s: cliente non corrispondente all'organizzazione", inv.get("id"))
+            return True
         per = line.get("period") or {}
         if status == "paid":
             pu = {"last_payment_at": _now(), "last_payment_error": None}
@@ -732,6 +754,7 @@ def build(db, deps: dict):
         dup = {"org_id": org["id"], "service_id": sid, "status": {"$in": list(ACTIVE)}, **({"event_id": ev["id"]} if ev else {})}
         if await db.marketplace_purchases.find_one(dup):
             raise HTTPException(status_code=400, detail="Servizio già attivo per questa organizzazione")
+        await _expire_pending({k: v for k, v in dup.items() if k != "status"})
         note = (body.note or "").strip()[:300] or None
         doc = {"id": uuid.uuid4().hex, "org_id": org["id"], "service_id": sid, "service_name": svc["name"], "event_id": (ev or {}).get("id"),
                "status": "active", "source": "manual", "note": note, "price": 0.0, "price_type": svc.get("price_type") or "one_time",

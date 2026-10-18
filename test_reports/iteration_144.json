@@ -1,0 +1,36 @@
+{
+  "summary": "Tested Marketplace + Stripe (TEST mode) and the YouTube tutorial video end to end. Backend: 26 of 26 pytest tests pass. They cover paid monthly/one-time/yearly checkout (session created against real Stripe test, purchase stays pending), an org with expired trial (checkout works and /iscritti writes work, while /events stays plan_readonly 403), and webhooks with real HMAC signatures. Webhook cases: completed one-time payment activates the service and a replay changes nothing; bad signature returns 400; mismatched org is not activated; unpaid is not activated; expired session sets 'expired'. A real Stripe test subscription goes active with current_period_end. invoice.payment_failed sets past_due + last_payment_error; invoice.paid sets it back to active, updates the period and writes one invoice record (kind marketplace, is_test) with no duplicate on replay. Also covered: a second recurring checkout is rejected; cancel/resume changes cancel_at_period_end on Stripe; the portal URL works; a one-time purchase cannot be cancelled. Free services: activation, duplicate rejected, disable works, other services stay active. Permissions: member gets 403, cross-org cancel 404, cross-org confirmation 403. Super Admin: orgs, grant (plus duplicate and 404 cases), stripe-sync, manual Price ID (wrong amount or not found → 400, valid one saved as manual), video URL parsing (youtu.be/watch/shorts; invalid → 400; empty clears it). Frontend at desktop and 390px mobile: video block missing when not configured; Play loads the youtube-nocookie iframe only after click; 'Guarda su YouTube' link works; 'Attiva gratuitamente' activates; 'Conferma e vai al pagamento' redirects to checkout.stripe.com; actions bar is sticky; ?canceled shows the toast; active Stripe service shows renewal date, Disdici and Gestisci pagamenti. SA editor: Stripe box (info + 'Crea/aggiorna su Stripe' works), video preview/invalid/remove, grant dialog works, Origine and Pagamenti columns present. All test data has been cleaned up. archivio-iscritti is untouched (price null, monthly, available, purchasable, tech_ready, video null).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/marketplace/services/{sid}/checkout", "issue": "The duplicate check only looks at active/past_due purchases, so the same org can open several pending recurring checkouts for the same service and pay them all. _activate_from_session does not check for an existing active purchase, so this ends in two active subscriptions and double billing. Same thing if a Super Admin grant happens while a Stripe checkout is pending (seen in the UI: a manual grant plus a pending Stripe purchase for the same service)."},
+      {"endpoint": "Stripe tax / _invoice", "issue": "The Checkout Session comes back with automatic_tax enabled (Stripe account default): 9€ is charged as 10.98€ (IVA 22%, amount_tax 198). Prices are created without tax_behavior ('unspecified'). The marketplace invoice record then overrides aliquota_iva/importo_iva to 0 and regime 'forfettario', while totale still includes the 22% tax. Fiscal data is inconsistent (same pattern as the SaaS record_payment). Decide between disabling automatic tax and setting tax_behavior explicitly."},
+      {"endpoint": "_invoice (invoice.paid)", "issue": "The purchase is looked up by metadata.purchase_id without checking that invoice.customer/org matches purchase.org_id. Low risk because metadata is set server-side."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Marketplace ?canceled toast", "issue": "In the preview, the 'Pagamento annullato' toast shows twice, most likely because React StrictMode runs the effect twice in development. A production build should show it once. Optional: guard with a ref.", "selector": "[data-sonner-toast]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Stripe Checkout", "issues": ["Adaptive pricing showed USD by default for the test browser (EUR available). Expected for non-IT IPs, informational only."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_marketplace_stripe.py", "/app/backend/tests/ui_mkt_setup.py", "/app/test_reports/pytest/mkt_stripe.xml"],
+  "action_items": [
+    "Prevent duplicate active recurring purchases: on activation (or at checkout), skip or flag the purchase if one is already active for org+service(+event), and reuse or expire older pending sessions.",
+    "Align the tax configuration between Stripe (automatic_tax 22% IVA) and the invoice record (forfettario 0% IVA)."
+  ],
+  "critical_code_review_comments": [
+    "marketplace.py _activate_from_session: no check for an existing active purchase of the same service, so double subscriptions are possible.",
+    "marketplace.py _stripe_price: Price.create has no tax_behavior while the account applies automatic tax.",
+    "Webhook ordering is correct: SAAS handles only kind=saas first, MKT handles kind=marketplace, and marketplace invoices fall through only when no purchase is found."
+  ],
+  "updated_files": ["/app/backend/tests/test_marketplace_stripe.py", "/app/backend/tests/ui_mkt_setup.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "TEST_ orgs, users, services and purchases were created and then deleted (DB cleaned). Stripe test products/prices were archived. Test subscriptions were cancelled. Stripe test customers remain in Stripe test mode.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_marketplace_stripe.py -v -n 0. It creates its own TEST_ services/orgs and cleans up. Webhooks are signed with STRIPE_WEBHOOK_SECRET. The subscription test creates a real Stripe test subscription on the org's customer with pm_card_visa. For UI tests: python ui_mkt_setup.py setup|cleanup (state stored in /tmp/mkt_ui.json). Dismiss cookie-reject-all and welcome-demo-skip before clicking."
+}
