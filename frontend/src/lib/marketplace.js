@@ -2,9 +2,10 @@ import { Globe, MonitorSmartphone, Mail, MessageCircle, FileSignature, Warehouse
 
 export const MKT_ICONS = { Globe, MonitorSmartphone, Mail, MessageCircle, FileSignature, Warehouse, Package, Sparkles, Megaphone, Camera, Ticket, ShoppingBag, Building2, Contact, ClipboardList, Newspaper, Map: MapIcon };
 export const PRICE_TYPES = { one_time: "Una tantum", monthly: "Abbonamento mensile", yearly: "Abbonamento annuale", usage: "A consumo" };
-export const STATUS = { coming_soon: "Prossimamente", available: "Disponibile", active: "Attivo", suspended: "Sospeso", past_due: "Pagamento in sospeso", canceled: "Annullato", pending: "In attesa di pagamento" };
+export const STATUS = { coming_soon: "Prossimamente", available: "Disponibile", active: "Attivo", suspended: "Sospeso", past_due: "Pagamento in sospeso", canceled: "Annullato", pending: "In attesa di pagamento", expired: "Pagamento annullato", failed: "Pagamento rifiutato" };
 export const priceLabel = (s) => {
-  if (!s.price) return "Prezzo da definire";
+  if (s.price == null) return "Prezzo da definire";
+  if (Number(s.price) === 0) return "Gratuito";
   const p = `€${Number(s.price).toLocaleString("it-IT", { minimumFractionDigits: 2 })}`;
   return { one_time: p, monthly: `${p}/mese`, yearly: `${p}/anno`, usage: `${p}${s.usage_unit ? ` / ${s.usage_unit}` : " a consumo"}` }[s.price_type] || p;
 };

@@ -8,6 +8,42 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { toast } from "sonner";
 import { Search, Store, CheckCircle2, Clock, Bell, BellRing } from "lucide-react";
 import { ServiceIcon, PRICE_TYPES, STATUS, priceLabel } from "@/lib/marketplace";
+import { YouTubeTutorial } from "@/components/marketplace/YouTubeTutorial";
+
+const fmtDate = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : null);
+
+function ActivePurchase({ s, canPurchase, onChanged }) {
+  const [busy, setBusy] = useState("");
+  const p = (s.purchases || []).find((x) => ["active", "past_due"].includes(x.status));
+  if (!p) return null;
+  const run = async (kind) => {
+    if (kind === "cancel" && !window.confirm(p.stripe_subscription_id ? "Disdire questo servizio? Resterà attivo fino alla fine del periodo già pagato. Gli altri servizi non cambiano." : "Disattivare questo servizio gratuito?")) return;
+    setBusy(kind);
+    try {
+      if (kind === "portal") { const { data } = await api.post("/marketplace/portal", { origin_url: window.location.origin }); window.location.href = data.url; return; }
+      await api.post(`/marketplace/purchases/${p.id}/${kind}`);
+      toast.success(kind === "cancel" ? "Disdetta registrata" : "Disdetta annullata");
+      onChanged();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    setBusy("");
+  };
+  return (
+    <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-600 space-y-2" data-testid="mkt-detail-subscription">
+      {p.status === "past_due" && <div className="font-semibold text-red-600" data-testid="mkt-detail-pastdue">Pagamento non riuscito: aggiorna il metodo di pagamento per non perdere il servizio.</div>}
+      {p.source === "manual" && <div>Attivato gratuitamente dal team CRMEvent.</div>}
+      {p.source === "free" && <div>Servizio gratuito attivato il {fmtDate(p.activated_at)}.</div>}
+      {p.current_period_end && <div data-testid="mkt-detail-renewal">{p.cancel_at_period_end ? `Disdetto: resta attivo fino al ${fmtDate(p.current_period_end)}` : `Rinnovo automatico il ${fmtDate(p.current_period_end)}`}</div>}
+      {canPurchase && (
+        <div className="flex flex-wrap gap-2">
+          {p.stripe_subscription_id && !p.cancel_at_period_end && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("cancel")} data-testid="mkt-detail-cancel">Disdici servizio</Button>}
+          {p.stripe_subscription_id && p.cancel_at_period_end && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("resume")} data-testid="mkt-detail-resume">Annulla disdetta</Button>}
+          {p.source === "free" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("cancel")} data-testid="mkt-detail-cancel">Disattiva</Button>}
+          {p.source === "stripe" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("portal")} data-testid="mkt-detail-portal">{busy === "portal" ? "Apertura..." : "Gestisci pagamenti"}</Button>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const badge = (s) => (s.active ? ["Attivo", "bg-emerald-100 text-emerald-800"] : s.status === "suspended" ? ["Sospeso", "bg-red-100 text-red-700"]
   : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "superadmin" && s.status === "available" ? ["Su attivazione", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
@@ -53,7 +89,7 @@ function Card({ s, onOpen, onToggle }) {
   );
 }
 
-function Detail({ s, canPurchase, onClose, onToggle }) {
+function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
   const [events, setEvents] = useState([]);
   const [eventId, setEventId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,14 +97,19 @@ function Detail({ s, canPurchase, onClose, onToggle }) {
   if (!s) return null;
   const buy = async () => {
     setBusy(true);
-    try { const { data } = await api.post(`/marketplace/services/${s.id}/checkout`, { origin_url: window.location.origin, event_id: eventId || null }); window.location.href = data.checkout_url; }
+    try {
+      const { data } = await api.post(`/marketplace/services/${s.id}/checkout`, { origin_url: window.location.origin, event_id: eventId || null });
+      if (data.activated) { toast.success("Servizio attivato gratuitamente"); setBusy(false); onChanged(); return; }
+      window.location.href = data.checkout_url;
+    }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setBusy(false); }
   };
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto rounded-2xl" data-testid="mkt-detail">
+      <DialogContent className="max-w-lg w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto rounded-2xl pb-0" data-testid="mkt-detail">
         <div className="flex items-center gap-3"><ServiceIcon s={s} /><div><DialogTitle className="text-xl font-bold">{s.name}</DialogTitle><div className="text-xs text-[#088F8A]">{s.category}</div></div></div>
         <DialogDescription className="text-sm text-slate-600">{s.description}</DialogDescription>
+        <YouTubeTutorial id={s.video_id} title={s.video_title} />
         <div className="grid grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 p-3">
           <div><div className="text-xs text-slate-400">Prezzo</div><b data-testid="mkt-detail-price">{priceLabel(s)}</b></div>
           <div><div className="text-xs text-slate-400">Modalità</div><b>{PRICE_TYPES[s.price_type]}</b></div>
@@ -78,15 +119,18 @@ function Detail({ s, canPurchase, onClose, onToggle }) {
               <ul className="mt-1 space-y-0.5">{g.items.map((it) => <li key={it} className="flex gap-2 text-sm text-slate-600"><span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0ABAB5] shrink-0" />{it}</li>)}</ul></div>))}</div>}
           {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">{s.status === "coming_soon" ? "Funzionalità previste" : "Condizioni e durata"}</div>{s.terms}</div>}
         </div>
-        <p className="text-xs text-slate-500">Servizio extra a pagamento, non incluso negli abbonamenti BRONZE, SILVER e GOLD. Appartiene all'organizzazione.</p>
+        <p className="text-xs text-slate-500">Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto. Appartiene all'organizzazione.</p>
+        <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-white border-t border-slate-100 space-y-3" data-testid="mkt-detail-actions">
         {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}{s.key === "archivio-iscritti" && <Link to="/iscritti" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-iscritti">Apri servizio</Link>}</div>
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">
                 {s.scope === "event" && <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm" data-testid="mkt-detail-event"><option value="">Seleziona l'evento…</option>{events.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>}
-                <Button disabled={busy || (s.scope === "event" && !eventId)} onClick={buy} className="w-full h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-detail-buy">{busy ? "Attendi..." : "Conferma e vai al pagamento"}</Button>
+                <Button disabled={busy || (s.scope === "event" && !eventId)} onClick={buy} className="w-full h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-detail-buy">{busy ? "Attendi..." : s.free ? "Attiva gratuitamente" : "Conferma e vai al pagamento"}</Button>
               </div>)}
+        {s.active && <ActivePurchase s={s} canPurchase={canPurchase} onChanged={onChanged} />}
         {s.status === "coming_soon" && !s.active && <NotifyButton s={s} onToggle={onToggle} full />}
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -98,9 +142,10 @@ export default function Marketplace() {
   const [cat, setCat] = useState("");
   const [open, setOpen] = useState(null);
   const [params, setParams] = useSearchParams();
-  const load = () => api.get("/marketplace/services").then(({ data }) => setData(data)).catch(() => setData({ services: [], categories: [] }));
+  const load = () => api.get("/marketplace/services").then(({ data }) => { setData(data); setOpen((o) => (o ? data.services.find((x) => x.id === o.id) || null : o)); }).catch(() => setData({ services: [], categories: [] }));
   useEffect(() => {
     const sid = params.get("session_id");
+    if (params.get("canceled")) { toast.info("Pagamento annullato: nessun addebito, il servizio non è stato attivato"); setParams({}, { replace: true }); }
     if (sid) api.get("/marketplace/checkout-confirmation", { params: { session_id: sid } }).then(({ data }) => {
       toast[data.status === "active" ? "success" : "info"](data.status === "active" ? "Servizio attivato" : "Pagamento in verifica: il servizio si attiverà appena confermato");
     }).catch(() => {}).finally(() => { setParams({}, { replace: true }); load(); });
@@ -126,7 +171,7 @@ export default function Marketplace() {
       {!data ? <p className="text-sm text-slate-400">Caricamento...</p> : !list.length ? <div className="text-center py-16 text-slate-500" data-testid="mkt-empty"><Store className="w-8 h-8 mx-auto mb-2 text-slate-300" />Nessun servizio trovato</div> : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{list.map((s) => <Card key={s.id} s={s} onOpen={setOpen} onToggle={toggle} />)}</div>
       )}
-      <Detail s={open} canPurchase={data?.can_purchase} onClose={() => setOpen(null)} onToggle={toggle} />
+      <Detail s={open} canPurchase={data?.can_purchase} onClose={() => setOpen(null)} onToggle={toggle} onChanged={load} />
       <span className="hidden">{STATUS.active}</span>
     </div>
   );

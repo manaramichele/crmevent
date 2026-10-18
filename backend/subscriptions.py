@@ -66,8 +66,9 @@ def _live_enabled() -> bool:
     return os.environ.get("SAAS_STRIPE_LIVE_ENABLED", "1").strip() != "0"
 
 
-WRITE_EXEMPT = ("/saas", "/account", "/auth", "/notifications", "/my/", "/support", "/news")
-WRITE_EXEMPT_EXACT = ("/marketplace/services/{sid}/notify",)
+# Marketplace e moduli acquistati: indipendenti dal piano (restano utilizzabili con prova/abbonamento terminati)
+WRITE_EXEMPT = ("/saas", "/account", "/auth", "/notifications", "/my/", "/support", "/news", "/marketplace", "/iscritti", "/press")
+WRITE_EXEMPT_EXACT = ()
 SAFE = ("GET", "HEAD", "OPTIONS")
 GOLD_NOTICE_HOURS = 4
 _cfg_cache = {"at": 0.0, "cfg": None}
