@@ -22,7 +22,7 @@ export function IscrittoDialog({ id, open, onClose, meta, edizioni, onChanged })
     if (!open) { return; }
     setPart({ edizione_id: "", gara: "", stato: "confermata" });
     if (!id) { setP({ partecipazioni: [], consent_history: [] }); setF(EMPTY); return; }
-    api.get(`/iscritti/${id}`).then(({ data }) => { setP(data); setF({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, data[k] ?? EMPTY[k]])) }); }).catch(err);
+    api.get(`/iscritti/${id}`).then(({ data }) => { setP(data); setF({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, data[k] ?? EMPTY[k]])), consenso_fonte: "" }); }).catch(err);
   }, [id, open]);
   const save = async () => {
     const body = { ...f, partecipazione: part.edizione_id ? part : null };
@@ -42,12 +42,12 @@ export function IscrittoDialog({ id, open, onClose, meta, edizioni, onChanged })
         <DialogTitle>{id ? `${p.nome || ""} ${p.cognome || ""}`.trim() || p.email || "Iscritto" : "Aggiungi iscritto"}</DialogTitle>
         <DialogDescription>{p.anonymized ? "Dati anonimizzati." : "Anagrafica unica: le partecipazioni a eventi ed edizioni restano separate."}</DialogDescription>
         <div className="grid sm:grid-cols-2 gap-2">
-          {FIELDS.map((k) => <Input key={k} disabled={!edit || p.anonymized} placeholder={meta.labels[k]} aria-label={meta.labels[k]} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} data-testid={`iscritto-${k}`} />)}
-          {meta.custom_fields.map((c) => <Input key={c.key} disabled={!edit} placeholder={c.label} value={f.custom[c.key] || ""} onChange={(e) => setF({ ...f, custom: { ...f.custom, [c.key]: e.target.value } })} data-testid={`iscritto-custom-${c.key}`} />)}
+          {FIELDS.map((k) => <label key={k} className="text-xs text-slate-500 space-y-0.5">{meta.labels[k]}<Input type={k === "data_nascita" ? "date" : "text"} disabled={!edit || p.anonymized} aria-label={meta.labels[k]} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} data-testid={`iscritto-${k}`} /></label>)}
+          {meta.custom_fields.map((c) => <label key={c.key} className="text-xs text-slate-500 space-y-0.5">{c.label}<Input disabled={!edit} value={f.custom[c.key] || ""} onChange={(e) => setF({ ...f, custom: { ...f.custom, [c.key]: e.target.value } })} data-testid={`iscritto-custom-${c.key}`} /></label>)}
         </div>
         <Textarea disabled={!edit} placeholder="Note" rows={2} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} data-testid="iscritto-note" />
         <div className="rounded-lg border border-slate-200 p-3 space-y-2">
-          <label className="flex items-center gap-2 text-sm font-semibold"><Checkbox disabled={!edit} checked={f.consenso_marketing} onCheckedChange={(v) => setF({ ...f, consenso_marketing: !!v })} data-testid="iscritto-consenso" />Consenso a comunicazioni promozionali</label>
+          <label className="flex items-center gap-2 text-sm font-semibold"><Checkbox disabled={!edit || (p.unsubscribed && !f.consenso_marketing)} checked={f.consenso_marketing} onCheckedChange={(v) => setF({ ...f, consenso_marketing: !!v })} data-testid="iscritto-consenso" />Consenso a comunicazioni promozionali</label>
           {edit && <Input placeholder="Fonte del consenso (es. modulo iscrizione 2025)" value={f.consenso_fonte} onChange={(e) => setF({ ...f, consenso_fonte: e.target.value })} data-testid="iscritto-consenso-fonte" />}
           {p.consenso_data && <p className="text-xs text-slate-500">Ultimo aggiornamento: {p.consenso_data} · {p.consenso_fonte}{p.unsubscribed ? " · disiscritto" : ""} · Brevo: {p.brevo_status}</p>}
           {p.consent_history?.length > 0 && <ul className="text-xs text-slate-500" data-testid="iscritto-consent-history">{p.consent_history.map((h, i) => <li key={i}>{h.at.slice(0, 10)} · {h.value ? "concesso" : "revocato"} · {h.source}</li>)}</ul>}

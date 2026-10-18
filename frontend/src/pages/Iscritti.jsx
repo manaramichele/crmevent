@@ -14,6 +14,7 @@ const SEL = "h-10 rounded-md border border-slate-200 px-3 text-sm bg-white min-w
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 const COLS = [["cognome", "Cognome"], ["nome", "Nome"], ["email", "Email"], ["cellulare", "Cellulare"], ["societa", "Società"], ["last_year", "Ultimo anno"], ["partecipazioni", "Partecipazioni"], ["consenso_marketing", "Consenso"], ["brevo_status", "Brevo"]];
 const SYNC = { ok: "Sincronizzato", parziale: "Parziale", errore: "Errore", rate_limit: "In attesa (limite Brevo)", non_configurato: "Brevo non configurato" };
+const BREVO = { sincronizzato: "Sincronizzato", da_sincronizzare: "In coda", escluso_consenso: "Senza consenso", disiscritto: "Disiscritto", errore: "Errore", rate_limit: "In coda", da_rimuovere: "In rimozione", anonimizzato: "Anonimizzato" };
 
 function Kpi({ label, v, id }) {
   return <div className="bg-white border border-slate-200 rounded-xl p-3" data-testid={`iscritti-kpi-${id}`}><div className="text-xs text-slate-500">{label}</div><div className="text-xl font-bold text-slate-900">{v}</div></div>;
@@ -84,7 +85,7 @@ export default function Iscritti() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Contact className="w-6 h-6 text-[#0ABAB5]" />Elenco Iscritti</h1>
-          <p className="text-sm text-slate-500" data-testid="iscritti-brevo-status">Brevo: {ls ? `${SYNC[ls.status] || ls.status} · ${new Date(ls.at).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}${ls.error ? ` · ${ls.error}` : ""}` : "mai sincronizzato"}{meta.brevo?.brevo_list_name ? ` · lista «${meta.brevo.brevo_list_name}»` : ""} · solo iscritti con consenso marketing</p>
+          <p className="text-sm text-slate-500" data-testid="iscritti-brevo-status">Brevo: {ls ? `${SYNC[ls.status] || ls.status} · ${new Date(ls.at).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}${ls.error && ls.status !== "non_configurato" ? ` · ${ls.error}` : ""}` : "mai sincronizzato"}{meta.brevo?.brevo_list_name ? ` · lista «${meta.brevo.brevo_list_name}»` : ""} · solo iscritti con consenso marketing</p>
         </div>
         {meta.can_edit && (
           <div className="flex flex-wrap gap-2">
@@ -118,7 +119,7 @@ export default function Iscritti() {
                 {list?.items.length === 0 && <tr><td colSpan={9} className="p-4 text-slate-500">Nessun iscritto per questi filtri.</td></tr>}
                 {list?.items.map((x) => (
                   <tr key={x.id} className="border-b last:border-0 hover:bg-slate-50 cursor-pointer" onClick={() => setOpen(x.id)} data-testid={`iscritto-row-${x.id}`}>
-                    {COLS.filter(([k]) => cols.includes(k)).map(([k]) => <td key={k} className="p-3 break-all">{k === "consenso_marketing" ? (x[k] ? "Sì" : "No") : (x[k] ?? "—") || "—"}</td>)}
+                    {COLS.filter(([k]) => cols.includes(k)).map(([k]) => <td key={k} className="p-3 break-all">{k === "consenso_marketing" ? (x[k] ? "Sì" : "No") : k === "brevo_status" ? (BREVO[x[k]] || "—") : (x[k] ?? "—") || "—"}</td>)}
                   </tr>
                 ))}
               </tbody>

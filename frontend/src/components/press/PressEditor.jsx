@@ -95,7 +95,7 @@ function SendDialog({ rel, onClose, onDone }) {
           <label className="flex items-center gap-2"><input type="radio" checked={f.mode === "scheduled"} onChange={() => setF({ ...f, mode: "scheduled" })} data-testid="press-mode-scheduled" />Programma</label>
         </div>
         {f.mode === "scheduled" && <Input type="datetime-local" value={f.send_at} onChange={(e) => setF({ ...f, send_at: e.target.value })} data-testid="press-send-at" />}
-        <Button disabled={busy || !rc?.count || (f.mode === "scheduled" && !f.send_at)} onClick={go} className={`w-full h-11 ${TIFFANY_BTN}`} data-testid="press-send-confirm"><Send className="w-4 h-4 mr-2" />{f.mode === "now" ? `Conferma invio a ${rc?.count || 0} destinatari` : "Conferma programmazione"}</Button>
+        <Button disabled={busy || !(rc?.count + (rc?.iscritti || 0)) || (f.mode === "scheduled" && !f.send_at)} onClick={go} className={`w-full h-11 ${TIFFANY_BTN}`} data-testid="press-send-confirm"><Send className="w-4 h-4 mr-2" />{f.mode === "now" ? `Conferma invio a ${(rc?.count || 0) + (rc?.iscritti || 0)} destinatari` : "Conferma programmazione"}</Button>
       </DialogContent>
     </Dialog>
   );

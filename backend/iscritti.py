@@ -181,7 +181,7 @@ def parse_row(cols: list, row: list, mapping: dict) -> tuple:
 class EdizioneIn(BaseModel):
     event_id: str
     anno: int = Field(ge=1950, le=2100)
-    edizione: str = Field(default="", max_length=40)
+    edizione: str = Field(min_length=1, max_length=40)
     gare: List[str] = []
 
 
@@ -539,7 +539,7 @@ def build(db, deps: dict):
 
     @r.get("/iscritti/imports")
     async def list_imports(user: dict = Depends(member)):
-        rows = await db.iscritti_imports.find({"org_id": user["org_id"], "status": {"$ne": "caricato"}}, {"_id": 0, "errors": 0, "columns": 0}).sort("created_at", -1).to_list(100)
+        rows = await db.iscritti_imports.find({"org_id": user["org_id"], "status": {"$in": ["in_corso", "completato", "errore"]}}, {"_id": 0, "errors": 0, "columns": 0}).sort("created_at", -1).to_list(100)
         return {"imports": rows}
 
     @r.get("/iscritti/imports/{iid}")
@@ -649,6 +649,7 @@ def build(db, deps: dict):
             "id": uuid.uuid4().hex, "org_id": org_id, "iscritto_id": pid, "edizione_id": ed["id"], "event_id": ed["event_id"], "anno": ed["anno"],
             "edizione": ed["edizione"], "gara": part.get("gara", ""), "tipologia": part.get("tipologia", ""), "stato": part.get("stato") or "confermata",
             "data_iscrizione": _date(part.get("data_iscrizione", "")) or now[:10], "created_at": now}}, upsert=True)
+        await db.iscritti.update_one({"id": pid, "$or": [{"last_year": {"$lt": ed["anno"]}}, {"last_year": None}]}, {"$set": {"last_year": ed["anno"]}})
 
     @r.post("/iscritti")
     async def create_iscritto(body: IscrittoIn, user: dict = Depends(editor)):
@@ -681,11 +682,13 @@ def build(db, deps: dict):
         upd = {**d, "dedup_key": key, "custom": {k: v[:500] for k, v in body.custom.items()}, "updated_at": now}
         push = None
         if body.consenso_marketing != bool(cur.get("consenso_marketing")):
+            if body.consenso_marketing and cur.get("unsubscribed"):
+                raise HTTPException(status_code=400, detail="L'iscritto si è disiscritto tramite il link: il consenso può essere riattivato solo dall'interessato")
             src = body.consenso_fonte.strip() or ("Modifica manuale" if body.consenso_marketing else "Revoca manuale")
             upd.update(consenso_marketing=body.consenso_marketing, consenso_fonte=src, consenso_data=now[:10])
             push = {"consent_history": {"at": now, "value": body.consenso_marketing, "source": src, "by": user["user_id"]}}
             if body.consenso_marketing:
-                upd["unsubscribed"] = False
+                pass
         upd["brevo_status"] = "da_sincronizzare" if (upd.get("consenso_marketing", cur.get("consenso_marketing")) and d["email"]) else (
             "da_rimuovere" if cur.get("brevo_status") == "sincronizzato" else "escluso_consenso")
         await db.iscritti.update_one({"id": pid}, {"$set": upd, **({"$push": push} if push else {})})
@@ -861,7 +864,7 @@ def build(db, deps: dict):
             if not (a or b):
                 continue
             st = await settings(o["id"])
-            last = await db.iscritti_imports.find_one({"org_id": o["id"], "status": {"$ne": "caricato"}}, {"_id": 0, "filename": 1, "status": 1, "created_at": 1}, sort=[("created_at", -1)])
+            last = await db.iscritti_imports.find_one({"org_id": o["id"], "status": {"$in": ["in_corso", "completato", "errore"]}}, {"_id": 0, "filename": 1, "status": 1, "created_at": 1}, sort=[("created_at", -1)])
             out.append({"org_id": o["id"], "nome": o["nome"], "active": bool(a.get("active")) or bool(b), "via": "acquisto" if b else "super_admin",
                         "iscritti": await db.iscritti.count_documents({"org_id": o["id"], "anonymized": {"$ne": True}}),
                         "brevo_errors": await db.iscritti.count_documents({"org_id": o["id"], "brevo_status": {"$in": ["errore", "rate_limit"]}}),
@@ -911,8 +914,9 @@ def build(db, deps: dict):
                 if await is_active(oid):
                     await sync_org(oid)
             limit_year = datetime.now(timezone.utc).year - RETENTION_YEARS
+            grace = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()  # storico appena importato: 90 giorni per verificarlo
             await db.iscritti_import_files.delete_many({"created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()}})
-            async for p in db.iscritti.find({"anonymized": {"$ne": True}, "last_year": {"$lt": limit_year}}, {"_id": 0, "id": 1, "org_id": 1}):
+            async for p in db.iscritti.find({"anonymized": {"$ne": True}, "last_year": {"$lt": limit_year}, "created_at": {"$lt": grace}}, {"_id": 0, "id": 1, "org_id": 1}):
                 await _anonymize(p["org_id"], p["id"], f"conservazione: nessuna partecipazione da oltre {RETENTION_YEARS} anni")
         asyncio.create_task(_run())
         return {"accepted": True}

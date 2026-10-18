@@ -731,3 +731,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - API: POST /api/calendar/availability, POST /api/calendar/sync-now, cron /api/cron/calendar-availability-tick ogni 15 min (crons.yml).
 - UI Profilo → Integrazioni Google Calendar: "Calendario di destinazione" + checkbox "Calendari da controllare", Salva, Sincronizza ora, stato/ultima riuscita/numero/errori.
 - Test: tests/check_gcal_availability.py. In preview Google Calendar non è configurato: verifica reale da fare in produzione.
+
+## Elenco Iscritti (Marketplace archivio-iscritti) — 2026-10-18 ✅ (iteration_143 + fix)
+- backend/iscritti.py: collezioni iscritti (dedup_key email>CF>nome+cognome+nascita, unique per org), iscritti_partecipazioni (unique org+iscritto+edizione+gara), iscritti_edizioni (collegate a events, anche storiche), iscritti_imports + iscritti_import_files (file a blocchi in Mongo, cancellati a fine import), iscritti_templates, iscritti_settings (campi personalizzati, lista Brevo, ultimo sync), iscritti_segments.
+- Import guidato 5 fasi asincrono (XLSX/XLS/CSV ≤25MB), suggerimento colonne, nuovi campi custom, anteprima, modalità update/skip, modelli riutilizzabili. Consenso solo se colonna esplicita "sì".
+- Brevo: lista "CRMEvent – [Org] – Iscritti" solo con consenso; mai riattiva disiscritti/blacklist; 429 → retry cron; liste per edizione su richiesta; link disiscrizione /api/public/iscritti/unsubscribe/{token}; SA retry + force-sync senza consenso (audit).
+- Permessi: admin org modifica/importa/esporta/cancella, membri solo vista (permissions.py "/iscritti" "*"). Attivazione: acquisto Marketplace (prezzo SA nel Catalogo) o SA manuale (org_services). Cron iscritti-tick 03:30: retry sync + anonimizzazione >5 anni senza partecipazioni (grazia 90 gg dall'import).
+- Servizio centrale select_recipients → Comunicati stampa (destinatari iscritti con consenso per edizione).
+- Frontend: /iscritti (Iscritti.jsx + components/iscritti/*), menu dopo Anagrafiche solo se attivo, Marketplace attivi in testa + "Apri servizio", SA tab "Elenco Iscritti" in Marketplace admin.
+

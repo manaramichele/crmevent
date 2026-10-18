@@ -1,0 +1,45 @@
+{
+  "summary": "Tested the Elenco Iscritti (archivio-iscritti) module end to end. Backend: 16/16 pytest pass, covering activation and 403 when inactive, marketplace listing, editions including a 2019 one and 409 on a duplicate, imports from a semicolon CSV with English headers, a comma CSV with Italian headers, and an XLSX with other English headers. Auto-suggested mapping, manual remapping and ignored columns all work, and a new custom field is stored in custom. Re-import dedup works, a cross-edition import gives 2 participations, the consent rules hold (si -> true with source, no or missing -> false), the error report and saved templates work, and import file chunks are deleted after the import. Also passed: combined filters, sort and pagination, KPI, CSV/XLSX export, manual CRUD with 409 on a duplicate, consent_history, anonymize and delete, member read-only (403 on write/export/import/editions), tenant isolation (404), Brevo returning non_configurato, the SA orgs/sync/force-sync endpoints with audit entries, and the press recipients count (consented iscritti only). Frontend at desktop 1920 and mobile 390: sidebar entry right after Anagrafiche only when the module is active; inactive org sees the iscritti-inactive page; all page buttons, filters, sorting, column toggles, KPI, the full 5-step wizard, detail dialog with participation and consent history, Edizioni tab, imports history, Brevo sync toast, CSV download and manual add work. Member UI is read-only. Marketplace shows the active service first with mkt-open-iscritti, and the SA iscritti-admin-table renders. 2 functional bugs found: (1) press SendDialog confirm button is disabled when only iscritti recipients exist; (2) manual add does not set last_year.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/iscritti and PUT /api/iscritti/{id} (_add_part)", "issue": "A participation added manually does not update iscritti.last_year (only the import path sets it). Effects: the 'Ultimo anno' column shows '—', sorting by last_year is wrong, and the daily retention cron filters on last_year < limit, so these people are never auto-anonymized. Seen in the DB: ui.manuale person had last_year None after being added with a 2026 edition."},
+      {"endpoint": "cron /api/cron/iscritti-tick retention", "issue": "By design, anyone whose latest participation is more than 5 years old is anonymized on the next daily run. An admin who imports a historical edition (e.g. 2019, which the UI encourages) will lose those people the next day. Consider a warning in the wizard or applying retention only to records older than N days."},
+      {"endpoint": "PUT /api/iscritti/{id}", "issue": "Turning consent on for a person who unsubscribed via the link sets unsubscribed=false. An admin can therefore re-subscribe an unsubscribed person; only the Brevo-side listUnsubscribed check prevents the re-sync. The UI also pre-fills consenso_fonte with the old source, so the new history entry reuses e.g. 'Importazione file «f1.csv»' instead of 'Modifica manuale'."},
+      {"endpoint": "GET /api/iscritti/imports and /api/platform/iscritti/orgs last_import", "issue": "Imports abandoned after the preview stay in status 'analizzato'. They show up in the imports history and as 'Ultima importazione · analizzato' in the SA table."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PressEditor SendDialog", "issue": "press-send-confirm is disabled by !rc?.count and its label uses rc.count only. With 0 press contacts and 3 consented iscritti, the dialog shows 'Destinatari idonei: 3 (di cui 3 iscritti)' but the button reads 'Conferma invio a 0 destinatari' and is disabled. The backend /send accepts press + iscritti. Fix: use rc.count + (rc.iscritti||0) for both the disabled check and the label.", "selector": "[data-testid='press-send-confirm']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/iscritti header", "issues": ["Brevo status line repeats the text: 'Brevo: Brevo non configurato · date · Brevo non configurato' (status label plus error)."]},
+      {"screen": "/iscritti table", "issues": ["Brevo column shows raw codes (escluso_consenso, da_sincronizzare); map them to readable Italian labels."]},
+      {"screen": "IscrittoDialog", "issues": ["The fields have placeholders but no visible labels, so once filled you can't tell them apart (e.g. '333', 'ASD Pisa').", "Data di nascita is a plain text input; use a shadcn date picker or a masked input."]},
+      {"screen": "Edizioni tab", "issues": ["After creating an edition only the label/gare are reset. Clicking '+ Crea edizione' again creates a second edition with an empty label for the same year instead of being blocked (UI allowed creating '2018 ' with an empty label)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iscritti_module.py", "/app/backend/tests/ui_iscritti_setup.py", "/app/test_reports/pytest/iscritti_results.xml"],
+  "action_items": [
+    "PressEditor SendDialog: enable confirm and fix the label when rc.count + rc.iscritti > 0 (currently disabled with iscritti only)",
+    "_add_part (manual add/edit participation): update iscritti.last_year like the import does",
+    "Decide retention behaviour for freshly imported historical editions (>5 years old get anonymized at the next cron run); at least warn in the wizard",
+    "Optional: do not reset 'unsubscribed' via an admin edit (or require an explicit confirm), and use 'Modifica manuale' as the source when consent is toggled",
+    "Optional UX: readable Brevo status labels, labelled fields in IscrittoDialog, deduplicated Brevo status text, hide/clean abandoned 'analizzato' imports"
+  ],
+  "critical_code_review_comments": [
+    "iscritti.py is 938 lines (above the 700 guideline); split into import/brevo/sa submodules",
+    "kpi(): aggregates per_person over all of the org's participations (to_list(200000)) on every call; compute recurring with a $match on the selected ids instead",
+    "parse_row line 169: `_date(...) or part.pop(...) and None` is obscure; make it explicit",
+    "list_iscritti: the `dir` query param shadows the builtin; harmless but confusing"
+  ],
+  "updated_files": ["/app/backend/tests/test_iscritti_module.py", "/app/backend/tests/ui_iscritti_setup.py"],
+  "success_rate": {"backend": "100% (16/16 pytest); 1 minor logic bug found via a DB check (last_year)", "frontend": "~95% (1 press SendDialog bug)"},
+  "seed_data_creation": "Pytest creates 2 orgs (test_iscrA_/test_iscrB_<ts>) plus a direct-DB member (role user) and deletes everything by org_id in teardown (all collections except audit_logs). UI tests used the existing TEST_ISCR Org plus a temporary inactive org, a member and a press release. All of these were cleaned up: the TEST_ISCR Org is back to 3 iscritti / 2 editions with press deactivated. The pre-existing TEST_ISCR Org (owner in /tmp/iscr_email) was NOT deleted because it was not created by this agent; main agent should delete it if no longer needed. Audit log entries were left untouched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_iscritti_module.py -v -n 0 (sequential, shared state). The non-admin member is inserted directly in the DB with membership role 'user'; can_edit is false. Press recipients test inserts a press_releases doc directly (releases are normally only created via AI generate). Cookie banner: cookie-reject-all. Login testids: email-input, password-input, submit-auth-button. Mobile nav: mobile-menu-button and then the last sidebar-link-iscritti.",
+  "rca of the issue": "SendDialog: PressEditor.jsx line ~98 uses `!rc?.count` and `rc.count` in the button label, ignoring rc.iscritti, while the backend schedule() sums press + iscritti. last_year: iscritti.py _add_part upserts the participation but never runs the `last_year` $set that _run_import does (lines 509-511)."
+}

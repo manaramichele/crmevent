@@ -12,7 +12,7 @@ const SEL = "h-10 rounded-md border border-slate-200 px-3 text-sm bg-white w-ful
 export function EdizioniPanel({ data, canEdit, onChanged }) {
   const [f, setF] = useState({ event_id: "", anno: new Date().getFullYear(), edizione: "", gare: "" });
   const add = async () => {
-    try { await api.post("/iscritti/edizioni", { ...f, anno: Number(f.anno), gare: f.gare.split(",").map((g) => g.trim()).filter(Boolean) }); toast.success("Edizione creata"); setF({ ...f, edizione: "", gare: "" }); onChanged(); } catch (e) { err(e); }
+    try { await api.post("/iscritti/edizioni", { ...f, anno: Number(f.anno), gare: f.gare.split(",").map((g) => g.trim()).filter(Boolean) }); toast.success("Edizione creata"); setF({ event_id: "", anno: new Date().getFullYear(), edizione: "", gare: "" }); onChanged(); } catch (e) { err(e); }
   };
   const del = async (id) => { try { await api.delete(`/iscritti/edizioni/${id}`); onChanged(); } catch (e) { err(e); } };
   return (
@@ -23,8 +23,8 @@ export function EdizioniPanel({ data, canEdit, onChanged }) {
           <Input type="number" value={f.anno} onChange={(e) => setF({ ...f, anno: e.target.value })} aria-label="Anno" data-testid="edizione-anno" />
           <Input placeholder="Edizione (es. 26ª)" value={f.edizione} onChange={(e) => setF({ ...f, edizione: e.target.value })} data-testid="edizione-label" />
           <Input placeholder="Gare (virgola)" value={f.gare} onChange={(e) => setF({ ...f, gare: e.target.value })} data-testid="edizione-gare" />
-          <Button className="sm:col-span-5 sm:justify-self-end bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" disabled={!f.event_id} onClick={add} data-testid="edizione-add">+ Crea edizione</Button>
-          <p className="sm:col-span-5 text-xs text-slate-500">Puoi creare anche edizioni di anni passati per importare lo storico, collegandole all'evento già presente in CRMEvent.</p>
+          <Button className="sm:col-span-5 sm:justify-self-end bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" disabled={!f.event_id || !f.edizione.trim()} onClick={add} data-testid="edizione-add">+ Crea edizione</Button>
+          <p className="sm:col-span-5 text-xs text-slate-500">Puoi creare anche edizioni di anni passati per importare lo storico, collegandole all'evento già presente in CRMEvent. Gli iscritti senza partecipazioni negli ultimi 5 anni vengono anonimizzati automaticamente 90 giorni dopo l'importazione.</p>
         </div>
       )}
       <div className="bg-white border border-slate-200 rounded-xl divide-y" data-testid="edizioni-list">
