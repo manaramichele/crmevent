@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+import cal_feeds
 from iscritti import _norm, read_rows
 
 DISCIPLINE = {"running": ["10 km", "Mezza maratona", "Maratona", "Altro"], "trail": ["Trail", "Ultra trail", "Skyrunning"],
@@ -167,6 +168,30 @@ class MergeIn(BaseModel):
 
 class ResolveIn(BaseModel):
     action: str
+
+
+class VerificaIn(BaseModel):
+    esito: str
+    metodo: Optional[str] = None
+    prova: Optional[str] = None
+    note: Optional[str] = None
+
+
+class ConnIn(BaseModel):
+    feed_url: str = Field(min_length=8, max_length=1000)
+    formato: str = "csv"
+    attiva: bool = True
+
+
+class FonteIn(BaseModel):
+    nome: str = Field(min_length=2, max_length=120)
+    disciplina: str = "running"
+    url: Optional[str] = None
+    feed_url: str = Field(min_length=8, max_length=1000)
+    formato: str = "csv"
+    metodo: str = Field(min_length=3, max_length=300)
+    prova: str = Field(min_length=3, max_length=1000)
+    note: Optional[str] = None
 
 
 class SettingsIn(BaseModel):
@@ -601,15 +626,163 @@ def build(db, deps: dict):
                 "per_distanza": [{"k": k, "n": n} for k, n in Counter(e.get("distanza") or "N/D" for e in evs).most_common(12)],
                 "anni": [y, y + 1]}
 
+    # ---------- fonti (Fase 2): verifica accesso, collegamento solo se consentita, sincronizzazione ----------
+    running: set = set()
+
+    async def all_sources() -> list:
+        st = {s["id"]: s for s in await db.cal_sources.find({}, {"_id": 0}).to_list(200)}
+        out = []
+        for k, n, d, u in SOURCES:
+            base = cal_feeds.VERIFICHE.get(k, {})
+            s = st.get(k) or {}
+            out.append({"id": k, "nome": n, "disciplina": d, "url": u, "custom": False, **s,
+                        "verifica": s.get("verifica") or {**base, "verificata_il": cal_feeds.VERIFICATA_IL, "verificata_da": "Verifica iniziale Fase 2"}})
+        out += [{**s, "custom": True} for s in st.values() if s.get("custom")]
+        for s in out:
+            if s["id"] == "manuale":
+                s["stato"] = "attiva"
+            elif s["verifica"].get("esito") != "consentita":
+                s["stato"] = "non_disponibile"
+            elif not (s.get("attiva") and s.get("feed_url")):
+                s["stato"] = "disabilitata"
+            else:
+                s["stato"] = "in_aggiornamento" if s["id"] in running else ("errore" if s.get("ultimo_esito") == "errore" else "attiva")
+        return out
+
+    async def get_source(sid: str) -> dict:
+        s = next((x for x in await all_sources() if x["id"] == sid), None)
+        if not s:
+            raise HTTPException(status_code=404, detail="Fonte non trovata")
+        return s
+
     @r.get("/sources")
     async def sources(admin: dict = Depends(sa)):
-        st = {s["id"]: s for s in await db.cal_sources.find({}, {"_id": 0}).to_list(50)}
-        cnt = {x["_id"]: x["n"] for x in await db.cal_events.aggregate([{"$unwind": "$sources"}, {"$group": {"_id": "$sources.source", "n": {"$sum": 1}}}]).to_list(50)}
-        imports = await db.cal_imports.find({}, {"_id": 0, "errors": 0}).sort("created_at", -1).to_list(20)
-        return {"sources": [{"id": k, "nome": n, "disciplina": d, "url": u, "eventi": cnt.get(k, 0),
-                             "stato": (st.get(k) or {}).get("stato") or ("attiva" if k == "manuale" else "disabilitata"),
-                             "accesso": (st.get(k) or {}).get("accesso") or ("Importazione Excel/CSV" if k == "manuale" else "Da verificare (Fase 2): API, feed, export e condizioni d'uso"),
-                             "ultima_sync": (st.get(k) or {}).get("ultima_sync")} for k, n, d, u in SOURCES], "imports": imports}
+        cnt = {x["_id"]: x["n"] for x in await db.cal_events.aggregate([{"$match": {"merged_into": None}}, {"$unwind": "$sources"},
+                                                                         {"$group": {"_id": "$sources.source", "n": {"$sum": 1}}}]).to_list(200)}
+        imports = await db.cal_imports.find({}, {"_id": 0, "errors": 0}).sort("created_at", -1).to_list(30)
+        s = await settings()
+        return {"sources": [{**x, "eventi": cnt.get(x["id"], 0)} for x in await all_sources()], "imports": imports, "formati": cal_feeds.FORMATI,
+                "raccolta_automatica": s["raccolta_automatica"], "ultima_sync_automatica": s.get("ultima_sync_automatica")}
+
+    @r.put("/sources/{sid}/verifica")
+    async def set_verifica(sid: str, body: VerificaIn, admin: dict = Depends(sa)):
+        src = await get_source(sid)
+        if sid == "manuale" or body.esito not in ("consentita", "non_consentita", "da_verificare"):
+            raise HTTPException(status_code=400, detail="Esito non valido")
+        if body.esito == "consentita" and not ((body.metodo or "").strip() and (body.prova or "").strip()):
+            raise HTTPException(status_code=400, detail="Per 'Consentita' indica il metodo di accesso autorizzato e la prova (accordo, licenza, documentazione API)")
+        v = {**body.model_dump(), "evidenze": src["verifica"].get("evidenze") or [], "come_sbloccare": src["verifica"].get("come_sbloccare"),
+             "verificata_il": _now()[:10], "verificata_da": admin.get("email")}
+        upd = {"verifica": v, "updated_at": _now(), **({} if body.esito == "consentita" else {"attiva": False})}
+        await db.cal_sources.update_one({"id": sid}, {"$set": upd}, upsert=True)
+        await audit(admin, "cal_source_verifica", detail=f"{sid} → {body.esito}")
+        return await get_source(sid)
+
+    def check_conn(feed_url: str, formato: str) -> str:
+        if formato not in cal_feeds.FORMATI:
+            raise HTTPException(status_code=400, detail="Formato non supportato")
+        try:
+            return cal_feeds.check_url(feed_url)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @r.put("/sources/{sid}/connessione")
+    async def set_conn(sid: str, body: ConnIn, admin: dict = Depends(sa)):
+        src = await get_source(sid)
+        if sid == "manuale" or src["verifica"].get("esito") != "consentita":
+            raise HTTPException(status_code=400, detail="Fonte non autorizzata: registra prima una verifica con esito 'Consentita'")
+        url = check_conn(body.feed_url, body.formato)
+        await db.cal_sources.update_one({"id": sid}, {"$set": {"feed_url": url, "formato": body.formato, "attiva": body.attiva, "updated_at": _now()}}, upsert=True)
+        await audit(admin, "cal_source_connessione", detail=f"{sid} · {body.formato} · attiva={body.attiva}")
+        return await get_source(sid)
+
+    @r.post("/sources")
+    async def add_source(body: FonteIn, admin: dict = Depends(sa)):
+        url = check_conn(body.feed_url, body.formato)
+        sid = f"fonte_{uuid.uuid4().hex[:8]}"
+        doc = {"id": sid, "custom": True, "nome": body.nome, "disciplina": body.disciplina if body.disciplina in DISCIPLINE else "*", "url": body.url,
+               "feed_url": url, "formato": body.formato, "attiva": True, "created_at": _now(), "created_by": admin.get("email"),
+               "verifica": {"esito": "consentita", "metodo": body.metodo, "prova": body.prova, "note": body.note, "evidenze": [],
+                            "verificata_il": _now()[:10], "verificata_da": admin.get("email")}}
+        await db.cal_sources.insert_one({**doc})
+        await audit(admin, "cal_source_create", detail=f"{body.nome} · {body.formato}")
+        return await get_source(sid)
+
+    @r.post("/sources/{sid}/test")
+    async def test_source(sid: str, admin: dict = Depends(sa)):
+        src = await get_source(sid)
+        if src["verifica"].get("esito") != "consentita" or not src.get("feed_url"):
+            raise HTTPException(status_code=400, detail="Fonte non autorizzata o senza indirizzo del feed")
+        try:
+            cols, rows = cal_feeds.parse(await cal_feeds.fetch(src["feed_url"], attempts=1), src.get("formato") or "csv")
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"Lettura non riuscita: {str(e)[:200]}") from e
+        return {"columns": cols, "mapping": feed_map(cols), "sample": rows[:5], "total": len(rows)}
+
+    def feed_map(cols: list) -> dict:
+        fields = EVENT_FIELDS + ["ext_id"]
+        return {**auto_map(cols), **{c: c for c in cols if c in fields}}
+
+    async def sync_source(sid: str, by: str, trigger: str) -> dict:
+        src = await get_source(sid)
+        if src["verifica"].get("esito") != "consentita" or not (src.get("attiva") and src.get("feed_url")):
+            return {"id": sid, "skipped": "non autorizzata o non attiva"}
+        if sid in running:
+            return {"id": sid, "skipped": "già in corso"}
+        running.add(sid)
+        jid = uuid.uuid4().hex
+        await db.cal_imports.insert_one({"id": jid, "file": src["feed_url"], "source": sid, "kind": "sync", "trigger": trigger, "status": "running",
+                                         "total": 0, "progress": 0, "created_by": by, "created_at": _now()})
+        try:
+            cols, rows = cal_feeds.parse(await cal_feeds.fetch(src["feed_url"]), src.get("formato") or "csv")
+            mp = feed_map(cols)
+            if "nome" not in mp.values():
+                raise ValueError("Nel feed non c'è una colonna riconoscibile come nome della manifestazione")
+            await db.cal_imports.update_one({"id": jid}, {"$set": {"total": len(rows)}})
+            await run_import(jid, rows, cols, mp, sid, by)
+            res = (await db.cal_imports.find_one({"id": jid}, {"_id": 0, "result": 1}) or {}).get("result") or {}
+            await db.cal_sources.update_one({"id": sid}, {"$set": {"ultima_sync": _now(), "ultimo_esito": "ok", "ultimo_errore": None, "ultimo_risultato": res}}, upsert=True)
+            return {"id": sid, "ok": True, **res}
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)[:300]
+            await db.cal_imports.update_one({"id": jid}, {"$set": {"status": "error", "error": msg, "finished_at": _now()}})
+            await db.cal_sources.update_one({"id": sid}, {"$set": {"ultimo_tentativo": _now(), "ultimo_esito": "errore", "ultimo_errore": msg}}, upsert=True)
+            return {"id": sid, "ok": False, "error": msg}
+        finally:
+            running.discard(sid)
+
+    async def sync_all(by: str, trigger: str) -> list:
+        out = []
+        for s in await all_sources():
+            if s["id"] != "manuale" and s["verifica"].get("esito") == "consentita" and s.get("attiva") and s.get("feed_url"):
+                out.append(await sync_source(s["id"], by, trigger))
+        return out
+
+    @r.post("/sources/{sid}/sync")
+    async def sync_now(sid: str, admin: dict = Depends(sa)):
+        src = await get_source(sid)
+        if src["verifica"].get("esito") != "consentita" or not (src.get("attiva") and src.get("feed_url")):
+            raise HTTPException(status_code=400, detail="Fonte non autorizzata o non attiva: nessuna sincronizzazione")
+        if sid in running:
+            raise HTTPException(status_code=409, detail="Sincronizzazione già in corso")
+        asyncio.create_task(sync_source(sid, admin.get("email"), "manuale"))
+        await audit(admin, "cal_source_sync", detail=sid)
+        return {"ok": True, "started": sid}
+
+    @r.post("/sync")
+    async def sync_all_now(admin: dict = Depends(sa)):
+        n = sum(1 for s in await all_sources() if s["stato"] in ("attiva", "errore") and s["id"] != "manuale")
+        if n:
+            asyncio.create_task(sync_all(admin.get("email"), "manuale"))
+        await audit(admin, "cal_sync_all", detail=f"{n} fonti")
+        return {"ok": True, "fonti": n}
+
+    async def cron_tick() -> dict:
+        s = await settings()
+        if not s["raccolta_automatica"]:
+            return {"skipped": "raccolta automatica disattivata"}
+        await db.cal_settings.update_one({"id": "main"}, {"$set": {"ultima_sync_automatica": _now()}}, upsert=True)
+        return {"results": await sync_all("cron", "automatica")}
 
     @r.get("/settings")
     async def get_settings(admin: dict = Depends(sa)):
@@ -623,4 +796,4 @@ def build(db, deps: dict):
         await audit(admin, "cal_settings_update", detail=json.dumps(d))
         return await settings()
 
-    return {"router": r, "ensure_indexes": ensure_indexes, "upsert_event": upsert_event}
+    return {"router": r, "ensure_indexes": ensure_indexes, "upsert_event": upsert_event, "cron_tick": cron_tick}

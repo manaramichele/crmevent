@@ -4,6 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { calApi, err, fmtD, Pill } from "./shared";
+import { ConnDialog, NewSourceDialog, VerificaDialog } from "./SourceDialogs";
+
+const ECOL = { consentita: "#16A34A", non_consentita: "#DC2626", da_verificare: "#D97706" };
+const ELBL = { consentita: "Consentita", non_consentita: "Non consentita", da_verificare: "Da verificare" };
+const fmtDT = (s) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
 
 const SCOL = { attiva: "#16A34A", in_aggiornamento: "#0ABAB5", errore: "#DC2626", non_disponibile: "#64748B", disabilitata: "#94A3B8" };
 const SLBL = { attiva: "Attiva", in_aggiornamento: "In aggiornamento", errore: "Errore", non_disponibile: "Non disponibile", disabilitata: "Disabilitata" };
@@ -43,26 +48,65 @@ export function DuplicatesPanel() {
   );
 }
 
+function SourceRow({ s, onVerifica, onConn, onSync }) {
+  const [open, setOpen] = useState(false);
+  const v = s.verifica || {};
+  const ok = v.esito === "consentita" && s.id !== "manuale";
+  return (
+    <>
+      <tr className="border-t border-slate-100 align-top" data-testid={`cal-source-${s.id}`}>
+        <td className="px-3 py-2 font-medium">{s.nome}{s.url && <div className="text-[11px] text-slate-400 break-all">{s.url}</div>}</td>
+        <td className="px-3 py-2"><Pill color={ECOL[v.esito]} testid={`cal-source-esito-${s.id}`}>{ELBL[v.esito] || "—"}</Pill>
+          <button className="block text-[11px] text-[#0A8F8B] underline mt-1" onClick={() => setOpen(!open)} data-testid={`cal-source-details-${s.id}`}>{open ? "Nascondi" : "Dettagli verifica"}</button></td>
+        <td className="px-3 py-2"><Pill color={SCOL[s.stato]} testid={`cal-source-stato-${s.id}`}>{SLBL[s.stato]}</Pill>{s.ultimo_errore && s.stato === "errore" && <div className="text-[11px] text-red-600 mt-1 max-w-[220px]">{s.ultimo_errore}</div>}</td>
+        <td className="px-3 py-2">{s.eventi}</td>
+        <td className="px-3 py-2 text-xs">{fmtDT(s.ultima_sync)}</td>
+        <td className="px-3 py-2">{s.id !== "manuale" && <div className="flex flex-wrap gap-1">
+          <Button size="sm" variant="outline" onClick={() => onVerifica(s)} data-testid={`cal-source-verifica-${s.id}`}>Registra verifica</Button>
+          {ok && <Button size="sm" variant="outline" onClick={() => onConn(s)} data-testid={`cal-source-conn-${s.id}`}>Collegamento</Button>}
+          {ok && s.attiva && s.feed_url && <Button size="sm" onClick={() => onSync(s)} disabled={s.stato === "in_aggiornamento"} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid={`cal-source-sync-${s.id}`}>Sincronizza ora</Button>}
+        </div>}</td>
+      </tr>
+      {open && <tr className="bg-slate-50" data-testid={`cal-source-evidenze-${s.id}`}><td colSpan={6} className="px-3 py-2 text-xs text-slate-600 space-y-1">
+        <div>Verificata il {fmtD(v.verificata_il)} · {v.verificata_da}{v.metodo ? ` · Metodo: ${v.metodo}` : ""}</div>
+        {(v.evidenze || []).map((e) => <div key={e}>• {e}</div>)}
+        {v.prova && <div>Prova: {v.prova}</div>}{v.note && <div>Note: {v.note}</div>}
+        {v.esito !== "consentita" && v.come_sbloccare && <div className="text-amber-700">Per collegarla: {v.come_sbloccare}</div>}
+      </td></tr>}
+    </>
+  );
+}
+
 export function SourcesPanel() {
   const [d, setD] = useState(null);
-  useEffect(() => { api.get(calApi("/sources")).then(({ data }) => setD(data)).catch(err); }, []);
+  const [dlg, setDlg] = useState(null);
+  const load = useCallback(() => api.get(calApi("/sources")).then(({ data }) => setD(data)).catch(err), []);
+  useEffect(() => { load(); }, [load]);
+  const saved = () => { setDlg(null); load(); };
+  const sync = async (s) => { try { await api.post(calApi(`/sources/${s.id}/sync`)); toast.success("Sincronizzazione avviata"); setTimeout(load, 1500); } catch (e) { err(e); } };
+  const syncAll = async () => { try { const { data } = await api.post(calApi("/sync")); toast.success(data.fonti ? `Sincronizzazione avviata su ${data.fonti} fonti` : "Nessuna fonte autorizzata attiva da sincronizzare"); setTimeout(load, 1500); } catch (e) { err(e); } };
   if (!d) return <p className="text-sm text-slate-500">Caricamento...</p>;
+  const active = d.sources.filter((s) => s.id !== "manuale" && ["attiva", "errore", "in_aggiornamento"].includes(s.stato)).length;
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800" data-testid="cal-sources-note">Fase 1: nessuna fonte esterna è collegata. Nella Fase 2 verificherò per ciascuna API, feed, esportazioni e condizioni d'uso; quelle non consentite resteranno "Non disponibile" e si alimentano con l'importazione Excel/CSV.</div>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[760px] text-sm" data-testid="cal-sources-table">
-        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Fonte", "Disciplina", "Stato", "Accesso", "Eventi collegati", "Ultima sincronizzazione"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
-        <tbody>{d.sources.map((s) => (
-          <tr key={s.id} className="border-t border-slate-100" data-testid={`cal-source-${s.id}`}>
-            <td className="px-3 py-2 font-medium">{s.nome}{s.url && <div className="text-[11px] text-slate-400">{s.url}</div>}</td><td className="px-3 py-2 text-xs">{s.disciplina}</td>
-            <td className="px-3 py-2"><Pill color={SCOL[s.stato]}>{SLBL[s.stato]}</Pill></td><td className="px-3 py-2 text-xs">{s.accesso}</td><td className="px-3 py-2">{s.eventi}</td><td className="px-3 py-2 text-xs">{s.ultima_sync ? fmtD(s.ultima_sync.slice(0, 10)) : "—"}</td>
-          </tr>))}</tbody>
+      <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800" data-testid="cal-sources-note">Verifica accesso completata: nessuna delle fonti indicate offre un'API, un feed o un'autorizzazione al riutilizzo automatico, quindi restano <b>scollegate</b> e si alimentano con l'importazione Excel/CSV. Una fonte si collega solo dopo aver registrato una verifica "Consentita" con la prova (accordo, licenza, API ufficiale).</div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600" data-testid="cal-sync-bar">
+        <span>Sincronizzazione automatica alle 03:00 (Europe/Rome): <b data-testid="cal-sync-auto-state">{d.raccolta_automatica ? "attiva" : "disattivata"}</b> · fonti collegate: <b data-testid="cal-sync-active-count">{active}</b> · ultima esecuzione: {fmtDT(d.ultima_sync_automatica)}</span>
+        <div className="ml-auto flex gap-2"><Button size="sm" variant="outline" onClick={() => setDlg({ t: "new" })} data-testid="cal-source-add">Aggiungi fonte autorizzata</Button>
+          <Button size="sm" onClick={syncAll} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid="cal-sync-all">Sincronizza ora</Button></div>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[860px] text-sm" data-testid="cal-sources-table">
+        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Fonte", "Esito verifica", "Stato", "Eventi", "Ultima sincronizzazione", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
+        <tbody>{d.sources.map((s) => <SourceRow key={s.id} s={s} onVerifica={(x) => setDlg({ t: "ver", s: x })} onConn={(x) => setDlg({ t: "conn", s: x })} onSync={sync} />)}</tbody>
       </table></div>
-      <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs" data-testid="cal-imports-log"><div className="font-semibold text-sm mb-2">Importazioni recenti</div>
-        {!d.imports.length && <p className="text-slate-500">Nessuna importazione.</p>}
-        {d.imports.map((i) => <div key={i.id} className="border-t border-slate-100 py-1">{fmtD(i.created_at.slice(0, 10))} · {i.file} · {i.status === "done" ? "completata" : "in corso"} · nuovi {i.result?.created || 0}, collegati {i.result?.linked || 0}, duplicati {i.result?.possible_duplicates || 0}, errori {i.result?.errors || 0}</div>)}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs" data-testid="cal-imports-log"><div className="font-semibold text-sm mb-2">Importazioni e sincronizzazioni recenti</div>
+        {!d.imports.length && <p className="text-slate-500">Nessuna attività.</p>}
+        {d.imports.map((i) => <div key={i.id} className="border-t border-slate-100 py-1">{fmtDT(i.created_at)} · {i.kind === "sync" ? `Sincronizzazione ${i.trigger} · ${i.source}` : i.file} · {i.status === "done" ? "completata" : i.status === "error" ? <span className="text-red-600">errore: {i.error}</span> : "in corso"} · nuovi {i.result?.created || 0}, collegati {i.result?.linked || 0}, duplicati {i.result?.possible_duplicates || 0}, errori {i.result?.errors || 0}</div>)}
       </div>
       <DuplicatesPanel />
+      {dlg?.t === "ver" && <VerificaDialog src={dlg.s} onClose={() => setDlg(null)} onSaved={saved} />}
+      {dlg?.t === "conn" && <ConnDialog src={dlg.s} onClose={() => setDlg(null)} onSaved={saved} />}
+      {dlg?.t === "new" && <NewSourceDialog onClose={() => setDlg(null)} onSaved={saved} />}
     </div>
   );
 }
@@ -78,7 +122,8 @@ export function SettingsPanel({ meta, onSaved }) {
       <label className="block">Intervallo minimo tra due comunicazioni allo stesso organizzatore (giorni)<Input type="number" min={1} max={365} value={s.intervallo_min_giorni} onChange={(e) => setS({ ...s, intervallo_min_giorni: e.target.value })} className="h-9 w-32 mt-1" data-testid="cal-set-interval" /></label>
       <div className="text-xs text-slate-500 space-y-1">
         <div>Modalità invio: <b>Manuale</b> (l'automatica sarà attivabile solo nella Fase 4).</div>
-        <div>Raccolta automatica e orario (03:00 Europe/Rome), lista e template Brevo, mittente: disponibili nelle Fasi 2 e 3.</div>
+        <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={!!s.raccolta_automatica} onChange={(e) => setS({ ...s, raccolta_automatica: e.target.checked })} data-testid="cal-set-auto" />Raccolta automatica ogni notte alle 03:00 (Europe/Rome), solo dalle fonti autorizzate e attive</label>
+        <div>Lista e template Brevo, mittente: disponibili nella Fase 3.</div>
       </div>
       <Button onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="cal-settings-save">Salva impostazioni</Button>
     </div>

@@ -36,6 +36,14 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: cal-italia-sync
+    description: "Calendario Eventi Italia: sincronizza ogni notte alle 03:00 solo le fonti con accesso verificato come consentito e attive"
+    cron: "0 3 * * *"
+    timezone: "Europe/Rome"
+    endpoint: "{{BASE_URL}}/api/cron/cal-italia-sync"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
   - name: press-tick
     description: "Comunicati stampa: bozze post-evento, invii programmati approvati, ripresa invii interrotti, sync Brevo"
     cron: "*/10 * * * *"

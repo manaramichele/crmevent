@@ -13881,6 +13881,15 @@ async def cron_press_tick(authorization: str = Header(default="")):
         raise HTTPException(status_code=401, detail="unauthorized")
     asyncio.create_task(PRESS["tick"]())
     return {"accepted": True}
+
+
+@app.post("/api/cron/cal-italia-sync")
+async def cron_cal_italia_sync(authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", f"Bearer {WEBHOOK_CRON_SECRET}"):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(CAL_ITALIA["cron_tick"]())
+    return {"accepted": True}
 app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
 app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
                                                    "verify_password": verify_password, "user_payload": user_payload,
