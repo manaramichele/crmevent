@@ -34,6 +34,7 @@ import { brevoPage, brevoIdentify, brevoReset } from "@/lib/brevoTracker";
 import { CHANGE_EVENT } from "@/lib/consent";
 import CookieBanner from "@/components/Cookie/CookieBanner";
 import PrivacyCookieAdmin from "@/pages/PrivacyCookieAdmin";
+import CalendarioItalia from "@/pages/CalendarioItalia";
 import Iscritti from "@/pages/Iscritti";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
@@ -161,6 +162,7 @@ function Shell() {
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/calendario-eventi-italia" element={<Protected><SuperAdminOnly><CalendarioItalia /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
         <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />
         <Route path="/iscritti" element={<Protected><Iscritti /></Protected>} />

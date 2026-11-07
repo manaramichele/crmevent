@@ -86,6 +86,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/partner", label: "Partner", icon: Handshake, id: "piattaforma-partner" },
   { to: "/piattaforma/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "piattaforma-segnalazioni", badge: "tickets" },
   { to: "/piattaforma/privacy-cookie", label: "Privacy e Cookie", icon: Cookie, id: "piattaforma-privacy-cookie" },
+  { to: "/piattaforma/calendario-eventi-italia", label: "Calendario Eventi Italia", icon: CalendarDays, id: "piattaforma-calendario-italia" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];

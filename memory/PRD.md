@@ -801,3 +801,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - GET /api/fic/vat-diagnostics (sola lettura): azienda collegata + aziende account, totale aliquote, pagine, esito, errori, tabella aliquote 0%. UI: FicVatPanel nella card Fatture in Cloud (Piattaforma).
 
 
+
+
+## 2026-11-07 · Calendario Eventi Italia — FASE 1 (testato iteration_146: frontend 95% → bug corretti; backend via script API)
+- Scelte utente: solo Fase 1 ora; fonti esterne da verificare (API/feed/ToS) in Fase 2 prima di collegarle; stato privacy "Idoneo" solo manuale SA con fonte+finalità+base giuridica.
+- Backend calendario_italia.py (prefix /api/platform/cal, solo SA; collezioni separate cal_events, cal_organizers, cal_duplicates, cal_conflicts, cal_history, cal_imports, cal_settings, cal_sources): CRUD eventi/organizzatori, unione organizzatori, privacy/contattabilità, dedup con punteggio (anni diversi mai uniti; ≥0.85 + stessa data → collega fonte; ≥0.6 → possibili duplicati), conflitti date tra fonti → data_da_verificare (blocca data comunicazione), cronologia (valore precedente/nuovo/fonte/modalità), campi confermati manualmente non sovrascritti, import CSV/XLSX in background con mappatura, export CSV/XLSX, dashboard, impostazioni (7/10/custom giorni, intervallo 60, modalità forzata manuale), registro fonti (tutte "Disabilitata – Da verificare (Fase 2)" tranne import manuale).
+- Frontend: /piattaforma/calendario-eventi-italia (voce menu SA), tab Dashboard, Calendario nazionale (tabella + mese/settimana/anno, colori disciplina, filtri, import/export), Organizzatori, Fonti e sincronizzazioni (+ duplicati/conflitti), Campagne Brevo e Storico (placeholder Fase 3), Impostazioni.
+- Backlog: Fase 2 (verifica accesso fonti, connettori consentiti, cron 03:00 Europe/Rome, retry, stato fonti), Fase 3 (Brevo lista "CRMEvent — Organizzatori Eventi Italia", attributi, template, simulazione, storico), Fase 4 (invio automatico controllato, anti-duplicati 60gg, disiscrizioni). Mancano: DELETE/archivio eventi e organizzatori.
+
