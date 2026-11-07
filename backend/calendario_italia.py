@@ -627,10 +627,9 @@ def build(db, deps: dict):
                 "anni": [y, y + 1]}
 
     # ---------- fonti (Fase 2): verifica accesso, collegamento solo se consentita, sincronizzazione ----------
-    running: set = set()
-
     async def all_sources() -> list:
         st = {s["id"]: s for s in await db.cal_sources.find({}, {"_id": 0}).to_list(200)}
+        running = {k for k, s in st.items() if (s.get("lock_until") or "") > _now()}
         out = []
         for k, n, d, u in SOURCES:
             base = cal_feeds.VERIFICHE.get(k, {})
@@ -708,6 +707,14 @@ def build(db, deps: dict):
         await audit(admin, "cal_source_create", detail=f"{body.nome} · {body.formato}")
         return await get_source(sid)
 
+    @r.delete("/sources/{sid}")
+    async def delete_source(sid: str, admin: dict = Depends(sa)):
+        res = await db.cal_sources.delete_one({"id": sid, "custom": True})
+        if not res.deleted_count:
+            raise HTTPException(status_code=400, detail="Si possono eliminare solo le fonti autorizzate aggiunte a mano")
+        await audit(admin, "cal_source_delete", detail=sid)
+        return {"ok": True}
+
     @r.post("/sources/{sid}/test")
     async def test_source(sid: str, admin: dict = Depends(sa)):
         src = await get_source(sid)
@@ -727,15 +734,19 @@ def build(db, deps: dict):
         src = await get_source(sid)
         if src["verifica"].get("esito") != "consentita" or not (src.get("attiva") and src.get("feed_url")):
             return {"id": sid, "skipped": "non autorizzata o non attiva"}
-        if sid in running:
+        await db.cal_sources.update_one({"id": sid}, {"$setOnInsert": {"id": sid}}, upsert=True)
+        lock = await db.cal_sources.update_one({"id": sid, "$or": [{"lock_until": None}, {"lock_until": {"$lt": _now()}}]},
+                                               {"$set": {"lock_until": (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()}})
+        if not lock.modified_count:
             return {"id": sid, "skipped": "già in corso"}
-        running.add(sid)
         jid = uuid.uuid4().hex
         await db.cal_imports.insert_one({"id": jid, "file": src["feed_url"], "source": sid, "kind": "sync", "trigger": trigger, "status": "running",
                                          "total": 0, "progress": 0, "created_by": by, "created_at": _now()})
         try:
             cols, rows = cal_feeds.parse(await cal_feeds.fetch(src["feed_url"]), src.get("formato") or "csv")
             mp = feed_map(cols)
+            if "disciplina" not in mp.values() and src.get("disciplina") in DISCIPLINE:
+                cols, rows, mp = cols + ["_disciplina"], [r + [src["disciplina"]] for r in rows], {**mp, "_disciplina": "disciplina"}
             if "nome" not in mp.values():
                 raise ValueError("Nel feed non c'è una colonna riconoscibile come nome della manifestazione")
             await db.cal_imports.update_one({"id": jid}, {"$set": {"total": len(rows)}})
@@ -749,7 +760,7 @@ def build(db, deps: dict):
             await db.cal_sources.update_one({"id": sid}, {"$set": {"ultimo_tentativo": _now(), "ultimo_esito": "errore", "ultimo_errore": msg}}, upsert=True)
             return {"id": sid, "ok": False, "error": msg}
         finally:
-            running.discard(sid)
+            await db.cal_sources.update_one({"id": sid}, {"$set": {"lock_until": None}})
 
     async def sync_all(by: str, trigger: str) -> list:
         out = []
@@ -763,7 +774,7 @@ def build(db, deps: dict):
         src = await get_source(sid)
         if src["verifica"].get("esito") != "consentita" or not (src.get("attiva") and src.get("feed_url")):
             raise HTTPException(status_code=400, detail="Fonte non autorizzata o non attiva: nessuna sincronizzazione")
-        if sid in running:
+        if src["stato"] == "in_aggiornamento":
             raise HTTPException(status_code=409, detail="Sincronizzazione già in corso")
         asyncio.create_task(sync_source(sid, admin.get("email"), "manuale"))
         await audit(admin, "cal_source_sync", detail=sid)

@@ -1216,3 +1216,11 @@ Task 2 — Creatività manuale:
 
 
 
+
+## 2026-11-07 — Calendario Eventi Italia · Fase 2 (fonti)
+- Verifica accesso (API/feed/export/robots/termini) di FIDAL, RaceUp, Wedosport, Running Around, FITRI, MyFITRI, Ironman: tutte NON CONSENTITE → nessuna collegata (esiti ed evidenze in backend/cal_feeds.py VERIFICHE).
+- Infrastruttura: registrazione verifica (Consentita richiede metodo + prova), collegamento feed CSV/XLSX/JSON/ICS solo per fonti consentite, "Aggiungi fonte autorizzata", prova lettura, Sincronizza ora (singola/tutte), elimina fonte custom, log sincronizzazioni.
+- Sync: nuovi tentativi (3), blocco anti-SSRF anche sui redirect, lock su DB, deduplica tramite upsert esistente (seconda sync collega, non duplica), disciplina della fonte applicata se il feed non la contiene.
+- Cron cal-italia-sync 03:00 Europe/Rome (/api/cron/cal-italia-sync, Bearer WEBHOOK_CRON_SECRET), attivo solo se "Raccolta automatica" è attivata nelle Impostazioni (default disattivata).
+- Test: iteration_147 backend 13/13, frontend 100%; fix successivi verificati con test manuale. Dati di test rimossi.
+

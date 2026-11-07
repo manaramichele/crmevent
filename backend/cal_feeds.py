@@ -73,9 +73,15 @@ async def fetch(url: str, attempts: int = 3) -> bytes:
     last = None
     for n in range(attempts):
         try:
-            check_url(url)
-            async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={"User-Agent": UA}) as c:
-                res = await c.get(url)
+            nxt = url
+            async with httpx.AsyncClient(timeout=30, follow_redirects=False, headers={"User-Agent": UA}) as c:
+                for _ in range(6):  # ogni reindirizzamento viene ricontrollato
+                    res = await c.get(check_url(nxt))
+                    if res.status_code not in (301, 302, 303, 307, 308):
+                        break
+                    nxt = str(res.next_request.url) if res.next_request else ""
+                else:
+                    raise ValueError("Troppi reindirizzamenti")
             if res.status_code >= 400:
                 raise ValueError(f"La fonte ha risposto HTTP {res.status_code}")
             if len(res.content) > MAX_BYTES:

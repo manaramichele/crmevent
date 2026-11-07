@@ -48,7 +48,7 @@ export function DuplicatesPanel() {
   );
 }
 
-function SourceRow({ s, onVerifica, onConn, onSync }) {
+function SourceRow({ s, onVerifica, onConn, onSync, onDelete }) {
   const [open, setOpen] = useState(false);
   const v = s.verifica || {};
   const ok = v.esito === "consentita" && s.id !== "manuale";
@@ -65,6 +65,7 @@ function SourceRow({ s, onVerifica, onConn, onSync }) {
           <Button size="sm" variant="outline" onClick={() => onVerifica(s)} data-testid={`cal-source-verifica-${s.id}`}>Registra verifica</Button>
           {ok && <Button size="sm" variant="outline" onClick={() => onConn(s)} data-testid={`cal-source-conn-${s.id}`}>Collegamento</Button>}
           {ok && s.attiva && s.feed_url && <Button size="sm" onClick={() => onSync(s)} disabled={s.stato === "in_aggiornamento"} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid={`cal-source-sync-${s.id}`}>Sincronizza ora</Button>}
+          {s.custom && <Button size="sm" variant="ghost" className="text-red-600" onClick={() => onDelete(s)} data-testid={`cal-source-delete-${s.id}`}>Elimina</Button>}
         </div>}</td>
       </tr>
       {open && <tr className="bg-slate-50" data-testid={`cal-source-evidenze-${s.id}`}><td colSpan={6} className="px-3 py-2 text-xs text-slate-600 space-y-1">
@@ -85,11 +86,13 @@ export function SourcesPanel() {
   const saved = () => { setDlg(null); load(); };
   const sync = async (s) => { try { await api.post(calApi(`/sources/${s.id}/sync`)); toast.success("Sincronizzazione avviata"); setTimeout(load, 1500); } catch (e) { err(e); } };
   const syncAll = async () => { try { const { data } = await api.post(calApi("/sync")); toast.success(data.fonti ? `Sincronizzazione avviata su ${data.fonti} fonti` : "Nessuna fonte autorizzata attiva da sincronizzare"); setTimeout(load, 1500); } catch (e) { err(e); } };
+  const del = async (s) => { if (!window.confirm(`Eliminare la fonte "${s.nome}"? Gli eventi già importati restano nel calendario.`)) return; try { await api.delete(calApi(`/sources/${s.id}`)); toast.success("Fonte eliminata"); load(); } catch (e) { err(e); } };
   if (!d) return <p className="text-sm text-slate-500">Caricamento...</p>;
+  const names = Object.fromEntries(d.sources.map((s) => [s.id, s.nome]));
   const active = d.sources.filter((s) => s.id !== "manuale" && ["attiva", "errore", "in_aggiornamento"].includes(s.stato)).length;
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800" data-testid="cal-sources-note">Verifica accesso completata: nessuna delle fonti indicate offre un'API, un feed o un'autorizzazione al riutilizzo automatico, quindi restano <b>scollegate</b> e si alimentano con l'importazione Excel/CSV. Una fonte si collega solo dopo aver registrato una verifica "Consentita" con la prova (accordo, licenza, API ufficiale).</div>
+      <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800" data-testid="cal-sources-note">Verifica accesso completata: nessuna delle fonti indicate (FIDAL, RaceUp, Wedosport, Running Around, FITRI, MyFITRI, Ironman) offre un'API, un feed o un'autorizzazione al riutilizzo automatico, quindi restano <b>scollegate</b> e si alimentano con l'importazione Excel/CSV. Una fonte si collega solo dopo aver registrato una verifica "Consentita" con la prova (accordo, licenza, API ufficiale).</div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600" data-testid="cal-sync-bar">
         <span>Sincronizzazione automatica alle 03:00 (Europe/Rome): <b data-testid="cal-sync-auto-state">{d.raccolta_automatica ? "attiva" : "disattivata"}</b> · fonti collegate: <b data-testid="cal-sync-active-count">{active}</b> · ultima esecuzione: {fmtDT(d.ultima_sync_automatica)}</span>
         <div className="ml-auto flex gap-2"><Button size="sm" variant="outline" onClick={() => setDlg({ t: "new" })} data-testid="cal-source-add">Aggiungi fonte autorizzata</Button>
@@ -97,11 +100,11 @@ export function SourcesPanel() {
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[860px] text-sm" data-testid="cal-sources-table">
         <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Fonte", "Esito verifica", "Stato", "Eventi", "Ultima sincronizzazione", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
-        <tbody>{d.sources.map((s) => <SourceRow key={s.id} s={s} onVerifica={(x) => setDlg({ t: "ver", s: x })} onConn={(x) => setDlg({ t: "conn", s: x })} onSync={sync} />)}</tbody>
+        <tbody>{d.sources.map((s) => <SourceRow key={s.id} s={s} onVerifica={(x) => setDlg({ t: "ver", s: x })} onConn={(x) => setDlg({ t: "conn", s: x })} onSync={sync} onDelete={del} />)}</tbody>
       </table></div>
       <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs" data-testid="cal-imports-log"><div className="font-semibold text-sm mb-2">Importazioni e sincronizzazioni recenti</div>
         {!d.imports.length && <p className="text-slate-500">Nessuna attività.</p>}
-        {d.imports.map((i) => <div key={i.id} className="border-t border-slate-100 py-1">{fmtDT(i.created_at)} · {i.kind === "sync" ? `Sincronizzazione ${i.trigger} · ${i.source}` : i.file} · {i.status === "done" ? "completata" : i.status === "error" ? <span className="text-red-600">errore: {i.error}</span> : "in corso"} · nuovi {i.result?.created || 0}, collegati {i.result?.linked || 0}, duplicati {i.result?.possible_duplicates || 0}, errori {i.result?.errors || 0}</div>)}
+        {d.imports.map((i) => <div key={i.id} className="border-t border-slate-100 py-1">{fmtDT(i.created_at)} · {i.kind === "sync" ? `Sincronizzazione ${i.trigger} · ${names[i.source] || i.source}` : i.file} · {i.status === "done" ? "completata" : i.status === "error" ? <span className="text-red-600">errore: {i.error}</span> : "in corso"} · nuovi {i.result?.created || 0}, collegati {i.result?.linked || 0}, duplicati {i.result?.possible_duplicates || 0}, errori {i.result?.errors || 0}</div>)}
       </div>
       <DuplicatesPanel />
       {dlg?.t === "ver" && <VerificaDialog src={dlg.s} onClose={() => setDlg(null)} onSaved={saved} />}
