@@ -781,3 +781,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Cause in codice: colonna Fattura mostrata solo per org con saas "enabled"; invoice.paid arrivato prima del salvataggio dell'ID abbonamento → pagamento non classificato saas_subscription. Fix: lista pagamenti per tutte le org; fallback webhook su metadata Subscription (kind saas, org_id).
 - Recupero Stripe: _reconcile_stripe_payments / POST /api/platform/invoices/reconcile[?org_id] (Invoice.list paid del cliente) → crea/collega record locali (kind, piano, ciclo, periodo) con fic_auto False: mai generazione automatica, solo pulsante. Avvio: migrazione fic_manual_backlog_v1 → fic_auto False su pagamenti già registrati senza fattura.
 - UI: cella Fattura sempre cliccabile (verifica Stripe al click), pulsante "Recupera pagamenti Stripe", stato "Dati mancanti" con elenco campi.
+
+
+
+## 2026-11-07 · Fix FIC "Cannot filter by subject field"
+- _fic_find_existing: rimosso filtro `subject` (non supportato). Ricerca con filtro documentato `amount_net = X` (type=invoice, fieldset detailed, sort -created_at) e confronto locale del riferimento Stripe (subject/visible_subject/note/righe). Se trovato → documento recuperato (fic_recovered_existing) senza crearne un altro.
+- Salvati su invoices: stripe_payment_ref (+ stripe_verified.payment_ref) e fic_document_id; controllo duplicati DB su entrambi. Auto + Riprova usano la stessa funzione. Test mock 15/15.

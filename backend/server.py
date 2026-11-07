@@ -7393,13 +7393,18 @@ def _fic_line(inv: dict, sv: dict) -> tuple:
     return name, "\n".join(parts)
 
 
-async def _fic_find_existing(cid: str, token: str, subject: str) -> Optional[dict]:
+async def _fic_find_existing(cid: str, token: str, subject: str, payment_ref: str, amount: float) -> Optional[dict]:
+    """Cerca su FIC una fattura già creata per lo stesso pagamento: filtro supportato (amount_gross), poi confronto locale sul riferimento Stripe."""
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(f"{FIC_BASE}/c/{cid}/issued_documents", headers={"Authorization": f"Bearer {token}"},
-                        params={"type": "invoice", "q": f"subject = '{subject}'", "fieldset": "basic", "per_page": 5})
+                        params={"type": "invoice", "q": f"amount_net = {round(float(amount), 2)}", "fieldset": "detailed", "per_page": 100, "sort": "-created_at"})
     if r.status_code >= 400:
         raise FicError(f"verifica documenti esistenti: {r.text[:200]}")
-    return next(iter(r.json().get("data") or []), None)
+    for d in r.json().get("data") or []:
+        texts = [d.get("subject"), d.get("visible_subject"), d.get("notes")] + [f"{i.get('name')} {i.get('description')}" for i in d.get("items_list") or []]
+        if any(payment_ref in (t or "") or subject == (t or "") for t in texts):
+            return d
+    return None
 
 
 async def _emit_saas_invoice(inv_id: str, manual: bool = False) -> dict:
@@ -7420,10 +7425,11 @@ async def _emit_saas_invoice(inv_id: str, manual: bool = False) -> dict:
     base = {"fic_attempts": int(inv.get("fic_attempts") or 0) + 1, "fic_last_attempt_at": now_iso(), "fic_mode": FIC_MODE, "updated_at": now_iso()}
     try:
         sv = await _stripe_verify_payment(inv)
-        dup = await db.invoices.find_one({"stripe_verified.payment_ref": sv["payment_ref"], "fic_document_id": {"$ne": None}, "id": {"$ne": inv_id}}, {"_id": 0, "id": 1})
+        dup = await db.invoices.find_one({"$or": [{"stripe_verified.payment_ref": sv["payment_ref"]}, {"stripe_payment_ref": sv["payment_ref"]}],
+                                          "fic_document_id": {"$ne": None}, "id": {"$ne": inv_id}}, {"_id": 0, "id": 1})
         if dup:
             raise FicError(f"Il pagamento {sv['payment_ref']} risulta già fatturato")
-        await db.invoices.update_one({"id": inv_id}, {"$set": {"stripe_verified": sv}})
+        await db.invoices.update_one({"id": inv_id}, {"$set": {"stripe_verified": sv, "stripe_payment_ref": sv["payment_ref"]}})
         org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0}) or {}
         missing = _billing_missing(org.get("billing") or {})
         if missing:
@@ -7433,7 +7439,8 @@ async def _emit_saas_invoice(inv_id: str, manual: bool = False) -> dict:
             raise FicError("Fatture in Cloud non connesso (OAuth mancante)")
         token, cid = await _fic_token(), await _fic_company_id()
         subject = f"CRMEvent {sv['payment_ref']}"
-        d = await _fic_find_existing(cid, token, subject)
+        d = await _fic_find_existing(cid, token, subject, sv["payment_ref"], sv["amount"])
+        recovered = bool(d)
         if not d:
             vat_id = await _fic_vat_forfettario(cid, token)
             if vat_id is None:
@@ -7458,7 +7465,8 @@ async def _emit_saas_invoice(inv_id: str, manual: bool = False) -> dict:
             d = r.json().get("data", {})
         await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_document_id": d.get("id"), "fic_numero": d.get("number"),
                                                               "fic_data": d.get("date"), "fic_pdf_url": d.get("url"), "fic_stato_documento": "bozza",
-                                                              "fic_stato_sdi": "non_inviato", "fic_error": None, "fic_missing": None, "fic_created_at": now_iso()}})
+                                                              "fic_stato_sdi": "non_inviato", "fic_error": None, "fic_missing": None, "fic_created_at": now_iso(),
+                                                              "fic_recovered_existing": recovered}})
         return {"state": "creata", "numero": d.get("number"), "document_id": d.get("id")}
     except Exception as e:  # noqa: BLE001
         msg = str(e)[:500]
