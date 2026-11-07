@@ -1,0 +1,39 @@
+{
+  "summary": "Tested Calendario Eventi Italia Phase 3 (Brevo), backend and frontend. Backend: 12 of 12 pytest checks pass. Brevo status shows configured=false with the right list name and the 2 templates. senders and list/sync return 400 'Brevo non configurato (BREVO_API_KEY mancante)'. templates/{id}/brevo returns 400 'Scegli prima il mittente verificato in Impostazioni' and templates/{id}/test returns 400 'Salva prima il template su Brevo': both are clear 400s, but they come from earlier checks, not the Brevo key check. Template save rejects html without UNSUB_URL (400), saves valid html, and returns 404 for an unknown template. Recipients preview is correct: only the idoneo organizer with email is included; the others are excluded with the right reason (da_verificare, Email mancante, Escluso dalle campagne, 'Organizzatore gi\u00e0 incluso per un altro evento'); data_comunicazione = today-1. Send: conferma wrong -> 400, wrong firma -> 409, real send without template/sender -> 400, simulation -> 200, campaign 'completata' 1/1, cal_comms 'simulato', stato_commerciale unchanged, organizer communications filled. comms status/q/campaign_id filters work. Unsubscribe with an invalid token shows 'Link non valido'; with a valid token it sets privacy to 'disiscritto', the next preview excludes the organizer, it cannot go back to idoneo, and sending with no recipients returns 400. Frontend (1920 and 390): every requested testid works: Non configurato pill, list sync disabled, template editors (anteprima, save shows an error toast on invalid html and saves valid html, Salva su Brevo and Invia prova disabled), preview shows included 1 / excluded 1, INVIA enables Simula invio, Invia reale stays disabled, simulation toast, Storico shows totals, the campaign log and filters, Impostazioni shows cal-brevo-sender. No real email was sent. All TEST_ data was cleaned up and templates/settings restored.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/platform/cal/brevo/list/sync", "issue": "brevo_email is cleared on each organizer BEFORE the batched Brevo remove call, and only remove[:150] is sent. With more than 150 no-longer-eligible contacts, or if the remove call fails, those contacts stay on the Brevo list for good: CRMEvent no longer remembers them, so later syncs never remove them. Clear brevo_email only after a successful remove, and batch every 150."},
+      {"endpoint": "GET /api/public/cal/unsubscribe/{token}", "issue": "The unsubscribe happens on a plain GET. Email link scanners and prefetchers (Outlook SafeLinks, corporate gateways) can unsubscribe people by accident. Also, there is no List-Unsubscribe-Post (RFC 8058 one-click) header, which Gmail and Yahoo require from bulk senders. Suggest a GET confirmation page plus POST, and adding 'List-Unsubscribe-Post: List-Unsubscribe=One-Click' with a POST handler."},
+      {"endpoint": "run_campaign (cal_brevo.py)", "issue": "asyncio.create_task result is not stored (the task can be garbage-collected or lost when the server restarts). The re-check before each send looks only at privacy=idoneo, not at escluso_campagne or stato_commerciale (escluso or cliente_acquisito changed after the preview)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "BrevoSenderSettings (Impostazioni)", "issue": "When Brevo is not configured, opening Impostazioni fires the error toast 'Brevo non configurato' twice, and the empty select only says 'Scegli un mittente verificato' with no explanation inline. Show an inline note instead of a toast on load, and disable the select.", "selector": "[data-testid='cal-brevo-sender-select']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Campagne Brevo - Nuova campagna", "issues": ["Dal/Al use the browser's native date input (shows mm/dd/yyyy in an Italian UI) instead of the shadcn Calendar/date picker", "Regione is free text, so a typo silently gives 0 results; a select would be safer"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_cal_brevo_phase3.py", "/app/backend/tests/cal_brevo_ui_seed.py", "/app/test_reports/pytest/pytest_cal_brevo.xml"],
+  "action_items": [
+    "Fix list_sync removal: clear brevo_email only after a successful Brevo remove, and remove in batches of 150 instead of truncating",
+    "Consider a two-step unsubscribe (confirmation page + POST) and the List-Unsubscribe-Post one-click header to stay compliant with Gmail/Yahoo bulk-sender rules",
+    "Impostazioni: avoid the duplicate error toast when Brevo is not configured; show an inline message instead",
+    "Optional: use the shadcn date picker for Dal/Al in the campaign builder"
+  ],
+  "critical_code_review_comments": [
+    "cal_brevo.py list_sync: brevo_email is set to None before remove() succeeds, and the list is truncated to 150 (data inconsistency with Brevo)",
+    "run_campaign: keep a reference to the task; re-check escluso_campagne and stato_commerciale before each send, not just privacy",
+    "Simulated rows do not count towards 'Gi\u00e0 inviato' (only status 'inviato' does). This is correct, but worth documenting",
+    "TemplateEditor renders admin HTML with dangerouslySetInnerHTML. Acceptable because only the Super Admin can edit it; sanitizing (DOMPurify) would be safer"
+  ],
+  "updated_files": ["/app/backend/tests/test_cal_brevo_phase3.py", "/app/backend/tests/cal_brevo_ui_seed.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Created TEST_P3 and TEST_UI3 organizers and events (regione TEST_Regione3 / TEST_RegUI), deleted by id afterwards along with their cal_history, cal_comms and cal_campaigns. The edited richiamo cal_templates doc was deleted and cal_settings restored. Final counts: cal_events/cal_organizers/cal_comms/cal_campaigns/cal_templates = 0, as before the test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "BREVO_API_KEY is empty in preview. Run the pytest with: cd /app/backend && python -m pytest tests/test_cal_brevo_phase3.py -p no:randomly (pytest.ini adds xdist). UI seed/cleanup: python tests/cal_brevo_ui_seed.py seed|cleanup (ids are stored in /tmp/cal_brevo_ui_ids.json). Filter the campaign preview by regione TEST_RegUI so only test data is touched. The container date is 2026-11-07."
+}

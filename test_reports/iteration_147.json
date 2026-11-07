@@ -1,0 +1,38 @@
+{
+  "summary": "Calendario Eventi Italia Phase 2 (sources, access checks, feed connection, sync, cron, automatic collection setting). Backend: 13/13 pytest pass. All 7 external sources show non_consentita and non_disponibile, with evidence listed. Manuale is attiva. For fidal, connessione, test and sync all return 400. Setting verifica to consentita without metodo or prova (including whitespace-only) returns 400, and an invalid esito returns 400. Consentita with metodo and prova leaves the source disabilitata, then connessione makes it attiva. Setting it back to non_consentita gives non_disponibile with attiva=false, and sync then returns 400. Internal or invalid feed URLs are rejected with 400: 127.0.0.1, localhost, 10.x, 169.254.169.254 and ftp. Missing metodo or prova returns 422 and a bad formato returns 400. Public Google ICS custom source: test returns 209 rows with direct mapping. Sync 1 created 209 events; sync 2 linked 209 and created 0, with no duplicates and an unchanged DB count. POST /sync and cron without a token or with a wrong token return 401, and cron with the secret returns accepted. Settings raccolta_automatica true/false is saved and reflected in GET /sources. Unauthenticated requests return 401/403. Frontend on desktop 1920 and mobile 390: table, pills, details and evidence, verifica dialog (backend error toast shown, dialog stays open), conn/sync buttons shown only for consented sources, add-source dialog, conn dialog test preview ('Letti 209 eventi'), per-source sync (row Attiva, 209 events, log line 'nuovi 209'), sync-all toast and the cal-set-auto toggle all work. On mobile the page has no horizontal overflow and the table scrolls inside its container. All test data was cleaned up and fidal and the settings were restored.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "cal_feeds.fetch", "issue": "Security (code review, exploit not reproduced): httpx is called with follow_redirects=True and check_url only checks the first URL. A public feed URL that redirects to an internal address (127.0.0.1, 169.254.169.254) would get past the internal-address block (SSRF via redirect). DNS rebinding (check-then-fetch race) is also possible. Fix: follow_redirects=False and re-check each Location manually, or pin the resolved IP."},
+      {"endpoint": "/api/platform/cal/sources/{id}", "issue": "There is no DELETE (or archive) for custom sources. A wrong or obsolete 'fonte autorizzata' can only be neutralised with verifica=non_consentita and stays in the table forever."},
+      {"endpoint": "sync_source/run_import", "issue": "The source's 'disciplina' is not applied to the events it imports. Events from a triathlon-only feed default to 'running' unless the feed has a disciplina column."},
+      {"endpoint": "sync running set", "issue": "The 'already running' check is an in-memory set, so it only works with a single worker. Multiple uvicorn workers or pods could run the same source twice. A DB lock flag would fix this."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Fonti - Importazioni e sincronizzazioni recenti", "issues": ["Log lines show the raw source id (e.g. 'fonte_8785cf90') instead of the source name"]},
+      {"screen": "Fonti - amber note", "issues": ["The static text says no source is connected even after a custom authorized source is added and active. Consider wording it as 'nessuna delle fonti indicate (FIDAL, ...)' or hiding it once a source is connected"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_cal_italia_sources.py", "/app/test_reports/pytest/cal_italia_sources.xml"],
+  "action_items": [
+    "Harden cal_feeds.fetch against SSRF via redirects: turn off automatic redirects and validate each hop with check_url",
+    "Optional: add DELETE/archive for custom sources",
+    "Optional: show the source name in the imports log and apply the source disciplina to imported events"
+  ],
+  "critical_code_review_comments": [
+    "fetch follow_redirects=True bypasses check_url (SSRF)",
+    "The in-process 'running' set is not safe across multiple workers",
+    "PUT /settings uses SettingsIn defaults, so a partial payload resets omitted fields (e.g. giorni_post_evento) to their defaults. The frontend sends the full object, so this is fine today."
+  ],
+  "updated_files": ["/app/backend/tests/test_cal_italia_sources.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None kept. Created TEST_ ICS sources (fonte_422f4d57 via pytest, fonte_8785cf90 via the UI) with 209 events each. They were deleted together with their cal_events, cal_imports and cal_sources docs. The fidal cal_sources doc was deleted to restore the default verifica. raccolta_automatica was restored to false.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with: cd /app/backend && python -m pytest tests/test_cal_italia_sources.py -n 0 -v. Use -n 0 because the module-level cleanup fixture needs a single worker. The cleanup fixture deletes the sources it created along with their events and imports, deletes the fidal override and restores cal_settings. Auth is a cookie session via POST /api/auth/login. The cal_events collection was empty apart from the test data at the time of testing.",
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md)"
+}

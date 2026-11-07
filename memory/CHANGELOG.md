@@ -1216,3 +1216,27 @@ Task 2 — Creatività manuale:
 
 
 
+
+## 2026-11-07 — Calendario Eventi Italia · Fase 2 (fonti)
+- Verifica accesso (API/feed/export/robots/termini) di FIDAL, RaceUp, Wedosport, Running Around, FITRI, MyFITRI, Ironman: tutte NON CONSENTITE → nessuna collegata (esiti ed evidenze in backend/cal_feeds.py VERIFICHE).
+- Infrastruttura: registrazione verifica (Consentita richiede metodo + prova), collegamento feed CSV/XLSX/JSON/ICS solo per fonti consentite, "Aggiungi fonte autorizzata", prova lettura, Sincronizza ora (singola/tutte), elimina fonte custom, log sincronizzazioni.
+- Sync: nuovi tentativi (3), blocco anti-SSRF anche sui redirect, lock su DB, deduplica tramite upsert esistente (seconda sync collega, non duplica), disciplina della fonte applicata se il feed non la contiene.
+- Cron cal-italia-sync 03:00 Europe/Rome (/api/cron/cal-italia-sync, Bearer WEBHOOK_CRON_SECRET), attivo solo se "Raccolta automatica" è attivata nelle Impostazioni (default disattivata).
+- Test: iteration_147 backend 13/13, frontend 100%; fix successivi verificati con test manuale. Dati di test rimossi.
+
+## 2026-11-07 — Calendario Eventi Italia · Fase 3 (Brevo)
+- backend/cal_brevo.py: lista "CRMEvent — Organizzatori Eventi Italia" (cartella dedicata, attributi CAL_*), sincronizzazione solo contatti Idoneo non esclusi, rimozione non più idonei a blocchi da 150, mai reiscrizione dei disiscritti.
+- Template Post-evento e Richiamo modificabili in CRMEvent (link {{ params.UNSUB_URL }} obbligatorio), salvataggio su Brevo, prova all'indirizzo del Super Admin.
+- Mittente scelto dai mittenti verificati Brevo (Impostazioni).
+- Anteprima destinatari con motivi di esclusione; invio manuale con conferma "INVIA" + firma destinatari (409 se cambiati), ricontrollo prima di ogni invio, modalità "Simula invio".
+- Storico comunicazioni e campagne; dashboard "Email inviate"; disiscrizione pubblica con pagina di conferma (GET) + POST e List-Unsubscribe one-click.
+- In preview BREVO_API_KEY è vuota (solo produzione): le azioni Brevo rispondono "Brevo non configurato". Test: iteration_148 100%; fix successivi verificati a mano.
+
+## 2026-11-07 — Calendario Eventi Italia · Fase 4 (invio automatico)
+- Cron cal-italia-auto-send ogni giorno 10:00 Europe/Rome → auto_tick in cal_brevo.py: template Post-evento, stessi controlli dell'anteprima (finestra data comunicazione ultimi 14 giorni → oggi), nessun limite giornaliero, lock giornaliero, ricontrollo Brevo blacklist prima di ogni invio.
+- Modalità invio "automatica" di default (applicata una volta all'avvio, poi decide il Super Admin in Impostazioni). Se mancano Brevo/mittente/template su Brevo, l'esecuzione è registrata come "non eseguita" con i motivi.
+- UI: stato invio automatico in Campagne Brevo, email previste nei prossimi 30 giorni (anche in dashboard), selettore modalità in Impostazioni.
+- Verifica: test unitario con Brevo finto su DB separato (invii, esclusioni, blacklist, nessun doppio invio, lock, modalità manuale).
+
+
+

@@ -13867,8 +13867,9 @@ ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_su
 press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
 app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
-CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit})
+CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "app_url": APP_URL})
 app.include_router(CAL_ITALIA["router"])
+app.include_router(CAL_ITALIA["public_router"])
 app.add_event_handler("startup", CAL_ITALIA["ensure_indexes"])
 app.include_router(PRESS["router"])
 app.add_event_handler("startup", PRESS["ensure_indexes"])
@@ -13880,6 +13881,24 @@ async def cron_press_tick(authorization: str = Header(default="")):
     if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", f"Bearer {WEBHOOK_CRON_SECRET}"):
         raise HTTPException(status_code=401, detail="unauthorized")
     asyncio.create_task(PRESS["tick"]())
+    return {"accepted": True}
+
+
+@app.post("/api/cron/cal-italia-sync")
+async def cron_cal_italia_sync(authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", f"Bearer {WEBHOOK_CRON_SECRET}"):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(CAL_ITALIA["cron_tick"]())
+    return {"accepted": True}
+
+
+@app.post("/api/cron/cal-italia-auto-send")
+async def cron_cal_italia_auto_send(authorization: str = Header(default="")):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    if not WEBHOOK_CRON_SECRET or not secrets.compare_digest(authorization or "", f"Bearer {WEBHOOK_CRON_SECRET}"):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    asyncio.create_task(CAL_ITALIA["auto_send_tick"]())
     return {"accepted": True}
 app.include_router(home_widgets.build_router(db, require_admin, get_current_user, SAAS, _resolve_active_org), prefix="/api")
 app.include_router(google_login.build_router(db, {"create_access_token": create_access_token, "set_auth_cookie": set_auth_cookie,
