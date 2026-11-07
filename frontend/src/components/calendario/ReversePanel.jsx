@@ -17,9 +17,10 @@ const fmtDT = (s) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "shor
 
 function ImportDialog({ onClose, onDone }) {
   const [lists, setLists] = useState(null);
+  const [msg, setMsg] = useState("");
   const [sel, setSel] = useState([]);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { api.get(calApi("/reverse/brevo/lists")).then(({ data }) => setLists(data.lists)).catch((e) => { setLists([]); err(e); }); }, []);
+  useEffect(() => { api.get(calApi("/reverse/brevo/lists")).then(({ data }) => setLists(data.lists)).catch((e) => { setLists([]); setMsg(e.response?.data?.detail || "Impossibile leggere le liste da Brevo"); }); }, []);
   const go = async () => {
     setBusy(true);
     try { const { data } = await api.post(calApi("/reverse/import"), { list_ids: sel }); toast.success(`Importati: ${data.nuovi} nuovi, ${data.aggiornati} aggiornati`); onDone(); } catch (e) { err(e); }
@@ -30,7 +31,7 @@ function ImportDialog({ onClose, onDone }) {
       <DialogHeader><DialogTitle>Importa contatti da Brevo</DialogTitle></DialogHeader>
       <p className="text-xs text-slate-500">Sola lettura: liste, consensi e automazioni su Brevo non vengono modificati. I contatti importati partono come "da verificare" per le comunicazioni.</p>
       {!lists ? <p className="text-sm text-slate-500">Caricamento liste...</p> : <div className="space-y-1 max-h-80 overflow-y-auto">
-        {!lists.length && <p className="text-sm text-slate-500">Nessuna lista disponibile.</p>}
+        {!lists.length && <p className="text-sm text-amber-700" data-testid="rv-import-msg">{msg || "Nessuna lista disponibile."}</p>}
         {lists.map((l) => <label key={l.id} className="flex items-center gap-2 text-sm py-1" data-testid={`rv-list-${l.id}`}>
           <input type="checkbox" checked={sel.includes(l.id)} onChange={(e) => setSel(e.target.checked ? [...sel, l.id] : sel.filter((x) => x !== l.id))} />
           {l.name} <span className="text-xs text-slate-400">({l.contatti} contatti)</span></label>)}
@@ -67,7 +68,7 @@ function ContactRow({ c }) {
       <td className="px-3 py-2 text-xs">{c.eventi.length ? c.eventi.map((e) => <div key={e.id}>{e.nome} <Pill color={(FS[e.stato] || [])[1]}>{(FS[e.stato] || [e.stato])[0]}</Pill></div>) : "—"}</td>
       <td className="px-3 py-2 text-xs">{c.eventi.map((e) => <div key={e.id}>{e.data_inizio ? fmtD(e.data_inizio) : "data da confermare"}</div>)}</td>
       <td className="px-3 py-2"><Pill color={col} testid={`rv-contact-state-${c.id}`}>{l}</Pill>
-        {!!(c.fonti || []).length && <button className="block text-[11px] text-[#0A8F8B] underline mt-1" onClick={() => setOpen(!open)} data-testid={`rv-contact-sources-${c.id}`}>{open ? "Nascondi fonti" : "Fonti consultate"}</button>}</td>
+        {!!((c.fonti || []).length || c.nota || c.errore) && <button className="block text-[11px] text-[#0A8F8B] underline mt-1" onClick={() => setOpen(!open)} data-testid={`rv-contact-sources-${c.id}`}>{open ? "Nascondi fonti" : "Fonti consultate"}</button>}</td>
     </tr>
     {open && <tr className="bg-slate-50"><td colSpan={5} className="px-3 py-2 text-xs text-slate-600 space-y-0.5" data-testid={`rv-contact-fonti-${c.id}`}>
       {c.nota && <div className="italic">{c.nota}</div>}
@@ -124,7 +125,7 @@ export function ReversePanel() {
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setDlg(true)} variant="outline" data-testid="rv-btn-import">IMPORTA DA BREVO</Button>
           <Button onClick={() => run("test")} disabled={!!running} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid="rv-btn-test">CERCA EVENTI · test 20 contatti</Button>
-          <div className="flex items-center gap-1"><select className={SEL} value={size} onChange={(e) => setSize(Number(e.target.value))} disabled={!st.test_completato} data-testid="rv-group-size">{[50, 100, 250, 500].map((n) => <option key={n} value={n}>{n} contatti</option>)}</select>
+          <div className="flex flex-wrap items-center gap-1"><select className={SEL} value={size} onChange={(e) => setSize(Number(e.target.value))} disabled={!st.test_completato} data-testid="rv-group-size">{[50, 100, 250, 500].map((n) => <option key={n} value={n}>{n} contatti</option>)}</select>
             <Button variant="outline" onClick={() => run("gruppo")} disabled={!!running || !st.test_completato} data-testid="rv-btn-group">CERCA EVENTI · gruppo</Button>
             <Button variant="outline" onClick={() => run("tutti")} disabled={!!running || !st.test_completato} data-testid="rv-btn-all">Tutti i restanti</Button></div>
           <Button variant="outline" onClick={() => run("update")} disabled={!!running} data-testid="rv-btn-update">AGGIORNA DATE</Button>

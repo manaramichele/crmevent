@@ -390,11 +390,13 @@ def build(db, deps: dict):
                 await search_contact(cid, j["created_by"])
             except Exception as e:  # noqa: BLE001
                 err = str(e)[:300]
+                if "BRAVE_API_KEY" in err:  # configurazione mancante: non consumare il contatto, sospendi
+                    await db.cal_rv_contacts.update_one({"id": cid}, {"$set": {"stato_ricerca": "da_analizzare", "errore": err}})
+                    await db.cal_rv_jobs.update_one({"id": jid}, {"$set": {"status": "sospeso", "motivo": err, "updated_at": _now()}})
+                    return
                 await db.cal_rv_contacts.update_one({"id": cid}, {"$set": {"stato_ricerca": "errore", "errore": err, "last_search_at": _now()}})
-            await db.cal_rv_jobs.update_one({"id": jid}, {"$inc": {"pos": 1, "errori": 1 if err else 0}, "$set": {"updated_at": _now(), **({"ultimo_errore": err} if err else {})}})
-            if err and "BRAVE_API_KEY" in err:
-                await db.cal_rv_jobs.update_one({"id": jid}, {"$set": {"status": "sospeso", "motivo": err}})
-                return
+            await db.cal_rv_jobs.update_one({"id": jid}, {"$inc": {"pos": 1, "errori": 1 if err else 0, "ok": 0 if err else 1},
+                                                        "$set": {"updated_at": _now(), **({"ultimo_errore": err} if err else {})}})
 
     def start(jid: str):
         state["task"] = asyncio.create_task(run_job(jid))
@@ -420,7 +422,7 @@ def build(db, deps: dict):
     async def search(body: SearchIn, admin: dict = Depends(sa)):
         if body.scope not in ("test", "gruppo", "tutti", "selezione"):
             raise HTTPException(status_code=400, detail="Ambito non valido")
-        test_done = await db.cal_rv_jobs.find_one({"kind": "test", "status": "completato"})
+        test_done = await db.cal_rv_jobs.find_one({"kind": "test", "status": "completato", "ok": {"$gt": 0}})
         if body.scope in ("gruppo", "tutti") and not test_done:
             raise HTTPException(status_code=400, detail="Esegui e controlla prima il test su 20 contatti")
         if body.scope == "selezione":
@@ -479,10 +481,10 @@ def build(db, deps: dict):
         jobs = await db.cal_rv_jobs.find({}, {"_id": 0, "queue": 0}).sort("created_at", -1).to_list(10)
         return {"liste": cfg.get("rv_lists") or [], "ultima_importazione": cfg.get("rv_last_import"), "settings": await rv_settings(),
                 "brave_configurato": bool(os.environ.get("BRAVE_API_KEY")),
-                "test_completato": bool(await db.cal_rv_jobs.find_one({"kind": "test", "status": "completato"})),
-                "kpi": {"totale_contatti": sum(by.values()), "analizzati": sum(v for k, v in by.items() if k not in ("da_analizzare", "in_corso")),
+                "test_completato": bool(await db.cal_rv_jobs.find_one({"kind": "test", "status": "completato", "ok": {"$gt": 0}})),
+                "kpi": {"totale_contatti": sum(by.values()), "analizzati": sum(v for k, v in by.items() if k not in ("da_analizzare", "in_corso", "errore")),
                         "organizzatori_identificati": await db.cal_rv_contacts.count_documents({"organizzatore_identificato": {"$nin": [None, ""]}}),
-                        "eventi_trovati": sum(fs.values()), "eventi_verificati": fs.get("verificato", 0) + fs.get("approvato", 0),
+                        "eventi_trovati": sum(v for k, v in fs.items() if k != "scartato"), "eventi_verificati": fs.get("verificato", 0) + fs.get("approvato", 0),
                         "eventi_da_verificare": fs.get("da_verificare", 0) + fs.get("data_da_confermare", 0),
                         "senza_eventi": by.get("nessun_evento", 0) + by.get("dati_insufficienti", 0), "errori": by.get("errore", 0)},
                 "per_stato": by, "jobs": jobs}
@@ -517,6 +519,8 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="Per approvare serve la data di inizio")
         if fix.get("data_inizio"):
             fix["anno"] = int(fix["data_inizio"][:4])
+            if not fix.get("data_fine") and not f.get("data_fine"):
+                fix["data_fine"] = fix["data_inizio"]
         if not f.get("organizer_id") and f.get("organizzatore"):
             fix["organizer_id"] = await org_by_name(f["organizzatore"], {"email": f["email"], "_source": "ricerca_brevo"}, admin.get("email"))
         await db.cal_rv_findings.update_one({"id": fid}, {"$set": {**fix, "stato": "approvato", "revisionato_da": admin.get("email"), "revisionato_il": _now()}})
