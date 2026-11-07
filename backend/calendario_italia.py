@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 import cal_brevo
 import cal_feeds
+import cal_reverse
 from iscritti import _norm, read_rows
 
 DISCIPLINE = {"running": ["10 km", "Mezza maratona", "Maratona", "Altro"], "trail": ["Trail", "Ultra trail", "Skyrunning"],
@@ -32,6 +33,7 @@ SOURCES = [
     ("wedosport", "Wedosport", "trail", "https://www.wedosport.net"), ("runningaround", "Running Around", "trail", "https://www.runningaround.it"),
     ("fitri", "FITRI", "triathlon", "https://www.fitri.it"), ("myfitri", "MyFITRI", "triathlon", "https://www.myfitri.it"),
     ("ironman", "Ironman (calendario ufficiale)", "triathlon", "https://www.ironman.com/races"), ("manuale", "Importazione manuale", "*", ""),
+    ("ricerca_brevo", "Ricerca da contatti Brevo", "*", ""),
 ]
 EVENT_FIELDS = ["nome", "disciplina", "specialita", "distanza", "edizione", "anno", "data_inizio", "data_fine", "regione", "provincia", "comune",
                 "indirizzo", "lat", "lng", "sito_web", "pagina_iscrizioni", "email", "telefono", "partecipanti", "note", "organizzatore"]
@@ -216,6 +218,7 @@ def build(db, deps: dict):
         await db.cal_organizers.create_index("nome_key")
         await db.cal_duplicates.create_index([("a", 1), ("b", 1)], unique=True)
         await db.cal_history.create_index([("entity_id", 1), ("at", -1)])
+        await rv["ensure"]()
         # Fase 4: invio automatico attivo di default (una sola volta, poi decide il Super Admin)
         await db.cal_settings.update_one({"id": "main", "auto_default_applied": {"$ne": True}},
                                          {"$set": {"modalita_invio": "automatica", "auto_default_applied": True}})
@@ -643,7 +646,7 @@ def build(db, deps: dict):
                         "verifica": s.get("verifica") or {**base, "verificata_il": cal_feeds.VERIFICATA_IL, "verificata_da": "Verifica iniziale Fase 2"}})
         out += [{**s, "custom": True} for s in st.values() if s.get("custom")]
         for s in out:
-            if s["id"] == "manuale":
+            if s["id"] in ("manuale", "ricerca_brevo"):
                 s["stato"] = "attiva"
             elif s["verifica"].get("esito") != "consentita":
                 s["stato"] = "non_disponibile"
@@ -815,4 +818,6 @@ def build(db, deps: dict):
 
     br = cal_brevo.build(db, {"sa": sa, "audit": audit, "settings": settings, "comm_date": comm_date, "history": history, "app_url": deps.get("app_url")})
     r.include_router(br["router"])
-    return {"router": r, "public_router": br["public_router"], "ensure_indexes": ensure_indexes, "upsert_event": upsert_event, "cron_tick": cron_tick, "auto_send_tick": br["auto_tick"]}
+    rv = cal_reverse.build(db, {"sa": sa, "audit": audit, "upsert_event": upsert_event, "clean_event": clean_event, "org_by_name": org_by_name, "history": history})
+    r.include_router(rv["router"])
+    return {"router": r, "public_router": br["public_router"], "ensure_indexes": ensure_indexes, "upsert_event": upsert_event, "cron_tick": cron_tick, "auto_send_tick": br["auto_tick"], "rv_nightly": rv["nightly"]}

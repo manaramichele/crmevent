@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { calApi, err, fmtD, Pill, SEL } from "./shared";
 import { ConnDialog, NewSourceDialog, VerificaDialog } from "./SourceDialogs";
 
+const FIXED = ["manuale", "ricerca_brevo"];
 const ECOL = { consentita: "#16A34A", non_consentita: "#DC2626", da_verificare: "#D97706" };
 const ELBL = { consentita: "Consentita", non_consentita: "Non consentita", da_verificare: "Da verificare" };
 const fmtDT = (s) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
@@ -51,7 +52,7 @@ export function DuplicatesPanel() {
 function SourceRow({ s, onVerifica, onConn, onSync, onDelete }) {
   const [open, setOpen] = useState(false);
   const v = s.verifica || {};
-  const ok = v.esito === "consentita" && s.id !== "manuale";
+  const ok = v.esito === "consentita" && !FIXED.includes(s.id);
   return (
     <>
       <tr className="border-t border-slate-100 align-top" data-testid={`cal-source-${s.id}`}>
@@ -61,7 +62,7 @@ function SourceRow({ s, onVerifica, onConn, onSync, onDelete }) {
         <td className="px-3 py-2"><Pill color={SCOL[s.stato]} testid={`cal-source-stato-${s.id}`}>{SLBL[s.stato]}</Pill>{s.ultimo_errore && s.stato === "errore" && <div className="text-[11px] text-red-600 mt-1 max-w-[220px]">{s.ultimo_errore}</div>}</td>
         <td className="px-3 py-2">{s.eventi}</td>
         <td className="px-3 py-2 text-xs">{fmtDT(s.ultima_sync)}</td>
-        <td className="px-3 py-2">{s.id !== "manuale" && <div className="flex flex-wrap gap-1">
+        <td className="px-3 py-2">{!FIXED.includes(s.id) && <div className="flex flex-wrap gap-1">
           <Button size="sm" variant="outline" onClick={() => onVerifica(s)} data-testid={`cal-source-verifica-${s.id}`}>Registra verifica</Button>
           {ok && <Button size="sm" variant="outline" onClick={() => onConn(s)} data-testid={`cal-source-conn-${s.id}`}>Collegamento</Button>}
           {ok && s.attiva && s.feed_url && <Button size="sm" onClick={() => onSync(s)} disabled={s.stato === "in_aggiornamento"} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid={`cal-source-sync-${s.id}`}>Sincronizza ora</Button>}
@@ -89,7 +90,7 @@ export function SourcesPanel() {
   const del = async (s) => { if (!window.confirm(`Eliminare la fonte "${s.nome}"? Gli eventi già importati restano nel calendario.`)) return; try { await api.delete(calApi(`/sources/${s.id}`)); toast.success("Fonte eliminata"); load(); } catch (e) { err(e); } };
   if (!d) return <p className="text-sm text-slate-500">Caricamento...</p>;
   const names = Object.fromEntries(d.sources.map((s) => [s.id, s.nome]));
-  const active = d.sources.filter((s) => s.id !== "manuale" && ["attiva", "errore", "in_aggiornamento"].includes(s.stato)).length;
+  const active = d.sources.filter((s) => !FIXED.includes(s.id) && ["attiva", "errore", "in_aggiornamento"].includes(s.stato)).length;
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800" data-testid="cal-sources-note">Verifica accesso completata: nessuna delle fonti indicate (FIDAL, RaceUp, Wedosport, Running Around, FITRI, MyFITRI, Ironman) offre un'API, un feed o un'autorizzazione al riutilizzo automatico, quindi restano <b>scollegate</b> e si alimentano con l'importazione Excel/CSV. Una fonte si collega solo dopo aver registrato una verifica "Consentita" con la prova (accordo, licenza, API ufficiale).</div>

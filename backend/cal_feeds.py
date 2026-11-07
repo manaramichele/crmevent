@@ -46,6 +46,8 @@ VERIFICHE = {
         "robots.txt dichiara 'use=reference' e blocca diversi agenti automatici; nessuna API pubblica del calendario gare."],
         "come_sbloccare": "Richiedere a IRONMAN un'autorizzazione o un feed partner."},
     "manuale": {"esito": "consentita", "metodo": "Importazione Excel/CSV da parte del Super Admin", "evidenze": [], "come_sbloccare": None},
+    "ricerca_brevo": {"esito": "consentita", "metodo": "Ricerca web tramite API autorizzata (Brave Search) e lettura di pagine pubbliche nel rispetto di robots.txt",
+                      "evidenze": ["Gli eventi entrano in calendario solo se l'estratto con la data è presente nel testo della pagina letta."], "come_sbloccare": None},
 }
 FORMATI = ["csv", "xlsx", "json", "ics"]
 MAX_BYTES = 20 * 1024 * 1024

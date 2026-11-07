@@ -10,8 +10,9 @@ import { OrganizersPanel } from "@/components/calendario/OrganizersPanel";
 import { SourcesPanel, SettingsPanel } from "@/components/calendario/SourcesPanel";
 import { CampaignsPanel, BrevoSenderSettings } from "@/components/calendario/CampaignsPanel";
 import { CommsPanel } from "@/components/calendario/CommsPanel";
+import { ReversePanel } from "@/components/calendario/ReversePanel";
 
-const TABS = [["dashboard", "Dashboard"], ["calendario", "Calendario nazionale"], ["organizzatori", "Organizzatori"], ["fonti", "Fonti e sincronizzazioni"],
+const TABS = [["dashboard", "Dashboard"], ["calendario", "Calendario nazionale"], ["organizzatori", "Organizzatori"], ["fonti", "Fonti e sincronizzazioni"], ["ricerca", "Ricerca da Brevo"],
   ["campagne", "Campagne Brevo"], ["storico", "Storico comunicazioni"], ["impostazioni", "Impostazioni"]];
 
 
@@ -31,6 +32,7 @@ export default function CalendarioItalia() {
           <TabsContent value="calendario"><EventsPanel meta={meta} /></TabsContent>
           <TabsContent value="organizzatori"><OrganizersPanel /></TabsContent>
           <TabsContent value="fonti"><SourcesPanel /></TabsContent>
+          <TabsContent value="ricerca"><ReversePanel /></TabsContent>
           <TabsContent value="campagne"><CampaignsPanel meta={meta} /></TabsContent>
           <TabsContent value="storico"><CommsPanel /></TabsContent>
           <TabsContent value="impostazioni"><div className="space-y-4"><SettingsPanel meta={meta} onSaved={loadMeta} /><BrevoSenderSettings /></div></TabsContent>
