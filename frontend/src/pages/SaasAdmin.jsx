@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Save, Pencil, Search } from "lucide-react";
 import SubscriptionEditDialog from "@/components/SubscriptionEditDialog";
 import { FormulaBadge, BILLING } from "@/components/PlanBadge";
+import { InvoiceCell, orgFicState } from "@/components/saas/InvoiceCell";
 
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
 const MODE = { trial: "Prova gratuita", active: "Attivo", past_due: "Pagamento in sospeso", canceled: "Scaduto", expired: "Scaduto", suspended: "Sospeso" };
@@ -65,7 +66,7 @@ function ConfigTab() {
 const TYPE = { cliente: "Cliente", interna: "Interna", internal: "Interna", test: "Test" };
 const formulaOf = (r) => (r.mode === "trial" ? (r.purchased ? r.paid_plan : null) : r.plan || r.assigned_plan || r.admin?.plan || r.paid_plan || null);
 
-function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt }) {
+function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt, fi, setFi }) {
   const s = "h-9 rounded-md border border-slate-200 bg-white px-2 text-sm";
   return (
     <div className="flex flex-wrap gap-2 mb-3" data-testid="saas-filters">
@@ -75,6 +76,7 @@ function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt }) {
       <select value={fp} onChange={(e) => setFp(e.target.value)} className={s} data-testid="saas-filter-plan"><option value="">Tutte le formule</option><option value="none">Nessuna formula</option><option value="bronze">BRONZE</option><option value="silver">SILVER</option><option value="gold">GOLD</option></select>
       <select value={fs} onChange={(e) => setFs(e.target.value)} className={s} data-testid="saas-filter-status"><option value="">Tutti gli stati</option><option value="trial">Prova gratuita</option><option value="active">Attivo</option><option value="expired">Scaduto</option><option value="suspended">Sospeso</option></select>
       <select value={fe} onChange={(e) => setFe(e.target.value)} className={s} data-testid="saas-filter-expiry"><option value="">Qualsiasi scadenza</option><option value="7">Entro 7 giorni</option><option value="30">Entro 30 giorni</option><option value="past">Già scaduti</option></select>
+      <select value={fi} onChange={(e) => setFi(e.target.value)} className={s} data-testid="saas-filter-invoice"><option value="">Tutte</option><option value="da_fatturare">Da fatturare</option><option value="creata">Fattura creata</option><option value="errore">Errore fatturazione</option></select>
     </div>
   );
 }
@@ -84,21 +86,22 @@ const stOf = (r) => (r.mode === "canceled" ? "expired" : r.mode === "past_due" ?
 function OrgsTab() {
   const [rows, setRows] = useState(null);
   const [edit, setEdit] = useState(null);
-  const [q, setQ] = useState(""); const [fp, setFp] = useState(""); const [fs, setFs] = useState(""); const [fe, setFe] = useState(""); const [ft, setFt] = useState("");
+  const [q, setQ] = useState(""); const [fp, setFp] = useState(""); const [fs, setFs] = useState(""); const [fe, setFe] = useState(""); const [ft, setFt] = useState(""); const [fi, setFi] = useState("");
   const load = useCallback(() => api.get("/platform/saas/organizations").then(({ data }) => setRows(data)).catch(err), []);
   useEffect(() => { load(); }, [load]);
   const post = async (url, body, msg) => { try { await api.post(url, body); toast.success(msg); load(); } catch (e) { err(e); } };
   if (!rows) return <p className="text-sm text-slate-400">Caricamento...</p>;
   const now = Date.now();
-  const shown = rows.filter((r) => (!q || (r.nome || "").toLowerCase().includes(q.toLowerCase())) && (!ft || (TYPE[r.type] || "").toLowerCase() === ft) && (!fp || (formulaOf(r) || "none") === fp)
+  const ficOk = (r) => !fi || (r.fatture || []).some((f) => (fi === "errore" ? ["errore", "dati_mancanti"].includes(f.state) : f.state === fi));
+  const shown = rows.filter((r) => ficOk(r) && (!q || (r.nome || "").toLowerCase().includes(q.toLowerCase())) && (!ft || (TYPE[r.type] || "").toLowerCase() === ft) && (!fp || (formulaOf(r) || "none") === fp)
     && (!fs || stOf(r) === fs) && (!fe || (() => { const e = endOf(r); if (!e) return false; const dd = (new Date(e) - now) / 864e5; return fe === "past" ? dd < 0 : dd >= 0 && dd <= Number(fe); })()));
   return (
     <>
-    <OrgsFilters {...{ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt }} />
+    <OrgsFilters {...{ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt, fi, setFi }} />
     {edit && <SubscriptionEditDialog row={edit} onClose={() => setEdit(null)} onSaved={load} />}
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="saas-orgs-table">
-      <table className="w-full min-w-[1100px] text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Tipo", "Formula", "Stato", "Condizione", "Periodicità", "Importo", "Pagamento", "Data inizio", "Data scadenza", "Prossimo rinnovo", "Staff e Volontari", "Eventi", "Pagamenti", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+      <table className="w-full min-w-[1220px] text-sm">
+        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Organizzazione", "Tipo", "Formula", "Stato", "Condizione", "Periodicità", "Importo", "Pagamento", "Data inizio", "Data scadenza", "Prossimo rinnovo", "Staff e Volontari", "Eventi", "Pagamenti", "Fattura", "Videochiamate", "Azioni"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
         <tbody>{shown.map((r) => (
           <tr key={r.id} className="border-t border-slate-100" data-testid={`saas-org-${r.id}`}>
             <td className="px-3 py-2 font-medium">{r.nome}{r.admin?.comp ? <span className="ml-1 text-[10px] rounded bg-emerald-50 text-emerald-700 px-1">Omaggio</span> : null}</td>
@@ -116,6 +119,7 @@ function OrgsTab() {
             <td className="px-3 py-2"><span data-testid={`saas-users-${r.id}`}>{r.people_count ?? "—"} / {r.limits?.max_users > 0 ? r.limits.max_users : "∞"}</span></td>
             <td className="px-3 py-2"><span data-testid={`saas-events-${r.id}`} title="Eventi creati (inclusi eliminati)">{r.events_count ?? "—"} / {r.limits?.max_events > 0 ? r.limits.max_events : "∞"}</span></td>
             <td className="px-3 py-2">{r.payments_count ?? "—"}{r.payments_total ? ` · €${r.payments_total}` : ""}</td>
+            <td className="px-3 py-2" data-testid={`saas-fic-cell-${r.id}`} data-state={orgFicState(r)}><InvoiceCell r={r} onChanged={load} /></td>
             <td className="px-3 py-2">{r.model !== "abbonamento" ? "—" : r.video_unlimited ? `${r.video_used ?? 0} · illimitate` : r.video_quota ? `${r.video_used ?? 0}/${r.video_quota}` : "Email"}</td>
             <td className="px-3 py-2 whitespace-nowrap space-x-1">
               {r.model === "abbonamento" && <Button size="sm" variant="outline" onClick={() => setEdit(r)} data-testid={`saas-edit-${r.id}`}><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>}

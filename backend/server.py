@@ -7304,67 +7304,222 @@ async def _fic_vat_forfettario(company_id: str, token: str) -> Optional[int]:
     return None
 
 
-async def _emit_saas_invoice(inv_id: str):
-    """Fattura reale abbonamento (FIC LIVE): forfettario N2.2, sezionale dedicato, invio SDI. Idempotente con tentativi."""
-    inv = await db.invoices.find_one({"id": inv_id, "kind": {"$in": ["saas_subscription", "marketplace"]}}, {"_id": 0})
-    if not inv or inv.get("is_test") or inv.get("payment_status") != "paid" or FIC_MODE != "live" or inv.get("fic_auto") is False:
-        return
-    if inv.get("fic_stato_sdi") == "inviato":
-        return
-    lock = await db.invoices.update_one({"id": inv_id, "fic_lock": {"$ne": True}}, {"$set": {"fic_lock": True}})
+FIC_DRAFT_KINDS = ["saas_subscription", "marketplace"]
+CYCLE_IT = {"monthly": "mensile", "yearly": "annuale", "semester": "semestrale"}
+
+
+def fic_invoice_state(inv: dict) -> str:
+    """Stato fatturazione di un pagamento: creata | da_fatturare | dati_mancanti | errore | non_disponibile."""
+    if inv.get("fic_document_id"):
+        return "creata"
+    if inv.get("is_test") or inv.get("payment_status") != "paid" or float(inv.get("totale") or 0) <= 0:
+        return "non_disponibile"
+    if inv.get("fic_missing"):
+        return "dati_mancanti"
+    if inv.get("fic_error"):
+        return "errore"
+    return "da_fatturare"
+
+
+class FicError(Exception):
+    pass
+
+
+def _stripe_payment_ref(si) -> tuple:
+    """(payment_intent_id, charge_id) dell'invoice Stripe, compatibile con API vecchie (payment_intent) e nuove (invoice payments)."""
+    pi = si.get("payment_intent")
+    pi = pi.get("id") if isinstance(pi, dict) else pi
+    ch = si.get("charge")
+    ch = ch.get("id") if isinstance(ch, dict) else ch
+    if not pi and not ch:
+        try:
+            for p in stripe_sdk.InvoicePayment.list(invoice=si["id"], limit=5).data:
+                pay = p.get("payment") or {}
+                if p.get("status") == "paid" and (pay.get("payment_intent") or pay.get("charge")):
+                    pi, ch = pay.get("payment_intent"), pay.get("charge")
+                    break
+        except Exception as e:  # noqa: BLE001
+            logger.warning("stripe invoice payments %s: %s", si.get("id"), e)
+    return pi, ch
+
+
+async def _stripe_verify_payment(inv: dict) -> dict:
+    """Verifica su Stripe (fonte certa) che il pagamento sia riuscito; lo stato 'Attivo' dell'abbonamento non basta."""
+    if not inv.get("stripe_invoice_id"):
+        raise FicError("Nessuna transazione Stripe associata")
+    try:
+        si = stripe_sdk.Invoice.retrieve(inv["stripe_invoice_id"])
+    except stripe_sdk.error.InvalidRequestError:
+        raise FicError(f"Transazione Stripe {inv['stripe_invoice_id']} non trovata (modalità {STRIPE_MODE.upper()})")
+    except stripe_sdk.error.StripeError as e:
+        raise FicError(f"Stripe non raggiungibile: {str(e)[:120]}")
+    if si.get("status") != "paid" or int(si.get("amount_paid") or 0) <= 0:
+        raise FicError(f"Pagamento non confermato da Stripe (stato {si.get('status')}, pagato {int(si.get('amount_paid') or 0) / 100:.2f})")
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0, "subscription.stripe_customer_id": 1}) or {}
+    if si.get("customer") != (org.get("subscription") or {}).get("stripe_customer_id"):
+        raise FicError("Il cliente Stripe del pagamento non corrisponde all'organizzazione")
+    pi, ch = _stripe_payment_ref(si)
+    if pi:
+        p = stripe_sdk.PaymentIntent.retrieve(pi)
+        if p.get("status") != "succeeded":
+            raise FicError(f"Transazione Stripe {pi} non riuscita (stato {p.get('status')})")
+    elif ch:
+        c = stripe_sdk.Charge.retrieve(ch)
+        if not c.get("paid") or c.get("status") != "succeeded":
+            raise FicError(f"Addebito Stripe {ch} non riuscito")
+    else:
+        raise FicError("Transazione Stripe non trovata per questo pagamento")
+    paid_ts = ((si.get("status_transitions") or {}).get("paid_at")) or si.get("created")
+    disc = sum(int(x.get("amount") or 0) for x in (si.get("total_discount_amounts") or []))
+    return {"invoice_id": si["id"], "payment_ref": pi or ch, "amount": round(int(si["amount_paid"]) / 100, 2),
+            "currency": (si.get("currency") or "eur").upper(), "discount": round(disc / 100, 2),
+            "paid_at": datetime.fromtimestamp(paid_ts, timezone.utc).isoformat() if paid_ts else None, "verified_at": now_iso()}
+
+
+def _fic_line(inv: dict, sv: dict) -> tuple:
+    if inv.get("kind") == "saas_subscription" and inv.get("saas_plan"):
+        cyc = CYCLE_IT.get(inv.get("saas_cycle"))
+        name = f"Abbonamento CRMEvent — {str(inv['saas_plan']).upper()}{f' ({cyc})' if cyc else ''}"
+    else:
+        name = inv.get("descrizione") or "Servizio CRMEvent"
+    fd = lambda s: datetime.fromisoformat(s).strftime("%d/%m/%Y")  # noqa: E731
+    parts = []
+    if inv.get("periodo_inizio") and inv.get("periodo_fine"):
+        parts.append(f"Periodo di riferimento: {fd(inv['periodo_inizio'])} – {fd(inv['periodo_fine'])}")
+    parts.append(f"Pagamento Stripe {sv['payment_ref']} del {fd(sv['paid_at'])}" if sv.get("paid_at") else f"Pagamento Stripe {sv['payment_ref']}")
+    if sv.get("discount"):
+        parts.append(f"Sconto applicato: {sv['discount']:.2f} {sv['currency']}".replace(".", ","))
+    parts.append("Metodo di pagamento: Stripe")
+    return name, "\n".join(parts)
+
+
+async def _fic_find_existing(cid: str, token: str, subject: str) -> Optional[dict]:
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get(f"{FIC_BASE}/c/{cid}/issued_documents", headers={"Authorization": f"Bearer {token}"},
+                        params={"type": "invoice", "q": f"subject = '{subject}'", "fieldset": "basic", "per_page": 5})
+    if r.status_code >= 400:
+        raise FicError(f"verifica documenti esistenti: {r.text[:200]}")
+    return next(iter(r.json().get("data") or []), None)
+
+
+async def _emit_saas_invoice(inv_id: str, manual: bool = False) -> dict:
+    """Fattura in BOZZA su Fatture in Cloud per un pagamento Stripe verificato. MAI invio SDI (manuale dal pannello FIC).
+    Idempotente: un solo documento per pagamento (lock, ID pagamento Stripe, ricerca su FIC prima di ogni nuovo tentativo)."""
+    inv = await db.invoices.find_one({"id": inv_id, "kind": {"$in": FIC_DRAFT_KINDS}}, {"_id": 0})
+    if not inv:
+        return {"state": "non_disponibile", "error": "Pagamento non trovato"}
+    if inv.get("fic_document_id") or inv.get("is_test") or inv.get("payment_status") != "paid":
+        return {"state": fic_invoice_state(inv)}
+    if not manual and (FIC_MODE != "live" or inv.get("fic_auto") is False):
+        return {"state": fic_invoice_state(inv)}
+    stale = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    lock = await db.invoices.update_one({"id": inv_id, "fic_document_id": None, "$or": [{"fic_lock": {"$ne": True}}, {"fic_lock_at": {"$lt": stale}}]},
+                                        {"$set": {"fic_lock": True, "fic_lock_at": now_iso()}})
     if not lock.modified_count:
-        return
+        return {"state": "in_corso", "error": "Generazione già in corso"}
     base = {"fic_attempts": int(inv.get("fic_attempts") or 0) + 1, "fic_last_attempt_at": now_iso(), "fic_mode": FIC_MODE, "updated_at": now_iso()}
     try:
+        sv = await _stripe_verify_payment(inv)
+        dup = await db.invoices.find_one({"stripe_verified.payment_ref": sv["payment_ref"], "fic_document_id": {"$ne": None}, "id": {"$ne": inv_id}}, {"_id": 0, "id": 1})
+        if dup:
+            raise FicError(f"Il pagamento {sv['payment_ref']} risulta già fatturato")
+        await db.invoices.update_one({"id": inv_id}, {"$set": {"stripe_verified": sv}})
+        org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0}) or {}
+        missing = _billing_missing(org.get("billing") or {})
+        if missing:
+            await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_missing": missing, "fic_error": "Dati di fatturazione mancanti: " + ", ".join(missing)}})
+            return {"state": "dati_mancanti", "missing": missing}
         if not fic_configured() or not await db.fic_settings.find_one({"provider": "fic"}):
-            raise RuntimeError("Fatture in Cloud non connesso (OAuth mancante)")
+            raise FicError("Fatture in Cloud non connesso (OAuth mancante)")
         token, cid = await _fic_token(), await _fic_company_id()
-        doc_id = inv.get("fic_document_id")
-        if not doc_id:
-            org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+        subject = f"CRMEvent {sv['payment_ref']}"
+        d = await _fic_find_existing(cid, token, subject)
+        if not d:
             vat_id = await _fic_vat_forfettario(cid, token)
             if vat_id is None:
-                raise RuntimeError("Aliquota 0% natura N2.2 non trovata su Fatture in Cloud (imposta FIC_VAT_ID_FORFETTARIO)")
-            tot = float(inv.get("totale") or 0)
-            today = datetime.now(timezone.utc).date().isoformat()
-            pay = {"amount": tot, "due_date": today, "paid_date": today, "status": "paid"}
+                raise FicError("Aliquota 0% natura N2.2 non trovata su Fatture in Cloud (imposta FIC_VAT_ID_FORFETTARIO)")
+            name, desc = _fic_line(inv, sv)
+            paid_day = (sv.get("paid_at") or now_iso())[:10]
+            pay = {"amount": sv["amount"], "due_date": paid_day, "paid_date": paid_day, "status": "paid"}
             if FIC_PAYMENT_ACCOUNT_ID.isdigit():
                 pay["payment_account"] = {"id": int(FIC_PAYMENT_ACCOUNT_ID)}
-            data = {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org or {}),
-                    "items_list": [{"name": _invoice_line_name(inv, org or {}), "qty": 1, "net_price": tot, "vat": {"id": vat_id}, **FIC_NO_WITHHOLDING_ITEM}],
-                    "currency": {"id": "EUR"}, "language": {"code": "it"}, "notes": FIC_FORFETTARIO_NOTE,
+            data = {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org), "subject": subject,
+                    "items_list": [{"name": name, "description": desc, "qty": 1, "net_price": sv["amount"], "vat": {"id": vat_id}, **FIC_NO_WITHHOLDING_ITEM}],
+                    "currency": {"id": sv["currency"]}, "language": {"code": "it"}, "notes": FIC_FORFETTARIO_NOTE,
                     "ei_data": {"payment_method": FIC_EI_PAYMENT_METHOD}, "payment_method": {"name": FIC_PAYMENT_METHOD_NAME},
                     "payments_list": [pay], **FIC_NO_WITHHOLDING_DOC}
             if FIC_SAAS_NUMERATION:
                 data["numeration"] = FIC_SAAS_NUMERATION
+            await db.invoices.update_one({"id": inv_id}, {"$set": {"fic_create_started_at": now_iso(), "fic_subject": subject}})
             async with httpx.AsyncClient(timeout=30) as c:
                 r = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents", headers={"Authorization": f"Bearer {token}"}, json={"data": data})
             if r.status_code >= 400:
-                raise RuntimeError(f"creazione documento: {r.text[:300]}")
+                raise FicError(f"creazione documento: {r.text[:300]}")
             d = r.json().get("data", {})
-            doc_id = d.get("id")
-            await db.invoices.update_one({"id": inv_id}, {"$set": {"fic_document_id": doc_id, "fic_numero": d.get("number"),
-                                                                  "fic_data": d.get("date"), "fic_pdf_url": d.get("url"), "fic_stato_documento": "emessa"}})
-        async with httpx.AsyncClient(timeout=30) as c:
-            sr = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents/{doc_id}/e_invoice/send",
-                              headers={"Authorization": f"Bearer {token}"}, json={"data": {}})
-        if sr.status_code >= 400:
-            raise RuntimeError(f"invio SDI: {sr.text[:300]}")
-        await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_stato_sdi": "inviato", "fic_error": None}})
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_document_id": d.get("id"), "fic_numero": d.get("number"),
+                                                              "fic_data": d.get("date"), "fic_pdf_url": d.get("url"), "fic_stato_documento": "bozza",
+                                                              "fic_stato_sdi": "non_inviato", "fic_error": None, "fic_missing": None, "fic_created_at": now_iso()}})
+        return {"state": "creata", "numero": d.get("number"), "document_id": d.get("id")}
     except Exception as e:  # noqa: BLE001
-        logger.error(f"FIC abbonamento {inv_id}: {e}")
-        await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_stato_documento": "errore_emissione" if not inv.get("fic_document_id") else "emessa",
-                                                              "fic_error": str(e)[:500]}})
+        msg = str(e)[:500]
+        logger.error(f"FIC pagamento {inv_id}: {msg}")
+        await db.invoices.update_one({"id": inv_id}, {"$set": {**base, "fic_stato_documento": "errore_emissione", "fic_error": msg}})
+        return {"state": "errore", "error": msg}
     finally:
         await db.invoices.update_one({"id": inv_id}, {"$set": {"fic_lock": False}})
 
 
 async def _retry_saas_invoices() -> int:
-    rows = await db.invoices.find({"kind": "saas_subscription", "is_test": {"$ne": True}, "payment_status": "paid",
-                                   "fic_stato_sdi": {"$ne": "inviato"}, "fic_attempts": {"$not": {"$gte": 6}}}, {"_id": 0, "id": 1}).to_list(200)
+    if FIC_MODE != "live":
+        return 0
+    rows = await db.invoices.find({"kind": {"$in": FIC_DRAFT_KINDS}, "is_test": {"$ne": True}, "payment_status": "paid", "fic_document_id": None,
+                                   "fic_missing": {"$in": [None, []]}, "fic_attempts": {"$not": {"$gte": 6}}}, {"_id": 0, "id": 1}).to_list(200)
     for r in rows:
         await _emit_saas_invoice(r["id"])
     return len(rows)
+
+
+class FicBillingIn(BillingDetails):
+    pass
+
+
+@api.get("/platform/invoices/{invoice_id}/fic")
+async def platform_invoice_fic(invoice_id: str, admin: dict = Depends(require_superadmin)):
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0, "fic_payload_preview": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Pagamento non trovato")
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0, "nome": 1, "billing": 1}) or {}
+    return {"invoice": {**inv, "fic_state": fic_invoice_state(inv)}, "org_nome": org.get("nome"), "billing": org.get("billing") or {},
+            "missing": _billing_missing(org.get("billing") or {}), "fic_connected": bool(fic_configured() and await db.fic_settings.find_one({"provider": "fic"}))}
+
+
+@api.put("/platform/invoices/{invoice_id}/billing")
+async def platform_invoice_billing(invoice_id: str, body: FicBillingIn, admin: dict = Depends(require_superadmin)):
+    """Il Super Admin completa i dati di fatturazione dell'organizzazione prima della generazione."""
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0, "org_id": 1})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Pagamento non trovato")
+    data = TN.normalize_fields("billing", body.model_dump())
+    await db.organizations.update_one({"id": inv["org_id"]}, {"$set": {"billing": data, "updated_at": now_iso()}})
+    missing = _billing_missing(data)
+    await db.invoices.update_many({"org_id": inv["org_id"], "fic_document_id": None}, {"$set": {"fic_missing": missing or None}})
+    await record_audit(admin, "billing_completed_by_superadmin", org_id=inv["org_id"], detail="Dati di fatturazione aggiornati per Fatture in Cloud")
+    return {"billing": data, "missing": missing}
+
+
+@api.post("/platform/invoices/{invoice_id}/fic-generate")
+async def platform_invoice_generate(invoice_id: str, admin: dict = Depends(require_superadmin)):
+    """Genera (o riprova) la fattura in bozza su FIC dopo verifica Stripe. Nessun invio SDI."""
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv or inv.get("kind") not in FIC_DRAFT_KINDS:
+        raise HTTPException(status_code=404, detail="Pagamento non trovato")
+    if inv.get("fic_document_id"):
+        raise HTTPException(status_code=400, detail="Fattura già creata per questo pagamento")
+    if fic_invoice_state(inv) == "non_disponibile":
+        raise HTTPException(status_code=400, detail="Nessun pagamento reale confermato da fatturare (gratuito, TEST o non pagato)")
+    res = await _emit_saas_invoice(invoice_id, manual=True)
+    await record_audit(admin, "fic_draft_generate", org_id=inv.get("org_id"), detail=f"{inv.get('stripe_invoice_id')} → {res.get('state')}{' · ' + str(res.get('numero')) if res.get('numero') else ''}")
+    return res
 
 
 async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
@@ -7408,17 +7563,9 @@ async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
     amounts = {"imponibile": d.get("amount_net"), "iva": d.get("amount_vat"), "totale": d.get("amount_gross")}
     validation = None
     doc_id = d.get("id")
-    if dry_run and doc_id:
-        try:
-            async with httpx.AsyncClient(timeout=30) as c:
-                vr = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents/{doc_id}/e_invoice/send",
-                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                                  json={"data": {}, "options": {"dry_run": True}})
-            validation = {"status": vr.status_code, "body": vr.json() if vr.content else None}
-        except Exception as e:
-            validation = {"error": str(e)[:200]}
+    # Nessuna chiamata e_invoice/send (nemmeno dry-run): l'invio SDI è esclusivamente manuale dal pannello FIC.
     upd = {"fic_document_id": doc_id, "fic_numero": d.get("number"), "fic_data": d.get("date"),
-           "fic_stato_documento": "creato_test", "fic_stato_sdi": "dry_run_validato" if dry_run else "non_inviato",
+           "fic_stato_documento": "creato_test", "fic_stato_sdi": "non_inviato",
            "fic_pdf_url": d.get("url") or d.get("pdf_url"),
            "imponibile": amounts["imponibile"] if amounts["imponibile"] is not None else inv.get("imponibile"),
            "iva": amounts["iva"] if amounts["iva"] is not None else inv.get("iva"),
@@ -13430,7 +13577,7 @@ async def event_checkout_confirmation(session_id: str, user: dict = Depends(requ
 SAAS.update(subscriptions.build(db, {
     "require_admin": require_admin, "require_org_admin": require_org_admin, "require_superadmin": require_superadmin,
     "record_audit": record_audit, "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
-    "record_invoice": _record_invoice, "emit_invoice": _emit_saas_invoice, "retry_invoices": _retry_saas_invoices,
+    "record_invoice": _record_invoice, "emit_invoice": _emit_saas_invoice, "retry_invoices": _retry_saas_invoices, "fic_state": fic_invoice_state,
     "stripe_mode": STRIPE_MODE, "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET,
     "on_paid": lambda o, inv: PARTNER["on_subscription_paid"](o, inv)}))
 BREVO_SUBS = brevo_subscriptions.build(db, {"state_for": SAAS["state_for"], "require_superadmin": require_superadmin, "record_audit": record_audit})
