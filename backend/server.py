@@ -42,6 +42,7 @@ import subscriptions
 import brevo_subscriptions
 import brevo_tracker
 import iscritti
+import calendario_italia
 import gcal_availability
 import privacy_consent
 import pipeline_seed_sports
@@ -13866,6 +13867,9 @@ ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_su
 press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
 app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
+CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit})
+app.include_router(CAL_ITALIA["router"])
+app.add_event_handler("startup", CAL_ITALIA["ensure_indexes"])
 app.include_router(PRESS["router"])
 app.add_event_handler("startup", PRESS["ensure_indexes"])
 
