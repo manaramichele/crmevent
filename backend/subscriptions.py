@@ -965,7 +965,9 @@ def build(db, deps: dict):
                             "users_count": await db.memberships.count_documents({"org_id": o["id"], "active": True}),
                             "events_count": await db.events.count_documents({"org_id": o["id"]})})
             if st["enabled"]:
-                pay = await db.invoices.find({"org_id": o["id"], "kind": "saas_subscription"}, {"_id": 0, "totale": 1, "payment_status": 1}).to_list(500)
+                pay = await db.invoices.find({"org_id": o["id"], "kind": {"$in": ["saas_subscription", "marketplace"]}},
+                                             {"_id": 0, "fic_payload_preview": 0, "dati_fiscali_cliente": 0}).sort("data", -1).to_list(500)
+                pay = [p for p in pay if p.get("payment_status") == "paid" or p.get("fic_document_id")]
                 vp = await video_policy(o["id"])
                 row.update({k: st.get(k) for k in ("mode", "plan", "plan_label", "paid_plan", "billing_cycle", "price_amount", "activated_at",
                                                    "current_period_end", "current_period_start", "trial_start", "trial_end", "days_left", "cancel_at_period_end",
@@ -977,6 +979,12 @@ def build(db, deps: dict):
                             "invoices_count": len(pay), "video_used": vp.get("used"), "video_quota": vp.get("quota"),
                             "video_unlimited": vp.get("unlimited"), "video_period": vp.get("period")})
             out.append(row)
+            if st["enabled"]:
+                row["fatture"] = [{"id": p["id"], "kind": p.get("kind"), "data": p.get("data"), "totale": p.get("totale"), "valuta": (p.get("valuta") or "eur").upper(),
+                                   "descrizione": p.get("descrizione"), "periodo_inizio": p.get("periodo_inizio"), "periodo_fine": p.get("periodo_fine"),
+                                   "stripe_invoice_id": p.get("stripe_invoice_id"), "is_test": bool(p.get("is_test")), "state": deps["fic_state"](p),
+                                   "numero": p.get("fic_numero"), "url": p.get("fic_pdf_url"), "error": p.get("fic_error"), "missing": p.get("fic_missing"),
+                                   "stato_sdi": p.get("fic_stato_sdi")} for p in pay]
         return out
 
     @r.post("/platform/saas/orgs/{org_id}/enable-trial")

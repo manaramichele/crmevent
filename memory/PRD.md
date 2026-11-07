@@ -765,3 +765,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 ## 2026-10-18 · Marketplace gratuito per Demo ufficiale (verificato via API + screenshot)
 - Contrassegno org `is_demo_official` (solo org type "test"; toggle in OrgDetail SA, badge "Demo ufficiale"; bootstrap una tantum su org "Demo"/test se unica — schema_meta demo_official_v1).
 - marketplace: gratuità decisa dall'org attiva (_is_demo_org), mai dal ruolo SA. Demo: prezzo di listino + "Gratuito per organizzazione Demo", "Attiva gratuitamente", nessuno Stripe/fattura, purchase source "demo", causale DEMO, price 0, list_price, nessuna scadenza. Nova Events (test senza flag), clienti e SA che impersona un cliente → Stripe.
+
+
+## 2026-11-07 · Fatturazione Stripe → Fatture in Cloud in BOZZA (test in-process con mock Stripe/FIC: 15/15)
+- _emit_saas_invoice riscritto: verifica Stripe (Invoice status paid + amount_paid, cliente = org, PaymentIntent/Charge succeeded; compatibile InvoicePayment API nuove), salva stripe_verified (importo, valuta, data, sconto, payment_ref).
+- Bozza FIC: subject "CRMEvent {payment_ref}", riga "Abbonamento CRMEvent — PLAN (ciclo)" + descrizione con periodo, pagamento Stripe, sconto, metodo Stripe; importo pagato; aliquota N2.2 dalle impostazioni FIC. RIMOSSO ogni e_invoice/send (anche dry-run in _fic_issue_document): invio SDI solo manuale.
+- Anti-duplicati: lock con scadenza 10 min, un documento per payment_ref, ricerca FIC per subject prima di ogni tentativo. Errore → stato errore; dati mancanti → dati_mancanti (SA completa via PUT /api/platform/invoices/{id}/billing).
+- Auto su webhook (solo FIC_MODE=live) + retry cron (saas + marketplace); manuale: POST /api/platform/invoices/{id}/fic-generate, GET /api/platform/invoices/{id}/fic.
+- UI: colonna "Fattura" + filtro (Tutte/Da fatturare/Fattura creata/Errore) in Abbonamenti › Stato abbonamenti, dialog per pagamento (components/saas/InvoiceCell.jsx).
+
