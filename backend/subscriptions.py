@@ -542,6 +542,14 @@ def build(db, deps: dict):
         if t in ("invoice.paid", "invoice.payment_succeeded", "invoice.payment_failed"):
             sid = _invoice_sub_id(obj)
             o = await db.organizations.find_one({"saas.stripe_subscription_id": sid}, {"_id": 0}) if sid else None
+            if not o and sid:
+                # la fattura può arrivare prima che checkout.session.completed salvi l'ID abbonamento: si usa il metadata Stripe
+                try:
+                    md = stripe_sdk.Subscription.retrieve(sid).get("metadata") or {}
+                except Exception:  # noqa: BLE001
+                    md = {}
+                if md.get("kind") == "saas" and md.get("org_id"):
+                    o = await db.organizations.find_one({"id": md["org_id"]}, {"_id": 0})
             if not o:
                 return False
             await record_payment(o, obj, "payment_failed" if t == "invoice.payment_failed" else "paid")
@@ -951,7 +959,7 @@ def build(db, deps: dict):
     @r.get("/platform/saas/organizations")
     async def admin_orgs(admin: dict = Depends(deps["require_superadmin"])):
         cfg = await get_config()
-        orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "type": 1, "saas": 1, "credits": 1, "created_at": 1}).sort("nome", 1).to_list(5000)
+        orgs = await db.organizations.find({}, {"_id": 0, "id": 1, "nome": 1, "type": 1, "saas": 1, "credits": 1, "created_at": 1, "billing": 1}).sort("nome", 1).to_list(5000)
         out = []
         for o in orgs:
             st = org_state(o, cfg)
@@ -964,10 +972,10 @@ def build(db, deps: dict):
                 row.update({"mode": None, "plan": None, "admin": ((o.get("saas") or {}).get("admin")), "expires_at": None, "limits": None,
                             "users_count": await db.memberships.count_documents({"org_id": o["id"], "active": True}),
                             "events_count": await db.events.count_documents({"org_id": o["id"]})})
+            pay = await db.invoices.find({"org_id": o["id"], "kind": {"$in": ["saas_subscription", "marketplace"]}},
+                                         {"_id": 0, "fic_payload_preview": 0, "dati_fiscali_cliente": 0}).sort("data", -1).to_list(500)
+            pay = [p for p in pay if p.get("payment_status") == "paid" or p.get("fic_document_id")]
             if st["enabled"]:
-                pay = await db.invoices.find({"org_id": o["id"], "kind": {"$in": ["saas_subscription", "marketplace"]}},
-                                             {"_id": 0, "fic_payload_preview": 0, "dati_fiscali_cliente": 0}).sort("data", -1).to_list(500)
-                pay = [p for p in pay if p.get("payment_status") == "paid" or p.get("fic_document_id")]
                 vp = await video_policy(o["id"])
                 row.update({k: st.get(k) for k in ("mode", "plan", "plan_label", "paid_plan", "billing_cycle", "price_amount", "activated_at",
                                                    "current_period_end", "current_period_start", "trial_start", "trial_end", "days_left", "cancel_at_period_end",
@@ -979,11 +987,16 @@ def build(db, deps: dict):
                             "invoices_count": len(pay), "video_used": vp.get("used"), "video_quota": vp.get("quota"),
                             "video_unlimited": vp.get("unlimited"), "video_period": vp.get("period")})
             out.append(row)
-            if st["enabled"]:
+            miss = deps["billing_missing"](o.get("billing") or {})
+
+            def _st(p):
+                s = deps["fic_state"](p)
+                return "dati_mancanti" if miss and s in ("da_fatturare", "errore") else s
+            if pay:
                 row["fatture"] = [{"id": p["id"], "kind": p.get("kind"), "data": p.get("data"), "totale": p.get("totale"), "valuta": (p.get("valuta") or "eur").upper(),
                                    "descrizione": p.get("descrizione"), "periodo_inizio": p.get("periodo_inizio"), "periodo_fine": p.get("periodo_fine"),
-                                   "stripe_invoice_id": p.get("stripe_invoice_id"), "is_test": bool(p.get("is_test")), "state": deps["fic_state"](p),
-                                   "numero": p.get("fic_numero"), "url": p.get("fic_pdf_url"), "error": p.get("fic_error"), "missing": p.get("fic_missing"),
+                                   "stripe_invoice_id": p.get("stripe_invoice_id"), "is_test": bool(p.get("is_test")), "state": _st(p),
+                                   "numero": p.get("fic_numero"), "url": p.get("fic_pdf_url"), "error": p.get("fic_error"), "missing": (miss or None) if _st(p) == "dati_mancanti" else p.get("fic_missing"),
                                    "stato_sdi": p.get("fic_stato_sdi")} for p in pay]
         return out
 
