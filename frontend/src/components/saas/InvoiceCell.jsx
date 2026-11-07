@@ -46,7 +46,14 @@ function BillingForm({ f, onSaved }) {
 
 function PaymentRow({ f, onChanged }) {
   const [busy, setBusy] = useState(false);
+  const [pv, setPv] = useState(null);
+  const preview = async () => {
+    setBusy(true);
+    try { const { data } = await api.post(`/platform/invoices/${f.id}/fic-preview`); setPv(data); } catch (e) { err(e); }
+    setBusy(false);
+  };
   const gen = async () => {
+    if (!window.confirm(`Creare ora la fattura in BOZZA su Fatture in Cloud per ${eur(f.totale, f.valuta)}? Nessun invio allo SDI.`)) return;
     setBusy(true);
     try {
       const { data } = await api.post(`/platform/invoices/${f.id}/fic-generate`);
@@ -69,12 +76,26 @@ function PaymentRow({ f, onChanged }) {
           {f.numero && <span className="text-xs font-semibold" data-testid={`fic-numero-${f.id}`}>n. {f.numero}</span>}
           {f.state === "creata" && f.url && <a href={f.url} target="_blank" rel="noopener noreferrer" data-testid={`fic-view-${f.id}`}><Button size="sm" variant="outline"><ExternalLink className="w-3.5 h-3.5 mr-1" />Visualizza fattura</Button></a>}
           {["da_fatturare", "errore", "dati_mancanti"].includes(f.state) && (
+            <Button size="sm" variant="outline" disabled={busy} onClick={preview} data-testid={`fic-preview-${f.id}`}>Verifica</Button>
+          )}
+          {["da_fatturare", "errore", "dati_mancanti"].includes(f.state) && (
             <Button size="sm" disabled={busy} onClick={gen} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid={`fic-generate-${f.id}`}>
               {f.state === "errore" ? <RotateCw className="w-3.5 h-3.5 mr-1" /> : <FilePlus2 className="w-3.5 h-3.5 mr-1" />}{busy ? "Verifica Stripe..." : f.state === "errore" ? "Riprova" : "Genera fattura"}
             </Button>
           )}
         </div>
       </div>
+      {pv && (
+        <div className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-slate-600 space-y-0.5" data-testid={`fic-preview-box-${f.id}`}>
+          <div><b>Stripe:</b> {pv.stripe.payment_ref} · {eur(pv.stripe.amount, pv.stripe.currency)} · pagato il {d(pv.stripe.paid_at)}</div>
+          <div><b>Riga:</b> {pv.riga} · {eur(pv.importo, pv.stripe.currency)}</div>
+          <div data-testid={`fic-preview-vat-${f.id}`}><b>Aliquota FIC:</b> {pv.vat.description || "—"} (ID {pv.vat.id}{pv.vat.ei_type ? ` · ${pv.vat.ei_type}` : ""})</div>
+          <div><b>Bollo:</b> {pv.bollo ? `2,00 € virtuale a carico dell'emittente (il totale resta ${eur(pv.importo, pv.stripe.currency)})` : "non dovuto"}</div>
+          <div className={pv.existing ? "text-amber-700 font-semibold" : ""}>{pv.existing ? `Documento già presente su FIC (n. ${pv.existing.number}): verrà collegato, non duplicato` : "Nessun documento esistente per questo pagamento"}</div>
+          {pv.missing?.length > 0 && <div className="text-red-600">Dati mancanti: {pv.missing.join(", ")}</div>}
+          <div>Invio SDI: no (solo manuale da Fatture in Cloud)</div>
+        </div>
+      )}
       {f.error && f.state !== "creata" && <div className="mt-2 flex gap-1 text-xs text-red-600" data-testid={`fic-error-${f.id}`}><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{f.error}</div>}
       {f.state === "dati_mancanti" && f.missing?.length > 0 && <div className="mt-2 text-xs text-red-600" data-testid={`fic-missing-${f.id}`}>Da completare: {f.missing.join(", ")}</div>}
       {f.state === "dati_mancanti" && <BillingForm f={f} onSaved={onChanged} />}

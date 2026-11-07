@@ -787,3 +787,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 ## 2026-11-07 · Fix FIC "Cannot filter by subject field"
 - _fic_find_existing: rimosso filtro `subject` (non supportato). Ricerca con filtro documentato `amount_net = X` (type=invoice, fieldset detailed, sort -created_at) e confronto locale del riferimento Stripe (subject/visible_subject/note/righe). Se trovato → documento recuperato (fic_recovered_existing) senza crearne un altro.
 - Salvati su invoices: stripe_payment_ref (+ stripe_verified.payment_ref) e fic_document_id; controllo duplicati DB su entrambi. Auto + Riprova usano la stessa funzione. Test mock 15/15.
+
+
+## 2026-11-07 · Fix aliquota FIC "Contribuenti forfettari" + bollo
+- _fic_vat_forfettario: legge GET /c/{cid}/info/vat_types (fallback /settings/vat_types), sceglie l'aliquota 0% natura N2.2 (accetta "N2.2"/"2.2") con descrizione "Contribuenti forfettari", salva l'ID in fic_settings.vat_forfettario (per company_id); se FIC rifiuta l'aliquota → nuova ricerca + 1 tentativo. Override env facoltativo. Nessuna aliquota creata.
+- Payload in _fic_build_draft; bollo: stamp_duty 2.0 se importo > 77,47 € (fattura elettronica → a carico emittente, totale = incassato Stripe).
+- POST /api/platform/invoices/{id}/fic-preview: verifica Stripe, duplicati FIC, aliquota e bozza senza creare nulla (pulsante "Verifica"); "Genera/Riprova" chiede conferma. Test mock 18/18.
+
