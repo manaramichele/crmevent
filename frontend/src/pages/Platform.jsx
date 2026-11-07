@@ -9,6 +9,7 @@ import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText,
 import PlatformUsers from "@/pages/PlatformUsers";
 import SaasAdmin from "@/pages/SaasAdmin";
 import NormalizePreview from "@/components/NormalizePreview";
+import { FicVatPanel } from "@/components/saas/FicVatPanel";
 
 const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"]];
 
@@ -131,7 +132,8 @@ export default function Platform() {
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8 flex items-center gap-4" data-testid="fic-card">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8" data-testid="fic-card">
+      <div className="flex items-center gap-4">
         <div className="w-10 h-10 rounded-lg bg-tiffany-light text-tiffany-fg flex items-center justify-center"><ReceiptText className="w-5 h-5" /></div>
         <div className="min-w-0">
           <div className="font-semibold text-slate-800">Fatturazione elettronica · Fatture in Cloud</div>
@@ -144,6 +146,8 @@ export default function Platform() {
             ? <Button variant="outline" size="sm" onClick={disconnectFic} data-testid="fic-disconnect"><Unlink className="w-4 h-4 mr-1.5" />Scollega</Button>
             : <Button size="sm" className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={connectFic} data-testid="fic-connect"><Link2 className="w-4 h-4 mr-1.5" />Collega Fatture in Cloud</Button>)}
         </div>
+      </div>
+      {fic?.connected && <FicVatPanel />}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 mb-8" data-testid="brevo-card">
