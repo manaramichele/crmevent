@@ -7299,6 +7299,102 @@ def _nature(v) -> str:
     return str(v or "").upper().replace(" ", "").lstrip("N")
 
 
+async def _fic_vat_list(company_id: str, token: str) -> dict:
+    """Tutte le aliquote (standard + personalizzate) da GET /c/{cid}/info/vat_types con fieldset detailed
+    (il fieldset base non include la natura ei_type). Gestisce l'eventuale paginazione."""
+    rows, pages, page, body = [], 0, 1, {}
+    async with httpx.AsyncClient(timeout=20) as c:
+        while True:
+            r = await c.get(f"{FIC_BASE}/c/{company_id}/info/vat_types", headers={"Authorization": f"Bearer {token}"},
+                            params={"fieldset": "detailed", "page": page, "per_page": 100})
+            if r.status_code >= 400:
+                raise FicError(f"lettura aliquote IVA (HTTP {r.status_code}): {r.text[:200]}")
+            body = r.json()
+            rows += body.get("data") or []
+            pages += 1
+            last = body.get("last_page")
+            if not last or page >= int(last) or pages >= 20:
+                break
+            page += 1
+    return {"rows": rows, "pages": pages, "paginated": bool(body.get("last_page"))}
+
+
+def _vat_text(v: dict) -> str:
+    return " ".join(str(v.get(k) or "") for k in ("description", "notes", "ei_description")).lower()
+
+
+def _vat_pick(rows: list) -> Optional[dict]:
+    """Solo l'aliquota 'Contribuenti forfettari' (per nome) con IVA 0% e natura N2.2 se indicata. Mai un'altra 0%."""
+    cands = [v for v in rows if not v.get("is_disabled") and abs(float(v.get("value") or 0)) < 0.01 and "forfettar" in _vat_text(v)
+             and (not v.get("ei_type") or _nature(v.get("ei_type")) == "2.2")]
+    cands.sort(key=lambda v: (_nature(v.get("ei_type")) != "2.2", FIC_FORFETTARIO_NAME not in str(v.get("description") or "").lower()))
+    return cands[0] if cands else None
+
+
+def _vat_valid(v: dict) -> Optional[str]:
+    if v.get("is_disabled"):
+        return "aliquota disattivata"
+    if abs(float(v.get("value") or 0)) >= 0.01:
+        return f"IVA {v.get('value')}% invece di 0%"
+    if v.get("ei_type") and _nature(v.get("ei_type")) != "2.2":
+        return f"natura {v.get('ei_type')} invece di N2.2"
+    return None
+
+
+class VatIdIn(BaseModel):
+    vat_id: int
+
+
+@api.get("/fic/vat-diagnostics")
+async def fic_vat_diagnostics(admin: dict = Depends(require_superadmin)):
+    """Solo lettura: azienda collegata, aliquote recuperate, paginazione, esito ricerca ed errori. Non crea documenti né aliquote."""
+    cfg = await db.fic_settings.find_one({"provider": "fic"}, {"_id": 0, "vat_forfettario": 1}) or {}
+    out = {"company_id": await _fic_company_id(), "connected": bool(fic_configured() and await db.fic_settings.find_one({"provider": "fic"})),
+           "scopes": FIC_SCOPES, "endpoint": "GET /c/{company_id}/info/vat_types?fieldset=detailed", "total": 0, "pages": 0, "paginated": False,
+           "rows": [], "match": None, "configured": cfg.get("vat_forfettario"), "env_override": (os.environ.get("FIC_VAT_ID_FORFETTARIO") or "").strip() or None,
+           "companies": [], "error": None}
+    if not out["connected"]:
+        out["error"] = "Fatture in Cloud non connesso"
+        return out
+    try:
+        token, cid = await _fic_token(), out["company_id"]
+        async with httpx.AsyncClient(timeout=20) as c:
+            me = await c.get(f"{FIC_BASE}/user/companies", headers={"Authorization": f"Bearer {token}"})
+        if me.status_code < 400:
+            comps = ((me.json().get("data") or {}).get("companies")) or []
+            out["companies"] = [{"id": x.get("id"), "name": x.get("name"), "selected": str(x.get("id")) == str(cid)} for x in comps]
+        lst = await _fic_vat_list(cid, token)
+        out.update(total=len(lst["rows"]), pages=lst["pages"], paginated=lst["paginated"],
+                   rows=[{k: v.get(k) for k in ("id", "value", "description", "notes", "ei_type", "ei_description", "e_invoice", "is_disabled")} for v in lst["rows"]])
+        m = _vat_pick(lst["rows"])
+        out["match"] = {k: m.get(k) for k in ("id", "value", "description", "ei_type", "ei_description")} if m else None
+    except Exception as e:  # noqa: BLE001
+        out["error"] = str(e)[:400]
+    return out
+
+
+@api.put("/fic/vat-forfettario")
+async def fic_set_vat(body: VatIdIn, admin: dict = Depends(require_superadmin)):
+    """ID aliquota impostato manualmente: salvato solo se esiste su FIC ed è 0% con natura N2.2."""
+    if not fic_configured() or not await db.fic_settings.find_one({"provider": "fic"}):
+        raise HTTPException(status_code=400, detail="Fatture in Cloud non connesso")
+    token, cid = await _fic_token(), await _fic_company_id()
+    try:
+        lst = await _fic_vat_list(cid, token)
+    except FicError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    v = next((x for x in lst["rows"] if str(x.get("id")) == str(body.vat_id)), None)
+    if not v:
+        raise HTTPException(status_code=400, detail=f"ID aliquota {body.vat_id} non presente nell'azienda FIC {cid}")
+    bad = _vat_valid(v)
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Aliquota non valida per il forfettario: {bad}")
+    await db.fic_settings.update_one({"provider": "fic"}, {"$set": {"vat_forfettario": {"id": v["id"], "description": v.get("description"), "ei_type": v.get("ei_type"),
+                                                                                       "company_id": str(cid), "source": "manual", "found_at": now_iso()}}})
+    await record_audit(admin, "fic_vat_forfettario_set", detail=f"{v['id']} · {v.get('description')}")
+    return {"ok": True, "vat": {"id": v["id"], "description": v.get("description"), "ei_type": v.get("ei_type")}}
+
+
 async def _fic_vat_forfettario(company_id: str, token: str, refresh: bool = False) -> Optional[int]:
     """ID reale dell'aliquota FIC 'Contribuenti forfettari' (0%, natura N2.2) letto dalle API e salvato in fic_settings.
     Override facoltativo: FIC_VAT_ID_FORFETTARIO. Nessuna aliquota viene creata."""
@@ -7309,19 +7405,17 @@ async def _fic_vat_forfettario(company_id: str, token: str, refresh: bool = Fals
     cached = cfg.get("vat_forfettario") or {}
     if not refresh and cached.get("id") and cached.get("company_id") == str(company_id):
         return cached["id"]
-    async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.get(f"{FIC_BASE}/c/{company_id}/info/vat_types", headers={"Authorization": f"Bearer {token}"})
-        if r.status_code == 404:
-            r = await c.get(f"{FIC_BASE}/c/{company_id}/settings/vat_types", headers={"Authorization": f"Bearer {token}"})
-    if r.status_code >= 400:
-        raise FicError(f"lettura aliquote IVA Fatture in Cloud: {r.text[:200]}")
-    rows = [v for v in (r.json().get("data") or []) if not v.get("is_disabled")]
-    zero_n22 = [v for v in rows if abs(float(v.get("value") or 0)) < 0.01 and _nature(v.get("ei_type")) == "2.2"]
-    pick = next((v for v in zero_n22 if FIC_FORFETTARIO_NAME in str(v.get("description") or "").lower()), None) or (zero_n22[0] if len(zero_n22) == 1 else None)
+    lst = await _fic_vat_list(company_id, token)
+    if cached.get("source") == "manual" and cached.get("company_id") == str(company_id):
+        mv = next((x for x in lst["rows"] if str(x.get("id")) == str(cached["id"])), None)
+        if mv and not _vat_valid(mv):
+            return mv["id"]
+    pick = _vat_pick(lst["rows"])
     if not pick:
-        found = ", ".join(f"{v.get('id')}:{v.get('description')} {v.get('value')}% {v.get('ei_type') or ''}".strip() for v in rows if abs(float(v.get("value") or 0)) < 0.01)
-        logger.error("FIC aliquote 0%% disponibili: %s", found)
-        raise FicError(f"Aliquota 'Contribuenti forfettari' 0% N2.2 non trovata tra le aliquote FIC (aliquote 0% lette: {found[:300] or 'nessuna'})")
+        zero = ", ".join(f"{v.get('id')}:{v.get('description')} {v.get('ei_type') or ''}".strip() for v in lst["rows"] if abs(float(v.get("value") or 0)) < 0.01)
+        logger.error("FIC azienda %s: %s aliquote lette, 0%%: %s", company_id, len(lst["rows"]), zero)
+        raise FicError(f"Aliquota 'Contribuenti forfettari' 0% N2.2 non trovata (azienda FIC {company_id}, {len(lst['rows'])} aliquote lette). "
+                       "Apri 'Diagnostica aliquote' in Piattaforma › Fatture in Cloud o imposta l'ID manualmente.")
     await db.fic_settings.update_one({"provider": "fic"}, {"$set": {"vat_forfettario": {"id": pick["id"], "description": pick.get("description"),
                                                                                        "ei_type": pick.get("ei_type"), "company_id": str(company_id), "found_at": now_iso()}}})
     return pick["id"]

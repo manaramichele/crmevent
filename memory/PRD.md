@@ -794,3 +794,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Payload in _fic_build_draft; bollo: stamp_duty 2.0 se importo > 77,47 € (fattura elettronica → a carico emittente, totale = incassato Stripe).
 - POST /api/platform/invoices/{id}/fic-preview: verifica Stripe, duplicati FIC, aliquota e bozza senza creare nulla (pulsante "Verifica"); "Genera/Riprova" chiede conferma. Test mock 18/18.
 
+
+## 2026-11-07 · Fix definitivo ricerca aliquota FIC
+- Causa: GET /info/vat_types senza fieldset=detailed restituisce solo id/value/description/is_disabled (niente ei_type) → il filtro natura N2.2 scartava tutto. Ora _fic_vat_list usa fieldset=detailed + paginazione; _vat_pick accetta solo aliquote con "forfettar" nel nome/note/descr. e-fattura, 0%, natura N2.2 (se indicata) — mai altre 0%.
+- Priorità ID: env FIC_VAT_ID_FORFETTARIO > ID manuale SA verificato (PUT /api/fic/vat-forfettario) > ID trovato via API (cache fic_settings.vat_forfettario).
+- GET /api/fic/vat-diagnostics (sola lettura): azienda collegata + aziende account, totale aliquote, pagine, esito, errori, tabella aliquote 0%. UI: FicVatPanel nella card Fatture in Cloud (Piattaforma).
+
+
