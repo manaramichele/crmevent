@@ -475,12 +475,12 @@ def build(db, deps: dict):
     # ---------- stato, tabelle, verifica risultati ----------
     @r.get("/reverse/status")
     async def status(admin: dict = Depends(sa)):
-        cfg = await db.cal_settings.find_one({"id": "main"}, {"_id": 0, "rv_lists": 1, "rv_last_import": 1}) or {}
+        cfg = await db.cal_settings.find_one({"id": "main"}, {"_id": 0, "rv_lists": 1, "rv_last_import": 1, "rv_brave_check": 1}) or {}
         by = {x["_id"]: x["n"] for x in await db.cal_rv_contacts.aggregate([{"$group": {"_id": "$stato_ricerca", "n": {"$sum": 1}}}]).to_list(20)}
         fs = {x["_id"]: x["n"] for x in await db.cal_rv_findings.aggregate([{"$group": {"_id": "$stato", "n": {"$sum": 1}}}]).to_list(20)}
         jobs = await db.cal_rv_jobs.find({}, {"_id": 0, "queue": 0}).sort("created_at", -1).to_list(10)
         return {"liste": cfg.get("rv_lists") or [], "ultima_importazione": cfg.get("rv_last_import"), "settings": await rv_settings(),
-                "brave_configurato": bool(os.environ.get("BRAVE_API_KEY")),
+                "brave_configurato": bool(os.environ.get("BRAVE_API_KEY")), "brave_check": cfg.get("rv_brave_check"),
                 "test_completato": bool(await db.cal_rv_jobs.find_one({"kind": "test", "status": "completato", "ok": {"$gt": 0}})),
                 "kpi": {"totale_contatti": sum(by.values()), "analizzati": sum(v for k, v in by.items() if k not in ("da_analizzare", "in_corso", "errore")),
                         "organizzatori_identificati": await db.cal_rv_contacts.count_documents({"organizzatore_identificato": {"$nin": [None, ""]}}),
@@ -529,6 +529,23 @@ def build(db, deps: dict):
             await db.cal_events.update_one({"id": eid}, {"$set": {k: fix[k] for k in ("data_inizio", "data_fine") if k in fix} | {"data_da_verificare": False, "data_confermata_manuale": True}})
         await audit(admin, "cal_rv_review", detail=f"{f['nome']} → approvato")
         return {"ok": True, "event_id": eid}
+
+    @r.post("/reverse/brave/test")
+    async def brave_test(admin: dict = Depends(sa)):
+        """Una sola ricerca generica (nessun contatto) per verificare chiave e connessione. Non espone la chiave."""
+        key = os.environ.get("BRAVE_API_KEY")
+        if not key:
+            return {"ok": False, "configurata": False, "messaggio": "BRAVE_API_KEY non presente nel backend"}
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                res = await c.get("https://api.search.brave.com/res/v1/web/search", headers={"X-Subscription-Token": key, "Accept": "application/json"},
+                                  params={"q": "maratona Italia", "country": "IT", "search_lang": "it", "count": 1})
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "configurata": True, "messaggio": f"Connessione non riuscita: {type(e).__name__}"}
+        ok = res.status_code == 200
+        msg = "Connessione a Brave Search riuscita" if ok else {401: "Chiave non valida", 403: "Chiave non autorizzata", 429: "Limite di richieste raggiunto"}.get(res.status_code, f"Brave ha risposto HTTP {res.status_code}")
+        await db.cal_settings.update_one({"id": "main"}, {"$set": {"rv_brave_check": {"at": _now(), "ok": ok, "messaggio": msg}}}, upsert=True)
+        return {"ok": ok, "configurata": True, "http": res.status_code, "messaggio": msg}
 
     @r.put("/reverse/settings")
     async def put_settings(body: RvSettingsIn, admin: dict = Depends(sa)):

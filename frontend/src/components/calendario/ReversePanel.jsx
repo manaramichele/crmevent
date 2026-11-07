@@ -111,6 +111,9 @@ export function ReversePanel() {
     try { const { data } = await api.post(calApi(scope === "update" ? "/reverse/update" : "/reverse/search"), scope === "update" ? {} : { scope, size }); toast.success(`Elaborazione avviata su ${data.contatti} contatti`); load(); } catch (e) { err(e); }
   };
   if (!st) return <p className="text-sm text-slate-500">Caricamento...</p>;
+  const testBrave = async () => {
+    try { const { data } = await api.post(calApi("/reverse/brave/test")); (data.ok ? toast.success : toast.error)(data.messaggio); load(); } catch (e) { err(e); }
+  };
   const k = st.kpi;
   const job = st.jobs.find((j) => ["running", "sospeso"].includes(j.status));
   const KPI = [["Totale contatti", k.totale_contatti, "tot"], ["Contatti analizzati", k.analizzati, "analizzati"], ["Organizzatori identificati", k.organizzatori_identificati, "org"],
@@ -122,6 +125,10 @@ export function ReversePanel() {
         <div className="text-xs text-slate-600" data-testid="rv-lists">Liste Brevo selezionate: <b>{st.liste.length ? st.liste.map((l) => l.name || l.id).join(", ") : "nessuna"}</b>
           {st.ultima_importazione && ` · ultima importazione ${fmtDT(st.ultima_importazione.at)} (${st.ultima_importazione.nuovi} nuovi, ${st.ultima_importazione.aggiornati} aggiornati)`}</div>
         {!st.brave_configurato && <div className="text-xs text-amber-700" data-testid="rv-brave-missing">Motore di ricerca non configurato: manca la chiave Brave Search.</div>}
+        <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="rv-brave-check">
+          <Button size="sm" variant="outline" onClick={testBrave} data-testid="rv-btn-brave-test">Verifica connessione Brave</Button>
+          {st.brave_check && <span className={st.brave_check.ok ? "text-green-700" : "text-red-600"} data-testid="rv-brave-check-result">{st.brave_check.messaggio} · {fmtDT(st.brave_check.at)}</span>}
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setDlg(true)} variant="outline" data-testid="rv-btn-import">IMPORTA DA BREVO</Button>
           <Button onClick={() => run("test")} disabled={!!running} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid="rv-btn-test">CERCA EVENTI · test 20 contatti</Button>
