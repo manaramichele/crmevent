@@ -98,7 +98,7 @@ export function OrganizersPanel() {
             <td className="px-3 py-2"><Button size="sm" variant="outline" onClick={() => setOpen(o.id)} data-testid={`cal-org-open-${o.id}`}>Apri</Button></td>
           </tr>))}</tbody>
       </table></div>
-      {open !== undefined && <OrgDialog id={open} onClose={() => setOpen(undefined)} onSaved={() => { setOpen(undefined); load(); }} />}
+      {open !== undefined && <OrgDialog id={open} onClose={() => { setOpen(undefined); load(); }} onSaved={() => { setOpen(undefined); load(); }} />}
     </div>
   );
 }

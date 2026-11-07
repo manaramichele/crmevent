@@ -50,14 +50,15 @@ function Table({ rows, open }) {
   );
 }
 
-function CalendarView({ rows, view, cursor, setCursor, open }) {
+function CalendarView({ rows, view, cursor, setCursor, setMode, open }) {
   const by = useMemo(() => rows.reduce((m, e) => ((m[e.data_inizio] = [...(m[e.data_inizio] || []), e]), m), {}), [rows]);
-  const move = (n) => { const d = new Date(cursor); if (view === "year") d.setFullYear(d.getFullYear() + n); else if (view === "week") d.setDate(d.getDate() + 7 * n); else d.setMonth(d.getMonth() + n); setCursor(d); };
+  const move = (n) => { const d = new Date(cursor); if (view === "year") d.setFullYear(d.getFullYear() + n); else if (view === "week") d.setDate(d.getDate() + 7 * n); else { d.setDate(1); d.setMonth(d.getMonth() + n); } setCursor(d); };
+  const wk = new Date(cursor); wk.setDate(wk.getDate() - ((wk.getDay() + 6) % 7)); const wkEnd = new Date(wk); wkEnd.setDate(wk.getDate() + 6);
   const Ev = ({ e }) => <button type="button" onClick={() => open(e.id)} className="block w-full truncate rounded px-1 text-left text-[10px] font-semibold text-white" style={{ background: DISC_COLOR[e.disciplina] }} title={e.nome}>{e.nome}</button>;
   let body;
   if (view === "year") {
     body = <div className="grid grid-cols-2 md:grid-cols-4 gap-2">{MESI.map((m, i) => { const n = rows.filter((e) => e.data_inizio?.slice(5, 7) === String(i + 1).padStart(2, "0")).length;
-      return <button key={m} type="button" onClick={() => setCursor(new Date(cursor.getFullYear(), i, 1))} className="rounded-xl border border-slate-200 bg-white p-3 text-left" data-testid={`cal-year-${i + 1}`}><div className="font-semibold">{m}</div><div className="text-2xl font-bold text-[#088F8A]">{n}</div><div className="text-[11px] text-slate-400">eventi</div></button>; })}</div>;
+      return <button key={m} type="button" onClick={() => { setCursor(new Date(cursor.getFullYear(), i, 1)); setMode("month"); }} className="rounded-xl border border-slate-200 bg-white p-3 text-left" data-testid={`cal-year-${i + 1}`}><div className="font-semibold">{m}</div><div className="text-2xl font-bold text-[#088F8A]">{n}</div><div className="text-[11px] text-slate-400">eventi</div></button>; })}</div>;
   } else {
     const start = new Date(cursor);
     if (view === "month") start.setDate(1);
@@ -71,7 +72,7 @@ function CalendarView({ rows, view, cursor, setCursor, open }) {
   return (
     <div className="space-y-2" data-testid={`cal-view-${view}`}>
       <div className="flex items-center gap-2"><Button size="sm" variant="outline" onClick={() => move(-1)} data-testid="cal-prev"><ChevronLeft className="w-4 h-4" /></Button>
-        <div className="font-semibold text-sm" data-testid="cal-cursor">{view === "year" ? cursor.getFullYear() : `${MESI[cursor.getMonth()]} ${cursor.getFullYear()}`}</div>
+        <div className="font-semibold text-sm" data-testid="cal-cursor">{view === "year" ? cursor.getFullYear() : view === "week" ? `${wk.toLocaleDateString("it-IT")} – ${wkEnd.toLocaleDateString("it-IT")}` : `${MESI[cursor.getMonth()]} ${cursor.getFullYear()}`}</div>
         <Button size="sm" variant="outline" onClick={() => move(1)} data-testid="cal-next"><ChevronRight className="w-4 h-4" /></Button>
         <div className="ml-auto flex gap-2 text-[11px]">{Object.entries(DISC_LABEL).map(([k, l]) => <Pill key={k} color={DISC_COLOR[k]}>{l}</Pill>)}</div></div>
       {body}
@@ -98,6 +99,7 @@ export function EventsPanel({ meta }) {
   }, [f, page, mode, cursor]);
   const load = useCallback(() => api.get(calApi("/events"), { params }).then(({ data }) => setD(data)).catch(err), [params]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  const visible = mode === "month" ? d.rows.filter((e) => e.data_inizio?.slice(0, 7) === `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`).length : d.total;
   return (
     <div className="space-y-3" data-testid="cal-events">
       <div className="flex flex-wrap items-center gap-2">
@@ -111,11 +113,11 @@ export function EventsPanel({ meta }) {
         </div>
       </div>
       <Filters f={f} setF={(v) => { setF(v); setPage(1); }} meta={meta} />
-      <div className="text-xs text-slate-500" data-testid="cal-total">{d.total} eventi</div>
+      <div className="text-xs text-slate-500" data-testid="cal-total">{visible} eventi</div>
       {mode === "table" ? <>
         {d.rows.length ? <Table rows={d.rows} open={setOpenId} /> : <p className="text-sm text-slate-500" data-testid="cal-empty">Nessun evento. Aggiungilo o importa un file Excel/CSV.</p>}
         {d.total > 50 && <div className="flex gap-2 items-center text-xs"><Button size="sm" variant="outline" disabled={page === 1} onClick={() => setPage(page - 1)}>Precedente</Button>Pagina {page} di {Math.ceil(d.total / 50)}<Button size="sm" variant="outline" disabled={page * 50 >= d.total} onClick={() => setPage(page + 1)}>Successiva</Button></div>}
-      </> : <CalendarView rows={d.rows} view={mode} cursor={cursor} setCursor={setCursor} open={setOpenId} />}
+      </> : <CalendarView rows={d.rows} view={mode} cursor={cursor} setCursor={setCursor} setMode={setMode} open={setOpenId} />}
       {openId !== undefined && <EventDialog id={openId} meta={meta} onClose={() => setOpenId(undefined)} onSaved={() => { setOpenId(undefined); load(); }} />}
       {imp && <ImportDialog onClose={() => setImp(false)} onDone={load} />}
     </div>

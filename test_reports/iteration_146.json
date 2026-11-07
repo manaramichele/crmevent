@@ -1,0 +1,45 @@
+{
+  "summary": "Frontend E2E test of Super Admin 'Calendario Eventi Italia' Phase 1 (desktop 1920 + mobile 390). All requested flows work: sidebar link and route, 7 tabs, 12 KPIs plus 4 charts with bars, table with TEST_ events, filters (q, disciplina, anno 2027/2026), month, week and year modes with colours by discipline (Apr 2027 shows TEST_Maratona Alfa in teal), XLSX and CSV export downloads (CSV ';' with header), create event dialog, open existing event (sources, data_comunicazione, history), manual date change recalculates comm date +7 (19/09 -> 26/09) and adds a history row, CSV import with auto-mapping (2 new; re-import gives 0 new and 2 linked; same name with a different date gives a possible duplicate), organizer TEST_ASD Sport Italia with 5 events, privacy guard (idoneo without base giuridica gives error toast; with fonte+finalita+base it saves), organizer create + merge, Fonti table (7 sources 'Disabilitata', 'Da verificare (Fase 2)', Importazione manuale 'Attiva'), duplicates section with the TEST_Maratona Alfa pair at 67% plus Unisci/Separati/Ignora, Unisci tested on my own duplicate pair, Settings 7/10/custom persist after reload, 0 is rejected, mode 'Manuale', Campagne/Storico placeholders. Mobile: no page overflow, tabs wrap to 3 lines, tables scroll horizontally (980/820px inside a 356px wrapper), dialog is full width. No JS page errors. Found 1 functional UI bug (stale organizer list) and several minor UX issues.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/platform/cal/events, /api/platform/cal/organizers", "issue": "There is no DELETE endpoint for events or organizers. A wrong or test record can't be removed from the UI (only status 'annullata' or merging), so cleanup needs direct DB access."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OrganizersPanel / PrivacyBox", "issue": "Saving privacy (e.g. status -> Idoneo) shows the success toast, but the dialog stays open and only reloads the org itself. Closing the dialog (onClose) does not reload the list, so the row still shows 'Da verificare' until a page reload. The same happens with any save done inside PrivacyBox.", "selector": "[data-testid=cal-privacy-save] / [data-testid^=cal-org-row-]", "priority": "MEDIUM"},
+      {"component": "EventsPanel CalendarView year mode", "issue": "Clicking a month tile (cal-year-N) only changes the cursor and stays in year view. The user expects it to switch to month view for that month.", "selector": "[data-testid^=cal-year-]", "priority": "LOW"},
+      {"component": "EventsPanel CalendarView week mode", "issue": "The cursor label in week mode shows only 'Apr 2027' (the month), not the week range. After moving by month the cursor keeps today's day-of-month, so the week shown is arbitrary (e.g. Apr 5-11) and the user can't tell which week it is.", "selector": "[data-testid=cal-cursor]", "priority": "LOW"},
+      {"component": "EventsPanel CalendarView", "issue": "move() uses setMonth on a cursor that is not normalised to day 1. On the 29th-31st it skips months (Jan 31 + 1 becomes Mar 3). Normalise the cursor to day 1 in month/year modes.", "selector": "[data-testid=cal-next]", "priority": "LOW"},
+      {"component": "EventsPanel cal-total in month mode", "issue": "'N eventi' counts the whole fetch range (previous month from the 20th to next month's 12th), not the visible month. Apr 2027 shows '2 eventi' while only 1 is in April.", "selector": "[data-testid=cal-total]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Fonti after duplicate merge", "issue": "After Unisci, the sources table event counts and the imports log are not refreshed (only the DuplicatesPanel reloads). Minor staleness.", "affected_selectors": ["[data-testid=cal-sources-table]"]}
+    ],
+    "design_issues": [
+      {"screen": "Event dialog / Privacy box", "issues": ["Data inizio/fine use the native browser date input (mm/dd/yyyy in en locale) instead of the shadcn Calendar picker", "Privacy 'Data acquisizione' and 'Data consenso' are plain text inputs with no date picker or validation"]},
+      {"screen": "Fonti", "issues": ["The 'Disabilitata' pill (#94A3B8 text on a 10% tint) has low contrast", "The generic 'Fatto' toast after Unisci/Separati/Ignora could be more specific"]},
+      {"screen": "Organizzatori merge", "issue_note": "", "issues": ["The confirm dialog says 'nel primo selezionato' but doesn't name the organizer that is kept. Keep order depends on click order (sel[0])."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/cleanup_cal_ui_iter.py"],
+  "action_items": [
+    "OrganizersPanel: reload the list when OrgDialog closes, or call the parent load() after a PrivacyBox save, so the Privacy pill updates without a page reload",
+    "CalendarView: clicking a year tile should switch to month mode; normalise the cursor to day 1; show the week range label in week mode",
+    "Optional: show the visible-period count in calendar modes; refresh the sources table after resolving duplicates; add DELETE (or archive) for events/organizers; use the shadcn date picker for date fields"
+  ],
+  "critical_code_review_comments": [
+    "ImportDialog.poll: the setInterval has no clearInterval on unmount/close and no try/catch. If the dialog is closed mid-import, or the job reaches a status other than 'done' (e.g. error), or a GET fails, polling continues forever with unhandled promise rejections",
+    "shared.fmtD builds new Date(`${s}T00:00:00`) and will render 'Invalid Date' if any value already carries a time component (callers currently slice to 10 chars, but this is fragile)",
+    "EventDialog save sends every remaining field of the fetched doc (e.g. organizzatore_nome, data_comunicazione, data_da_verificare, stato_* etc.) back on PUT. This relies on backend whitelisting, so confirm the backend ignores computed fields",
+    "OrganizersPanel merge uses window.confirm (not shadcn AlertDialog), which is inconsistent with the rest of the UI"
+  ],
+  "updated_files": ["/app/backend/tests/cleanup_cal_ui_iter.py (new, cleanup helper only)"],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "95% - all 8 requested flows pass; 1 medium stale-list bug plus minor UX issues"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (works)",
+  "seed_data_creation": "Created and then deleted by id: event TEST_UI Corsa Zeta, imported events TEST_IMP Corri Omega (x2, one merged) and TEST_IMP Trail Sigma, organizers TEST_IMP ASD Omega and TEST_UI Org Merge, imports TEST_import.csv x2 and TEST_dup.csv, plus related cal_history/cal_duplicates rows. Main-agent TEST_ data touched: TEST_ASD Sport Italia privacy was temporarily set and then restored via API to status da_verificare / fonte manuale / tipo pubblico / finalita and base null (ultima_verifica timestamp changed). Settings were changed and restored to 7 days / 60 interval. The TEST_Maratona Alfa duplicate pair was left unresolved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Page /piattaforma/calendario-eventi-italia?tab=<key>. Accept the cookie banner first on mobile (it blocks the login button). Merge orgs uses window.confirm, so add a page.on('dialog') accept handler. There are no DELETE APIs; clean up via Mongo by id (see /app/backend/tests/cleanup_cal_ui_iter.py). Pre-existing data: 6 TEST_ events (2027), org TEST_ASD Sport Italia with 5 events, 1 open duplicate (TEST_Maratona Alfa vs TEST_Maratona Alfa 2027)."
+}
