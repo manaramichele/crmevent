@@ -373,7 +373,7 @@ def build(db, deps: dict):
                             doc.update(status="saltato", errore="Contatto disiscritto su Brevo")
                         else:
                             doc.update(status="inviato", message_id=await send_one(b, t, x["email"], o["nome"], params, unsub))
-                            await db.cal_organizers.update_one({"id": o["id"]}, {"$set": {"ultimo_contatto": _now(), **({"stato_commerciale": "inviato"} if o.get("stato_commerciale") in ADVANCE else {})}})
+                            await db.cal_organizers.update_one({"id": o["id"]}, {"$set": {"ultimo_contatto": _now(), **({"stato_commerciale": "inviato"} if (o.get("stato_commerciale") or "da_qualificare") in ADVANCE else {})}})
                             await db.cal_events.update_one({"id": x["event_id"]}, {"$set": {"stato_commerciale": "inviato"}})
                             await history(o["id"], "comunicazione", None, f"{t['nome']} \u00b7 {x['evento']}", "brevo", "manuale", by)
                     ok += doc["status"] in ("inviato", "simulato")
@@ -437,4 +437,60 @@ def build(db, deps: dict):
                     pass
         return page("Disiscrizione registrata: non riceverai altre comunicazioni da CRMEvent." if o else "Link non valido o scaduto.")
 
-    return {"router": r, "public_router": pub}
+    # ---------- invio automatico (Fase 4): ogni giorno alle 10:00, stessi controlli dell'anteprima ----------
+    AUTO_TPL = "post_evento"
+
+    async def auto_ready() -> list:
+        s, c, t = await settings(), await cfg(), await template(AUTO_TPL)
+        miss = []
+        if s.get("modalita_invio") != "automatica":
+            miss.append("Invio automatico spento")
+        if not is_configured():
+            miss.append("Brevo non configurato")
+        if not c.get("sender"):
+            miss.append("Mittente non scelto")
+        if not t.get("brevo_template_id"):
+            miss.append("Template Post-evento non salvato su Brevo")
+        return miss
+
+    async def auto_tick() -> dict:
+        today = date.today().isoformat()
+        miss = await auto_ready()
+        if miss:
+            out = {"at": _now(), "esito": "non_eseguito", "motivi": miss}
+            await set_cfg({"auto_last": out})
+            return out
+        lock = await db.cal_settings.update_one({"id": "main"}, {"$setOnInsert": {"id": "main"}}, upsert=True)
+        lock = await db.cal_settings.update_one({"id": "main", "brevo.auto_day": {"$ne": today}}, {"$set": {"brevo.auto_day": today}})
+        if not lock.modified_count:
+            return {"skipped": "già eseguito oggi"}
+        t = await template(AUTO_TPL)
+        f = FilterIn(template_id=AUTO_TPL, dal=(date.today() - timedelta(days=14)).isoformat(), al=today)
+        res = await recipients(f)
+        cid = None
+        if res["inclusi"]:
+            cid = uuid.uuid4().hex
+            await db.cal_campaigns.insert_one({"id": cid, "template_id": t["id"], "template_nome": t["nome"], "filtri": f.model_dump(), "automatica": True,
+                                               "destinatari": len(res["inclusi"]), "inviati": 0, "errori": 0, "status": "in_corso", "simulazione": False,
+                                               "created_by": "invio automatico", "created_at": _now()})
+            await run_campaign(cid, t, res["inclusi"], False, "invio automatico")
+        camp = await db.cal_campaigns.find_one({"id": cid}, {"_id": 0}) if cid else {}
+        out = {"at": _now(), "esito": "eseguito", "campaign_id": cid, "destinatari": len(res["inclusi"]), "inviati": camp.get("inviati", 0),
+               "errori": camp.get("errori", 0), "esclusi": len(res["esclusi"])}
+        await set_cfg({"auto_last": out})
+        return out
+
+    async def upcoming() -> int:
+        """Email che partiranno in automatico nei prossimi 30 giorni (stessi controlli, stato attuale)."""
+        if (await settings()).get("modalita_invio") != "automatica":
+            return 0
+        d1 = date.today() + timedelta(days=1)
+        return len((await recipients(FilterIn(template_id=AUTO_TPL, dal=d1.isoformat(), al=(d1 + timedelta(days=30)).isoformat())))["inclusi"])
+
+    @r.get("/brevo/auto")
+    async def auto_status(admin: dict = Depends(sa)):
+        miss = await auto_ready()
+        return {"attivo": not miss, "mancanti": miss, "orario": "10:00 (Europe/Rome)", "template": AUTO_TPL, "ultimo": (await cfg()).get("auto_last"),
+                "programmate_30_giorni": await upcoming()}
+
+    return {"router": r, "public_router": pub, "auto_tick": auto_tick, "upcoming": upcoming}

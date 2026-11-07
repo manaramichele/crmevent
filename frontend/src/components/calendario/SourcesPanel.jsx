@@ -3,7 +3,7 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { calApi, err, fmtD, Pill } from "./shared";
+import { calApi, err, fmtD, Pill, SEL } from "./shared";
 import { ConnDialog, NewSourceDialog, VerificaDialog } from "./SourceDialogs";
 
 const ECOL = { consentita: "#16A34A", non_consentita: "#DC2626", da_verificare: "#D97706" };
@@ -124,7 +124,10 @@ export function SettingsPanel({ meta, onSaved }) {
           <Input type="number" min={1} max={90} value={s.giorni_post_evento} onChange={(e) => setS({ ...s, giorni_post_evento: e.target.value })} className="h-9 w-24" data-testid="cal-set-days" /></div></label>
       <label className="block">Intervallo minimo tra due comunicazioni allo stesso organizzatore (giorni)<Input type="number" min={1} max={365} value={s.intervallo_min_giorni} onChange={(e) => setS({ ...s, intervallo_min_giorni: e.target.value })} className="h-9 w-32 mt-1" data-testid="cal-set-interval" /></label>
       <div className="text-xs text-slate-500 space-y-1">
-        <div>Modalità invio: <b>Manuale</b> (l'automatica sarà attivabile solo nella Fase 4).</div>
+        <label className="block text-sm text-slate-700">Invio email post-evento
+          <select className={`${SEL} w-full mt-1`} value={s.modalita_invio} onChange={(e) => setS({ ...s, modalita_invio: e.target.value })} data-testid="cal-set-mode">
+            <option value="automatica">Automatico: ogni giorno alle 10:00 (Europe/Rome)</option><option value="manuale">Manuale: solo dalla tab Campagne Brevo</option></select></label>
+        <div>In automatico partono solo verso i destinatari che l'anteprima includerebbe (idonei, con email, non esclusi, nel rispetto dell'intervallo minimo), con il template Post-evento.</div>
         <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={!!s.raccolta_automatica} onChange={(e) => setS({ ...s, raccolta_automatica: e.target.checked })} data-testid="cal-set-auto" />Raccolta automatica ogni notte alle 03:00 (Europe/Rome), solo dalle fonti autorizzate e attive</label>
         <div>Lista e template Brevo: nella tab "Campagne Brevo". Il mittente si sceglie qui sotto.</div>
       </div>

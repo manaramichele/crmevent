@@ -22,7 +22,7 @@ export function CommsPanel() {
       <div className="flex flex-wrap gap-2 text-xs">{Object.entries(SL).map(([k, l]) => <Pill key={k} color={SC[k]} testid={`cal-comms-tot-${k}`}>{l}: {d.totali[k] || 0}</Pill>)}</div>
       <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs" data-testid="cal-campaigns-log"><div className="font-semibold text-sm mb-2">Campagne</div>
         {!camps.length && <p className="text-slate-500">Nessuna campagna.</p>}
-        {camps.map((c) => <div key={c.id} className="border-t border-slate-100 py-1">{fmtDT(c.created_at)} · {c.template_nome} · {c.simulazione ? "simulazione" : "invio reale"} · {c.status} · {c.inviati}/{c.destinatari} ok, {c.errori} errori · {c.created_by}</div>)}
+        {camps.map((c) => <div key={c.id} className="border-t border-slate-100 py-1">{fmtDT(c.created_at)} · {c.template_nome} · {c.automatica ? "automatica" : c.simulazione ? "simulazione" : "invio reale"} · {c.status} · {c.inviati}/{c.destinatari} ok, {c.errori} errori · {c.created_by}</div>)}
       </div>
       <div className="flex flex-wrap gap-2">
         <select className={SEL} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} data-testid="cal-comms-status"><option value="">Tutti gli esiti</option>{Object.entries(SL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>

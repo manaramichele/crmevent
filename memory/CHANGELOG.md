@@ -1232,4 +1232,11 @@ Task 2 — Creatività manuale:
 - Storico comunicazioni e campagne; dashboard "Email inviate"; disiscrizione pubblica con pagina di conferma (GET) + POST e List-Unsubscribe one-click.
 - In preview BREVO_API_KEY è vuota (solo produzione): le azioni Brevo rispondono "Brevo non configurato". Test: iteration_148 100%; fix successivi verificati a mano.
 
+## 2026-11-07 — Calendario Eventi Italia · Fase 4 (invio automatico)
+- Cron cal-italia-auto-send ogni giorno 10:00 Europe/Rome → auto_tick in cal_brevo.py: template Post-evento, stessi controlli dell'anteprima (finestra data comunicazione ultimi 14 giorni → oggi), nessun limite giornaliero, lock giornaliero, ricontrollo Brevo blacklist prima di ogni invio.
+- Modalità invio "automatica" di default (applicata una volta all'avvio, poi decide il Super Admin in Impostazioni). Se mancano Brevo/mittente/template su Brevo, l'esecuzione è registrata come "non eseguita" con i motivi.
+- UI: stato invio automatico in Campagne Brevo, email previste nei prossimi 30 giorni (anche in dashboard), selettore modalità in Impostazioni.
+- Verifica: test unitario con Brevo finto su DB separato (invii, esclusioni, blacklist, nessun doppio invio, lock, modalità manuale).
+
+
 

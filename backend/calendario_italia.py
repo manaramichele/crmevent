@@ -198,7 +198,7 @@ class FonteIn(BaseModel):
 class SettingsIn(BaseModel):
     giorni_post_evento: int = Field(7, ge=1, le=90)
     intervallo_min_giorni: int = Field(60, ge=1, le=365)
-    modalita_invio: str = "manuale"
+    modalita_invio: str = "automatica"
     raccolta_automatica: bool = False
     orario_sync: str = "03:00"
 
@@ -216,6 +216,9 @@ def build(db, deps: dict):
         await db.cal_organizers.create_index("nome_key")
         await db.cal_duplicates.create_index([("a", 1), ("b", 1)], unique=True)
         await db.cal_history.create_index([("entity_id", 1), ("at", -1)])
+        # Fase 4: invio automatico attivo di default (una sola volta, poi decide il Super Admin)
+        await db.cal_settings.update_one({"id": "main", "auto_default_applied": {"$ne": True}},
+                                         {"$set": {"modalita_invio": "automatica", "auto_default_applied": True}})
 
     async def settings() -> dict:
         s = await db.cal_settings.find_one({"id": "main"}, {"_id": 0}) or {}
@@ -621,7 +624,7 @@ def build(db, deps: dict):
                         "clienti": sum(1 for o in orgs if o.get("stato_commerciale") == "cliente_acquisito"),
                         "duplicati_aperti": await db.cal_duplicates.count_documents({"status": "open"}),
                         "conflitti_aperti": await db.cal_conflicts.count_documents({"status": "open"}),
-                        "email_programmate": 0, "email_inviate": await db.cal_comms.count_documents({"status": "inviato"})},
+                        "email_programmate": await br["upcoming"](), "email_inviate": await db.cal_comms.count_documents({"status": "inviato"})},
                 "per_mese": [{"mese": f"{m:02d}", "n": mesi.get(f"{m:02d}", 0)} for m in range(1, 13)],
                 "per_disciplina": [{"k": k, "n": n} for k, n in Counter(e.get("disciplina") or "N/D" for e in evs).most_common()],
                 "per_regione": [{"k": k, "n": n} for k, n in Counter(e.get("regione") or "N/D" for e in evs).most_common(20)],
@@ -804,11 +807,12 @@ def build(db, deps: dict):
     @r.put("/settings")
     async def put_settings(body: SettingsIn, admin: dict = Depends(sa)):
         d = body.model_dump()
-        d["modalita_invio"] = "manuale"  # automatica attivabile solo dalla Fase 4
+        if d["modalita_invio"] not in ("manuale", "automatica"):
+            d["modalita_invio"] = "manuale"
         await db.cal_settings.update_one({"id": "main"}, {"$set": {**d, "updated_at": _now(), "updated_by": admin.get("email")}}, upsert=True)
         await audit(admin, "cal_settings_update", detail=json.dumps(d))
         return await settings()
 
     br = cal_brevo.build(db, {"sa": sa, "audit": audit, "settings": settings, "comm_date": comm_date, "history": history, "app_url": deps.get("app_url")})
     r.include_router(br["router"])
-    return {"router": r, "public_router": br["public_router"], "ensure_indexes": ensure_indexes, "upsert_event": upsert_event, "cron_tick": cron_tick}
+    return {"router": r, "public_router": br["public_router"], "ensure_indexes": ensure_indexes, "upsert_event": upsert_event, "cron_tick": cron_tick, "auto_send_tick": br["auto_tick"]}

@@ -101,6 +101,22 @@ function CampaignBuilder({ meta, templates }) {
   );
 }
 
+function AutoStatus() {
+  const [a, setA] = useState(null);
+  useEffect(() => { api.get(calApi("/brevo/auto")).then(({ data }) => setA(data)).catch(err); }, []);
+  if (!a) return null;
+  const u = a.ultimo;
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 text-sm space-y-1" data-testid="cal-auto-status">
+      <div className="flex flex-wrap items-center gap-2"><span className="font-semibold">Invio automatico post-evento</span>
+        <Pill color={a.attivo ? "#16A34A" : "#D97706"} testid="cal-auto-state">{a.attivo ? `Attivo · ogni giorno alle ${a.orario}` : "Non attivo"}</Pill></div>
+      {!a.attivo && <div className="text-xs text-amber-700" data-testid="cal-auto-missing">Manca: {a.mancanti.join(" · ")}</div>}
+      <div className="text-xs text-slate-600">Email previste nei prossimi 30 giorni: <b data-testid="cal-auto-upcoming">{a.programmate_30_giorni}</b>
+        {u && <> · ultima esecuzione {fmtDT(u.at)}: {u.esito === "eseguito" ? `${u.inviati} inviate, ${u.errori} errori, ${u.esclusi} esclusi` : `non eseguita (${(u.motivi || []).join(", ")})`}</>}</div>
+    </div>
+  );
+}
+
 export function CampaignsPanel({ meta }) {
   const [st, setSt] = useState(null);
   const [tp, setTp] = useState(null);
@@ -113,6 +129,7 @@ export function CampaignsPanel({ meta }) {
   return (
     <div className="space-y-4" data-testid="cal-campaigns">
       <BrevoStatus st={st} reload={load} />
+      <AutoStatus />
       <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3" data-testid="cal-templates"><div className="font-semibold text-sm">Template email</div>
         <div className="grid lg:grid-cols-2 gap-3">{tp.templates.map((t) => <TemplateEditor key={`${t.id}-${t.updated_at || ""}-${t.synced_at || ""}`} t={t} params={tp.params} hasSender={!!st.sender} reload={load} />)}</div></div>
       <CampaignBuilder meta={meta} templates={tp.templates} />
