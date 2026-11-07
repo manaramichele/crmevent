@@ -7291,17 +7291,40 @@ FIC_FORFETTARIO_NOTE = ("Operazione effettuata ai sensi dell'art. 1, commi da 54
 FIC_SAAS_NUMERATION = (os.environ.get("FIC_SAAS_NUMERATION") or "").strip()
 
 
-async def _fic_vat_forfettario(company_id: str, token: str) -> Optional[int]:
-    """Aliquota FIC 0% con natura N2.2 (forfettario). Override: FIC_VAT_ID_FORFETTARIO."""
+FIC_FORFETTARIO_NAME = "contribuenti forfettari"
+FIC_STAMP_THRESHOLD = 77.47
+
+
+def _nature(v) -> str:
+    return str(v or "").upper().replace(" ", "").lstrip("N")
+
+
+async def _fic_vat_forfettario(company_id: str, token: str, refresh: bool = False) -> Optional[int]:
+    """ID reale dell'aliquota FIC 'Contribuenti forfettari' (0%, natura N2.2) letto dalle API e salvato in fic_settings.
+    Override facoltativo: FIC_VAT_ID_FORFETTARIO. Nessuna aliquota viene creata."""
     override = (os.environ.get("FIC_VAT_ID_FORFETTARIO") or "").strip()
     if override.isdigit():
         return int(override)
+    cfg = await db.fic_settings.find_one({"provider": "fic"}, {"_id": 0, "vat_forfettario": 1}) or {}
+    cached = cfg.get("vat_forfettario") or {}
+    if not refresh and cached.get("id") and cached.get("company_id") == str(company_id):
+        return cached["id"]
     async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.get(f"{FIC_BASE}/c/{company_id}/settings/vat_types", headers={"Authorization": f"Bearer {token}"})
-    for v in (r.json().get("data") or []):
-        if abs(float(v.get("value") or 0)) < 0.01 and str(v.get("ei_type") or "").upper() == "N2.2":
-            return v["id"]
-    return None
+        r = await c.get(f"{FIC_BASE}/c/{company_id}/info/vat_types", headers={"Authorization": f"Bearer {token}"})
+        if r.status_code == 404:
+            r = await c.get(f"{FIC_BASE}/c/{company_id}/settings/vat_types", headers={"Authorization": f"Bearer {token}"})
+    if r.status_code >= 400:
+        raise FicError(f"lettura aliquote IVA Fatture in Cloud: {r.text[:200]}")
+    rows = [v for v in (r.json().get("data") or []) if not v.get("is_disabled")]
+    zero_n22 = [v for v in rows if abs(float(v.get("value") or 0)) < 0.01 and _nature(v.get("ei_type")) == "2.2"]
+    pick = next((v for v in zero_n22 if FIC_FORFETTARIO_NAME in str(v.get("description") or "").lower()), None) or (zero_n22[0] if len(zero_n22) == 1 else None)
+    if not pick:
+        found = ", ".join(f"{v.get('id')}:{v.get('description')} {v.get('value')}% {v.get('ei_type') or ''}".strip() for v in rows if abs(float(v.get("value") or 0)) < 0.01)
+        logger.error("FIC aliquote 0%% disponibili: %s", found)
+        raise FicError(f"Aliquota 'Contribuenti forfettari' 0% N2.2 non trovata tra le aliquote FIC (aliquote 0% lette: {found[:300] or 'nessuna'})")
+    await db.fic_settings.update_one({"provider": "fic"}, {"$set": {"vat_forfettario": {"id": pick["id"], "description": pick.get("description"),
+                                                                                       "ei_type": pick.get("ei_type"), "company_id": str(company_id), "found_at": now_iso()}}})
+    return pick["id"]
 
 
 FIC_DRAFT_KINDS = ["saas_subscription", "marketplace"]
@@ -7407,6 +7430,27 @@ async def _fic_find_existing(cid: str, token: str, subject: str, payment_ref: st
     return None
 
 
+async def _fic_build_draft(inv: dict, sv: dict, org: dict, cid: str, token: str, subject: str) -> dict:
+    """Payload bozza FIC: importo = incassato Stripe; aliquota 'Contribuenti forfettari' reale; bollo 2 € a carico dell'emittente
+    (campo stamp_duty su fattura elettronica: non cambia il totale incassato)."""
+    vat_id = await _fic_vat_forfettario(cid, token)
+    name, desc = _fic_line(inv, sv)
+    paid_day = (sv.get("paid_at") or now_iso())[:10]
+    pay = {"amount": sv["amount"], "due_date": paid_day, "paid_date": paid_day, "status": "paid"}
+    if FIC_PAYMENT_ACCOUNT_ID.isdigit():
+        pay["payment_account"] = {"id": int(FIC_PAYMENT_ACCOUNT_ID)}
+    data = {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org), "subject": subject,
+            "items_list": [{"name": name, "description": desc, "qty": 1, "net_price": sv["amount"], "vat": {"id": vat_id}, **FIC_NO_WITHHOLDING_ITEM}],
+            "currency": {"id": sv["currency"]}, "language": {"code": "it"}, "notes": FIC_FORFETTARIO_NOTE,
+            "ei_data": {"payment_method": FIC_EI_PAYMENT_METHOD}, "payment_method": {"name": FIC_PAYMENT_METHOD_NAME},
+            "payments_list": [pay], **FIC_NO_WITHHOLDING_DOC}
+    if sv["amount"] > FIC_STAMP_THRESHOLD:
+        data["stamp_duty"] = 2.0
+    if FIC_SAAS_NUMERATION:
+        data["numeration"] = FIC_SAAS_NUMERATION
+    return data
+
+
 async def _emit_saas_invoice(inv_id: str, manual: bool = False) -> dict:
     """Fattura in BOZZA su Fatture in Cloud per un pagamento Stripe verificato. MAI invio SDI (manuale dal pannello FIC).
     Idempotente: un solo documento per pagamento (lock, ID pagamento Stripe, ricerca su FIC prima di ogni nuovo tentativo)."""
@@ -7442,24 +7486,14 @@ async def _emit_saas_invoice(inv_id: str, manual: bool = False) -> dict:
         d = await _fic_find_existing(cid, token, subject, sv["payment_ref"], sv["amount"])
         recovered = bool(d)
         if not d:
-            vat_id = await _fic_vat_forfettario(cid, token)
-            if vat_id is None:
-                raise FicError("Aliquota 0% natura N2.2 non trovata su Fatture in Cloud (imposta FIC_VAT_ID_FORFETTARIO)")
-            name, desc = _fic_line(inv, sv)
-            paid_day = (sv.get("paid_at") or now_iso())[:10]
-            pay = {"amount": sv["amount"], "due_date": paid_day, "paid_date": paid_day, "status": "paid"}
-            if FIC_PAYMENT_ACCOUNT_ID.isdigit():
-                pay["payment_account"] = {"id": int(FIC_PAYMENT_ACCOUNT_ID)}
-            data = {"type": "invoice", "e_invoice": True, "entity": _fic_entity(org), "subject": subject,
-                    "items_list": [{"name": name, "description": desc, "qty": 1, "net_price": sv["amount"], "vat": {"id": vat_id}, **FIC_NO_WITHHOLDING_ITEM}],
-                    "currency": {"id": sv["currency"]}, "language": {"code": "it"}, "notes": FIC_FORFETTARIO_NOTE,
-                    "ei_data": {"payment_method": FIC_EI_PAYMENT_METHOD}, "payment_method": {"name": FIC_PAYMENT_METHOD_NAME},
-                    "payments_list": [pay], **FIC_NO_WITHHOLDING_DOC}
-            if FIC_SAAS_NUMERATION:
-                data["numeration"] = FIC_SAAS_NUMERATION
+            data = await _fic_build_draft(inv, sv, org, cid, token, subject)
             await db.invoices.update_one({"id": inv_id}, {"$set": {"fic_create_started_at": now_iso(), "fic_subject": subject}})
             async with httpx.AsyncClient(timeout=30) as c:
                 r = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents", headers={"Authorization": f"Bearer {token}"}, json={"data": data})
+                if r.status_code >= 400 and "vat" in r.text.lower():
+                    # ID aliquota salvato non più valido: nuova ricerca dalle API e un solo nuovo tentativo
+                    data["items_list"][0]["vat"] = {"id": await _fic_vat_forfettario(cid, token, refresh=True)}
+                    r = await c.post(f"{FIC_BASE}/c/{cid}/issued_documents", headers={"Authorization": f"Bearer {token}"}, json={"data": data})
             if r.status_code >= 400:
                 raise FicError(f"creazione documento: {r.text[:300]}")
             d = r.json().get("data", {})
@@ -7513,6 +7547,31 @@ async def platform_invoice_billing(invoice_id: str, body: FicBillingIn, admin: d
     await db.invoices.update_many({"org_id": inv["org_id"], "fic_document_id": None}, {"$set": {"fic_missing": missing or None}})
     await record_audit(admin, "billing_completed_by_superadmin", org_id=inv["org_id"], detail="Dati di fatturazione aggiornati per Fatture in Cloud")
     return {"billing": data, "missing": missing}
+
+
+@api.post("/platform/invoices/{invoice_id}/fic-preview")
+async def platform_invoice_preview(invoice_id: str, admin: dict = Depends(require_superadmin)):
+    """Verifica senza creare nulla: pagamento Stripe, duplicati su FIC, aliquota forfettaria reale e bozza che verrebbe creata."""
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv or inv.get("kind") not in FIC_DRAFT_KINDS:
+        raise HTTPException(status_code=404, detail="Pagamento non trovato")
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0}) or {}
+    try:
+        sv = await _stripe_verify_payment(inv)
+        if not fic_configured() or not await db.fic_settings.find_one({"provider": "fic"}):
+            raise FicError("Fatture in Cloud non connesso (OAuth mancante)")
+        token, cid = await _fic_token(), await _fic_company_id()
+        subject = f"CRMEvent {sv['payment_ref']}"
+        existing = await _fic_find_existing(cid, token, subject, sv["payment_ref"], sv["amount"])
+        data = await _fic_build_draft(inv, sv, org, cid, token, subject)
+    except FicError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    vat = ((await db.fic_settings.find_one({"provider": "fic"}, {"_id": 0, "vat_forfettario": 1})) or {}).get("vat_forfettario") or {}
+    it = data["items_list"][0]
+    return {"stripe": sv, "existing": {"id": existing.get("id"), "number": existing.get("number")} if existing else None,
+            "vat": {"id": it["vat"]["id"], "description": vat.get("description"), "ei_type": vat.get("ei_type")}, "riga": it["name"], "descrizione": it["description"],
+            "importo": it["net_price"], "bollo": data.get("stamp_duty", 0), "bollo_a_carico": "emittente" if data.get("stamp_duty") else None,
+            "missing": _billing_missing(org.get("billing") or {}), "invio_sdi": False}
 
 
 @api.post("/platform/invoices/{invoice_id}/fic-generate")
