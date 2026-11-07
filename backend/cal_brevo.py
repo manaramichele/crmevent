@@ -88,6 +88,7 @@ def build(db, deps: dict):
     pub = APIRouter(prefix="/api/public/cal")
     sa, audit, settings, comm_date, history = deps["sa"], deps["audit"], deps["settings"], deps["comm_date"], deps["history"]
     app_url = (deps.get("app_url") or "").rstrip("/")
+    tasks: set = set()
 
     async def cfg() -> dict:
         return (await db.cal_settings.find_one({"id": "main"}, {"_id": 0}) or {}).get("brevo") or {}
@@ -177,8 +178,7 @@ def build(db, deps: dict):
                     ok = email and (o.get("privacy") or {}).get("status") == "idoneo" and not o.get("escluso_campagne")
                     if not ok:
                         if o.get("brevo_email"):
-                            remove.append(o["brevo_email"])
-                            await db.cal_organizers.update_one({"id": o["id"]}, {"$set": {"brevo_email": None}})
+                            remove.append((o["id"], o["brevo_email"]))
                         continue
                     last = await db.cal_events.find_one({"organizer_id": o["id"], "merged_into": None}, {"_id": 0, "nome": 1, "data_inizio": 1}, sort=[("data_inizio", -1)]) or {}
                     attrs = {"CAL_ORGANIZZATORE": o["nome"], "CAL_TIPOLOGIA": o.get("tipologia"), "CAL_REGIONE": o.get("regione"),
@@ -198,9 +198,16 @@ def build(db, deps: dict):
                         await db.cal_organizers.update_one({"id": o["id"]}, {"$set": {"brevo_email": email, "brevo_synced_at": _now()}})
                     except BrevoError:
                         res["errori"] += 1
-                if remove:
-                    await b._req("POST", f"/contacts/lists/{lid}/contacts/remove", json={"emails": remove[:150]})
-                    res["rimossi"] = len(remove[:150])
+                for i in range(0, len(remove), 150):
+                    chunk = remove[i:i + 150]
+                    try:
+                        await b._req("POST", f"/contacts/lists/{lid}/contacts/remove", json={"emails": [e for _, e in chunk]})
+                    except BrevoError as e:
+                        if e.status != 400:  # 400 = contatti già assenti dalla lista
+                            res["errori"] += len(chunk)
+                            continue
+                    await db.cal_organizers.update_many({"id": {"$in": [x for x, _ in chunk]}}, {"$set": {"brevo_email": None}})
+                    res["rimossi"] += len(chunk)
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
@@ -252,7 +259,7 @@ def build(db, deps: dict):
     async def send_one(b: BrevoClient, t: dict, to: str, name: str, params: dict, unsub: Optional[str]) -> str:
         body = {"templateId": int(t["brevo_template_id"]), "to": [{"email": to, "name": name[:70]}], "params": params, "tags": ["calendario-italia"]}
         if unsub:
-            body["headers"] = {"List-Unsubscribe": f"<{unsub}>"}
+            body["headers"] = {"List-Unsubscribe": f"<{unsub}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
         return ((await b._req("POST", "/smtp/email", json=body)) or {}).get("messageId")
 
     def sample_params(unsub: str) -> dict:
@@ -336,7 +343,9 @@ def build(db, deps: dict):
         await db.cal_campaigns.insert_one({"id": cid, "template_id": t["id"], "template_nome": t["nome"], "filtri": body.model_dump(exclude={"firma", "conferma"}),
                                            "destinatari": len(res["inclusi"]), "inviati": 0, "errori": 0, "status": "in_corso", "simulazione": body.simulazione,
                                            "created_by": admin.get("email"), "created_at": _now()})
-        asyncio.create_task(run_campaign(cid, t, res["inclusi"], body.simulazione, admin.get("email")))
+        task = asyncio.create_task(run_campaign(cid, t, res["inclusi"], body.simulazione, admin.get("email")))
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
         await audit(admin, "cal_campaign_send", detail=f"{cid} \u00b7 {t['id']} \u00b7 {len(res['inclusi'])} \u00b7 simulazione={body.simulazione}")
         return {"campaign_id": cid, "destinatari": len(res["inclusi"]), "simulazione": body.simulazione}
 
@@ -346,7 +355,8 @@ def build(db, deps: dict):
         try:
             for x in rows:
                 o = await db.cal_organizers.find_one({"id": x["org_id"]}, {"_id": 0})
-                if not o or (o.get("privacy") or {}).get("status") != "idoneo":  # ricontrollo prima di ogni invio
+                if (not o or (o.get("privacy") or {}).get("status") != "idoneo" or o.get("escluso_campagne")
+                        or o.get("stato_commerciale") in SKIP_COMM):  # ricontrollo prima di ogni invio
                     continue
                 unsub = f"{app_url}/api/public/cal/unsubscribe/{await unsub_token(o)}"
                 params = {"ORGANIZZATORE": o["nome"], "EVENTO": x["evento"], "COMUNE": x.get("comune") or "", "DEMO_URL": app_url, "UNSUB_URL": unsub,
@@ -397,9 +407,24 @@ def build(db, deps: dict):
         await db.cal_organizers.update_one({"id": o["id"]}, {"$set": {"privacy": p}})
         await history(o["id"], "privacy", (o.get("privacy") or {}).get("status"), "disiscritto", fonte, "automatica", fonte)
 
+    def page(msg: str, form: str = "") -> HTMLResponse:
+        return HTMLResponse(f'<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>CRMEvent</title></head>'
+                            f'<body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#0f172a"><h2>CRMEvent</h2><p>{_html.escape(msg)}</p>{form}</body></html>')
+
+    async def by_token(token: str) -> Optional[dict]:
+        return await db.cal_organizers.find_one({"unsub_token": token}, {"_id": 0}) if len(token) > 20 else None
+
     @pub.get("/unsubscribe/{token}", response_class=HTMLResponse)
+    async def unsubscribe_page(token: str):
+        """Solo conferma: un GET (anche da scanner/anteprime) non disiscrive."""
+        if not await by_token(token):
+            return page("Link non valido o scaduto.")
+        return page("Vuoi smettere di ricevere comunicazioni da CRMEvent?",
+                    f'<form method="post"><button style="background:#0ABAB5;border:none;padding:10px 20px;border-radius:999px;font-weight:bold;cursor:pointer">Conferma disiscrizione</button></form>')
+
+    @pub.post("/unsubscribe/{token}", response_class=HTMLResponse)
     async def unsubscribe(token: str):
-        o = await db.cal_organizers.find_one({"unsub_token": token}, {"_id": 0}) if len(token) > 20 else None
+        o = await by_token(token)
         if o and (o.get("privacy") or {}).get("status") != "disiscritto":
             await mark_unsub(o, "Disiscrizione dal link nell'email", "link_email")
             if o.get("brevo_email") and is_configured():
@@ -410,8 +435,6 @@ def build(db, deps: dict):
                             await b._req("POST", f"/contacts/lists/{lid}/contacts/remove", json={"emails": [o["brevo_email"]]})
                 except Exception:  # noqa: BLE001
                     pass
-        msg = "Disiscrizione registrata: non riceverai altre comunicazioni da CRMEvent." if o else "Link non valido o scaduto."
-        return HTMLResponse(f'<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>CRMEvent</title></head>'
-                            f'<body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#0f172a"><h2>CRMEvent</h2><p>{_html.escape(msg)}</p></body></html>')
+        return page("Disiscrizione registrata: non riceverai altre comunicazioni da CRMEvent." if o else "Link non valido o scaduto.")
 
     return {"router": r, "public_router": pub}

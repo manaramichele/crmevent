@@ -1224,3 +1224,12 @@ Task 2 — Creatività manuale:
 - Cron cal-italia-sync 03:00 Europe/Rome (/api/cron/cal-italia-sync, Bearer WEBHOOK_CRON_SECRET), attivo solo se "Raccolta automatica" è attivata nelle Impostazioni (default disattivata).
 - Test: iteration_147 backend 13/13, frontend 100%; fix successivi verificati con test manuale. Dati di test rimossi.
 
+## 2026-11-07 — Calendario Eventi Italia · Fase 3 (Brevo)
+- backend/cal_brevo.py: lista "CRMEvent — Organizzatori Eventi Italia" (cartella dedicata, attributi CAL_*), sincronizzazione solo contatti Idoneo non esclusi, rimozione non più idonei a blocchi da 150, mai reiscrizione dei disiscritti.
+- Template Post-evento e Richiamo modificabili in CRMEvent (link {{ params.UNSUB_URL }} obbligatorio), salvataggio su Brevo, prova all'indirizzo del Super Admin.
+- Mittente scelto dai mittenti verificati Brevo (Impostazioni).
+- Anteprima destinatari con motivi di esclusione; invio manuale con conferma "INVIA" + firma destinatari (409 se cambiati), ricontrollo prima di ogni invio, modalità "Simula invio".
+- Storico comunicazioni e campagne; dashboard "Email inviate"; disiscrizione pubblica con pagina di conferma (GET) + POST e List-Unsubscribe one-click.
+- In preview BREVO_API_KEY è vuota (solo produzione): le azioni Brevo rispondono "Brevo non configurato". Test: iteration_148 100%; fix successivi verificati a mano.
+
+

@@ -12,17 +12,19 @@ const fmtDT = (s) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "shor
 export function BrevoSenderSettings() {
   const [st, setSt] = useState(null);
   const [senders, setSenders] = useState(null);
+  const [msg, setMsg] = useState("");
   const load = useCallback(() => api.get(calApi("/brevo/status")).then(({ data }) => setSt(data)).catch(err), []);
-  useEffect(() => { load(); api.get(calApi("/brevo/senders")).then(({ data }) => setSenders(data.senders)).catch((e) => { setSenders([]); err(e); }); }, [load]);
+  useEffect(() => { load(); api.get(calApi("/brevo/senders")).then(({ data }) => setSenders(data.senders)).catch((e) => { setSenders([]); setMsg(e.response?.data?.detail || "Impossibile leggere i mittenti da Brevo"); }); }, [load]);
   const pick = async (id) => { try { await api.put(calApi("/brevo/sender"), { sender_id: Number(id) }); toast.success("Mittente salvato"); load(); } catch (e) { err(e); } };
   if (!st) return null;
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2 text-sm max-w-2xl" data-testid="cal-brevo-sender">
       <div className="font-semibold">Mittente Brevo</div>
-      <select className={`${SEL} w-full`} value={st.sender?.id || ""} onChange={(e) => pick(e.target.value)} disabled={!senders} data-testid="cal-brevo-sender-select">
+      <select className={`${SEL} w-full`} value={st.sender?.id || ""} onChange={(e) => pick(e.target.value)} disabled={!senders?.length} data-testid="cal-brevo-sender-select">
         <option value="" disabled>{senders ? "Scegli un mittente verificato" : "Caricamento mittenti..."}</option>
         {(senders || []).map((s) => <option key={s.id} value={s.id}>{s.name} &lt;{s.email}&gt;</option>)}
       </select>
+      {msg && <p className="text-xs text-amber-700" data-testid="cal-brevo-sender-error">{msg}</p>}
       <p className="text-xs text-slate-500">Sono elencati solo i mittenti attivi e verificati sull'account Brevo di CRMEvent.</p>
     </div>
   );
