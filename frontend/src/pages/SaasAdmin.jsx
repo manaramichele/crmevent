@@ -66,7 +66,7 @@ function ConfigTab() {
 const TYPE = { cliente: "Cliente", interna: "Interna", internal: "Interna", test: "Test" };
 const formulaOf = (r) => (r.mode === "trial" ? (r.purchased ? r.paid_plan : null) : r.plan || r.assigned_plan || r.admin?.plan || r.paid_plan || null);
 
-function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt, fi, setFi }) {
+function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt, fi, setFi, onSync }) {
   const s = "h-9 rounded-md border border-slate-200 bg-white px-2 text-sm";
   return (
     <div className="flex flex-wrap gap-2 mb-3" data-testid="saas-filters">
@@ -77,6 +77,7 @@ function OrgsFilters({ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt, fi, 
       <select value={fs} onChange={(e) => setFs(e.target.value)} className={s} data-testid="saas-filter-status"><option value="">Tutti gli stati</option><option value="trial">Prova gratuita</option><option value="active">Attivo</option><option value="expired">Scaduto</option><option value="suspended">Sospeso</option></select>
       <select value={fe} onChange={(e) => setFe(e.target.value)} className={s} data-testid="saas-filter-expiry"><option value="">Qualsiasi scadenza</option><option value="7">Entro 7 giorni</option><option value="30">Entro 30 giorni</option><option value="past">Già scaduti</option></select>
       <select value={fi} onChange={(e) => setFi(e.target.value)} className={s} data-testid="saas-filter-invoice"><option value="">Tutte</option><option value="da_fatturare">Da fatturare</option><option value="creata">Fattura creata</option><option value="errore">Errore fatturazione</option></select>
+      <Button type="button" variant="outline" onClick={onSync} className="h-9 text-xs" data-testid="saas-reconcile-stripe">Recupera pagamenti Stripe</Button>
     </div>
   );
 }
@@ -97,7 +98,11 @@ function OrgsTab() {
     && (!fs || stOf(r) === fs) && (!fe || (() => { const e = endOf(r); if (!e) return false; const dd = (new Date(e) - now) / 864e5; return fe === "past" ? dd < 0 : dd >= 0 && dd <= Number(fe); })()));
   return (
     <>
-    <OrgsFilters {...{ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt, fi, setFi }} />
+    <OrgsFilters {...{ q, setQ, fp, setFp, fs, setFs, fe, setFe, ft, setFt, fi, setFi }} onSync={async () => {
+          const t = toast.loading("Verifica dei pagamenti su Stripe...");
+          try { const { data } = await api.post("/platform/invoices/reconcile"); toast.success(`Stripe: ${data.found} pagamenti confermati · ${data.added + data.fixed} recuperati`, { id: t }); load(); }
+          catch (e) { toast.dismiss(t); err(e); }
+        }} />
     {edit && <SubscriptionEditDialog row={edit} onClose={() => setEdit(null)} onSaved={load} />}
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="saas-orgs-table">
       <table className="w-full min-w-[1220px] text-sm">

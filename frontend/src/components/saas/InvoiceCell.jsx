@@ -76,6 +76,7 @@ function PaymentRow({ f, onChanged }) {
         </div>
       </div>
       {f.error && f.state !== "creata" && <div className="mt-2 flex gap-1 text-xs text-red-600" data-testid={`fic-error-${f.id}`}><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{f.error}</div>}
+      {f.state === "dati_mancanti" && f.missing?.length > 0 && <div className="mt-2 text-xs text-red-600" data-testid={`fic-missing-${f.id}`}>Da completare: {f.missing.join(", ")}</div>}
       {f.state === "dati_mancanti" && <BillingForm f={f} onSaved={onChanged} />}
     </div>
   );
@@ -83,21 +84,29 @@ function PaymentRow({ f, onChanged }) {
 
 export function InvoiceCell({ r, onChanged }) {
   const [open, setOpen] = useState(false);
+  const [sync, setSync] = useState(false);
   const fs = r.fatture || [];
-  if (!fs.length) return <Badge s="non_disponibile" testid={`saas-fic-${r.id}`} />;
   const s = orgFicState(r);
+  const openDlg = async () => {
+    setOpen(true); setSync(true);
+    try { const { data } = await api.post("/platform/invoices/reconcile", null, { params: { org_id: r.id } }); if (data.added || data.fixed) { toast.success(`Pagamenti Stripe recuperati: ${data.added + data.fixed}`); } await onChanged(); }
+    catch (e) { err(e); }
+    setSync(false);
+  };
   const todo = fs.filter((f) => ["da_fatturare", "errore", "dati_mancanti"].includes(f.state)).length;
   const last = fs.find((f) => f.numero);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="flex flex-col items-start gap-0.5 text-left" data-testid={`saas-fic-${r.id}`}>
+      <button type="button" onClick={openDlg} className="flex flex-col items-start gap-0.5 text-left" data-testid={`saas-fic-${r.id}`}>
         <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5 text-slate-400" /><Badge s={s} /></span>
-        <span className="text-[11px] text-slate-500">{todo ? `${todo} da gestire · ` : ""}{last ? `ultima n. ${last.numero}` : `${fs.length} pagament${fs.length === 1 ? "o" : "i"}`}</span>
+        <span className="text-[11px] text-slate-500">{!fs.length ? "Verifica su Stripe" : `${todo ? `${todo} da gestire · ` : ""}${last ? `ultima n. ${last.numero}` : `${fs.length} pagament${fs.length === 1 ? "o" : "i"}`}`}</span>
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto" data-testid={`saas-fic-dialog-${r.id}`}>
           <DialogTitle>Fatture · {r.nome}</DialogTitle>
           <DialogDescription>Ogni pagamento Stripe confermato genera una sola fattura in bozza su Fatture in Cloud. L'invio allo SDI si fa solo manualmente da Fatture in Cloud.</DialogDescription>
+          {sync && <p className="text-xs text-slate-500" data-testid="fic-reconcile-loading">Verifica dei pagamenti su Stripe in corso...</p>}
+          {!sync && !fs.length && <p className="text-sm text-slate-500" data-testid="fic-no-payments">Nessun pagamento Stripe confermato per questa organizzazione.</p>}
           <div className="space-y-2">{fs.map((f) => <PaymentRow key={f.id} f={f} onChanged={onChanged} />)}</div>
         </DialogContent>
       </Dialog>

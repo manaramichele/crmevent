@@ -7473,7 +7473,7 @@ async def _retry_saas_invoices() -> int:
     if FIC_MODE != "live":
         return 0
     rows = await db.invoices.find({"kind": {"$in": FIC_DRAFT_KINDS}, "is_test": {"$ne": True}, "payment_status": "paid", "fic_document_id": None,
-                                   "fic_missing": {"$in": [None, []]}, "fic_attempts": {"$not": {"$gte": 6}}}, {"_id": 0, "id": 1}).to_list(200)
+                                   "fic_auto": {"$ne": False}, "fic_missing": {"$in": [None, []]}, "fic_attempts": {"$not": {"$gte": 6}}}, {"_id": 0, "id": 1}).to_list(200)
     for r in rows:
         await _emit_saas_invoice(r["id"])
     return len(rows)
@@ -7520,6 +7520,87 @@ async def platform_invoice_generate(invoice_id: str, admin: dict = Depends(requi
     res = await _emit_saas_invoice(invoice_id, manual=True)
     await record_audit(admin, "fic_draft_generate", org_id=inv.get("org_id"), detail=f"{inv.get('stripe_invoice_id')} → {res.get('state')}{' · ' + str(res.get('numero')) if res.get('numero') else ''}")
     return res
+
+
+def _stripe_inv_kind(si, org: dict) -> Optional[str]:
+    sd = (si.get("parent") or {}).get("subscription_details") or si.get("subscription_details") or {}
+    line = (((si.get("lines") or {}).get("data") or [{}])[0]) or {}
+    for m in (si.get("metadata"), sd.get("metadata"), line.get("metadata")):
+        k = (m or {}).get("kind")
+        if k == "saas":
+            return "saas_subscription"
+        if k == "marketplace":
+            return "marketplace"
+    sub = si.get("subscription") or sd.get("subscription")
+    sub = sub.get("id") if isinstance(sub, dict) else sub
+    if sub and sub == ((org.get("saas") or {}).get("stripe_subscription_id")):
+        return "saas_subscription"
+    return None
+
+
+async def _reconcile_stripe_payments(org_id: str) -> dict:
+    """Recupera da Stripe i pagamenti riusciti dell'organizzazione (anche precedenti) e li rende fatturabili.
+    Solo record locali: nessuna modifica su Stripe e nessuna fattura generata (fic_auto False: solo pulsante manuale)."""
+    org = await db.organizations.find_one({"id": org_id}, {"_id": 0}) or {}
+    cust = (org.get("subscription") or {}).get("stripe_customer_id")
+    if not cust:
+        return {"found": 0, "added": 0, "fixed": 0}
+    found = added = fixed = 0
+    for si in stripe_sdk.Invoice.list(customer=cust, status="paid", limit=100).auto_paging_iter():
+        if int(si.get("amount_paid") or 0) <= 0:
+            continue
+        kind = _stripe_inv_kind(si, org)
+        if not kind:
+            continue
+        found += 1
+        cur = await db.invoices.find_one({"stripe_invoice_id": si["id"]}, {"_id": 0})
+        if cur and cur.get("kind") in FIC_DRAFT_KINDS and cur.get("payment_status") == "paid" and cur.get("org_id") == org_id:
+            continue
+        if cur and cur.get("kind") not in (None, *FIC_DRAFT_KINDS):
+            continue
+        if not cur:
+            await _record_invoice(si, "paid")
+            cur = await db.invoices.find_one({"stripe_invoice_id": si["id"]}, {"_id": 0})
+            if not cur:
+                continue
+            added += 1
+        else:
+            fixed += 1
+        line = (((si.get("lines") or {}).get("data") or [{}])[0]) or {}
+        per = line.get("period") or {}
+        rec = ((line.get("price") or {}).get("recurring") or {}).get("interval")
+        s = org.get("saas") or {}
+        upd = {"kind": kind, "org_id": org_id, "payment_status": "paid", "is_test": STRIPE_MODE != "live", "stripe_backfilled_at": now_iso()}
+        if not cur.get("fic_attempts"):
+            upd["fic_auto"] = False
+        if kind == "saas_subscription":
+            upd.update({"saas_plan": cur.get("saas_plan") or s.get("plan"), "saas_cycle": cur.get("saas_cycle") or {"month": "monthly", "year": "yearly"}.get(rec) or s.get("billing_cycle"),
+                        "descrizione": cur.get("descrizione") or f"Abbonamento CRMEvent {str(s.get('plan') or '').upper()}".strip()})
+        else:
+            upd["descrizione"] = cur.get("descrizione") or (line.get("description") or "Servizio CRMEvent")
+        if per.get("start") and per.get("end") and not cur.get("periodo_inizio"):
+            upd.update({"periodo_inizio": datetime.fromtimestamp(per["start"], timezone.utc).isoformat(),
+                        "periodo_fine": datetime.fromtimestamp(per["end"], timezone.utc).isoformat()})
+        await db.invoices.update_one({"stripe_invoice_id": si["id"], "fic_document_id": None}, {"$set": upd})
+    return {"found": found, "added": added, "fixed": fixed}
+
+
+@api.post("/platform/invoices/reconcile")
+async def platform_invoice_reconcile(org_id: Optional[str] = None, admin: dict = Depends(require_superadmin)):
+    """Recupera da Stripe i pagamenti confermati non collegati (una org o tutte quelle con cliente Stripe). Nessuna fattura generata."""
+    ids = [org_id] if org_id else [o["id"] for o in await db.organizations.find({"subscription.stripe_customer_id": {"$nin": [None, ""]}}, {"_id": 0, "id": 1}).to_list(5000)]
+    tot, errors = {"found": 0, "added": 0, "fixed": 0}, []
+    for oid in ids:
+        try:
+            r = await _reconcile_stripe_payments(oid)
+            for k in tot:
+                tot[k] += r[k]
+        except Exception as e:  # noqa: BLE001
+            logger.error("reconcile %s: %s", oid, e)
+            errors.append(oid)
+    await record_audit(admin, "stripe_payments_reconcile", org_id=org_id, detail=f"trovati {tot['found']} · aggiunti {tot['added']} · collegati {tot['fixed']}")
+    return {**tot, "orgs": len(ids), "errors": errors}
+
 
 
 async def _fic_issue_document(inv: dict, dry_run: bool = True) -> dict:
@@ -9786,6 +9867,11 @@ async def migrate_memberships():
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
+    if not await db.schema_meta.find_one({"id": "fic_manual_backlog_v1"}):
+        # pagamenti gi\u00e0 registrati prima della fatturazione in bozza: solo generazione manuale dal pulsante (mai automatica)
+        await db.invoices.update_many({"kind": {"$in": ["saas_subscription", "marketplace"]}, "fic_document_id": None, "fic_auto": {"$exists": False}},
+                                      {"$set": {"fic_auto": False}})
+        await db.schema_meta.insert_one({"id": "fic_manual_backlog_v1", "applied_at": now_iso()})
     await db.user_sessions.create_index("session_token")
     try:  # classificazione storica (non distruttiva): accessi/operazioni Super Admin = registro tecnico amministrativo
         sa_ids = [u["user_id"] for u in await db.users.find({"role": "superadmin"}, {"_id": 0, "user_id": 1}).to_list(50)]

@@ -774,3 +774,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Auto su webhook (solo FIC_MODE=live) + retry cron (saas + marketplace); manuale: POST /api/platform/invoices/{id}/fic-generate, GET /api/platform/invoices/{id}/fic.
 - UI: colonna "Fattura" + filtro (Tutte/Da fatturare/Fattura creata/Errore) in Abbonamenti › Stato abbonamenti, dialog per pagamento (components/saas/InvoiceCell.jsx).
 
+
+
+
+## 2026-11-07 · Fix "Non disponibile" su pagamenti già incassati
+- Cause in codice: colonna Fattura mostrata solo per org con saas "enabled"; invoice.paid arrivato prima del salvataggio dell'ID abbonamento → pagamento non classificato saas_subscription. Fix: lista pagamenti per tutte le org; fallback webhook su metadata Subscription (kind saas, org_id).
+- Recupero Stripe: _reconcile_stripe_payments / POST /api/platform/invoices/reconcile[?org_id] (Invoice.list paid del cliente) → crea/collega record locali (kind, piano, ciclo, periodo) con fic_auto False: mai generazione automatica, solo pulsante. Avvio: migrazione fic_manual_backlog_v1 → fic_auto False su pagamenti già registrati senza fattura.
+- UI: cella Fattura sempre cliccabile (verifica Stripe al click), pulsante "Recupera pagamenti Stripe", stato "Dati mancanti" con elenco campi.
