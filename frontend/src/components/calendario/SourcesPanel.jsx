@@ -126,7 +126,7 @@ export function SettingsPanel({ meta, onSaved }) {
       <div className="text-xs text-slate-500 space-y-1">
         <div>Modalità invio: <b>Manuale</b> (l'automatica sarà attivabile solo nella Fase 4).</div>
         <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={!!s.raccolta_automatica} onChange={(e) => setS({ ...s, raccolta_automatica: e.target.checked })} data-testid="cal-set-auto" />Raccolta automatica ogni notte alle 03:00 (Europe/Rome), solo dalle fonti autorizzate e attive</label>
-        <div>Lista e template Brevo, mittente: disponibili nella Fase 3.</div>
+        <div>Lista e template Brevo: nella tab "Campagne Brevo". Il mittente si sceglie qui sotto.</div>
       </div>
       <Button onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="cal-settings-save">Salva impostazioni</Button>
     </div>

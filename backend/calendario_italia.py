@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+import cal_brevo
 import cal_feeds
 from iscritti import _norm, read_rows
 
@@ -448,7 +449,8 @@ def build(db, deps: dict):
             raise HTTPException(status_code=404, detail="Organizzatore non trovato")
         evs = await db.cal_events.find({"organizer_id": oid, "merged_into": None}, {"_id": 0, "id": 1, "nome": 1, "anno": 1, "data_inizio": 1, "stato": 1, "comune": 1}).sort("data_inizio", -1).to_list(500)
         hist = await db.cal_history.find({"entity_id": oid}, {"_id": 0}).sort("at", -1).to_list(100)
-        return {**o, "events": evs, "history": hist, "communications": []}
+        comms = await db.cal_comms.find({"org_id": oid}, {"_id": 0}).sort("at", -1).to_list(100)
+        return {**o, "events": evs, "history": hist, "communications": comms}
 
     @r.post("/organizers")
     async def create_org(body: OrganizerIn, admin: dict = Depends(sa)):
@@ -619,7 +621,7 @@ def build(db, deps: dict):
                         "clienti": sum(1 for o in orgs if o.get("stato_commerciale") == "cliente_acquisito"),
                         "duplicati_aperti": await db.cal_duplicates.count_documents({"status": "open"}),
                         "conflitti_aperti": await db.cal_conflicts.count_documents({"status": "open"}),
-                        "email_programmate": 0, "email_inviate": 0},
+                        "email_programmate": 0, "email_inviate": await db.cal_comms.count_documents({"status": "inviato"})},
                 "per_mese": [{"mese": f"{m:02d}", "n": mesi.get(f"{m:02d}", 0)} for m in range(1, 13)],
                 "per_disciplina": [{"k": k, "n": n} for k, n in Counter(e.get("disciplina") or "N/D" for e in evs).most_common()],
                 "per_regione": [{"k": k, "n": n} for k, n in Counter(e.get("regione") or "N/D" for e in evs).most_common(20)],
@@ -807,4 +809,6 @@ def build(db, deps: dict):
         await audit(admin, "cal_settings_update", detail=json.dumps(d))
         return await settings()
 
-    return {"router": r, "ensure_indexes": ensure_indexes, "upsert_event": upsert_event, "cron_tick": cron_tick}
+    br = cal_brevo.build(db, {"sa": sa, "audit": audit, "settings": settings, "comm_date": comm_date, "history": history, "app_url": deps.get("app_url")})
+    r.include_router(br["router"])
+    return {"router": r, "public_router": br["public_router"], "ensure_indexes": ensure_indexes, "upsert_event": upsert_event, "cron_tick": cron_tick}
