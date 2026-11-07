@@ -1,0 +1,44 @@
+{
+  "summary": "Tested the 'Ricerca da Brevo' tab of Calendario Eventi Italia, backend and frontend. Backend pytest: 11 of 12 pass. Passing: status/KPI, auth required, brevo/lists and import return 400 'Brevo non configurato', cron without auth or with a wrong token returns 401, settings PUT/GET persist and are validated (422), gruppo/tutti return 400 before the test, an invalid scope returns 400, a test job with no BRAVE key goes 'sospeso' with a motivo mentioning BRAVE_API_KEY and the contact goes 'errore', a gmail-only contact without societa becomes 'dati_insufficienti', approving without a date returns 400, approving with a date creates a cal_event with source 'ricerca_brevo' and an organizer and sets the finding to 'approvato', scarta sets 'scartato'. The one failure is a real bug: resuming (Riprendi) a test job that was suspended for the missing Brave key marks it 'completato' without retrying the failed contact, which also unlocks group processing. UI (1920): every requested testid renders. 8 KPIs, the Brave warning, and group/all buttons disabled before the test. The import dialog shows the Brevo error toast without crashing. The test job shows sospesa with Riprendi/Annulla, and Annulla works. Approving without a date shows an error toast; Correggi dati + date + Approva inserts the event; Scarta works; the KPI updates. Regression: the dashboard, fonti and campagne tabs render, and Fonti lists 'Ricerca da contatti Brevo' as Consentita/Attiva with no action buttons. Mobile 390: the buttons row overflows horizontally. All test data was cleaned up and cal_settings.rv was restored (unset). No emails were sent.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/platform/cal/reverse/jobs/{jid}/riprendi (run_job)", "issue": "run_job increments pos even when the contact failed because BRAVE_API_KEY is missing, then suspends. On Riprendi the failed contact is skipped and stays 'errore'. If it was the last contact, the job goes straight to 'completato'. For a kind='test' job this sets test_completato=true and unlocks gruppo/tutti even though nothing was searched. Repro: seed 1 contact with societa, run scope=test (job goes sospeso, pos 1/1), Riprendi: status becomes completato. Fix: when err contains BRAVE_API_KEY, do not $inc pos (and/or reset the contact to da_analizzare) before suspending. test_completato should also require the test job to have at least one non-error result.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /reverse/status kpi", "issue": "'analizzati' counts 'errore' contacts as analysed. 'eventi_trovati' includes 'scartato' findings."},
+      {"endpoint": "POST /reverse/findings/{fid}/review approva", "issue": "When data_inizio is supplied but data_fine is not, data_fine stays null on both the finding and the event (to_calendar's fallback runs only in save_finding). Consider defaulting data_fine to data_inizio."},
+      {"endpoint": "run_job", "issue": "The same failure repeats for other errors: generic errors (e.g. LLM failure) just skip the contact, and there is no retry path except scope=selezione."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ReversePanel buttons row (mobile 390px)", "issue": "The wrapper around the group-size select, the gruppo button and 'Tutti i restanti' is 'flex items-center gap-1' without flex-wrap, so the row overflows. body.scrollWidth is 465 on a 390 viewport and 'Tutti i restanti' is cut off.", "selector": "[data-testid='rv-group-size'] parent div", "priority": "MEDIUM"},
+      {"component": "ContactRow", "issue": "A contact in 'errore' with fonti [] (Brave failed before any query was recorded) has no 'Fonti consultate' toggle, so the user cannot see c.errore or c.nota in the table. The same applies to dati_insufficienti contacts with a nota.", "selector": "[data-testid^='rv-contact-sources-']", "priority": "LOW"},
+      {"component": "ImportDialog", "issue": "The 'Brevo non configurato' toast appears twice, caused by the double effect in dev StrictMode. Minor; consider a dedicated 'Brevo non configurato' message inside the dialog instead of 'Nessuna lista disponibile'.", "selector": "[data-testid='rv-import-dialog']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "FindingsReview Correggi dati", "issues": ["Uses the native <input type='date'> instead of the shadcn Calendar/DatePicker"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_cal_reverse_brevo.py", "/app/backend/tests/cal_reverse_ui_seed.py", "/app/test_reports/pytest/pytest_cal_reverse.xml"],
+  "action_items": [
+    "Fix run_job/riprendi: do not advance pos (or reset the contact to da_analizzare) when suspending for the missing BRAVE_API_KEY, so Riprendi retries that contact and a test job cannot become 'completato' (and unlock gruppo/tutti) without real searches",
+    "Add flex-wrap to the group-size/gruppo/tutti wrapper in ReversePanel.jsx (mobile overflow)",
+    "Show contact errore/nota even when fonti is empty",
+    "Optional: default data_fine to data_inizio on manual approval; exclude errore from 'analizzati' and scartato from 'eventi_trovati' KPIs; replace the native date inputs with the shadcn date picker"
+  ],
+  "critical_code_review_comments": [
+    "cal_reverse.py run_job: pos is incremented before the BRAVE_API_KEY suspension check, so the failing contact is lost on resume (see critical issue)",
+    "MODEL = ('anthropic','claude-opus-5-5'): not verified here because no LLM call is possible without Brave. Main agent says it was verified offline",
+    "The FS state map is duplicated in ReversePanel.jsx and FindingsReview.jsx (ReversePanel exports FS but FindingsReview redefines it)",
+    "search_contact runs find_one with no None check; a deleted contact gives an AttributeError, which is caught and recorded as 'errore' via update_one on a missing doc (harmless no-op)"
+  ],
+  "updated_files": ["/app/backend/tests/test_cal_reverse_brevo.py", "/app/backend/tests/cal_reverse_ui_seed.py"],
+  "success_rate": {"backend": "92% (11/12; the failure is a real bug)", "frontend": "90% (all flows work; mobile overflow)"},
+  "seed_data_creation": "Contacts and findings were inserted directly into cal_rv_contacts/cal_rv_findings with TEST_ names. All were removed, along with created jobs, the TEST_ event and organizer, their cal_history, and cal_duplicates. cal_settings.rv was unset (it was absent before).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "BREVO_API_KEY and BRAVE_API_KEY are empty in preview. The cal_rv_* collections were empty before testing. Run: cd /app/backend && python -m pytest tests/test_cal_reverse_brevo.py -p no:randomly -n0. test_test_job_suspends_without_brave currently fails at the annullato assertion because of the riprendi bug. UI seed: python tests/cal_reverse_ui_seed.py seed|cleanup (ids in /tmp/cal_reverse_ui_ids.json). Log in via page.request.post /api/auth/login and dismiss the cookie banner with the 'Accept all' button before clicking lower elements. Container date is 2026-11-07.",
+  "rca of the issue": "run_job: after search_contact raises 'Chiave Brave Search mancante (BRAVE_API_KEY)', the code runs $inc pos:1 and then sets status sospeso. On riprendi the loop restarts at pos+1. With a single-contact or last-contact queue, pos >= len(queue), so status becomes 'completato'. active test_done checks only kind=test & status=completato, so gruppo/tutti unlock."
+}

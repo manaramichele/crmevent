@@ -52,6 +52,14 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: cal-italia-reverse-update
+    description: "Calendario Eventi Italia: ogni notte alle 04:00 ricontrolla le date degli organizzatori importati da Brevo (cache e intervallo configurabili)"
+    cron: "0 4 * * *"
+    timezone: "Europe/Rome"
+    endpoint: "{{BASE_URL}}/api/cron/cal-italia-reverse-update"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
   - name: press-tick
     description: "Comunicati stampa: bozze post-evento, invii programmati approvati, ripresa invii interrotti, sync Brevo"
     cron: "*/10 * * * *"

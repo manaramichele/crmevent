@@ -1239,4 +1239,13 @@ Task 2 — Creatività manuale:
 - Verifica: test unitario con Brevo finto su DB separato (invii, esclusioni, blacklist, nessun doppio invio, lock, modalità manuale).
 
 
+## 2026-11-07 — Calendario Eventi Italia · Ricerca da Brevo (ricerca inversa)
+- backend/cal_reverse.py: import contatti da liste Brevo (sola lettura, dedup per ID Brevo/email), ricerca Brave Search (BRAVE_API_KEY, cache configurabile), lettura pagine pubbliche nel rispetto di robots.txt (anti-SSRF), estrazione con Claude Opus 5.5 (Emergent key) e verifica: l'estratto con la data deve comparire nel testo della pagina letta; stati verificato/da_verificare/data_da_confermare/non trovato.
+- Solo i verificati (o approvati a mano) entrano nel calendario con fonte "ricerca_brevo" (ext_id stabile → aggiornamento senza duplicati, cambi data → verifica manuale, rinvii/annullamenti aggiornano lo stato).
+- Organizzatori creati con privacy "da_verificare" (Brevo ≠ consenso); disiscritti Brevo → disiscritto.
+- Job progressivi: test 20 contatti obbligatorio prima dei gruppi (50/100/250/500/tutti), pausa/riprendi/annulla, sospensione se manca la chiave Brave senza consumare contatti. Cron cal-italia-reverse-update 04:00 Europe/Rome (intervallo, max per notte, cache configurabili).
+- UI tab "Ricerca da Brevo": KPI, pulsanti IMPORTA DA BREVO / CERCA EVENTI / AGGIORNA DATE / VERIFICA RISULTATI, tabella contatti con fonti consultate, revisione risultati.
+- In preview mancano BRAVE_API_KEY e BREVO_API_KEY (test): pipeline verificata offline con Brave finto + pagina reale + IA reale (Milano Marathon 2027-04-04 verificato). iteration_149: fix successivi (riprendi job, KPI, data fine, mobile).
+
+
 
