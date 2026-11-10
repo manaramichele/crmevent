@@ -44,7 +44,7 @@ export default function TeamSelect({
         </PopoverTrigger>
         <PopoverContent className="p-0 z-[200]" align={align}
           style={{ width: "var(--radix-popover-trigger-width)", minWidth: 220 }} data-testid={`${testid}-popover`}>
-          <div ref={bindWheel} className="max-h-56 overflow-y-auto p-1">
+          <div ref={bindWheel} className="max-h-[min(14rem,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto overscroll-contain touch-pan-y p-1">
             {allowNone && (
               <button type="button" onClick={() => { onChange(""); setOpen(false); }}
                 className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 flex items-center justify-between" data-testid={`${testid}-opt-none`}>
