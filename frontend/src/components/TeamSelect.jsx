@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 import { useWheelScroll } from "@/lib/useWheelScroll";
 import TeamQuickCreate from "@/components/TeamQuickCreate";
+import { ResponsivePicker, useIsMobilePicker, listClass } from "@/components/ResponsivePicker";
 
 // Selettore Team condiviso usato in TUTTE le maschere (Ruoli evento, Turni, Anagrafica, ...).
 // - "— Nessun team —" sempre in cima (se allowNone)
@@ -20,11 +21,14 @@ export default function TeamSelect({
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const bindWheel = useWheelScroll();
+  const mobile = useIsMobilePicker();
+  const [q, setQ] = useState("");
 
   const list = useMemo(() => (teams || [])
     .filter((t) => !eventoId || t.evento_id === eventoId)
+    .filter((t) => !mobile || !q.trim() || (t.nome || "").toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "it", { sensitivity: "base" })),
-  [teams, eventoId]);
+  [teams, eventoId, mobile, q]);
 
   const selected = (teams || []).find((t) => t.id === value);
 
@@ -34,17 +38,16 @@ export default function TeamSelect({
 
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+      <ResponsivePicker open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }} mobile={mobile} title="Seleziona Team" testid={`${testid}-popover`}
+        popoverProps={{ className: "p-0 z-[200]", align, style: { width: "var(--radix-popover-trigger-width)", minWidth: 220 } }}
+        trigger={
           <Button type="button" variant="outline" role="combobox" disabled={disabled}
             className="w-full justify-between font-normal h-10" data-testid={testid}>
             <span className={selected ? "text-slate-800 truncate" : "text-slate-400 truncate"}>{selected ? selected.nome : placeholder}</span>
             <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="p-0 z-[200]" align={align}
-          style={{ width: "var(--radix-popover-trigger-width)", minWidth: 220 }} data-testid={`${testid}-popover`}>
-          <div ref={bindWheel} className="max-h-[min(14rem,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto overscroll-contain touch-pan-y p-1">
+          </Button>}>
+          {mobile && <div className="p-2 border-b border-slate-100"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca team..." className="h-10 text-base" data-testid={`${testid}-search`} /></div>}
+          <div ref={bindWheel} className={listClass(mobile, "max-h-[min(14rem,calc(var(--radix-popover-content-available-height)-3rem))] overflow-y-auto overscroll-contain touch-pan-y p-1")} data-testid={`${testid}-list`}>
             {allowNone && (
               <button type="button" onClick={() => { onChange(""); setOpen(false); }}
                 className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 flex items-center justify-between" data-testid={`${testid}-opt-none`}>
@@ -68,8 +71,7 @@ export default function TeamSelect({
               <Plus className="w-3.5 h-3.5" />Aggiungi nuovo Team
             </button>
           </div>
-        </PopoverContent>
-      </Popover>
+      </ResponsivePicker>
       {creating && (
         <TeamQuickCreate eventoId={eventoId} onClose={() => setCreating(false)}
           onCreated={async (t) => { await invalidateTeams(); if (t?.id) onChange(t.id); setCreating(false); }} />

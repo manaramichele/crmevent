@@ -1,0 +1,65 @@
+{
+  "summary": "Frontend-only verification of the new ResponsivePicker mobile bottom sheet (nested Radix Dialog) replacing the Popover on mobile for TeamSelect, StaffAssignSelect and TeamMembersDialog 'Aggiungi componente'. Tested in Playwright WebKit with the iPhone 13 profile (isMobile, hasTouch, iOS Safari UA) and in Chromium with the Pixel 5 profile using real CDP Input.dispatchTouchEvent swipes, plus a desktop 1920x800 regression. A real physical iPhone/Safari was NOT available, and WebKit on Linux cannot do native momentum scrolling. 94/94 checks passed (WebKit 28 + 8, Chromium mobile 22 + 12, desktop 17 + 7 incl. sub-checks). No bugs found in the fix.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PersonDetailDialog header in edit mode, mobile 390px", "issues": ["The 'Salva' button (person-detail-save) sits right under the dialog's top-right close X and partly overlaps it. Minor, existed before this change."]}
+    ]
+  },
+  "verified_results": {
+    "root_cause_check": "Confirmed in WebKit: with the sheet open, a cancelable touchmove sent to an element OUTSIDE the sheet (the PersonDetailDialog behind it) IS defaultPrevented (moves=[true x5]). This shows the scroll lock is active and that the test method can detect blocking. The same touchmove on a list option or on the list inside the sheet is NOT defaultPrevented (start=false, moves=[false x5]). So the sheet is the active scroll lock and native scrolling of the list is not blocked.",
+    "webkit_iphone13": [
+      "Staff/Volontari > Volontari > Apri > Modifica > tab Team > team-assign-<id>: opens as a bottom sheet (data-sheet=true) fully inside the viewport (top 99.6, bottom 664 = vh, 0..390). Shows title 'Seleziona Team', a close button (team-assign-<id>-popover-close), a search field, the list and the 'Aggiungi nuovo Team' footer.",
+      "List is a scroll container: scrollHeight 814 > clientHeight 415, overflow-y auto, 19 options. Setting scrollTop programmatically reaches the bottom (399/399) and the last option becomes visible. Note: page.mouse.wheel is not supported in mobile WebKit, so wheel scrolling could not be tested there.",
+      "page.tap on the last option (TEST_Team 17) selects it and closes the sheet. The trigger shows the new value and GET /api/staff confirms team_id was saved.",
+      "Searching 'Team 05' leaves 2 buttons ('— Nessun team —' + 1 match). The close X closes only the sheet; the person dialog stays open. '— Nessun team —' resets the value. 'Aggiungi nuovo Team' opens the 'Nuovo Team' dialog on top.",
+      "person-detail-save / person-detail-cancel can be reached.",
+      "Eventi tab presence-edit-team-<id>: same results; selecting TEST_Team 16 works.",
+      "StaffAssignSelect (pipeline 'Nuova attività' > Responsabile) and TeamMembersDialog 'Aggiungi componente': both open as a sheet, the list scrolls (856>419, 1024>411), touch is not prevented, and tapping the last option selects / adds the member."
+    ],
+    "chromium_pixel5_real_cdp_touch": [
+      "TeamSelect sheet: swipe changes scrollTop 0 -> 345, the bottom (345/345) is reached and swiping down scrolls back to 0. The person dialog behind and window.scrollY do not move. Selecting the last option after swiping works.",
+      "team-add-popover: swipe scrolls 0 -> 181/139 to the bottom and back; the dialog behind does not scroll; search filters; tapping adds the member. In the 'Aggiungi nuova persona' form, the Tipo Select (z-[400]) opens ABOVE the sheet, its option is the topmost element at its position, selecting 'Volontario' works and the sheet stays open.",
+      "staff-assign-popover (27 staff): swipe scrolls 0 -> 383 to the bottom and back; the task dialog behind does not scroll; the last option is selected and only the sheet closes. Search filters, 'Aggiungi nuovo Staff' quick-add form shows inside the sheet, and the close X works."
+    ],
+    "desktop_1920x800_regression": [
+      "StaffAssignSelect, TeamSelect (person dialog) and TeamMembersDialog add all still open as a Popover (no data-sheet, inside the radix popper wrapper) anchored to the trigger. Mouse-wheel scrolling works (384 / 354 / 734 px) and selection works.",
+      "TeamSelect on desktop has no search field (unchanged). StaffAssignSelect search still gets autofocus."
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/ui_mobile_picker_webkit.py",
+    "/app/backend/tests/ui_mobile_picker_webkit_others.py",
+    "/app/backend/tests/ui_mobile_picker_chromium_touch.py",
+    "/app/backend/tests/ui_picker_pipeline_and_desktop.py",
+    "/app/backend/tests/seed_menu_scroll_test.py",
+    "/app/backend/tests/seed_mobile_picker_extra.py",
+    "/app/backend/tests/cleanup_mobile_picker_test.py"
+  ],
+  "action_items": [
+    "Optional: on mobile, move the PersonDetailDialog header buttons (Annulla/Salva) away from the close X.",
+    "Optional: iPad in landscape (>1024px wide, coarse pointer) still gets the desktop Popover inside the modal, i.e. the old code path. Consider widening the media query to (pointer: coarse) with no width limit, or test it on an iPad.",
+    "Confirm once on a real iPhone in Safari; the emulation cannot reproduce native momentum scrolling."
+  ],
+  "critical_code_review_comments": [
+    "ResponsivePicker is clean and small. The nested Radix Dialog becomes the active react-remove-scroll lock, which fixes the root cause properly instead of working around it.",
+    "useIsMobilePicker re-renders on media query changes. If the viewport crosses the breakpoint while the picker is open (e.g. rotating a tablet), the picker switches from Popover to Dialog while open. Edge case, low risk.",
+    "TeamSelect search only exists on mobile (the filter depends on `mobile`). Desktop keeps the old behaviour as requested, but with many teams desktop users have no search.",
+    "Checklist 'Assegna' (crm.jsx StaffAssignSelect) was not tested at runtime. It uses the same component, so it should behave the same."
+  ],
+  "updated_files": [
+    "/app/backend/tests/ui_mobile_picker_webkit.py",
+    "/app/backend/tests/ui_mobile_picker_webkit_others.py",
+    "/app/backend/tests/ui_mobile_picker_chromium_touch.py",
+    "/app/backend/tests/ui_picker_pipeline_and_desktop.py",
+    "/app/backend/tests/seed_mobile_picker_extra.py",
+    "/app/backend/tests/cleanup_mobile_picker_test.py"
+  ],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_MenuScroll Org (admin test_menuscroll_71e218@example.com) with 12 events, 18 teams, 28 TEST_ persons/staff, a pipeline (generico, 32 tasks) and an event date. ALL removed afterwards with cleanup_mobile_picker_test.py, scoped to that exact org_id/user: 181 docs including the users doc, the organization doc, memberships, consent_records, audit_logs, saas_* and brevo_tracker_log. A re-run finds nothing (user not found), login with the TEST admin returns 401, and there are 0 users matching test_menuscroll_* (none left from earlier runs either). No seed or production data was touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "WebKit lives at PLAYWRIGHT_BROWSERS_PATH=/tmp/pw. Run with /root/.venv/bin/python. In WebKit, new Touch() is an 'Illegal constructor': use document.createTouchList(document.createTouch(window, el, 1, x, y, x, y)). WebKit screenshots need type='jpeg' when quality is set. Chromium: executable_path=/usr/local/bin/browser-use-chromium. Workflow: python3 seed_menu_scroll_test.py && python3 seed_mobile_picker_extra.py, then run the ui_* scripts, then python3 cleanup_mobile_picker_test.py --do. The pipeline needs the event date set plus POST /api/events/{id}/pipeline/generate {template_key:'generico'} before 'pipeline-add-task' appears. Desktop person row testid: person-row-<id>; mobile: m-open-person-<id>; team detail on mobile: m-edit-team-<id>."
+}

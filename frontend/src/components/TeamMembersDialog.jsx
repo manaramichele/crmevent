@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { ResponsivePicker, useIsMobilePicker, listClass } from "@/components/ResponsivePicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import { MODAL } from "@/lib/modal";
@@ -91,6 +91,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
   const [noteOpen, setNoteOpen] = useState(false);
   const { sort, toggle } = useSort({ key: "cognome", dir: "asc" });
   const bindWheel = useWheelScroll();
+  const mobile = useIsMobilePicker();
 
   const eventName = events.find((e) => e.id === team?.evento_id)?.nome || "—";
 
@@ -196,11 +197,9 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
   if (!team) return null;
 
   const addPopover = canEdit && (
-    <Popover open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) resetAdd(); }}>
-      <PopoverTrigger asChild>
-        <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold h-9 w-full sm:w-auto" data-testid="team-add-member"><UserPlus className="w-4 h-4 mr-1.5" />Aggiungi componente</Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[min(20rem,calc(100vw-2rem))] p-0 z-[200]" align="end" data-testid="team-add-popover" onOpenAutoFocus={(e) => { if (creating) e.preventDefault(); }}>
+    <ResponsivePicker open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) resetAdd(); }} mobile={mobile} title="Aggiungi componente" testid="team-add-popover"
+      popoverProps={{ className: "w-[min(20rem,calc(100vw-2rem))] p-0 z-[200]", align: "end", onOpenAutoFocus: (e) => { if (creating) e.preventDefault(); } }}
+      trigger={<Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold h-9 w-full sm:w-auto" data-testid="team-add-member"><UserPlus className="w-4 h-4 mr-1.5" />Aggiungi componente</Button>}>
         {creating ? (
           <div className="p-3 space-y-3" data-testid="team-new-person-form">
             <button type="button" onClick={() => { setCreating(false); setExisting(null); }} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 py-1"><ArrowLeft className="w-3.5 h-3.5" />Indietro</button>
@@ -215,7 +214,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
             <div className="space-y-1"><Label className="text-xs">Tipo *</Label>
               <Select value={nf.tipo} onValueChange={(v) => setNf((s) => ({ ...s, tipo: v }))}>
                 <SelectTrigger className="h-9" data-testid="tp-tipo"><SelectValue /></SelectTrigger>
-                <SelectContent className="z-[300]"><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent>
+                <SelectContent className="z-[400]"><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent>
               </Select>
             </div>
             {existing && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Esiste già un'anagrafica con questi contatti: <b>{existing.cognome} {existing.nome}</b>. Usarla per questo Team?</div>}
@@ -228,8 +227,8 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
           </div>
         ) : (
           <>
-            <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={addQuery} onChange={(e) => setAddQuery(e.target.value)} placeholder="Cerca staff/volontario..." className="h-9" data-testid="team-add-search" /></div>
-            <div ref={bindWheel} className="max-h-56 overflow-y-auto p-1" data-testid="team-add-list">
+            <div className="p-1.5 border-b border-slate-100"><Input autoFocus={!mobile} value={addQuery} onChange={(e) => setAddQuery(e.target.value)} placeholder="Cerca staff/volontario..." className={mobile ? "h-10 text-base" : "h-9"} data-testid="team-add-search" /></div>
+            <div ref={bindWheel} className={listClass(mobile, "max-h-56 overflow-y-auto p-1")} data-testid="team-add-list">
               {candidates.length === 0 ? <div className="px-2 py-3 text-xs text-slate-400 text-center" data-testid="team-add-empty">Nessuno Staff/Volontario dell'evento disponibile.</div> :
                 candidates.map((c) => (
                   <button key={c.id} onClick={() => addMember(c)} disabled={busy} className="w-full text-left text-sm px-2 py-2.5 rounded-md hover:bg-slate-100 flex items-center justify-between" data-testid={`team-add-opt-${c.id}`}>
@@ -242,8 +241,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
             </div>
           </>
         )}
-      </PopoverContent>
-    </Popover>
+    </ResponsivePicker>
   );
 
   const memberList = (key, list) => (
