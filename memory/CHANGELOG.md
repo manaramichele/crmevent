@@ -1255,3 +1255,9 @@ Task 2 — Creatività manuale:
 - Fix globale: lib/menuScroll.js (isolateScroll + overscroll-contain/touch-pan-y) in ui/popover.jsx, ui/select.jsx, ui/dropdown-menu.jsx; altezza max = spazio disponibile (Select max 60dvh), collisionPadding 8 → apertura verso l'alto se manca spazio; TeamSelect lista adattiva.
 - iteration_150: 100% su Chromium mobile (touch reale via CDP) e desktop; iOS Safari non emulabile qui.
 
+## 2026-11-10 — Menu Team su iPhone (fix reale)
+- Causa: TeamSelect usava un Radix Popover portalizzato nel body dentro la modale PersonDetailDialog; il blocco-scroll della modale (react-remove-scroll) annulla i touchmove fuori dalla modale e su iOS lo stopPropagation non bastava.
+- Fix: components/ResponsivePicker.jsx — su smartphone/touch pannello dal basso basato su Dialog annidata (blocco-scroll attivo, lista al suo interno), con ricerca e chiudi; desktop invariato (Popover). Applicato a TeamSelect, StaffAssignSelect, TeamMembersDialog.
+- iteration_151: 94/94 (WebKit iPhone 13, Chromium Pixel 5 con swipe reali, desktop). iPhone fisico non disponibile.
+
+

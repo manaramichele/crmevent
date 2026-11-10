@@ -3,7 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
-const MQ = "(max-width: 767px), (pointer: coarse) and (max-width: 1024px)";
+const MQ = "(max-width: 767px), (pointer: coarse)";
 
 export function useIsMobilePicker() {
   const [m, setM] = useState(() => typeof window !== "undefined" && window.matchMedia(MQ).matches);
