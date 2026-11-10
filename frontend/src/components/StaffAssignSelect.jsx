@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { ResponsivePicker, useIsMobilePicker, listClass } from "@/components/ResponsivePicker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ export function StaffAssignSelect({
   const [existing, setExisting] = useState(null);
   const [busy, setBusy] = useState(false);
   const bindWheel = useWheelScroll();
+  const mobile = useIsMobilePicker();
 
   const selected = useMemo(() => {
     if (!value) return null;
@@ -90,9 +91,9 @@ export function StaffAssignSelect({
   );
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
-      <PopoverTrigger asChild>{trigger || defaultTrigger}</PopoverTrigger>
-      <PopoverContent className="w-72 p-0 z-[200]" align={align} data-testid="staff-assign-popover" onOpenAutoFocus={(e) => { if (quick) e.preventDefault(); }}>
+    <ResponsivePicker open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }} mobile={mobile} title="Seleziona Staff" testid="staff-assign-popover"
+      trigger={trigger || defaultTrigger}
+      popoverProps={{ className: "w-72 p-0 z-[200]", align, onOpenAutoFocus: (e) => { if (quick) e.preventDefault(); } }}>
         {quick ? (
           <div className="p-3 space-y-3" data-testid="staff-quick-add-form">
             <button type="button" onClick={() => { setQuick(null); setExisting(null); }} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800"><ArrowLeft className="w-3.5 h-3.5" />Indietro</button>
@@ -113,8 +114,8 @@ export function StaffAssignSelect({
           </div>
         ) : (
           <>
-            <div className="p-1.5 border-b border-slate-100"><Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={focusFirstOpt} placeholder="Cerca staff..." className="h-8" data-testid="staff-assign-search" /></div>
-            <div ref={bindWheel} onKeyDown={onListKeyDown} className="max-h-56 overflow-y-auto p-1" data-testid="staff-assign-list">
+            <div className="p-1.5 border-b border-slate-100"><Input autoFocus={!mobile} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={focusFirstOpt} placeholder="Cerca staff..." className={mobile ? "h-10 text-base" : "h-8"} data-testid="staff-assign-search" /></div>
+            <div ref={bindWheel} onKeyDown={onListKeyDown} className={listClass(mobile, "max-h-56 overflow-y-auto p-1")} data-testid="staff-assign-list">
               <button type="button" data-opt onClick={() => pick(null)} className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 focus:bg-slate-100 outline-none text-slate-500" data-testid="staff-opt-none">—</button>
               {list.map((p) => (
                 <button type="button" data-opt key={p.id} onClick={() => pick(p.id)} className={`w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-100 focus:bg-slate-100 outline-none ${p.id === value ? "bg-tiffany-light/40 font-semibold" : ""}`} data-testid={`staff-opt-${p.id}`}>{pname(p)}</button>
@@ -127,7 +128,6 @@ export function StaffAssignSelect({
             </div>
           </>
         )}
-      </PopoverContent>
-    </Popover>
+    </ResponsivePicker>
   );
 }
