@@ -1249,3 +1249,9 @@ Task 2 — Creatività manuale:
 
 
 
+
+## 2026-11-08 — Menu a tendina su smartphone
+- Causa: la modale (Radix Dialog / react-remove-scroll) blocca touchmove/wheel fuori dalla sua area; i menu sono portalizzati nel body → niente scroll col dito.
+- Fix globale: lib/menuScroll.js (isolateScroll + overscroll-contain/touch-pan-y) in ui/popover.jsx, ui/select.jsx, ui/dropdown-menu.jsx; altezza max = spazio disponibile (Select max 60dvh), collisionPadding 8 → apertura verso l'alto se manca spazio; TeamSelect lista adattiva.
+- iteration_150: 100% su Chromium mobile (touch reale via CDP) e desktop; iOS Safari non emulabile qui.
+

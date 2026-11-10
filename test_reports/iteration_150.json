@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only test of mobile touch-scroll fix for portaled dropdowns inside modals (TeamSelect Popover, shadcn Select, DropdownMenu). Emulated mobile in Playwright Chromium (390x844 isMobile+hasTouch, Pixel-5 UA; plus 667x375 landscape) using real CDP Input.dispatchTouchEvent swipes. WebKit/iPhone emulation NOT available in this environment (/pw-browsers only has chromium) -> iOS Safari not verified. Found and fixed 1 CRITICAL bug: components/ui/dropdown-menu.jsx used isolateScroll/MENU_SCROLL without importing them -> 'ReferenceError: isolateScroll is not defined' crashed the Events page (/eventi) and EventPipeline on every load. After the fix, all tested flows pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "components/ui/dropdown-menu.jsx", "issue": "FIXED by testing agent: missing import of isolateScroll and MENU_SCROLL from @/lib/menuScroll -> runtime ReferenceError on pages that use DropdownMenu (Events.jsx, EventPipeline.jsx). Events page crashed before fix (pageerror 'isolateScroll is not defined'). ESLint did not flag this no-undef, so the dev build looked 'Compiled with warnings' only.", "selector": "[data-testid^='actions-menu-'], [data-testid^='more-actions-']", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_results": {
+    "mobile_390x844_chromium": [
+      "PersonDetailDialog > Modifica > tab Team > TeamSelect (team-assign-*): popover opens upward (data-side=top) fully inside viewport (top 505, bottom 770, left 34, right 382); touch swipe scrolls inner list scrollTop 0 -> 200; dialog scrollTop and window.scrollY unchanged; tapping TEST_Team 17 (last option) selects it and saving persisted (verified via GET /api/staff team_id)",
+      "Turni > Aggiungi turno > shift-team TeamSelect: opens upward, footer 'Aggiungi nuovo Team' visible, touch scroll 0 -> 223",
+      "Select shift-event (24 TEST events): opens upward when trigger in lower half (data-side=top, top 4 / bottom 433), opens downward when trigger near top (data-side=bottom), touch swipe scrolls Radix viewport both directions (345 -> 0 -> 325), dialog not scrolled, option selection works",
+      "DropdownMenu (Events page 'Azioni', mobile): after fix opens, flips upward near bottom (side=top, 538-767 within 844), 7 items",
+      "Dialog itself touch-scrollable (scrollHeight 1111 > clientHeight 791, scrollTop 0 -> 319); Salva/Annulla (person-detail-save/cancel, shift-save/cancel) reachable"
+    ],
+    "mobile_landscape_667x375": ["Dialog touch-scrolls; shift-team popover flips up and fits (15-274 of 375), touch scroll works"],
+    "desktop_1920x800": ["DropdownMenu 'Altre' opens", "TeamSelect wheel scroll 0 -> 300, selection works", "Select wheel scroll works, selection works", "shift-team popover opens + selects"],
+    "native_select": "Not runtime-tested (only org-switcher-select / settings panels use native <select>); code-verified that no global CSS/handler change affects native selects"
+  },
+  "test_report_links": ["/app/backend/tests/seed_menu_scroll_test.py"],
+  "action_items": [
+    "Keep the import fix in components/ui/dropdown-menu.jsx (import { isolateScroll, MENU_SCROLL } from '@/lib/menuScroll') and double-check other files touched by the change for missing imports",
+    "Verify on a real iPhone (Safari) since WebKit emulation was not available here"
+  ],
+  "critical_code_review_comments": [
+    "dropdown-menu.jsx: missing import (fixed). ESLint no-undef did not catch it in this build config - consider enabling it to avoid silent runtime crashes.",
+    "TeamSelect inner list relies on both useWheelScroll (manual wheel handling) and PopoverContent isolateScroll; works, but redundant now — keep only one mechanism for clarity.",
+    "Select options order in shift-event/presence-event follows events array order (newest first), Radix focuses first/selected item; no issue but long lists open scrolled to the selected item end."
+  ],
+  "updated_files": ["/app/frontend/src/components/ui/dropdown-menu.jsx", "/app/backend/tests/seed_menu_scroll_test.py"],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100% after fix (DropdownMenu flow was 0% before fix)"},
+  "seed_data_creation": "Created via API: TEST_MenuScroll Org (admin test_menuscroll_f6ddd4@example.com / TestPass123!), 24 TEST_Evento events, 18 TEST_Team teams, 1 TEST_Mario person + 1 presence. All teams/events/person/presence deleted by id; org deleted via superadmin DELETE /api/platform/organizations/{id}. Remaining: the TEST admin user account test_menuscroll_f6ddd4@example.com (detached, org_id=null) since the org-delete endpoint keeps admin accounts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "To reach TeamSelect on mobile: /staff-volontari > tab-volontari > m-open-person-{id} > person-detail-edit > ptab-team > team-assign-{presenceId}; popover testid '<testid>-popover', inner scroll list is popover.firstElementChild. New orgs show welcome-demo-dialog: call POST /api/demo/welcome/dismiss after login. Cookie banner: cookie-accept-all. Use CDP Input.dispatchTouchEvent for real touch swipes. WebKit is not installed in /pw-browsers.",
+  "rca of the issue": "Original bug: Radix Dialog uses react-remove-scroll which cancels touchmove/wheel outside the dialog DOM; portaled Popover/Select/DropdownMenu content is outside, so touch scroll was blocked. Fix (stopPropagation of touchmove/wheel on menu content + available-height max-h + collisionPadding) verified working in Chromium touch emulation. Regression introduced by the fix: dropdown-menu.jsx referenced isolateScroll/MENU_SCROLL without import -> ReferenceError crashing Events/EventPipeline pages; fixed by adding the import."
+}
