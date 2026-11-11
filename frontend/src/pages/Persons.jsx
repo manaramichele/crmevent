@@ -113,6 +113,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const [sel, setSel] = useState(() => new Set());
   const prefsOf = (r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter);
   const prefText = (r) => { const ps = prefsOf(r); if (!ps.length) return ""; return [...new Set(ps.map((p) => p.preferenza || "Non indicata"))].join(", "); };
+  const mansioniOf = (r) => (r.mansioni || []).filter((m) => evFilter === "all" || m.evento_id === evFilter);
+  const mansioneText = (r) => { const ms = mansioniOf(r); if (!ms.length) return r.ruolo || ""; return [...new Set(ms.map((m) => m.ruolo).filter(Boolean))].join(", "); };
   const flip = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const filtered = rows.filter((r) => {
     if (tab === "referenti_aziende" && !r.is_referente) return false;
@@ -134,7 +136,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     ruolo_evento: (r) => (r.is_staff ? "Staff" : r.is_volontario ? "Volontario" : r.is_referente ? "Referente" : ""),
     team: (r) => (r.teams_nomi || []).join(", "),
     evento: (r) => (r.eventi_nomi || []).join(", "),
-    qualifica: (r) => r.ruolo || "",
+    qualifica: (r) => mansioneText(r),
     aziende: (r) => (r.aziende_nomi || []).join(", "),
     accesso: (r) => INV_LABEL[r.invite_status || "non_invitato"] || "",
   };
@@ -145,10 +147,27 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const toggleAll = () => setSel(allSel ? new Set() : new Set(displayRows.map((r) => r.id)));
   const pick = (r) => (onInvite || isStaffTab) && <input type="checkbox" className="accent-tiffany w-4 h-4" checked={sel.has(r.id)} onChange={() => flip(r.id)} onClick={(e) => e.stopPropagation()} aria-label="Seleziona" data-testid={`select-invite-${r.id}`} />;
   const prefOptions = [...new Set(rows.flatMap((r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter).map((p) => p.preferenza || "Non indicata")))].sort((a, b) => a.localeCompare(b, "it"));
+  const eventFor = (r) => {
+    if (evFilter !== "all") return evFilter;
+    const ps = prefsOf(r);
+    if (ps.length === 1) return ps[0].evento_id;
+    const evs = [...new Set((r.mansioni || []).map((m) => m.evento_id))];
+    return evs.length === 1 ? evs[0] : evs.length === 0 ? null : undefined;
+  };
   const assign = async (people, mansione) => {
+    const byEv = {};
+    for (const r of people) {
+      const ev = eventFor(r);
+      if (ev === undefined) { toast.error(`${r.cognome || ""} ${r.nome || ""} partecipa a più eventi: scegli prima l'evento nel filtro`); return; }
+      (byEv[ev || ""] = byEv[ev || ""] || []).push(r.id);
+    }
     try {
-      const { data } = await api.post("/persons/mansione-bulk", { person_ids: people.map((r) => r.id), mansione, evento_id: evFilter !== "all" ? evFilter : null });
-      toast.success(`Mansione "${mansione}" assegnata (${data.partecipazioni + data.anagrafiche})`); onReload && onReload();
+      let n = 0;
+      for (const [ev, ids] of Object.entries(byEv)) {
+        const { data } = await api.post("/persons/mansione-bulk", { person_ids: ids, mansione, evento_id: ev || null });
+        n += data.partecipazioni + data.anagrafiche;
+      }
+      toast.success(`Mansione "${mansione}" assegnata (${n})`); onReload && onReload();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const confirmPrefs = async (people) => {
@@ -162,7 +181,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (!t) return <span className="text-slate-400">—</span>;
     const ps = prefsOf(r).map((p) => p.preferenza);
     const match = ps.length === 1 && ruoli.includes(ps[0]);
-    const done = match && r.ruolo === ps[0];
+    const done = match && (() => { const ev = eventFor(r); const ms = (r.mansioni || []).filter((m) => m.evento_id === ev); return ms.length ? ms.every((m) => m.ruolo === ps[0]) : r.ruolo === ps[0]; })();
     return (
       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
         <span className="text-slate-700" data-testid={`pref-${r.id}`}>{t}</span>
@@ -249,7 +268,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 {isStaffTab && <div className="flex items-start gap-2" data-testid={`m-pref-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-1.5">Preferenza</span>{prefCell(r)}</div>}
                 {isStaffTab ? (<>
                   <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Team</span>{teamsCell(r)}</div>
-                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span><span className="break-words">{r.ruolo || "—"}</span></div>
+                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span><span className="break-words">{mansioneText(r) || "—"}</span></div>
                   {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
                 </>) : (<>
@@ -303,7 +322,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                         <td className="px-4 py-3">{prefCell(r)}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
-                        <td className="px-4 py-3 text-slate-700" data-testid={`mansione-${r.id}`}>{r.ruolo || "—"}</td>
+                        <td className="px-4 py-3 text-slate-700" data-testid={`mansione-${r.id}`}>{mansioneText(r) || "—"}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
                         <td className="px-4 py-3" data-testid={`invite-status-${r.id}`}><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
                       </>

@@ -83,6 +83,8 @@ def build(db, deps: dict):
                "partecipazioni_gia_corrette": 0, "da_classificare_con_preferenza": 0, "non_recuperabili": [], "anomalie": [],
                "stati": defaultdict(int), "ruolo_evento": defaultdict(int), "simulazione": not apply}
         groups = defaultdict(list)
+        run_id = uuid.uuid4().hex
+        changed = 0
         for a in avs:
             rep["stati"][a.get("stato") or "nuova"] += 1
             rep["ruolo_evento"][a.get("ruolo_evento") or "da_definire"] += 1
@@ -92,10 +94,12 @@ def build(db, deps: dict):
                 rep["anomalie"].append({"tipo": "collegamento persona ricostruito" if pid else "persona non trovata",
                                         "nome": f"{a.get('cognome') or ''} {a.get('nome') or ''}".strip(), "evento": evn.get(a.get("evento_id")), "availability_id": a["id"]})
                 if pid and apply:
+                    await db.backup_avail_prefs.insert_one({"run_id": run_id, "org_id": org_id, "availability_id": a["id"], "at": _now(),
+                                                            "prev": {"persona_id": a.get("persona_id")}})
+                    changed += 1
                     await db.availabilities.update_one({"org_id": org_id, "id": a["id"]}, {"$set": {"persona_id": pid, "persona_id_originale": a.get("persona_id")}})
             if pid:
                 groups[(pid, a.get("evento_id"))].append(a)
-        run_id = uuid.uuid4().hex
         for (pid, eid), lst in groups.items():
             lst.sort(key=lambda x: x.get("updated_at") or x.get("created_at") or "", reverse=True)
             a = lst[0]
@@ -126,13 +130,14 @@ def build(db, deps: dict):
                 if s.get("team_id") or has_shift:
                     rep["con_team_o_turni_aggiornati"] += 1
                 if apply:
+                    changed += 1
                     await db.backup_avail_prefs.insert_one({"run_id": run_id, "org_id": org_id, "staff_id": s["id"], "at": _now(),
                                                             "prev": {k: s.get(k) for k in ("preferenza_volontario", "preferenza_av_id", "preferenza_sync_at")}})
                     await db.staff.update_one({"org_id": org_id, "id": s["id"]},
                                               {"$set": {"preferenza_volontario": pref, "preferenza_av_id": a["id"], "preferenza_sync_at": _now()}})
         rep["stati"], rep["ruolo_evento"] = dict(rep["stati"]), dict(rep["ruolo_evento"])
-        if apply:
-            rep["run_id"] = run_id
+        if apply and changed:
+            rep["run_id"], rep["modifiche"] = run_id, changed
             await db.avail_prefs_runs.insert_one({**rep, "id": run_id, "by": by, "at": _now()})
             rep.pop("_id", None)
         return rep

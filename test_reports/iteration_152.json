@@ -1,0 +1,46 @@
+{
+  "summary": "Tested Preferenze volontari end to end, backend and frontend. The backend works: preferences come back per event; confirming an availability keeps the preference; mansione-bulk with an event filter changes only that event's staff.ruolo, and categoria, team_id, stato and shifts stay the same; an invalid mansione returns 400; non-superadmins get 403; the Super Admin preview writes nothing; apply writes preferenza_volontario and a backup; a second apply is idempotent (partecipazioni_gia_corrette=2) and creates or deletes no records. Pytest: 9/10 passed. The 1 failure is a real bug: the Mansione column (and pref-done) reads persons.ruolo, but the quick confirm writes staff.ruolo for anyone who has a staff link. So in the Volontari and Staff tabs, quick confirm and bulk assign show a success toast, yet the Mansione column stays '—', pref-done never appears and the confirm button stays. The UI works for Da classificare (people with no staff link). Mobile (Chromium Pixel 5 and WebKit iPhone 13) works: m-pref rows, a 32px tappable confirm button, a pick select, the bulk bar, and no horizontal overflow. The Super Admin page works: apply is disabled until a preview is run, the report renders, apply works and is idempotent. All TEST data was removed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/persons-enriched", "issue": "Does not return the per-event staff.ruolo (mansione). The UI therefore cannot show the result of POST /api/persons/mansione-bulk for people with staff links. See frontend_issues."},
+      {"endpoint": "POST /api/persons/mansione-bulk", "issue": "When evento_id is null (filter set to 'Tutti gli eventi'), update_many sets staff.ruolo on ALL of the person's event participations. Bulk assign from the Staff/Volontari tab with no event filter overwrites the mansione for every event."},
+      {"endpoint": "POST /api/persons/mansione-bulk", "issue": "person_ids are not checked against _person_scope (sub-admin scope). It is still org-scoped, so there is no cross-tenant risk."},
+      {"endpoint": "POST /api/platform/avail-prefs/apply", "issue": "When it rebuilds a broken link (anomaly 'collegamento persona ricostruito') it rewrites availabilities.persona_id, keeping persona_id_originale but with no backup_avail_prefs row. The UI footer says 'Le risposte originali restano intatte'. Also, every apply inserts an avail_prefs_runs row and shows 'backup <run_id>' even when nothing changed."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Persons.jsx PeopleTable Mansione column + prefCell 'done' check", "issue": "Uses r.ruolo (persons.ruolo), but mansione-bulk updates staff.ruolo whenever the person has a staff link for the event. Reproduced in the Volontari tab with the event A filter: clicking pref-confirm shows the toast 'Mansione \"Hostess\" assegnata (1)' and the DB has staff.ruolo='Hostess', but mansione-<id> still shows '—', pref-done-<id> is missing and pref-confirm-<id> is still shown. The same applies to bulk-mansione-apply and bulk-confirm-prefs, and to m-mansione on mobile.", "selector": "[data-testid=mansione-<id>], [data-testid=pref-done-<id>], [data-testid=m-mansione-<id>]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Quick confirm / bulk assign in the Staff and Volontari tabs", "issue": "The backend write succeeds, but after reload the UI does not show the new mansione. Users will think it failed and click again.", "affected_selectors": ["pref-confirm-<id>", "bulk-mansione-apply", "bulk-confirm-prefs"]}
+    ],
+    "design_issues": [
+      {"screen": "Staff/Volontari selection", "issues": ["Selecting rows shows two bars at once: bulk-mansione-bar at the top and the existing invite bar ('N selezionati · Invia inviti') at the bottom, sharing the same selection. This is confusing."]},
+      {"screen": "Mobile (WebKit iOS)", "issues": ["The native selects (people-pref-filter, bulk-mansione-select, pref-pick) get the grey iOS default styling. They look different from the shadcn Select next to them; add appearance-none and a custom chevron.", "pref-confirm on mobile is 32x32px, below the 44px recommended tap target."]},
+      {"screen": "PersonDetailDialog", "issues": ["person-preferenze is shown only in the 'Eventi' tab, not in Anagrafica. The event cards do not show the per-event mansione (staff.ruolo), so the admin cannot check the assignment there."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter152_avail_prefs.py", "/app/backend/tests/avp_helpers.py", "/app/backend/tests/avp_ui_seed.py", "/app/backend/tests/avp_mobile_ui.py", "/app/test_reports/pytest/iter152.xml"],
+  "action_items": [
+    "HIGH: Make the Mansione column event-aware. In persons_enriched, return the staff mansioni per event (for example 'mansioni': [{evento_id, ruolo}]). In PeopleTable, show the staff.ruolo for evFilter (or all distinct ones joined) and use it for 'done' (fall back to person.ruolo when there are no links). Apply this to both desktop mansione-<id> and mobile m-mansione-<id>.",
+    "With evento_id=null, either require an event filter for quick confirm and bulk assign in the Staff/Volontari tabs, or limit the update to the events whose preference matched (send the evento_id from the preference used). Today all participations are overwritten.",
+    "Optional: put a backup entry in backup_avail_prefs before rewriting availabilities.persona_id during apply; skip the avail_prefs_runs insert and the 'backup' label when nothing changed.",
+    "Optional: show a single selection bar, and add appearance-none styling to the native selects on iOS."
+  ],
+  "critical_code_review_comments": [
+    "avail_prefs.py mansione_bulk: the per-person loop does 1-2 DB round-trips per id, up to 1000. That is acceptable, but a single update_many over all ids plus a person fallback would be faster.",
+    "avail_prefs.py latest_avs: compares updated_at/created_at ISO strings, which is correct for UTC ISO. pref_label correctly builds 'Altro: xxx'.",
+    "Persons.jsx: prefFilter is not reset when evFilter changes. A selected preference that does not exist in the new event leaves the table empty and the option missing from the dropdown.",
+    "Persons.jsx: the mobile cards and the desktop table render at the same time (CSS hidden), so testids such as pref-<id> and pref-confirm-<id> are duplicated in the DOM. Tests must scope to 'table' or people-mobile-list-<tab>.",
+    "PreferenzeVolontari.jsx: the 'Tutte le organizzazioni' default lets Super Admin apply to every org in one click after a preview. This is acceptable with window.confirm, but consider naming the orgs in the confirm text."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter152_avail_prefs.py", "/app/backend/tests/avp_helpers.py", "/app/backend/tests/avp_ui_seed.py", "/app/backend/tests/avp_mobile_ui.py"],
+  "success_rate": {"backend": "90% (9/10; the failure is the mansione-visibility bug)", "frontend": "~85% (Da classificare, filters, sort, bulk, detail, Super Admin and mobile pass; mansione/done display broken for people with staff links)"},
+  "seed_data_creation": "Created a TEST org (TEST_AVP_<tag>) with test_avp_<tag>@example.com, 2 events, 4 public availabilities, a team, 2 staff links and a shift, once for pytest and once for UI. Everything was deleted by org_id and admin email afterwards (verified 0 remaining). Apply ran only on the TEST org. Demo and Nova Events were not touched (they appeared only in the org dropdown).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run `cd /app/backend && python -m pytest tests/test_iter152_avail_prefs.py -n 0`. It creates its own TEST org and cleans up. test_enriched_reflects_staff_mansione is the regression test for the bug. For UI: run `python tests/avp_ui_seed.py` (writes /tmp/avp_ui.json), set users.welcome_demo='dismissed' for the TEST admin to skip the WelcomeDemo dialog, dismiss the cookie banner ('Reject non-essential'), scope selectors to '[role=tabpanel][data-state=active] table' or 'people-mobile-list-<tab>', then run `python tests/avp_ui_seed.py cleanup`. Mobile: `PLAYWRIGHT_BROWSERS_PATH=/tmp/pw python tests/avp_mobile_ui.py` (WebKit installed in /tmp/pw). The public submit rate limit is 6/min per IP.",
+  "rca of the issue": "mansione_bulk updates db.staff.ruolo for people with a participation (correct per spec), but persons_enriched returns only the persons doc fields. PeopleTable renders r.ruolo and computes done = r.ruolo === preference, so the staff-level mansione is never shown. Repro: a person with a staff link for event A and an availability preference 'Hostess'; go to Volontari, filter event A, click pref-confirm. The toast reports success and the DB has staff.ruolo='Hostess', but the column still shows '—'. Fix: expose per-event staff ruolo in persons_enriched and render and compare it in PeopleTable."
+}

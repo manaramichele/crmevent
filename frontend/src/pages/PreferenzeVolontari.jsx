@@ -8,7 +8,7 @@ const N = ({ l, v, id }) => <div className="rounded-lg border border-slate-200 b
 function Report({ r }) {
   return (
     <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4" data-testid={`avp-report-${r.org_id}`}>
-      <div className="font-semibold">{r.organizzazione} {r.simulazione ? <span className="text-xs text-amber-700">(simulazione: nulla è stato scritto)</span> : <span className="text-xs text-green-700">(aggiornamento eseguito · backup {r.run_id})</span>}</div>
+      <div className="font-semibold">{r.organizzazione} {r.simulazione ? <span className="text-xs text-amber-700">(simulazione: nulla è stato scritto)</span> : <span className="text-xs text-green-700">{r.run_id ? `(aggiornamento eseguito: ${r.modifiche} modifiche · backup ${r.run_id})` : "(nessuna modifica necessaria: dati già allineati)"}</span>}</div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <N l="Disponibilità esaminate" v={r.disponibilita_esaminate} id="esaminate" /><N l="Preferenze recuperate" v={r.preferenze_recuperate} id="recuperate" />
         <N l="Preferenze collegate" v={r.preferenze_collegate} id="collegate" /><N l="Partecipazioni già corrette" v={r.partecipazioni_gia_corrette} id="corrette" />
@@ -18,7 +18,7 @@ function Report({ r }) {
       <div className="text-xs text-slate-600">Stati: {Object.entries(r.stati).map(([k, v]) => `${k} ${v}`).join(" · ")} — Ruolo evento: {Object.entries(r.ruolo_evento).map(([k, v]) => `${k} ${v}`).join(" · ")}</div>
       <details className="text-xs"><summary className="cursor-pointer font-medium">Preferenze non recuperabili ({r.non_recuperabili.length})</summary>{r.non_recuperabili.map((x, i) => <div key={i}>{x.nome} · {x.evento} · {x.motivo}</div>)}</details>
       <details className="text-xs"><summary className="cursor-pointer font-medium">Anomalie e collegamenti ({r.anomalie.length})</summary>{r.anomalie.map((x, i) => <div key={i}>{x.tipo} · {x.nome} · {x.evento}</div>)}</details>
-      <p className="text-[11px] text-slate-500">Nessuna anagrafica creata; ruoli, categorie, team, turni e conferme non vengono modificati. Le risposte originali restano intatte.</p>
+      <p className="text-[11px] text-slate-500">Nessuna anagrafica creata; ruoli, categorie, team, turni e conferme non vengono modificati. Le risposte originali (preferenze e date) restano intatte; solo i collegamenti persona ricostruiti vengono corretti, con backup.</p>
     </div>
   );
 }
