@@ -1,0 +1,47 @@
+{
+  "summary": "Retest of the iteration 152 fixes for Preferenze volontari: all fixes verified, and no new functional bugs found. Backend pytest: 14/14 passed (4 new tests in test_iter153 plus the 10-test iter152 regression suite, with its old persons.ruolo assertion updated to the new mansioni contract). (1) GET /api/persons-enriched returns mansioni [{evento_id, ruolo}] from staff links. mansione-bulk with an event updates only that event's staff.ruolo; persons.ruolo, categoria, team, stato and shifts stay the same. (2) Desktop UI with the 'Tutti gli eventi' filter: P4 (volunteer in A+B, preference only in A) quick confirm wrote only staff A (B stayed null). mansione-P4 changed to Coordinatore, pref-done appeared, the confirm button disappeared. P2 (A=Hostess, B=Coordinatore): pref-pick and bulk-mansione-apply (P2+P4) both showed the toast 'partecipa a più eventi: scegli prima l'evento nel filtro' and wrote nothing (checked through the API). With the event A filter, P2 confirm gave Hostess and done. With the event B filter, bulk-confirm-prefs gave Coordinatore on B only, and A stayed Hostess. With the 'all' filter the column shows 'Hostess, Coordinatore'. (3) Super Admin apply: rebuilding a broken persona_id now writes a backup_avail_prefs row (prev.persona_id, same run_id) and sets persona_id_originale. A second apply inserts no avail_prefs_runs row and no backups, returns no run_id, and the UI shows '(nessuna modifica necessaria: dati già allineati)'. Apply stays disabled until a preview is run, and the preview writes nothing. (4) Regression: Da classificare quick confirm sets persons.ruolo, which shows in the column. Preference text is unchanged, and 'Altro: TEST_custom' shows pref-pick. At 390px mobile, m-mansione updates after confirm and after a successful bulk-mansione-apply, and there is no horizontal overflow (scrollWidth 390). All TEST data was cleaned up, 0 remaining (orgs, users, events, persons, staff, shifts, teams, availabilities, avail_links, backup_avail_prefs, avail_prefs_runs, settings).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/persons/mansione-bulk", "issue": "If evento_id is given but the person has no staff link for that event (for example, a preference in event A but staff links only in B), it falls back to the global persons.ruolo. The UI then shows '—' in the Mansione column for the 'all' filter, because mansioneText ignores r.ruolo when links exist, while prefCell shows done. This is an edge case and an inconsistency."},
+      {"endpoint": "POST /api/persons/mansione-bulk", "issue": "Carried over from iteration 152: person_ids are not checked against _person_scope (sub-admin scope). It is still org-scoped."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Persons PeopleTable (Volontari, event filter)", "issues": ["The Team and Evento columns (teams_nomi, eventi_nomi) are not event-filtered. With the event B filter, P2 still shows TEST_Team, which belongs to event A. The Mansione column is event-aware but its neighbours are not."]},
+      {"screen": "Staff/Volontari bulk confirm with the 'Tutti gli eventi' filter", "issues": ["bulk-confirm-prefs silently skips people with more than one preference. There is no toast unless no one matches, so the success count can look low with no explanation."]},
+      {"screen": "Carried over from iteration 152", "issues": ["Two selection bars are shown at once (bulk-mansione-bar and the invite bar)", "Native selects get the iOS default styling", "The 32px tap target on mobile"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter153_avail_prefs_fixes.py",
+    "/app/backend/tests/test_iter152_avail_prefs.py",
+    "/app/backend/tests/avp_helpers.py",
+    "/app/backend/tests/avp_ui_seed153.py",
+    "/app/test_reports/pytest/iter153.xml",
+    "/app/test_reports/pytest/iter153_regr.xml"
+  ],
+  "action_items": [
+    "Optional: in mansioneText, fall back to r.ruolo when every filtered mansione is empty, or make the mansione-bulk fallback event-aware, so the column and pref-done agree.",
+    "Optional: filter teams_nomi and eventi_nomi by evFilter in PeopleTable.",
+    "Optional: in confirmPrefs, show a toast saying how many people were skipped because they have several preferences."
+  ],
+  "critical_code_review_comments": [
+    "eventFor/assign check all selected people before writing anything, so an ambiguous person blocks the whole bulk call and nothing is partially written. Good.",
+    "avail_prefs.run counts changes correctly: a backup row is written for each rewrite, and a run row only when changed > 0.",
+    "Public availability submit is rate-limited to 6 per minute per IP. Test setups that submit more than 6 forms need a 60s pause (the iteration 152 helpers submit 4 per org)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter153_avail_prefs_fixes.py",
+    "/app/backend/tests/test_iter152_avail_prefs.py",
+    "/app/backend/tests/avp_ui_seed153.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_AVP_* orgs through register-organization, plus their events, persons, staff, team, shift and availabilities. All of it was deleted by org_id and 0 remain. Demo and Nova Events were not touched. Apply was run only on TEST orgs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run the pytest files one at a time with a 60s gap between them, because of the public form rate limit (6/min/IP). The pytest.ini uses xdist. UI seed: python avp_ui_seed153.py, which writes /tmp/avp_ui.json; clean up with 'cleanup'. In the UI, dismiss the demo popup with 'Non ora'. Desktop and mobile lists are both in the DOM, so scope selectors to person-row-<id> or person-card-<id> inside [role=tabpanel][data-state=active]."
+}

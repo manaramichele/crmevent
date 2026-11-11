@@ -87,6 +87,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "piattaforma-segnalazioni", badge: "tickets" },
   { to: "/piattaforma/privacy-cookie", label: "Privacy e Cookie", icon: Cookie, id: "piattaforma-privacy-cookie" },
   { to: "/piattaforma/calendario-eventi-italia", label: "Calendario Eventi Italia", icon: CalendarDays, id: "piattaforma-calendario-italia" },
+  { to: "/piattaforma/preferenze-volontari", label: "Recupero preferenze volontari", icon: CalendarDays, id: "piattaforma-preferenze" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];

@@ -246,6 +246,12 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                     </div>
                   </div>
                 )}
+                {(d.preferenze || []).length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 space-y-1" data-testid="person-preferenze">
+                    <div className="text-xs font-semibold text-amber-800">Preferenza indicata nella Raccolta disponibilità</div>
+                    {d.preferenze.map((p) => <div key={p.availability_id} className="text-sm text-slate-700" data-testid={`person-pref-${p.evento_id}`}><span className="text-slate-500">{p.evento_nome || "Evento"}:</span> <b>{p.preferenza || "Non indicata"}</b></div>)}
+                  </div>
+                )}
                 {d.events.length === 0 ? <p className="text-sm text-slate-400 py-2">Nessun evento associato.</p> :
                   d.events.map((x) => (
                     <div key={x.presence.id} className="border border-slate-200 rounded-lg px-4 py-3" data-testid={`presence-row-${x.presence.id}`}>

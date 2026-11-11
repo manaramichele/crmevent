@@ -16,9 +16,9 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, UserPlus, Search, Users, Phone, Eye, Crown } from "lucide-react";
-import { useSort, SortIcon, sortRows } from "@/lib/sortable";
+import { Plus, Pencil, Trash2, UserPlus, Search, Users, Phone, Eye, Crown, Check } from "lucide-react";
 import { toast } from "sonner";
+import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
 import TeamMembersDialog, { teamCounts } from "@/components/TeamMembersDialog";
 import VolunteerSummary from "@/components/VolunteerSummary";
@@ -105,17 +105,24 @@ function EventRolesDialog({ person, events, settings, open, onOpenChange, onDone
   );
 }
 
-function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], onOpen, onEdit, onInvite, onDelete, onRoleClick, onInvited }) {
+function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onRoleClick, onInvited }) {
   const [q, setQ] = useState("");
   const [evFilter, setEvFilter] = useState("all");
+  const [prefFilter, setPrefFilter] = useState("all");
+  const [bulkRole, setBulkRole] = useState("");
   const [sel, setSel] = useState(() => new Set());
+  const prefsOf = (r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter);
+  const prefText = (r) => { const ps = prefsOf(r); if (!ps.length) return ""; return [...new Set(ps.map((p) => p.preferenza || "Non indicata"))].join(", "); };
+  const mansioniOf = (r) => (r.mansioni || []).filter((m) => evFilter === "all" || m.evento_id === evFilter);
+  const mansioneText = (r) => { const ms = mansioniOf(r).map((m) => m.ruolo).filter(Boolean); return ms.length ? [...new Set(ms)].join(", ") : (r.ruolo || ""); };
   const flip = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const filtered = rows.filter((r) => {
     if (tab === "referenti_aziende" && !r.is_referente) return false;
     if (tab === "staff" && !r.is_staff) return false;
     if (tab === "volontari" && !r.is_volontario) return false;
     if (tab === "da_classificare" && (r.is_referente || r.is_staff || r.is_volontario)) return false;
-    if (evFilter !== "all" && !(r.eventi_ids || []).includes(evFilter)) return false;
+    if (evFilter !== "all" && !(r.eventi_ids || []).includes(evFilter) && !(r.preferenze || []).some((p) => p.evento_id === evFilter)) return false;
+    if (prefFilter !== "all" && !prefsOf(r).some((p) => (p.preferenza || "Non indicata") === prefFilter)) return false;
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
@@ -125,10 +132,11 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const ACC = {
     nome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
     cellulare: (r) => r.cellulare || "",
+    preferenza: (r) => prefText(r),
     ruolo_evento: (r) => (r.is_staff ? "Staff" : r.is_volontario ? "Volontario" : r.is_referente ? "Referente" : ""),
     team: (r) => (r.teams_nomi || []).join(", "),
     evento: (r) => (r.eventi_nomi || []).join(", "),
-    qualifica: (r) => r.ruolo || "",
+    qualifica: (r) => mansioneText(r),
     aziende: (r) => (r.aziende_nomi || []).join(", "),
     accesso: (r) => INV_LABEL[r.invite_status || "non_invitato"] || "",
   };
@@ -137,7 +145,54 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const selectedRows = displayRows.filter((r) => sel.has(r.id));
   const allSel = displayRows.length > 0 && selectedRows.length === displayRows.length;
   const toggleAll = () => setSel(allSel ? new Set() : new Set(displayRows.map((r) => r.id)));
-  const pick = (r) => onInvite && <input type="checkbox" className="accent-tiffany w-4 h-4" checked={sel.has(r.id)} onChange={() => flip(r.id)} onClick={(e) => e.stopPropagation()} aria-label="Seleziona per invito" data-testid={`select-invite-${r.id}`} />;
+  const pick = (r) => (onInvite || isStaffTab) && <input type="checkbox" className="accent-tiffany w-4 h-4" checked={sel.has(r.id)} onChange={() => flip(r.id)} onClick={(e) => e.stopPropagation()} aria-label="Seleziona" data-testid={`select-invite-${r.id}`} />;
+  const prefOptions = [...new Set(rows.flatMap((r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter).map((p) => p.preferenza || "Non indicata")))].sort((a, b) => a.localeCompare(b, "it"));
+  const eventFor = (r) => {
+    if (evFilter !== "all") return evFilter;
+    const ps = prefsOf(r);
+    if (ps.length === 1) return ps[0].evento_id;
+    const evs = [...new Set((r.mansioni || []).map((m) => m.evento_id))];
+    return evs.length === 1 ? evs[0] : evs.length === 0 ? null : undefined;
+  };
+  const assign = async (people, mansione) => {
+    const byEv = {};
+    for (const r of people) {
+      const ev = eventFor(r);
+      if (ev === undefined) { toast.error(`${r.cognome || ""} ${r.nome || ""} partecipa a più eventi: scegli prima l'evento nel filtro`); return; }
+      (byEv[ev || ""] = byEv[ev || ""] || []).push(r.id);
+    }
+    try {
+      let n = 0;
+      for (const [ev, ids] of Object.entries(byEv)) {
+        const { data } = await api.post("/persons/mansione-bulk", { person_ids: ids, mansione, evento_id: ev || null });
+        n += data.partecipazioni + data.anagrafiche;
+      }
+      toast.success(`Mansione "${mansione}" assegnata (${n})`); onReload && onReload();
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const confirmPrefs = async (people) => {
+    const groups = {};
+    people.forEach((r) => { const ps = prefsOf(r).map((p) => p.preferenza).filter((p) => ruoli.includes(p)); if (ps.length === 1) (groups[ps[0]] = groups[ps[0]] || []).push(r); });
+    if (!Object.keys(groups).length) { toast.error("Nessuna preferenza corrisponde a una mansione esistente: scegli la mansione dal menu"); return; }
+    for (const [m, ppl] of Object.entries(groups)) await assign(ppl, m);
+    const skipped = people.length - Object.values(groups).flat().length;
+    if (skipped) toast.info(`${skipped} persone saltate: preferenze multiple o senza mansione corrispondente`);
+  };
+  const prefCell = (r) => {
+    const t = prefText(r);
+    if (!t) return <span className="text-slate-400">—</span>;
+    const ps = prefsOf(r).map((p) => p.preferenza);
+    const match = ps.length === 1 && ruoli.includes(ps[0]);
+    const done = match && (() => { const ev = eventFor(r); const ms = (r.mansioni || []).filter((m) => m.evento_id === ev); return ms.length ? ms.every((m) => m.ruolo === ps[0]) : r.ruolo === ps[0]; })();
+    return (
+      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <span className="text-slate-700" data-testid={`pref-${r.id}`}>{t}</span>
+        {match && !done && <button type="button" onClick={() => assign([r], ps[0])} title={`Assegna la mansione ${ps[0]}`} className="inline-flex h-8 w-8 md:h-7 md:w-7 items-center justify-center rounded-full border border-tiffany text-tiffany-active hover:bg-tiffany-light" data-testid={`pref-confirm-${r.id}`}><Check className="w-4 h-4" /></button>}
+        {done && <Check className="w-4 h-4 text-green-600" data-testid={`pref-done-${r.id}`} />}
+        {!match && ruoli.length > 0 && <select className="h-8 max-w-[9rem] rounded-md border border-slate-200 bg-white px-1 text-xs" value="" onChange={(e) => e.target.value && assign([r], e.target.value)} data-testid={`pref-pick-${r.id}`}><option value="">Scegli mansione…</option>{ruoli.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
+      </div>
+    );
+  };
   const Th = ({ k, label, right }) => (
     <th onClick={() => toggle(k)} data-testid={`sort-${k}`} className={`font-semibold text-slate-600 px-4 py-3 whitespace-nowrap cursor-pointer select-none group ${right ? "text-right" : "text-left"}`}>
       <span className="inline-flex items-center gap-1">{label}<SortIcon active={sort.key === k} dir={sort.dir} /></span>
@@ -185,7 +240,21 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
             </Select>
           </div>
         )}
+        {isStaffTab && prefOptions.length > 0 && (
+          <select className="h-10 w-full sm:w-56 rounded-md border border-slate-200 bg-white px-2 text-sm" value={prefFilter} onChange={(e) => setPrefFilter(e.target.value)} data-testid="people-pref-filter">
+            <option value="all">Tutte le preferenze</option>{prefOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
       </div>
+      {isStaffTab && selectedRows.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-tiffany/40 bg-tiffany-light/40 px-3 py-2 text-sm" data-testid="bulk-mansione-bar">
+          <span className="font-medium">{selectedRows.length} selezionati</span>
+          <Button size="sm" variant="outline" onClick={() => confirmPrefs(selectedRows)} data-testid="bulk-confirm-prefs"><Check className="w-4 h-4 mr-1" />Conferma preferenze</Button>
+          <select className="h-9 rounded-md border border-slate-200 bg-white px-2" value={bulkRole} onChange={(e) => setBulkRole(e.target.value)} data-testid="bulk-mansione-select"><option value="">Mansione…</option>{ruoli.map((x) => <option key={x} value={x}>{x}</option>)}</select>
+          <Button size="sm" disabled={!bulkRole} onClick={() => assign(selectedRows, bulkRole)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900" data-testid="bulk-mansione-apply">Assegna a {selectedRows.length}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSel(new Set())} data-testid="bulk-clear">Annulla selezione</Button>
+        </div>
+      )}
       {tab === "volontari" && <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={evFilter} />}
       <div className="md:hidden space-y-2.5" data-testid={`people-mobile-list-${tab}`}>
         {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
@@ -198,9 +267,10 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
               <div className="mt-2 space-y-1.5 text-sm text-slate-700">
                 {r.cellulare && <a href={`tel:${r.cellulare}`} className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{r.cellulare}</a>}
                 <div>{roleBadges(r)}</div>
+                {isStaffTab && <div className="flex items-start gap-2" data-testid={`m-pref-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-1.5">Preferenza</span>{prefCell(r)}</div>}
                 {isStaffTab ? (<>
                   <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Team</span>{teamsCell(r)}</div>
-                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span><span className="break-words">{r.ruolo || "—"}</span></div>
+                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span><span className="break-words">{mansioneText(r) || "—"}</span></div>
                   {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
                 </>) : (<>
@@ -221,10 +291,11 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
-              {onInvite && <th className="pl-4 py-3 w-8"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={allSel} onChange={toggleAll} aria-label="Seleziona tutti" data-testid={`select-invite-all-${tab}`} /></th>}
+              {(onInvite || isStaffTab) && <th className="pl-4 py-3 w-8"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={allSel} onChange={toggleAll} aria-label="Seleziona tutti" data-testid={`select-invite-all-${tab}`} /></th>}
               {isStaffTab ? (<>
                 <Th k="nome" label="Cognome e Nome" />
                 <Th k="cellulare" label="Cellulare" />
+                <Th k="preferenza" label="Preferenza" />
                 <Th k="ruolo_evento" label="Ruolo evento" />
                 <Th k="team" label="Team" />
                 <Th k="qualifica" label="Mansione" />
@@ -245,14 +316,15 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 : displayRows.length === 0 ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
-                    {onInvite && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
+                    {(onInvite || isStaffTab) && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
                     <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.cognome} {r.nome}</span><LastInvite person={r} /></td>
                     {isStaffTab ? (
                       <>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
+                        <td className="px-4 py-3">{prefCell(r)}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
-                        <td className="px-4 py-3 text-slate-700" data-testid={`mansione-${r.id}`}>{r.ruolo || "—"}</td>
+                        <td className="px-4 py-3 text-slate-700" data-testid={`mansione-${r.id}`}>{mansioneText(r) || "—"}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
                         <td className="px-4 py-3" data-testid={`invite-status-${r.id}`}><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
                       </>
@@ -429,7 +501,7 @@ export default function Persons({ mode = "anagrafiche" }) {
           </TabsList>
           {["staff", "volontari", "da_classificare"].map((t) => (
             <TabsContent key={t} value={t}>
-              <PeopleTable tab={t} events={events} teams={teams} staffLinks={staffLinks} {...peopleProps} />
+              <PeopleTable tab={t} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} {...peopleProps} />
             </TabsContent>
           ))}
           <TabsContent value="team">
