@@ -43,6 +43,7 @@ import brevo_subscriptions
 import brevo_tracker
 import iscritti
 import calendario_italia
+import avail_prefs
 import gcal_availability
 import privacy_consent
 import pipeline_seed_sports
@@ -1922,6 +1923,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
     pres_by = defaultdict(list)
     for p in pres:
         pres_by[p["persona_id"]].append(p)
+    prefs = await AVP["prefs_for"](admin["org_id"])
     out = []
     for p in persons:
         pid = p["id"]
@@ -1953,7 +1955,8 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "teams_nomi": teams_nomi,
                     "eventi_nomi": eventi_nomi,
                     "eventi_ids": list({x["evento_id"] for x in prs}),
-                    "eventi_count": len({x["evento_id"] for x in prs})})
+                    "eventi_count": len({x["evento_id"] for x in prs}),
+                    "preferenze": prefs.get(pid, [])})
     return out
 
 
@@ -2078,8 +2081,9 @@ async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
               if _team_ids(admin) is None or s.get("team_id") in _team_ids(admin)]
     activities = await db.activities.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "attivita") else []
     followups = await db.followups.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "followup") else []
+    preferenze = (await AVP["prefs_for"](admin["org_id"], [person_id])).get(person_id, [])
     return {"person": p, "companies": companies, "events": events, "teams": teams,
-            "shifts": shifts, "activities": activities, "followups": followups}
+            "shifts": shifts, "activities": activities, "followups": followups, "preferenze": preferenze}
 
 
 @api.get("/companies/{company_id}/detail")
@@ -13867,6 +13871,8 @@ ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_su
 press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
 app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
+AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
+app.include_router(AVP["router"])
 CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "app_url": APP_URL})
 app.include_router(CAL_ITALIA["router"])
 app.include_router(CAL_ITALIA["public_router"])

@@ -35,6 +35,7 @@ import { CHANGE_EVENT } from "@/lib/consent";
 import CookieBanner from "@/components/Cookie/CookieBanner";
 import PrivacyCookieAdmin from "@/pages/PrivacyCookieAdmin";
 import CalendarioItalia from "@/pages/CalendarioItalia";
+import PreferenzeVolontari from "@/pages/PreferenzeVolontari";
 import Iscritti from "@/pages/Iscritti";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
@@ -163,6 +164,7 @@ function Shell() {
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/calendario-eventi-italia" element={<Protected><SuperAdminOnly><CalendarioItalia /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/preferenze-volontari" element={<Protected><SuperAdminOnly><PreferenzeVolontari /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
         <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />
         <Route path="/iscritti" element={<Protected><Iscritti /></Protected>} />
