@@ -1261,3 +1261,10 @@ Task 2 — Creatività manuale:
 - iteration_151: 94/94 (WebKit iPhone 13, Chromium Pixel 5 con swipe reali, desktop). iPhone fisico non disponibile.
 
 
+## 2026-11-10 — Preferenze volontari (Raccolta disponibilità → Staff/Volontari)
+- backend/avail_prefs.py: preferenza per persona+evento letta da availabilities (risposta più recente), esposta in /persons-enriched (preferenze + mansioni per evento) e /persons/{id}/detail; POST /persons/mansione-bulk (solo mansione, solo ruoli esistenti, per evento).
+- Super Admin /piattaforma/preferenze-volontari: anteprima/report e aggiornamento retroattivo (staff.preferenza_volontario, ricostruzione collegamenti persona con backup in backup_avail_prefs, idempotente, avail_prefs_runs solo se ci sono modifiche).
+- UI Persons: colonna Preferenza prima di Ruolo evento, filtro/ordinamento, conferma rapida, scelta manuale, selezione multipla + assegnazione massiva, card mobile; blocco preferenze nella scheda persona.
+- iteration_152/153: backend 14/14, frontend 100%. Trio Events è su Aruba: migrazione da eseguire lì dal pannello Super Admin.
+
+

@@ -72,7 +72,8 @@ class TestAvailPrefs:
     # UI mansione column reads persons.ruolo -> does it reflect staff.ruolo after assignment?
     def test_enriched_reflects_staff_mansione(self, ctx):
         p2 = enriched(ctx, ctx["pid"]["p2"])
-        assert p2.get("ruolo") == ctx["ruoli"][1], f"persons-enriched ruolo={p2.get('ruolo')!r}; staff.ruolo not surfaced to UI Mansione column"
+        m = {x["evento_id"]: x["ruolo"] for x in p2["mansioni"]}  # iter153: per-event mansioni from staff links
+        assert m.get(ctx["ev"]["A"]) == ctx["ruoli"][1] and m.get(ctx["ev"]["B"]) in (None, "")
 
     # invalid mansione -> 400, nothing created
     def test_invalid_mansione(self, ctx):

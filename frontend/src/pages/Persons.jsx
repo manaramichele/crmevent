@@ -114,7 +114,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const prefsOf = (r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter);
   const prefText = (r) => { const ps = prefsOf(r); if (!ps.length) return ""; return [...new Set(ps.map((p) => p.preferenza || "Non indicata"))].join(", "); };
   const mansioniOf = (r) => (r.mansioni || []).filter((m) => evFilter === "all" || m.evento_id === evFilter);
-  const mansioneText = (r) => { const ms = mansioniOf(r); if (!ms.length) return r.ruolo || ""; return [...new Set(ms.map((m) => m.ruolo).filter(Boolean))].join(", "); };
+  const mansioneText = (r) => { const ms = mansioniOf(r).map((m) => m.ruolo).filter(Boolean); return ms.length ? [...new Set(ms)].join(", ") : (r.ruolo || ""); };
   const flip = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const filtered = rows.filter((r) => {
     if (tab === "referenti_aziende" && !r.is_referente) return false;
@@ -175,6 +175,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     people.forEach((r) => { const ps = prefsOf(r).map((p) => p.preferenza).filter((p) => ruoli.includes(p)); if (ps.length === 1) (groups[ps[0]] = groups[ps[0]] || []).push(r); });
     if (!Object.keys(groups).length) { toast.error("Nessuna preferenza corrisponde a una mansione esistente: scegli la mansione dal menu"); return; }
     for (const [m, ppl] of Object.entries(groups)) await assign(ppl, m);
+    const skipped = people.length - Object.values(groups).flat().length;
+    if (skipped) toast.info(`${skipped} persone saltate: preferenze multiple o senza mansione corrispondente`);
   };
   const prefCell = (r) => {
     const t = prefText(r);
