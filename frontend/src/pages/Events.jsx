@@ -17,6 +17,21 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import AvailabilityDialog from "@/components/AvailabilityDialog";
+import { loadDemoProject } from "@/lib/plannerDemo";
+
+// Ricorda al nuovo utente di ritrovare nel suo primo evento il progetto creato nella demo pubblica.
+function DemoProjectBanner({ navigate }) {
+  const [first, setFirst] = useState(undefined);
+  const has = !!loadDemoProject();
+  useEffect(() => { if (has) api.get("/events").then(({ data }) => { const l = Array.isArray(data) ? data : data.items || []; setFirst(l[0] || null); }).catch(() => setFirst(null)); }, [has]);
+  if (!has || first === undefined) return null;
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-tiffany/40 bg-tiffany-light/50 p-3 text-sm" data-testid="events-demo-banner">
+      <span className="flex-1">{first ? `Il progetto creato nella demo Event Planner ti aspetta: aprilo in "${first.nome}" per importarlo.` : "Il progetto creato nella demo Event Planner ti aspetta: crea il tuo primo evento con \"Aggiungi\", poi apri Event Planner dal menu Altre per importarlo."}</span>
+      {first && <Button size="sm" onClick={() => navigate(`/eventi/${first.id}/planner`)} className="bg-tiffany text-slate-900 hover:bg-tiffany-hover" data-testid="events-demo-open">Apri Event Planner</Button>}
+    </div>
+  );
+}
 
 const STATO = { attivo: "green", pianificato: "tiffany", concluso: "gray", annullato: "red" };
 const STATO_LABEL = { attivo: "In corso", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
@@ -421,6 +436,7 @@ export default function Events() {
 
   return (
     <>
+      <DemoProjectBanner navigate={navigate} />
       <EntityManager title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event" defaultSort={{ key: "data_inizio", dir: "asc" }}
         searchKeys={["nome", "citta", "tipologia"]} fullActions

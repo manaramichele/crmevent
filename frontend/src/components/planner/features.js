@@ -48,6 +48,23 @@ export function translate(f, dLng, dLat) {
   return { ...f, geometry: { ...g, coordinates: coords } };
 }
 
+export const layerForCat = (layers, cat) => (layers.find((l) => l.nome.toLowerCase().startsWith((cat || "").toLowerCase().slice(0, 5))) || layers.find((l) => !l.bloccato) || layers[0])?.id;
+
+// Crea un nuovo oggetto dal tipo di strumento o dall'elemento della libreria (stesso motore per area riservata e demo).
+export function makeFeature(spec, c, layers, linePreset) {
+  const lf = (cat) => layerForCat(layers, cat);
+  const base = { id: uid(), layer_id: lf(spec.categoria), colore: spec.colore, nome: spec.nome, categoria: spec.categoria };
+  let f;
+  if (spec.tipo === "box") f = { properties: { ...base, tipo: "box", center: c, larghezza: spec.larghezza, lunghezza: spec.lunghezza, rotazione: 0, quantita: 1 } };
+  else if (spec.tipo === "line" && linePreset) f = { properties: { ...base, nome: linePreset.nome, categoria: linePreset.categoria, colore: linePreset.colore, tipo: "line", passo: linePreset.larghezza, layer_id: lf(linePreset.categoria) }, geometry: { type: "LineString", coordinates: c } };
+  else if (spec.tipo === "point") f = { properties: { ...base, nome: spec.nome || "Punto", tipo: "point", quantita: 1 }, geometry: { type: "Point", coordinates: c } };
+  else if (spec.tipo === "line" || spec.tipo === "measure") f = { properties: { ...base, nome: spec.tipo === "measure" ? "Misura" : "Linea", tipo: spec.tipo, layer_id: lf("Percorsi") }, geometry: { type: "LineString", coordinates: c } };
+  else if (spec.tipo === "polygon") f = { properties: { ...base, nome: "Area", tipo: "polygon", layer_id: lf("Aree") }, geometry: { type: "Polygon", coordinates: [[...c, c[0]]] } };
+  else if (spec.tipo === "rect") { const [a, b] = c; f = { properties: { ...base, nome: "Rettangolo", tipo: "polygon", layer_id: lf("Aree") }, geometry: { type: "Polygon", coordinates: [[a, [b[0], a[1]], b, [a[0], b[1]], a]] } }; }
+  else if (spec.tipo === "circle") f = { properties: { ...base, nome: "Cerchio", tipo: "circle", center: c, raggio: spec.raggio, layer_id: lf("Aree") } };
+  return { type: "Feature", geometry: f.geometry || null, ...f };
+}
+
 export const anchorOf = (f) => {
   const g = geometryOf(f);
   if (f.properties.center) return f.properties.center;

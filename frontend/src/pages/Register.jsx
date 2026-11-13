@@ -14,6 +14,7 @@ import { Sparkles, ShieldCheck, Gift } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { getReferral, clearReferral } from "@/lib/referral";
+import { loadDemoProject, trackDemo } from "@/lib/plannerDemo";
 
 export default function Register() {
   const { setUser } = useAuth();
@@ -39,6 +40,7 @@ export default function Register() {
       setUser(data);
       trackEvent("sign_up", { method: "email" });
       try { localStorage.removeItem("crmevent_lead"); clearReferral(); } catch {}
+      if (loadDemoProject()) { trackDemo("signup"); nav("/eventi", { replace: true }); return; }
       nav("/app", { replace: true });  // unico benvenuto: WelcomeDemo nel Layout
     } catch (err) { toast.error(formatApiError(err.response?.data?.detail)); }
     finally { setLoading(false); }

@@ -4,6 +4,7 @@ import api, { formatApiError } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import Footer from "@/components/Footer";
 import PlansSection from "@/components/PlansSection";
+import PlannerDemoSection from "@/components/landing/PlannerDemoSection";
 import { toast } from "sonner";
 import {
   CalendarDays, Building2, Users, Handshake, UserCog, Users2, Clock, Map as MapIcon,
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 
 const NAV = [
-  ["Funzionalità", "funzionalita"], ["Per chi è", "per-chi"], ["Staff & Volontari", "staff"],
+  ["Funzionalità", "funzionalita"], ["Event Planner", "event-planner"], ["Per chi è", "per-chi"], ["Staff & Volontari", "staff"],
   ["Sponsor", "sponsor"], ["Come funziona", "come-funziona"], ["Prezzi", "prezzi"],
 ];
 
@@ -265,6 +266,8 @@ export default function LandingPage() {
           <p className="mt-6 text-xl font-display font-bold text-slate-900">CRMEvent mette tutto insieme.</p>
         </div>
       </Section>
+
+      <PlannerDemoSection onScroll={scrollTo} />
 
       {/* Funzionalità */}
       <Section id="funzionalita" className="py-20">

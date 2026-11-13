@@ -88,6 +88,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/privacy-cookie", label: "Privacy e Cookie", icon: Cookie, id: "piattaforma-privacy-cookie" },
   { to: "/piattaforma/calendario-eventi-italia", label: "Calendario Eventi Italia", icon: CalendarDays, id: "piattaforma-calendario-italia" },
   { to: "/piattaforma/preferenze-volontari", label: "Recupero preferenze volontari", icon: CalendarDays, id: "piattaforma-preferenze" },
+  { to: "/piattaforma/event-planner-demo", label: "Event Planner in homepage", icon: Sparkles, id: "piattaforma-planner-demo" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];

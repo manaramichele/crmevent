@@ -45,6 +45,7 @@ import iscritti
 import calendario_italia
 import avail_prefs
 import planner
+import planner_demo
 import gcal_availability
 import privacy_consent
 import pipeline_seed_sports
@@ -13878,6 +13879,9 @@ app.include_router(AVP["router"])
 PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit})
 app.include_router(PLANNER["router"])
 app.add_event_handler("startup", PLANNER["ensure"])
+PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})
+app.include_router(PLANNER_DEMO["router"])
+app.add_event_handler("startup", PLANNER_DEMO["ensure"])
 CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "app_url": APP_URL})
 app.include_router(CAL_ITALIA["router"])
 app.include_router(CAL_ITALIA["public_router"])
