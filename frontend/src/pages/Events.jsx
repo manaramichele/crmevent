@@ -283,6 +283,7 @@ function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, open
   const all = [
     { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
     { key: "briefing", label: "Briefing", Icon: FileText, run: () => navigate(`/eventi/${row.id}/briefing`), title: "Briefing evento" },
+    { key: "planner", label: "Event Planner", Icon: FileText, run: () => navigate(`/eventi/${row.id}/planner`), title: "Event Planner" },
     { key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" },
     { key: "maps", label: "Percorsi", Icon: MapIcon, run: () => setMapsFor(row.id), title: "Mappe & Percorsi" },
     { key: "calsync", label: "Calendario", Icon: CalendarPlus, run: () => syncCal(row), title: "Aggiungi a Google Calendar" },

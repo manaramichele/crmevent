@@ -44,6 +44,7 @@ import Companies from "@/pages/Companies";
 import Persons from "@/pages/Persons";
 import Hospitality from "@/pages/Hospitality";
 import Briefing from "@/pages/Briefing";
+import EventPlanner from "@/pages/EventPlanner";
 import SponsorsPartners from "@/pages/SponsorsPartners";
 import Activities from "@/pages/Activities";
 import Followups from "@/pages/Followups";
@@ -185,6 +186,7 @@ function Shell() {
         <Route path="/evento/:id" element={<Protected><VolunteerEvent /></Protected>} />
         <Route path="/eventi" element={<Protected><Perm s="eventi"><Events /></Perm></Protected>} />
         <Route path="/eventi/:id/briefing" element={<Protected><Perm s="briefing"><Briefing /></Perm></Protected>} />
+        <Route path="/eventi/:id/planner" element={<Protected><Perm s="eventi"><EventPlanner /></Perm></Protected>} />
         <Route path="/eventi/:id/pipeline" element={<Protected><Perm s="pipeline"><EventPipeline /></Perm></Protected>} />
         <Route path="/pipeline/attenzione" element={<Protected><Perm s="pipeline"><PipelineAttentionPage /></Perm></Protected>} />
         <Route path="/aziende" element={<Protected><Perm s="aziende"><Companies /></Perm></Protected>} />
