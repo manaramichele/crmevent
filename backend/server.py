@@ -46,6 +46,7 @@ import calendario_italia
 import avail_prefs
 import planner
 import planner_demo
+import referenti_integrazione
 import gcal_availability
 import privacy_consent
 import pipeline_seed_sports
@@ -2177,6 +2178,87 @@ async def delete_company_contact(rel_id: str, admin: dict = Depends(require_admi
     return {"ok": True}
 
 
+# ---------------- referenti in linea nella scheda Azienda (Nome, Cognome, Email, Cellulare) ----------------
+REF_FIELDS = ("nome", "cognome", "email", "cellulare")
+
+
+class ReferenteIn(BaseModel):
+    person_id: Optional[str] = None
+    nome: Optional[str] = Field(None, max_length=120)
+    cognome: Optional[str] = Field(None, max_length=120)
+    email: Optional[str] = Field(None, max_length=200)
+    cellulare: Optional[str] = Field(None, max_length=40)
+
+
+class ReferentiIn(BaseModel):
+    referenti: List[ReferenteIn] = Field(default_factory=list, max_length=100)
+
+
+def _ref_out(p: dict) -> dict:
+    return {"person_id": p["id"], **{k: p.get(k) or "" for k in REF_FIELDS}}
+
+
+def _digits(s: Optional[str]) -> str:
+    d = re.sub(r"\D", "", s or "")
+    return d[-9:] if len(d) >= 9 else ""
+
+
+async def _company_or_404(admin: dict, company_id: str) -> dict:
+    c = await db.companies.find_one(oq(admin, id=company_id), {"_id": 0, "id": 1})
+    if not c:
+        raise HTTPException(status_code=404, detail="Azienda non trovata")
+    return c
+
+
+@api.get("/companies/{company_id}/referenti")
+async def get_company_referenti(company_id: str, admin: dict = Depends(require_admin)):
+    await _company_or_404(admin, company_id)
+    return [_ref_out(x["person"]) for x in await _company_contacts(company_id, admin["org_id"])]
+
+
+@api.put("/companies/{company_id}/referenti")
+async def put_company_referenti(company_id: str, body: ReferentiIn, admin: dict = Depends(require_admin)):
+    """Sincronizza i referenti: aggiorna i contatti collegati, crea/collega i nuovi senza duplicati,
+    scollega quelli rimossi. Nessun contatto viene cancellato e gli altri campi restano invariati."""
+    await _company_or_404(admin, company_id)
+    oid = admin["org_id"]
+    current = {x["person"]["id"]: x for x in await _company_contacts(company_id, oid)}
+    keep = set()
+    for r in body.referenti:
+        vals = {k: (getattr(r, k) or "").strip() for k in REF_FIELDS}
+        if not any(vals.values()):
+            continue
+        if r.person_id and r.person_id in current:
+            await db.persons.update_one({"id": r.person_id, "org_id": oid}, {"$set": {**vals, "updated_at": datetime.now(timezone.utc).isoformat()}})
+            keep.add(r.person_id)
+            continue
+        match = None
+        if vals["email"]:
+            match = await db.persons.find_one({"org_id": oid, "email": {"$regex": f"^{re.escape(vals['email'])}$", "$options": "i"}}, {"_id": 0})
+        if not match and _digits(vals["cellulare"]):
+            tail = _digits(vals["cellulare"])
+            for p in await db.persons.find({"org_id": oid, "cellulare": {"$regex": tail[-6:]}}, {"_id": 0}).to_list(50):
+                if _digits(p.get("cellulare")) == tail:
+                    match = p
+                    break
+        if match and (match["id"] in keep):
+            continue
+        if match:
+            fill = {k: v for k, v in vals.items() if v and not match.get(k)}
+            if fill:
+                await db.persons.update_one({"id": match["id"], "org_id": oid}, {"$set": fill})
+            pid = match["id"]
+        else:
+            pid = (await _create("persons", {"org_id": oid, **vals, "azienda_id": company_id, "invite_status": "non_invitato"}))["id"]
+        if not await db.person_companies.find_one({"org_id": oid, "person_id": pid, "company_id": company_id}):
+            await _create("person_companies", {"org_id": oid, "person_id": pid, "company_id": company_id, "referente_principale": False})
+        keep.add(pid)
+    for pid in set(current) - keep:
+        await db.person_companies.delete_many({"org_id": oid, "person_id": pid, "company_id": company_id})
+        await db.persons.update_one({"id": pid, "org_id": oid, "azienda_id": company_id}, {"$set": {"azienda_id": None}})
+    return [_ref_out(x["person"]) for x in await _company_contacts(company_id, oid)]
+
+
 # ---------------- person invite ----------------
 class InviteIn(BaseModel):
     role: Optional[str] = None
@@ -2653,19 +2735,8 @@ async def _my_teams_overview(user: dict) -> list:
 
 @api.get("/notifications")
 async def notifications(admin: dict = Depends(require_admin)):
-    today = datetime.now(timezone.utc).date().isoformat()
-    if not _can(admin, "followup"):
-        return {"count": 0, "items": []}
-    fus = await db.followups.find(oq(admin, stato={"$ne": "completato"}, **_ev_scope(admin)), {"_id": 0}).to_list(3000)
-    items = []
-    for f in fus:
-        sc = (f.get("scadenza") or "")[:10]
-        if sc and sc < today:
-            items.append({"id": f["id"], "tipo": "scaduto", "titolo": f["titolo"], "scadenza": sc})
-        elif sc == today:
-            items.append({"id": f["id"], "tipo": "oggi", "titolo": f["titolo"], "scadenza": sc})
-    items.sort(key=lambda x: x["scadenza"])
-    return {"count": len(items), "items": items[:30]}
+    # Le notifiche riguardavano solo i Follow-up, sezione rimossa dall'interfaccia (dati conservati).
+    return {"count": 0, "items": []}
 
 
 @api.get("/search")
@@ -3319,13 +3390,13 @@ async def seed_support():
          "In CRMEvent l'anagrafica è unica: apri la persona in 'Persone' e nella scheda 'Eventi' aggiungi tutte le associazioni evento che servono, ognuna con la propria categoria e ruolo. Non creare anagrafiche separate: la stessa persona resta un unico record.",
          ["collegare persona", "più eventi", "persona multipla", "associare persona"]),
         ("Creare un'azienda e aggiungere referenti", "aziende", "Come creo un'azienda con i suoi referenti?",
-         "Vai in 'Aziende' → 'Aggiungi azienda'. Compila ragione sociale, settore, tipo e contatti. Nella stessa schermata puoi aggiungere uno o più referenti con 'Aggiungi referente': al salvataggio il sistema crea l'azienda e crea/collega automaticamente le persone in anagrafica, verificando i duplicati.",
+         "Vai in 'Aziende' → 'Aggiungi azienda'. Compila ragione sociale, settore, tipo e contatti. Nella stessa schermata, nel campo 'Referente', inserisci Nome, Cognome, Email e Cellulare; con '+ Aggiungi referente' ne aggiungi altri. Se esiste già un contatto con la stessa email o lo stesso cellulare, viene collegato senza creare duplicati.",
          ["creare azienda", "nuova azienda", "referente", "referenti azienda"]),
         ("Modificare i dati di un'azienda", "aziende", "Come modifico i dati di un'azienda?",
          "Vai in 'Aziende', clicca sulla riga dell'azienda per aprire la scheda e premi 'Modifica'. Puoi aggiornare ragione sociale, settore, contatti e responsabile interno. Dalla scheda gestisci anche i referenti nella tab 'Referenti'.",
          ["modificare azienda", "aggiornare azienda", "dati azienda"]),
         ("Aggiungere referenti a un'azienda con controllo duplicati", "aziende", "Come aggiungo un referente a un'azienda esistente?",
-         "Apri la scheda azienda, tab 'Referenti', 'Aggiungi referente': inserisci i dati e premi 'Verifica e salva'. Il sistema controlla i duplicati per email, cellulare e nome+cognome: se trova una persona esistente propone di collegarla invece di crearne una nuova.",
+         "Vai in 'Aziende', apri l'azienda e premi 'Modifica'. Nel campo 'Referente' modifichi direttamente Nome, Cognome, Email e Cellulare, aggiungi altri referenti con '+ Aggiungi referente' o rimuovi quelli non più attuali. Se esiste già un contatto con la stessa email o lo stesso cellulare, viene collegato senza duplicati.",
          ["referente", "aggiungere referente", "contatto azienda", "duplicati"]),
         ("Creare un team e assegnare un Team Leader", "team", "Come creo un team e assegno il responsabile?",
          "Vai in 'Persone' → scheda 'Team' (oppure dalla scheda evento) e premi 'Aggiungi'. Indica nome team, evento, area e seleziona il Team Leader tra le persone in anagrafica. I membri del team si gestiscono tramite le presenze/associazioni all'evento.",
@@ -3336,12 +3407,6 @@ async def seed_support():
         ("Coprire un turno scoperto", "turni", "Come assegno un turno scoperto a una persona?",
          "I turni senza persona risultano 'Scoperti'. Apri il turno in modifica e seleziona la persona da assegnare: il turno passerà da scoperto ad assegnato. Puoi filtrare i turni per evento, area e team per individuare rapidamente quelli ancora da coprire.",
          ["turno scoperto", "assegnare turno", "coprire turno"]),
-        ("Registrare un'attività (chiamata, email, meeting)", "attivita", "Come registro un'attività?",
-         "Vai in 'Attività' e premi 'Aggiungi'. Scegli il tipo (chiamata, email, meeting, nota), il titolo, la data e collega eventualmente persona, azienda o evento. Le attività tengono traccia dello storico delle interazioni.",
-         ["attività", "registrare attività", "chiamata", "email", "meeting", "nota"]),
-        ("Creare un follow-up con scadenza", "attivita", "Come creo un follow-up con promemoria?",
-         "Vai in 'Follow-up' e premi 'Aggiungi': indica titolo, scadenza e collega azienda, persona o evento. I follow-up in scadenza o scaduti compaiono nelle notifiche in alto e nella dashboard per non perdere le azioni importanti.",
-         ["follow-up", "followup", "promemoria", "scadenza", "ricontattare"]),
         ("Preparare il briefing dello staff", "briefing", "Come preparo il briefing dello staff?",
          "Nella scheda dell'evento trovi le viste operative Staff, Volontari, Team e Turni: da qui verifica ruoli, aree, punti di ritrovo e turni assegnati. Puoi allegare mappe e percorsi nella sezione Mappe dell'evento per distribuire le informazioni operative al team.",
          ["briefing", "staff", "preparare briefing", "istruzioni staff"]),
@@ -3377,6 +3442,12 @@ async def seed_support():
         added += 1
     if added:
         logger.info(f"Support KB: +{added} voci pubblicate")
+    # Sezioni Attività e Follow-up rimosse: archivia le voci; aggiorna le risposte sui referenti in Aziende.
+    await db.support_knowledge_base.update_many({"org_id": DEFAULT_ORG, "titolo": {"$in": ["Registrare un'attività (chiamata, email, meeting)", "Creare un follow-up con scadenza"]}},
+                                                {"$set": {"stato": "archiviato"}})
+    for titolo, _, _, risp, _ in kb:
+        if titolo in ("Creare un'azienda e aggiungere referenti", "Aggiungere referenti a un'azienda con controllo duplicati"):
+            await db.support_knowledge_base.update_one({"org_id": DEFAULT_ORG, "titolo": titolo}, {"$set": {"risposta": risp}})
     portal = [
         ("Area personale: i miei eventi", "eventi", "Come vedo i miei eventi?",
          "Nella tua area personale, in 'I miei eventi', trovi tutti gli eventi a cui sei stato associato, con il tuo ruolo e lo stato. Tocca un evento per aprirne i dettagli operativi.",
@@ -4152,7 +4223,7 @@ async def org_permissions(admin: dict = Depends(require_org_admin)):
     teams = await db.teams.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "evento_id": 1, "responsabile_id": 1}).sort("nome", 1).to_list(5000)
     persons = await db.persons.find({"org_id": oid}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1}).to_list(20000)
     persons.sort(key=lambda p: (f"{p.get('cognome') or ''} {p.get('nome') or ''}").strip().lower())
-    return {"sections": [{"key": k, "label": l} for k, l in P.SECTIONS], "actions": P.ACTION_LABELS,
+    return {"sections": [{"key": k, "label": l} for k, l in P.SECTIONS if k not in P.HIDDEN_SECTIONS], "actions": P.ACTION_LABELS,
             "roles": P.ROLES, "defaults": {r: P.default_permissions(r) for r in ("user", "collaboratore")},
             "members": members, "events": events, "teams": teams, "persons": persons}
 
@@ -11199,7 +11270,7 @@ CREDIT_SERVICE_DESCRIPTIONS = {
     "event_maintenance": "Mantiene operativo un evento già attivato. Il costo viene scalato in automatico ogni mese di calendario a partire dalla data di attivazione, fino alla data dell'evento: il mese che arriva fino all'evento non viene addebitato di nuovo. Se i crediti non sono sufficienti l'evento viene sospeso; riattivandolo si paga un solo mese di mantenimento e il ciclo riparte.",
     "event_pipeline_pro": "Attiva per un evento la Pipeline di preparazione: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni e tutte le attività da svolgere prima dell'evento. Il costo viene scalato una sola volta per evento, anche quando la Pipeline viene copiata da un'edizione precedente. Dopo l'attivazione modelli, attività e aggiornamenti dello stesso evento sono compresi.",
     "video_support": "Sessione di assistenza dedicata di 30 minuti tramite Google Meet, con possibilità di condividere lo schermo per ricevere supporto nell'utilizzo di CRMEvent.",
-    "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare Attività e Follow-up con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
+    "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare eventi e turni con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
 }
 
 
@@ -13895,6 +13966,7 @@ app.add_event_handler("startup", PLANNER["ensure"])
 PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})
 app.include_router(PLANNER_DEMO["router"])
 app.add_event_handler("startup", PLANNER_DEMO["ensure"])
+app.include_router(referenti_integrazione.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit})["router"])
 CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "app_url": APP_URL})
 app.include_router(CAL_ITALIA["router"])
 app.include_router(CAL_ITALIA["public_router"])

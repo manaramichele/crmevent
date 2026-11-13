@@ -66,8 +66,8 @@ function DashboardMock() {
         </div>
       </div>
       <div className="col-span-4 bg-white rounded-lg border border-slate-200 p-3">
-        <div className="text-xs font-semibold text-slate-700 mb-2">Follow-up di oggi</div>
-        {["AutoDrive Motors", "CloudByte", "FinCore"].map((n) => (
+        <div className="text-xs font-semibold text-slate-700 mb-2">Prossimi eventi</div>
+        {["Corsa del Parco", "Trail dei Colli", "Festival Estate"].map((n) => (
           <div key={n} className="flex items-center gap-2 py-1.5 border-b border-slate-50 last:border-0">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /><span className="text-[10px] text-slate-600">{n}</span></div>))}
       </div>
@@ -119,13 +119,13 @@ function VolunteerMock() {
 
 const FEATURES = [
   [CalendarDays, "Eventi", "Gestisci tutte le edizioni dei tuoi eventi da un unico spazio."],
-  [Building2, "Contatti", "Aziende, referenti e persone in un'unica anagrafica senza duplicazioni."],
-  [Handshake, "Sponsor & Partner", "Prospect, trattative, follow-up e partnership in una pipeline commerciale."],
+  [Building2, "Aziende e referenti", "Ogni azienda con i suoi referenti in un'unica scheda, senza duplicazioni."],
+  [Handshake, "Sponsor & Partner", "Prospect, trattative e partnership in una pipeline commerciale."],
   [UserCog, "Staff & Volontari", "Assegna persone, ruoli, aree operative e responsabilità."],
   [Users2, "Team", "Crea squadre operative e mostra subito chi lavora con chi."],
   [Clock, "Turni", "Organizza giorni, orari, punti di ritrovo e attività."],
   [MapIcon, "Mappe & Percorsi", "Condividi percorsi, mappe operative e punti di riferimento."],
-  [BellRing, "Follow-up", "Non dimenticare telefonate, attività e contatti importanti."],
+  [MapIcon, "Event Planner", "Progetta percorsi, strutture e spazi del tuo evento direttamente sulla mappa."],
   [CalendarCheck2, "Google Calendar", "Porta eventi e turni nel calendario degli utenti."],
 ];
 
@@ -308,7 +308,7 @@ export default function LandingPage() {
                 <span key={s} className={`px-3 py-1.5 rounded-full text-xs font-semibold ${i === 5 ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-tiffany-light text-tiffany-fg ring-1 ring-tiffany-border"}`}>{s}</span>))}
             </div>
             <div className="grid grid-cols-2 gap-3 mt-6 max-w-md text-sm">
-              {[["Valore pipeline", "€ 282.000"], ["Prossimo follow-up", "Oggi"], ["Referente", "Sara Colombo"], ["Storico attività", "12 interazioni"]].map(([l, v]) => (
+              {[["Valore pipeline", "€ 282.000"], ["Fase trattativa", "In corso"], ["Referente", "Sara Colombo"], ["Eventi collegati", "3 eventi"]].map(([l, v]) => (
                 <div key={l} className="bg-white rounded-lg border border-slate-200 p-3"><div className="text-[11px] text-slate-400 uppercase font-semibold">{l}</div><div className="font-semibold text-slate-800">{v}</div></div>))}
             </div>
           </div>

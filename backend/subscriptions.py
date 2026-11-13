@@ -37,6 +37,8 @@ FEATURES = [  # (chiave, etichetta) — chiavi = sezioni permessi + funzioni tra
     ("briefing", "Briefing"), ("followup", "Follow-up"),
 ]
 FEATURE_KEYS = [k for k, _ in FEATURES]
+HIDDEN_FEATURES = {"anagrafiche", "attivita", "followup"}  # sezioni rimosse dall'interfaccia
+VISIBLE_FEATURES = [(k, l) for k, l in FEATURES if k not in HIDDEN_FEATURES]
 # Limiti per piano (-1 = illimitati). Usati se la configurazione salvata non li specifica.
 DEFAULT_LIMITS = {"bronze": {"max_events": 1, "max_users": 10}, "silver": {"max_events": 5, "max_users": 30},
                   "gold": {"max_events": -1, "max_users": -1}}
@@ -623,7 +625,7 @@ def build(db, deps: dict):
     async def plans_public():
         cfg = await get_config()
         return {"trial_days": cfg.get("trial_days"), "trial_plan": cfg.get("trial_plan"), "trial_video_quota": cfg.get("trial_video_quota"),
-                "features": [{"key": k, "label": l} for k, l in FEATURES],
+                "features": [{"key": k, "label": l} for k, l in VISIBLE_FEATURES],
                 "plans": [{"key": k, **{f: cfg["plans"][k].get(f) for f in ("label", "color", "tagline", "monthly", "yearly", "features", "video_quota")},
                            "semester": cycle_amount(cfg, k, "semester"), **plan_limits(cfg, k)}
                           for k in PLAN_KEYS if cfg["plans"][k].get("active", True)]}
@@ -926,7 +928,7 @@ def build(db, deps: dict):
     # ---------------- Super Admin ----------------
     @r.get("/platform/saas/config")
     async def admin_config(admin: dict = Depends(deps["require_superadmin"])):
-        return {**(await get_config()), "feature_catalog": [{"key": k, "label": l} for k, l in FEATURES],
+        return {**(await get_config()), "feature_catalog": [{"key": k, "label": l} for k, l in VISIBLE_FEATURES],
                 "stripe_mode": deps["stripe_mode"], "live_enabled": _live_enabled()}
 
     @r.put("/platform/saas/config")

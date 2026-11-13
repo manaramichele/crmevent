@@ -8,6 +8,8 @@ SECTIONS = [
     ("briefing", "Briefing"), ("mappe", "Mappe / GPX"), ("pipeline", "Pipeline Evento"),
 ]
 SECTION_KEYS = [k for k, _ in SECTIONS]
+# Sezioni non più mostrate nell'interfaccia (dati e permessi conservati).
+HIDDEN_SECTIONS = {"anagrafiche", "attivita", "followup"}
 ACTIONS = ["view", "create", "edit", "delete"]
 ACTION_LABELS = {"view": "Visualizza", "create": "Crea", "edit": "Modifica", "delete": "Elimina"}
 ROLES = {"admin_org": "Admin Organizzatore", "user": "Utente", "collaboratore": "Collaboratore"}

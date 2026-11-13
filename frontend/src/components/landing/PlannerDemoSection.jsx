@@ -5,7 +5,7 @@ import { ArrowRight, Users, ListChecks, Route, Handshake, FileText, CalendarDays
 
 const PlannerDemo = lazy(() => import("@/components/planner/PlannerDemo"));
 
-const LINKS = [[Users, "Staff e volontari", "persone assegnate alle postazioni"], [ListChecks, "Attività", "attività operative legate alle aree"],
+const LINKS = [[Users, "Staff e volontari", "persone assegnate alle postazioni"], [ListChecks, "Pipeline evento", "compiti operativi legati all'evento"],
   [Route, "Percorsi", "tracciati dell'evento"], [Handshake, "Sponsor e partner", "aree sponsor sulla mappa"],
   [FileText, "Briefing", "informazioni operative condivise"], [CalendarDays, "Eventi", "ogni planimetria è legata al suo evento"]];
 

@@ -37,6 +37,7 @@ import PrivacyCookieAdmin from "@/pages/PrivacyCookieAdmin";
 import CalendarioItalia from "@/pages/CalendarioItalia";
 import PreferenzeVolontari from "@/pages/PreferenzeVolontari";
 import PlannerDemoAdmin from "@/pages/PlannerDemoAdmin";
+import PlatformReferenti from "@/pages/PlatformReferenti";
 import Iscritti from "@/pages/Iscritti";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
@@ -47,8 +48,6 @@ import Hospitality from "@/pages/Hospitality";
 import Briefing from "@/pages/Briefing";
 import EventPlanner from "@/pages/EventPlanner";
 import SponsorsPartners from "@/pages/SponsorsPartners";
-import Activities from "@/pages/Activities";
-import Followups from "@/pages/Followups";
 import Leads from "@/pages/Leads";
 import SettingsPage from "@/pages/Settings";
 import Support from "@/pages/Support";
@@ -166,6 +165,7 @@ function Shell() {
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/calendario-eventi-italia" element={<Protected><SuperAdminOnly><CalendarioItalia /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/integrazione-referenti" element={<Protected><SuperAdminOnly><PlatformReferenti /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/event-planner-demo" element={<Protected><SuperAdminOnly><PlannerDemoAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/preferenze-volontari" element={<Protected><SuperAdminOnly><PreferenzeVolontari /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
@@ -192,12 +192,12 @@ function Shell() {
         <Route path="/eventi/:id/pipeline" element={<Protected><Perm s="pipeline"><EventPipeline /></Perm></Protected>} />
         <Route path="/pipeline/attenzione" element={<Protected><Perm s="pipeline"><PipelineAttentionPage /></Perm></Protected>} />
         <Route path="/aziende" element={<Protected><Perm s="aziende"><Companies /></Perm></Protected>} />
-        <Route path="/persone" element={<Protected><Perm s="anagrafiche"><Persons mode="anagrafiche" /></Perm></Protected>} />
+        <Route path="/persone" element={<Navigate to="/aziende" replace />} />
         <Route path="/staff-volontari" element={<Protected><Perm s="staff"><Persons mode="staff" /></Perm></Protected>} />
         <Route path="/ospitalita" element={<Protected><Perm s="ospitalita"><Hospitality /></Perm></Protected>} />
         <Route path="/sponsor" element={<Protected><Perm s="sponsor"><SponsorsPartners /></Perm></Protected>} />
-        <Route path="/attivita" element={<Protected><Perm s="attivita"><Activities /></Perm></Protected>} />
-        <Route path="/followup" element={<Protected><Perm s="followup"><Followups /></Perm></Protected>} />
+        <Route path="/attivita" element={<Navigate to="/app" replace />} />
+        <Route path="/followup" element={<Navigate to="/app" replace />} />
         <Route path="/lead" element={<Navigate to="/marketing/organizzatori?tab=leads" replace />} />
         <Route path="/supporto" element={<Protected><SuperAdminOnly><Support /></SuperAdminOnly></Protected>} />
         <Route path="/impostazioni" element={<Protected><Perm s="admin"><SettingsPage /></Perm></Protected>} />

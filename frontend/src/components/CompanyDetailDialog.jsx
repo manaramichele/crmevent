@@ -84,8 +84,6 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
                 <TabsTrigger value="eventi" data-testid="ctab-eventi"><CalendarDays className="w-4 h-4 mr-1" />Eventi</TabsTrigger>
                 <TabsTrigger value="trattative" data-testid="ctab-trattative"><Handshake className="w-4 h-4 mr-1" />Trattative</TabsTrigger>
                 <TabsTrigger value="sponsorship" data-testid="ctab-sponsorship">Sponsorship</TabsTrigger>
-                <TabsTrigger value="attivita" data-testid="ctab-attivita"><ListChecks className="w-4 h-4 mr-1" />Attività</TabsTrigger>
-                <TabsTrigger value="followup" data-testid="ctab-followup"><BellRing className="w-4 h-4 mr-1" />Follow-up</TabsTrigger>
               </TabsList>
 
               <TabsContent value="anagrafica" className="pt-2">
@@ -100,8 +98,8 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
               </TabsContent>
 
               <TabsContent value="referenti" className="pt-2 space-y-2">
-                {!adding && <Button variant="outline" size="sm" onClick={() => setAdding(true)} data-testid="add-referente-btn"><Plus className="w-4 h-4 mr-1" />Aggiungi referente</Button>}
-                {adding && (
+                <Button variant="outline" size="sm" onClick={() => onEdit && onEdit(c)} data-testid="edit-referenti-btn"><Pencil className="w-4 h-4 mr-1" />Modifica referenti</Button>
+                {false && adding && (
                   <div className="border border-dashed border-slate-300 rounded-lg p-3 bg-slate-50/50 space-y-2" data-testid="referente-form">
                     <div className="grid grid-cols-2 gap-2">
                       <div><Label className="text-xs">Nome*</Label><Input value={ref.nome} onChange={(e) => setRef({ ...ref, nome: e.target.value })} data-testid="ref-nome" /></div>
@@ -131,10 +129,9 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
                 )}
                 {d.contacts.length === 0 ? <p className="text-sm text-slate-400 py-2">Nessun referente collegato.</p> :
                   d.contacts.map((x, i) => (
-                    <div key={x.relation.id || i} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-3">
-                      <div><div className="font-medium text-slate-800 flex items-center gap-2">{x.person.cognome} {x.person.nome}{x.relation.referente_principale && <StatusBadge color="tiffany">Principale</StatusBadge>}</div>
-                        <div className="text-xs text-slate-500">{x.relation.qualifica || x.person.ruolo || "—"} · {x.person.email || x.person.cellulare || x.person.telefono || "—"}</div></div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => removeContact(x.relation)} data-testid={`ref-del-${x.person.id}`}><Trash2 className="w-4 h-4" /></Button>
+                    <div key={x.person.id || i} className="border border-slate-200 rounded-lg px-4 py-3" data-testid={`ref-row-${x.person.id}`}>
+                      <div className="font-medium text-slate-800">{[x.person.nome, x.person.cognome].filter(Boolean).join(" ") || "—"}</div>
+                      <div className="text-xs text-slate-500 break-all">{[x.person.email, x.person.cellulare].filter(Boolean).join(" · ") || "—"}</div>
                     </div>
                   ))}
               </TabsContent>
@@ -162,22 +159,6 @@ export default function CompanyDetailDialog({ companyId, open, onOpenChange, onC
                     <div key={dl.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-3">
                       <span className="font-medium text-slate-800">{dl.tipo} · {dl.livello || "—"}</span>
                       <span className="text-sm font-semibold text-emerald-600">{formatEUR(dl.valore_confermato || dl.valore)}</span></div>
-                  ))}
-              </TabsContent>
-
-              <TabsContent value="attivita" className="pt-2 space-y-2">
-                {d.activities.length === 0 ? <p className="text-sm text-slate-400 py-4">Nessuna attività.</p> :
-                  d.activities.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2.5">
-                      <span className="text-sm text-slate-700">{a.titolo}</span><StatusBadge color="gray">{a.tipo || "attività"}</StatusBadge></div>
-                  ))}
-              </TabsContent>
-
-              <TabsContent value="followup" className="pt-2 space-y-2">
-                {d.followups.length === 0 ? <p className="text-sm text-slate-400 py-4">Nessun follow-up.</p> :
-                  d.followups.map((f) => (
-                    <div key={f.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2.5">
-                      <span className="text-sm text-slate-700">{f.titolo}</span><StatusBadge color="orange">{f.scadenza || "—"}</StatusBadge></div>
                   ))}
               </TabsContent>
             </Tabs>
