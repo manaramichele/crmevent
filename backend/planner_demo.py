@@ -70,7 +70,11 @@ def build(db, deps: dict):
         valore = (body.valore or "")[:40]
         if valore and not re.fullmatch(r"[\w\- àèéìòù×,./()]+", valore):
             valore = ""
-        q, now = hits[client_ip(request)], time.time()
+        now = time.time()
+        if len(hits) > 5000:
+            for k in [k for k, v in hits.items() if not v or v[-1] < now - 3600]:
+                hits.pop(k, None)
+        q = hits[client_ip(request)]
         while q and q[0] < now - 3600:
             q.popleft()
         if len(q) >= RATE:

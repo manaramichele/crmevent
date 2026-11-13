@@ -4437,7 +4437,8 @@ async def remove_org_member(org_id: str, target_id: str, user: dict = Depends(ge
 ORG_CASCADE_COLLECTIONS = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
                            "event_maps", "activities", "followups", "calendar_event_links", "files",
                            "person_companies", "lodgings", "meals", "briefing_versions", "invoices",
-                           "structures", "fic_settings", "org_invites", "leads", "memberships"]
+                           "structures", "fic_settings", "org_invites", "leads", "memberships",
+                           "planner_projects", "planner_revisions"]
 ROLE_LABELS_USER = {"superadmin": "Super Admin", "admin": "Admin Organizzazione",
                     "member": "Utente", "staff": "Staff", "volunteer": "Volontario"}
 

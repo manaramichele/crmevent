@@ -63,9 +63,9 @@ export default function PlannerDemoAdmin() {
             <select value={f.scenario_default} onChange={set("scenario_default")} className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900" data-testid="pdemo-scenario">
               {Object.entries(f.scenari || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
           <label className="text-xs text-slate-500">Mostra l'invito alla registrazione dopo N interazioni
-            <Input type="number" min={1} max={50} value={f.soglia_interazioni} onChange={set("soglia_interazioni")} className="mt-1" data-testid="pdemo-threshold" /></label>
+            <Input type="number" min={1} max={50} value={f.soglia_interazioni} onChange={set("soglia_interazioni")} className="mt-1 text-sm text-slate-900" data-testid="pdemo-threshold" /></label>
           {FIELDS.map(([k, l, long]) => <label key={k} className={`text-xs text-slate-500 ${long ? "md:col-span-2" : ""}`}>{l}
-            {long ? <Textarea value={f[k]} onChange={set(k)} rows={3} className="mt-1 text-sm text-slate-900" data-testid={`pdemo-${k}`} /> : <Input value={f[k]} onChange={set(k)} className="mt-1" data-testid={`pdemo-${k}`} />}</label>)}
+            {long ? <Textarea value={f[k]} onChange={set(k)} rows={3} className="mt-1 text-sm text-slate-900" data-testid={`pdemo-${k}`} /> : <Input value={f[k]} onChange={set(k)} className="mt-1 text-sm text-slate-900" data-testid={`pdemo-${k}`} />}</label>)}
         </div>
         <Button onClick={save} disabled={busy} className="bg-tiffany text-slate-900 hover:bg-tiffany-hover" data-testid="pdemo-save">{busy ? "Salvataggio..." : "Salva impostazioni"}</Button>
       </div>
