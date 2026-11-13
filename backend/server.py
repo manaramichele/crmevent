@@ -44,6 +44,7 @@ import brevo_tracker
 import iscritti
 import calendario_italia
 import avail_prefs
+import planner
 import gcal_availability
 import privacy_consent
 import pipeline_seed_sports
@@ -13874,6 +13875,9 @@ app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
 app.include_router(AVP["router"])
+PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit})
+app.include_router(PLANNER["router"])
+app.add_event_handler("startup", PLANNER["ensure"])
 CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "app_url": APP_URL})
 app.include_router(CAL_ITALIA["router"])
 app.include_router(CAL_ITALIA["public_router"])

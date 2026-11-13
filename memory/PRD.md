@@ -809,3 +809,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Frontend: /piattaforma/calendario-eventi-italia (voce menu SA), tab Dashboard, Calendario nazionale (tabella + mese/settimana/anno, colori disciplina, filtri, import/export), Organizzatori, Fonti e sincronizzazioni (+ duplicati/conflitti), Campagne Brevo e Storico (placeholder Fase 3), Impostazioni.
 - Backlog: Fase 2 (verifica accesso fonti, connettori consentiti, cron 03:00 Europe/Rome, retry, stato fonti), Fase 3 (Brevo lista "CRMEvent — Organizzatori Eventi Italia", attributi, template, simulazione, storico), Fase 4 (invio automatico controllato, anti-duplicati 60gg, disiscrizioni). Mancano: DELETE/archivio eventi e organizzatori.
 
+
+## Event Planner — Fase B motore mappa (2026-11-13) — IN CORSO
+- Scelte utente: MapTiler, trasformare "Planimetrie & Mappe" nel Marketplace (fase D), ora solo Fase B.
+- Backend `planner.py`: progetti per evento, livelli, oggetti GeoJSON, salvataggio con versione (409 su conflitto), revisioni + ripristino, duplica, isolamento per organizzazione (404 cross-org, 401 senza login). Testato via API: OK.
+- Frontend `/eventi/:id/planner` (EventPlanner.jsx, components/planner/*, lib/geo.js): toolbar disegno/misura, 10 livelli, libreria 38 oggetti, pannello proprietà. La pagina si carica (desktop e mobile).
+- BLOCCATO: la chiave MAPTILER_API_KEY restituisce 403 "Key usage restricted" sia per il dominio di anteprima sia per crmevent.it → la mappa di base resta vuota. L'utente deve aggiungere i domini consentiti in MapTiler Cloud.
+- Da fare dopo lo sblocco: test completo con testing agent (disegno, misure, livelli, salvataggio automatico, mobile), poi Fasi C–E.
+
