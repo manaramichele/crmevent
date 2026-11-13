@@ -7,20 +7,22 @@ import { toast } from "sonner";
 import { MousePointer2, MapPin, Spline, Pentagon, Square, Circle, Ruler, Undo2, Redo2, Search, PanelLeft, PanelRight, ArrowLeft, Check } from "lucide-react";
 import PlannerMap from "@/components/planner/PlannerMap";
 import { LibraryPanel, LayersPanel, PropsPanel } from "@/components/planner/Panels";
-import { uid, translate } from "@/components/planner/features";
+import { uid, translate, makeFeature } from "@/components/planner/features";
+import useHistory from "@/components/planner/useHistory";
+import { loadDemoProject, clearDemoProject, trackDemo } from "@/lib/plannerDemo";
 import { boxPolygon } from "@/lib/geo";
 
 const TOOLS = [["select", MousePointer2, "Selezione e spostamento"], ["point", MapPin, "Punto"], ["line", Spline, "Linea"], ["polygon", Pentagon, "Poligono"],
   ["rect", Square, "Rettangolo"], ["circle", Circle, "Cerchio"], ["measure", Ruler, "Misura"]];
 
-function useHistory() {
-  const [state, setState] = useState({ past: [], present: [], future: [] });
-  const set = useCallback((next, transient, before) => setState((s) => (transient ? { ...s, present: next }
-    : { past: [...s.past, before || s.present].slice(-100), present: next, future: [] })), []);
-  const reset = useCallback((v) => setState({ past: [], present: v, future: [] }), []);
-  const undo = () => setState((s) => (s.past.length ? { past: s.past.slice(0, -1), present: s.past[s.past.length - 1], future: [s.present, ...s.future] } : s));
-  const redo = () => setState((s) => (s.future.length ? { past: [...s.past, s.present], present: s.future[0], future: s.future.slice(1) } : s));
-  return { features: state.present, set, reset, undo, redo, canUndo: state.past.length > 0, canRedo: state.future.length > 0 };
+function DemoImport({ onImport, onDiscard }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-tiffany/40 bg-tiffany-light/50 px-3 py-2 text-sm" data-testid="planner-demo-import">
+      <span className="flex-1">Hai un progetto creato nella demo Event Planner della homepage. Vuoi importarlo in questo evento?</span>
+      <Button size="sm" onClick={onImport} className="bg-tiffany text-slate-900 hover:bg-tiffany-hover" data-testid="planner-demo-import-btn">Importa progetto demo</Button>
+      <Button size="sm" variant="ghost" onClick={onDiscard} data-testid="planner-demo-discard">Non ora</Button>
+    </div>
+  );
 }
 
 export default function EventPlanner() {
@@ -44,6 +46,7 @@ export default function EventPlanner() {
   const [fly, setFly] = useState(null);
   const [save, setSave] = useState("salvato");
   const ver = useRef(1), dirty = useRef(false), timer = useRef(null);
+  const [demo, setDemo] = useState(() => loadDemoProject());
 
   const loadList = useCallback(() => api.get(`/planner/events/${id}/projects`).then(({ data }) => { setEv(data.evento); setProjects(data.projects); return data.projects; }), [id]);
   const open = useCallback(async (pid) => {
@@ -70,19 +73,19 @@ export default function EventPlanner() {
   }, [h.features, layers, persist]);
   const change = (next, transient, before) => { dirty.current = true; h.set(next, transient, before); };
   const setLayers = (l) => { dirty.current = true; setLayersRaw(l); };
-  const layerFor = (cat) => (layers.find((l) => l.nome.toLowerCase().startsWith((cat || "").toLowerCase().slice(0, 5))) || layers.find((l) => !l.bloccato) || layers[0])?.id;
+  const importDemo = async () => {
+    try {
+      const { data } = await api.post(`/planner/events/${id}/projects`, { nome: "Progetto dalla demo" });
+      await api.put(`/planner/projects/${data.id}/content`, { version: data.version, features: demo.features, layers: demo.layers });
+      await api.patch(`/planner/projects/${data.id}`, { center: demo.center, zoom: demo.zoom });
+      clearDemoProject(); setDemo(null); trackDemo("import"); toast.success("Progetto della demo importato");
+      await loadList(); open(data.id);
+    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+  const discardDemo = () => { clearDemoProject(); setDemo(null); };
 
   const create = (spec, c) => {
-    const base = { id: uid(), layer_id: layerFor(spec.categoria), colore: spec.colore, nome: spec.nome, categoria: spec.categoria };
-    let f;
-    if (spec.tipo === "box") f = { properties: { ...base, tipo: "box", center: c, larghezza: spec.larghezza, lunghezza: spec.lunghezza, rotazione: 0, quantita: 1 } };
-    else if (spec.tipo === "line" && linePreset) f = { properties: { ...base, id: base.id, nome: linePreset.nome, categoria: linePreset.categoria, colore: linePreset.colore, tipo: "line", passo: linePreset.larghezza, layer_id: layerFor(linePreset.categoria) }, geometry: { type: "LineString", coordinates: c } };
-    else if (spec.tipo === "point") f = { properties: { ...base, nome: spec.nome || "Punto", tipo: "point", quantita: 1 }, geometry: { type: "Point", coordinates: c } };
-    else if (spec.tipo === "line" || spec.tipo === "measure") f = { properties: { ...base, nome: spec.tipo === "measure" ? "Misura" : "Linea", tipo: spec.tipo, layer_id: layerFor("Percorsi") }, geometry: { type: "LineString", coordinates: c } };
-    else if (spec.tipo === "polygon") f = { properties: { ...base, nome: "Area", tipo: "polygon", layer_id: layerFor("Aree") }, geometry: { type: "Polygon", coordinates: [[...c, c[0]]] } };
-    else if (spec.tipo === "rect") { const [a, b] = c; f = { properties: { ...base, nome: "Rettangolo", tipo: "polygon", layer_id: layerFor("Aree") }, geometry: { type: "Polygon", coordinates: [[a, [b[0], a[1]], b, [a[0], b[1]], a]] } }; }
-    else if (spec.tipo === "circle") f = { properties: { ...base, nome: "Cerchio", tipo: "circle", center: c, raggio: spec.raggio, layer_id: layerFor("Aree") } };
-    f = { type: "Feature", geometry: f.geometry || null, ...f };
+    const f = makeFeature(spec, c, layers, linePreset);
     change([...h.features, f]); setSel(f.properties.id); setPlacing(null); setLinePreset(null); setMode("select"); if (window.innerWidth >= 1024) setRight(true);
   };
   const selected = h.features.find((f) => f.properties.id === sel);
@@ -120,6 +123,7 @@ export default function EventPlanner() {
           <select className="h-8 rounded-md border border-slate-200 bg-white px-1 text-xs" value={stile} onChange={(e) => setStile(e.target.value)} data-testid="planner-style"><option value="strade">Strade</option><option value="satellite">Satellite</option></select>
         </div>
       </div>
+      {demo && <DemoImport onImport={importDemo} onDiscard={discardDemo} />}
       {!proj ? <div className="p-8 text-sm text-slate-600" data-testid="planner-empty">Nessun progetto per questo evento. <Button size="sm" onClick={() => newProject(false)} className="ml-2 bg-tiffany text-slate-900 hover:bg-tiffany-hover" data-testid="planner-create-first">Crea il primo progetto</Button></div> : (
         <div className="relative flex min-h-0 flex-1">
           {left && <aside className="absolute inset-y-0 left-0 z-20 w-72 space-y-4 overflow-y-auto overscroll-contain border-r border-slate-200 bg-slate-50 p-3 lg:static" data-testid="planner-left">

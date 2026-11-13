@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the public Event Planner demo on the homepage from start to finish (backend + frontend). Backend: 19/19 pytest passed (public config, the 11 allowed tracking events, 400 for an unknown event, rate limit at 120/hour, 401/403 auth checks, 400/422 validation, edit/disable/restore). Frontend: the homepage section sits before Funzionalità with the correct title and 'Event Planner' in the nav; the features button scrolls to #funzionalita; the lazy demo has its toolbar, 39 library buttons, a tip that changes per tool, and undo/reset/fullscreen/close. Fullscreen fills 1920x1080. On a 390px viewport the demo opens full screen, the library sheet opens and close works. The Super Admin page edits the title (shown on the homepage), validates input via toast, hides the section when disabled, and the restore worked. Stats cards and the period selector work. Registration flow with localStorage set: redirect to /eventi, banner shown, the open button goes to the planner, import creates 'Progetto dalla demo' with the Test punto feature, center and zoom 15, the localStorage key is removed, and the signup and import counters rose by 1. Regression: the existing Event Planner loads, the 'Nuovo' project is created with the default layers, and the panels render. Map canvas not tested (MapTiler 403, known blocker); the demo shows demo-map-error as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/public/planner-demo/track", "issue": "The rate limit is keyed on the first X-Forwarded-For value, which the client controls. Sending a different spoofed XFF on each request skips the 120/h limit (confirmed: every test bucket used a spoofed XFF). Anyone can also inflate the 'signup'/'import' counters, since they are public. The in-memory `hits` dict is never pruned of idle IPs, so memory grows over time."},
+      {"endpoint": "DELETE /api/platform/organizations/{org_id}", "issue": "ORG_CASCADE_COLLECTIONS does not include planner_projects or planner_revisions (or saas_usage/saas_emails/brevo_tracker_log/audit_logs). Deleting an org left 2 orphaned planner_projects and 1 planner_revision; I removed them by hand."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Signup from the demo -> /eventi", "issue": "Right after registering, the WelcomeDemo modal ('Scopri CRMEvent con una demo gratuita') opens over /eventi and covers the events-demo-banner and the events-demo-open button. The visitor has to dismiss it before continuing the import. Consider skipping WelcomeDemo when loadDemoProject() is not null.", "affected_selectors": ["[data-testid='events-demo-banner']", "[data-testid='events-demo-open']"]}
+    ],
+    "design_issues": [
+      {"screen": "/piattaforma/event-planner-demo", "issues": ["The Input fields (titolo, cta_demo, cta_funzioni, link, nudge_titolo, nudge_cta, threshold) sit inside <label className='text-xs text-slate-500'> and pick up its slate-500 color. Real values look like grey placeholders, while the Textareas correctly use text-slate-900. Add text-slate-900 (and text-sm) to those Inputs."]},
+      {"screen": "Imported demo project", "issue_note": "", "issues": ["The imported project gets only the demo's layers (e.g. just 'Percorsi'), not the full default layer set a new project receives. Consider merging the demo layers with the defaults."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_planner_demo_home.py", "/app/backend/tests/cleanup_planner_demo_home.py", "/app/test_reports/pytest/pytest_planner_demo.xml"],
+  "action_items": [
+    "Optional: make the track rate limit harder to spoof (use the ingress-appended right-most XFF hop or request.client) and prune idle IP buckets",
+    "Add planner_projects and planner_revisions to ORG_CASCADE_COLLECTIONS",
+    "Suppress the WelcomeDemo modal when a demo project is waiting in localStorage after signup",
+    "Make Input text dark (text-slate-900) on the PlannerDemoAdmin page",
+    "User action (not code): allow the preview/production domains for the MapTiler key so the map can load"
+  ],
+  "critical_code_review_comments": [
+    "importDemo in EventPlanner.jsx runs POST project, PUT content and PATCH center as 3 separate calls. If PUT fails (e.g. malformed localStorage features), an empty 'Progetto dalla demo' is left behind and the banner stays. Consider one backend import endpoint or rolling back on failure.",
+    "trackDemo('signup') is called only when loadDemoProject() is truthy. A visitor who came from ?da=event-planner but has no saved features is not counted. Acceptable, but worth documenting.",
+    "Undo in PlannerDemo calls bump(), so undo/redo spam counts toward the nudge threshold. This is minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_planner_demo_home.py", "/app/backend/tests/cleanup_planner_demo_home.py"],
+  "success_rate": {"backend": "100%", "frontend": "100% (map canvas not testable)"},
+  "seed_data_creation": "Created 2 TEST_ orgs and admins (TEST_PDemo Org *, TEST_PDemoUI Org 489480), 1 event and 2 planner projects. All of them are deleted, along with their orphan docs. planner_demo_settings 'main' was deleted to restore defaults. Stats docs with valore TEST_v/TEST_rl were deleted. The aggregate counters with an empty valore (view/start/signup/import etc., a few counts) from the UI runs remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with: REACT_APP_BACKEND_URL=... pytest tests/test_planner_demo_home.py -n 0. The rate-limit test uses a spoofed X-Forwarded-For to get a fresh bucket. Auth is cookie-based. After a fresh signup the WelcomeDemo modal appears on /eventi; click 'Non ora' first. The event can be created via POST /api/events {nome}. Map tiles get a MapTiler 403 until the user fixes the allowed domains."
+}

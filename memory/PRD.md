@@ -817,3 +817,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - BLOCCATO: la chiave MAPTILER_API_KEY restituisce 403 "Key usage restricted" sia per il dominio di anteprima sia per crmevent.it → la mappa di base resta vuota. L'utente deve aggiungere i domini consentiti in MapTiler Cloud.
 - Da fare dopo lo sblocco: test completo con testing agent (disegno, misure, livelli, salvataggio automatico, mobile), poi Fasi C–E.
 
+
+## Event Planner in homepage con demo interattiva (2026-11-13) — ANTEPRIMA, NON PUBBLICATA
+- Scelte utente: sviluppo subito (la mappa si vede quando si sblocca MapTiler), scenario Running, progetto ritrovato nel primo evento dopo la registrazione, conteggi anonimi sempre.
+- Backend `planner_demo.py`: GET /api/public/planner-demo, POST /api/public/planner-demo/track (eventi in whitelist, limite 120 richieste/ora per IP), GET/PUT /api/planner-demo/settings e GET /api/planner-demo/stats (solo superadmin). planner_projects/planner_revisions aggiunte alla cancellazione a cascata dell'organizzazione.
+- Frontend: `landing/PlannerDemoSection.jsx` (prima di Funzionalità, anteprima SVG leggera, demo caricata solo al click), `planner/PlannerDemo.jsx` (stesso PlannerMap, pannelli e makeFeature/useHistory dell'Event Planner; bounds, minZoom 13, gesti cooperativi, schermo intero, invito alla registrazione), `demoScenarios.js`, `PlannerDemoAdmin.jsx` (/piattaforma/event-planner-demo), import del progetto demo in EventPlanner + banner nella pagina Eventi; WelcomeDemo rimandato finché c'è un progetto demo.
+- Test iteration_154: backend 100%, frontend 100% (escluso il disegno sulla mappa: MapTiler 403).
+- Backlog: scenari Trail/Triathlon/Festival/Fiera; unire i livelli demo con quelli predefiniti all'importazione; attribuzione della registrazione anche con Google.
+

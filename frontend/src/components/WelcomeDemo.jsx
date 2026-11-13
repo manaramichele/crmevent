@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronLeft, ChevronRight, CheckCircle2, Video } from "lucide-react";
 import { OnBehalfDemo } from "@/components/OnBehalfDemo";
+import { loadDemoProject } from "@/lib/plannerDemo";
 
 const WD = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
 const pad = (n) => String(n).padStart(2, "0");
@@ -104,6 +105,7 @@ function MyDemos({ demos }) {
   );
 }
 
+// Chi arriva dalla demo Event Planner prima importa il progetto, poi vede il benvenuto.
 export default function WelcomeDemo() {
   const { user, checkAuth } = useAuth();
   const [open, setOpen] = useState(false);
@@ -114,7 +116,7 @@ export default function WelcomeDemo() {
   const [mine, setMine] = useState([]);
   const support = !!user?.support;
   const eligible = user && !!user.org_id && (support || user.role !== "superadmin");
-  const autoOpen = eligible && !support && user.welcome_demo === "pending";
+  const autoOpen = eligible && !support && user.welcome_demo === "pending" && !loadDemoProject();
 
   const start = useCallback(async () => {
     if (support) { setDone(false); setOpen(true); return; }

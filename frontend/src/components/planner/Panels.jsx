@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Lock, Unlock, Plus, Copy, Trash2, Navigation } from "lucide-react";
+import { Eye, EyeOff, Lock, Unlock, Plus, Copy, Trash2, Navigation, Link2 } from "lucide-react";
 import { measures, anchorOf } from "./features";
 import { fmtM, fmtM2 } from "@/lib/geo";
 
@@ -67,6 +67,10 @@ export function PropsPanel({ f, layers, onPatch, onDuplicate, onDelete }) {
         {m.area != null && <div>Superficie: <b data-testid="planner-prop-area">{fmtM2(m.area)}</b> · perimetro {fmtM(m.perimetro)}</div>}
         <div>Coordinate: {a[1].toFixed(6)}, {a[0].toFixed(6)}</div>
       </div>
+      {p.collegamenti?.length > 0 && <div className="space-y-1 rounded-md border border-tiffany/40 bg-tiffany-light/40 p-2 text-xs" data-testid="planner-prop-links">
+        <div className="flex items-center gap-1 font-semibold text-slate-700"><Link2 className="h-3.5 w-3.5" />Collegato in CRMEvent</div>
+        {p.collegamenti.map((c) => <div key={c.area + c.testo}><b className="text-slate-700">{c.area}:</b> <span className="text-slate-600">{c.testo}</span></div>)}
+      </div>}
       {p.tipo !== "measure" && <><Num label="Quantità" value={p.quantita} onChange={set("quantita")} step={1} testid="planner-prop-qty" />
         <label className="block text-[11px] text-slate-500">Colore <input type="color" value={p.colore || "#0ABAB5"} onChange={(e) => onPatch({ colore: e.target.value })} className="ml-1 h-6 w-8 align-middle" data-testid="planner-prop-color" /></label>
         <textarea value={p.note || ""} onChange={(e) => onPatch({ note: e.target.value })} placeholder="Note / descrizione" rows={2} className="w-full rounded-md border border-slate-200 p-2 text-sm" data-testid="planner-prop-note" /></>}

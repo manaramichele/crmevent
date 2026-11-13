@@ -8,7 +8,8 @@ const STYLES = { strade: "streets-v2", satellite: "hybrid" };
 const EMPTY = { type: "FeatureCollection", features: [] };
 
 // Mappa MapLibre con disegno (punto, linea, poligono, rettangolo, cerchio, misura), selezione e trascinamento.
-export default function PlannerMap({ apiKey, stile, center, zoom, features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft, onView, flyTo }) {
+export default function PlannerMap({ apiKey, stile, center, zoom, features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft, onView, flyTo,
+  bounds, minZoom, cooperative = false, onError, emptyText }) {
   const box = useRef(null), map = useRef(null), st = useRef({}), draft = useRef([]);
   st.current = { features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft };
 
@@ -28,8 +29,12 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
   useEffect(() => {
     if (!apiKey || !box.current) return undefined;
     const m = new maplibregl.Map({ container: box.current, style: `https://api.maptiler.com/maps/${STYLES[stile] || STYLES.strade}/style.json?key=${apiKey}`,
-      center: center || [12.4964, 41.9028], zoom: zoom || (center ? 16 : 5), attributionControl: { compact: true }, doubleClickZoom: false });
+      center: center || [12.4964, 41.9028], zoom: zoom || (center ? 16 : 5), attributionControl: { compact: true }, doubleClickZoom: false,
+      maxBounds: bounds, minZoom: minZoom || 0, cooperativeGestures: cooperative });
     map.current = m;
+    let loaded = false;
+    m.on("load", () => { loaded = true; });
+    m.on("error", (e) => { if (!loaded && onError) onError(e?.error?.status || 0); });
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "bottom-right");
     m.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
     m.on("style.load", () => {
@@ -84,11 +89,12 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
     return () => { m.remove(); map.current = null; };
   }, [apiKey, stile]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { const c = map.current?.cooperativeGestures; if (c) { if (cooperative) c.enable(); else c.disable(); } }, [cooperative]);
   useEffect(() => { map.current?.getSource("feat")?.setData(displayCollection(features, layers, selectedId)); }, [features, layers, selectedId]);
   useEffect(() => { if (flyTo && map.current) map.current.flyTo({ center: flyTo.center, zoom: flyTo.zoom || 16 }); }, [flyTo]);
   useEffect(() => { pushDraft([]); if (map.current) map.current.getCanvas().style.cursor = mode === "select" && !placing ? "" : "crosshair"; }, [mode, placing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!apiKey) return <div className="flex h-full items-center justify-center bg-slate-100 p-6 text-center text-sm text-slate-600" data-testid="planner-no-key">Mappa non disponibile: manca la chiave MapTiler (MAPTILER_API_KEY) nel backend.</div>;
+  if (!apiKey) return <div className="flex h-full items-center justify-center bg-slate-100 p-6 text-center text-sm text-slate-600" data-testid="planner-no-key">{emptyText || "Mappa non disponibile: manca la chiave MapTiler (MAPTILER_API_KEY) nel backend."}</div>;
   return <div ref={box} className="h-full w-full" data-testid="planner-map" />;
 }
 
