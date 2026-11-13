@@ -825,3 +825,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test iteration_154: backend 100%, frontend 100% (escluso il disegno sulla mappa: MapTiler 403).
 - Backlog: scenari Trail/Triathlon/Festival/Fiera; unire i livelli demo con quelli predefiniti all'importazione; attribuzione della registrazione anche con Google.
 
+
+## Deploy GitHub → Aruba: readiness backend (2026-11-13)
+- Causa: /opt/crmevent/backend/deploy-backend.sh faceva `sleep 3` + un solo curl su https://api.crmevent.it → 502 durante l'avvio → rollback.
+- Aggiunto GET /api/health (ping MongoDB in sola lettura, 200 {"status":"ok"} / 503).
+- Blocco sostitutivo in /app/deploy/backend-readiness.sh: tentativi ogni 5s fino a 120s, verifica systemd + HTTP, 502/503/000 temporanei, riserva /docs se /api/health risponde 404, `false` finale → rollback come prima. Testato con simulazioni (502→200, mai pronto, 404→/docs).
+- Da applicare a mano sul server Aruba (backup dello script originale); non ancora applicato.

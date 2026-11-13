@@ -77,6 +77,18 @@ EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/
 
 app = FastAPI(title="CRMEvent API")
 api = APIRouter(prefix="/api")
+
+
+@app.get("/api/health")
+async def health():
+    """Readiness per deploy/monitoraggio: sola lettura (ping MongoDB), nessun dato restituito."""
+    try:
+        await asyncio.wait_for(client.admin.command("ping"), timeout=3)
+    except Exception:
+        raise HTTPException(status_code=503, detail="database non raggiungibile")
+    return {"status": "ok"}
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("crmevent")
 
