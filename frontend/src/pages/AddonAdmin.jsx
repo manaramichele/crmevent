@@ -59,8 +59,8 @@ function ConfigCard({ onSaved }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-5" data-testid="addon-config">
       <div className="space-y-2"><h3 className="font-semibold text-slate-900">Event Planner</h3>
-        <IncludedRow label="Eventi inclusi" value={c.planner.included} prefix="ep" onChange={(v) => setC({ ...c, planner: { ...c.planner, included: v } })} />
-        <label className="block text-xs text-slate-500 max-w-xs">Prezzo attivazione per evento aggiuntivo (€)<Input type="number" min={0} step="0.01" value={c.planner.price ?? ""} placeholder="Non configurato" onChange={(e) => setC({ ...c, planner: { ...c.planner, price: e.target.value } })} data-testid="ep-price" /></label>
+        <IncludedRow label="Eventi inclusi (evento gratuito del piano)" value={c.planner.included} prefix="ep" onChange={(v) => setC({ ...c, planner: { ...c.planner, included: v } })} />
+        <p className="text-xs text-slate-500" data-testid="ep-price-note">L'abbonamento per organizzazione (prezzo mensile, modalità semestrale/annuale) si configura in Marketplace → Event Planner → Modifica servizio.</p>
       </div>
       <div className="space-y-2"><h3 className="font-semibold text-slate-900">Event Map</h3>
         <IncludedRow label="Eventi inclusi" value={c.eventmap.included} prefix="em" onChange={(v) => setC({ ...c, eventmap: { ...c.eventmap, included: v } })} />
@@ -74,13 +74,13 @@ function ConfigCard({ onSaved }) {
 }
 
 function GrantForm({ org, product, data, packages, onDone }) {
-  const [f, setF] = useState({ source: "superadmin", events_total: 1, videos_total: 0, package_id: "", expires_at: "", event_ids: [], note: "" });
+  const [f, setF] = useState({ source: "superadmin", events_total: 1, videos_total: 0, package_id: "", expires_at: "", event_ids: [], note: "", scope: product === "planner" ? "org" : "event" });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const toggleEv = (id) => setF({ ...f, event_ids: f.event_ids.includes(id) ? f.event_ids.filter((x) => x !== id) : [...f.event_ids, id] });
   const submit = async () => {
     try {
       await api.post(`/platform/addons/orgs/${org.id}/grants`, { product, source: f.source, events_total: Number(f.events_total), videos_total: Number(f.videos_total || 0),
-        package_id: f.package_id || null, expires_at: f.expires_at || null, event_ids: f.event_ids, note: f.note || null });
+        package_id: f.package_id || null, expires_at: f.expires_at || null, event_ids: f.scope === "org" ? [] : f.event_ids, note: f.note || null, scope: f.scope });
       toast.success("Assegnazione gratuita registrata"); onDone();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
@@ -90,7 +90,8 @@ function GrantForm({ org, product, data, packages, onDone }) {
         <label className="text-xs text-slate-500">Tipo<select value={f.source} onChange={set("source")} className="w-full h-9 rounded-md border border-slate-200 px-2 text-sm" data-testid={`grant-source-${product}`}><option value="superadmin">Omaggio</option><option value="promo">Promozione temporanea</option></select></label>
         <label className="text-xs text-slate-500">Scadenza{f.source === "promo" ? "*" : ""}<Input type="date" value={f.expires_at} onChange={set("expires_at")} data-testid={`grant-expires-${product}`} /></label>
         {product === "eventmap" && <label className="text-xs text-slate-500 col-span-2">Pacchetto<select value={f.package_id} onChange={set("package_id")} className="w-full h-9 rounded-md border border-slate-200 px-2 text-sm" data-testid="grant-package"><option value="">Personalizzato</option>{packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
-        {!f.package_id && <label className="text-xs text-slate-500">Eventi<Input type="number" min={1} value={f.events_total} onChange={set("events_total")} data-testid={`grant-events-${product}`} /></label>}
+        {product === "planner" && <label className="text-xs text-slate-500 col-span-2">Copertura<select value={f.scope} onChange={set("scope")} className="w-full h-9 rounded-md border border-slate-200 px-2 text-sm" data-testid="grant-scope-planner"><option value="org">Tutti gli eventi dell'organizzazione (omaggio abbonamento)</option><option value="event">Eventi specifici</option></select></label>}
+        {!f.package_id && f.scope !== "org" && <label className="text-xs text-slate-500">Eventi<Input type="number" min={1} value={f.events_total} onChange={set("events_total")} data-testid={`grant-events-${product}`} /></label>}
         {product === "eventmap" && !f.package_id && <label className="text-xs text-slate-500">Video<Input type="number" min={0} value={f.videos_total} onChange={set("videos_total")} data-testid="grant-videos" /></label>}
       </div>
       <div className="text-xs text-slate-500">Attiva subito sugli eventi (facoltativo):</div>
@@ -114,7 +115,7 @@ function ProductPanel({ org, product, d, packages, reload }) {
       <div className="text-xs space-y-1">{d.events.filter((e) => e.assigned).map((e) => <div key={e.id}>{e.nome} · {e.active ? SOURCE_LABEL[e.source] || "attivo" : "non coperto"}</div>)}</div>
       {d.grants.length > 0 && <div className="space-y-1">{d.grants.map((g) => (
         <div key={g.id} className="flex items-center gap-2 text-xs rounded border border-slate-100 p-2" data-testid={`sa-grant-${g.id}`}>
-          <span className="flex-1">{SOURCE_LABEL[g.source]} · {g.package_name} · {g.events_total} eventi{product === "eventmap" && ` · ${g.videos_total} video`}{g.price ? ` · ${eur(g.price)} €` : ""}{g.expires_at ? ` · scad. ${new Date(g.expires_at).toLocaleDateString("it-IT")}` : ""} · <b>{STATUS_IT[g.status] || g.status}</b></span>
+          <span className="flex-1">{SOURCE_LABEL[g.source]} · {g.package_name} · {g.scope === "org" ? "tutti gli eventi" : `${g.events_total} eventi`}{product === "eventmap" && ` · ${g.videos_total} video`}{g.price ? ` · ${eur(g.price)} €` : ""}{g.expires_at ? ` · scad. ${new Date(g.expires_at).toLocaleDateString("it-IT")}` : ""} · <b>{STATUS_IT[g.status] || g.status}</b></span>
           {g.status === "active" && g.source !== "purchase" && <button type="button" onClick={() => revoke(g.id)} className="text-red-600 font-semibold" data-testid={`sa-grant-revoke-${g.id}`}>Revoca</button>}
         </div>))}</div>}
       <GrantForm org={org} product={product} data={d} packages={packages} onDone={reload} />

@@ -16,7 +16,7 @@ SLUG = {"planner": "event-planner", "eventmap": "event-map"}
 GRANT_SOURCES = ("purchase", "superadmin", "promo")
 DEFAULT_CONFIG = {
     "id": "config",
-    "planner": {"included": {"bronze": 0, "silver": 1, "gold": 3}, "price": None},
+    "planner": {"included": {"bronze": 0, "silver": 1, "gold": 1}, "price": None},
     "eventmap": {"included": {"bronze": 0, "silver": 1, "gold": 3}, "included_videos": 1, "packages": []},
 }
 
@@ -32,6 +32,19 @@ def _iso(d: datetime) -> str:
 def _included_videos(cfg: dict) -> int:
     # ogni evento incluso nel piano ha sempre almeno 1 video
     return max(1, int(cfg.get("included_videos") or 0))
+
+
+# Event Planner in abbonamento per organizzazione: stesso prezzo mensile, pagamento anticipato per il periodo
+PLANNER_CYCLES = {"semester": {"months": 6, "interval": "month", "count": 6, "label": "Semestrale"},
+                  "yearly": {"months": 12, "interval": "year", "count": 1, "label": "Annuale"}}
+PLANNER_KEY = "event-planner"
+
+
+def planner_monthly(svc: dict) -> Optional[float]:
+    p = (svc or {}).get("price")
+    if p is None:
+        return None
+    return round(float(p) / 12, 2) if svc.get("price_type") == "yearly" else round(float(p), 2)
 
 
 def _valid(g: dict, now: str) -> bool:
@@ -67,6 +80,7 @@ class CheckoutIn(BaseModel):
     origin_url: str
     event_id: Optional[str] = None
     package_id: Optional[str] = None
+    cycle: Optional[str] = None
 
 
 class GrantIn(BaseModel):
@@ -78,6 +92,7 @@ class GrantIn(BaseModel):
     expires_at: Optional[str] = None
     event_ids: list[str] = []
     note: Optional[str] = Field(None, max_length=300)
+    scope: str = "event"  # "org" = Event Planner per tutti gli eventi dell'organizzazione
 
 
 def build(db, deps: dict):
@@ -89,6 +104,19 @@ def build(db, deps: dict):
         await db.addon_grants.create_index([("org_id", 1), ("product", 1), ("status", 1)])
         await db.addon_grants.create_index("stripe_session_id", sparse=True)
         await db.addon_usage.create_index([("org_id", 1), ("product", 1)], unique=True)
+        if not await db.marketplace_meta.find_one({"id": "planner_org_v1"}):
+            # Planner per organizzazione: Silver/Gold 1 evento incluso; gli eventi già attivati col piano restano coperti
+            await db.addon_activations.update_many({"product": "planner", "grant_id": "plan"}, {"$set": {"legacy": True}})
+            await get_config()
+            await db.addon_config.update_one({"id": "config"}, {"$set": {"planner.included.silver": 1, "planner.included.gold": 1}})
+            await db.marketplace_meta.insert_one({"id": "planner_org_v1", "applied_at": _iso(_now())})
+        svc = await db.marketplace_services.find_one({"key": PLANNER_KEY}, {"_id": 0})
+        if svc and svc.get("scope") != "org":
+            upd = {"scope": "org", "billing_cycles": svc.get("billing_cycles") or list(PLANNER_CYCLES),
+                   "description": "Progetta e organizza gli spazi dei tuoi eventi direttamente sulla mappa. Gestisci strutture, percorsi, aree sponsor e postazioni operative da un unico ambiente."}
+            if svc.get("price") is not None:
+                upd.update(price=planner_monthly(svc), price_type="monthly")
+            await db.marketplace_services.update_one({"key": PLANNER_KEY}, {"$set": upd})
 
     async def get_config() -> dict:
         doc = await db.addon_config.find_one({"id": "config"}, {"_id": 0})
@@ -120,11 +148,14 @@ def build(db, deps: dict):
         gmap = {g["id"]: g for g in grants}
         acts = await db.addon_activations.find({"org_id": org_id, "product": product}, {"_id": 0}).sort("assigned_at", 1).to_list(2000)
         plan_acts = [a for a in acts if a["grant_id"] == "plan"]
-        covered_plan = {a["event_id"] for a in plan_acts[:limit]}
+        covered_plan = {a["event_id"] for a in [x for x in plan_acts if not (product == "planner" and x.get("legacy"))][:limit]}
+        if product == "planner" and limit:
+            covered_plan |= {a["event_id"] for a in plan_acts if a.get("legacy")}
+        org_sub = next((g for g in grants if g.get("scope") == "org" and _valid(g, now)), None) if product == "planner" else None
         rows = []
         for a in acts:
             g = gmap.get(a["grant_id"])
-            ok = unrestricted or (a["event_id"] in covered_plan if a["grant_id"] == "plan" else bool(g and _valid(g, now)))
+            ok = unrestricted or bool(org_sub) or (a["event_id"] in covered_plan if a["grant_id"] == "plan" else bool(g and _valid(g, now)))
             rows.append({**a, "covered": ok, "source": "included" if a["grant_id"] == "plan" else (g or {}).get("source"),
                          "expires_at": (g or {}).get("expires_at")})
         used_by = {}
@@ -133,7 +164,7 @@ def build(db, deps: dict):
         valid = [g for g in grants if _valid(g, now)]
         out = {"product": product, "name": PRODUCTS[product], "unrestricted": unrestricted, "plan": plan, "plan_label": st.get("plan_label") if plan else None,
                "mode": st.get("mode"), "included": limit, "included_used": min(len(plan_acts), limit), "included_assigned": len(plan_acts),
-               "included_free": max(0, limit - len(plan_acts)),
+               "included_free": max(0, limit - len(plan_acts)), "org_subscription": org_sub,
                "purchased": sum(g["events_total"] for g in grants if g["source"] == "purchase" and g.get("activated_at")),
                "granted": sum(g["events_total"] for g in grants if g["source"] in ("superadmin", "promo") and g["status"] != "revoked"),
                "grant_free": sum(max(0, g["events_total"] - used_by.get(g["id"], 0)) for g in valid),
@@ -147,7 +178,11 @@ def build(db, deps: dict):
             out["videos_available"] = max(0, out["videos_total"] - out["videos_used"] - out["videos_in_progress"])
             out["packages"] = [p for p in cfg.get("packages") or [] if p.get("active")]
         else:
-            out["price"] = cfg.get("price")
+            svc = await db.marketplace_services.find_one({"key": PLANNER_KEY}, {"_id": 0}) or {}
+            m = planner_monthly(svc)
+            out["monthly_price"] = m
+            out["cycles"] = [{"key": k, "label": c["label"], "months": c["months"], "total": round(m * c["months"], 2) if m is not None else None}
+                             for k, c in PLANNER_CYCLES.items() if k in (svc.get("billing_cycles") or list(PLANNER_CYCLES))]
         return out
 
     def _required(product: str, s: dict, ev_name: str = "") -> HTTPException:
@@ -160,6 +195,8 @@ def build(db, deps: dict):
         if await _unrestricted(org_id):
             return True
         s = await summary(org_id, product)
+        if s.get("org_subscription"):
+            return bool(await db.events.find_one({"org_id": org_id, "id": event_id}, {"_id": 1}))
         return any(a["event_id"] == event_id and a["covered"] for a in s["activations"])
 
     async def require_covered(user: dict, product: str, event_id: str) -> None:
@@ -224,8 +261,9 @@ def build(db, deps: dict):
     async def _events_view(org_id: str, s: dict) -> list:
         acts = {a["event_id"]: a for a in s["activations"]}
         evs = await db.events.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).sort("data_inizio", -1).to_list(500)
-        return [{**e, "active": e["id"] in acts and acts[e["id"]]["covered"], "assigned": e["id"] in acts,
-                 "source": (acts.get(e["id"]) or {}).get("source"), "expires_at": (acts.get(e["id"]) or {}).get("expires_at")} for e in evs]
+        sub = s.get("org_subscription")
+        return [{**e, "active": bool(sub) or (e["id"] in acts and acts[e["id"]]["covered"]), "assigned": e["id"] in acts,
+                 "source": (acts.get(e["id"]) or {}).get("source") or (("subscription" if sub["source"] == "purchase" else sub["source"]) if sub else None), "expires_at": (acts.get(e["id"]) or {}).get("expires_at")} for e in evs]
 
     # ---------------- organizzatore ----------------
     @r.get("/addons/{product}")
@@ -270,19 +308,16 @@ def build(db, deps: dict):
             raise HTTPException(status_code=403, detail="Non hai il permesso di acquistare servizi Marketplace")
         cfg = (await get_config())[product]
         s = await summary(user["org_id"], product)
+        if product == "planner":
+            return await _planner_checkout(body, user, s)
         ev = await _event(user["org_id"], body.event_id) if body.event_id else None
-        if product == "planner" and not ev:
-            raise HTTPException(status_code=400, detail="Seleziona l'evento su cui attivare Event Planner")
         if ev and any(a["event_id"] == ev["id"] and a["covered"] for a in s["activations"]):
             raise HTTPException(status_code=400, detail=f"{PRODUCTS[product]} è già attivo per questo evento: nessun acquisto necessario")
         if ev and (s["included_free"] > 0 or s["grant_free"] > 0):
             raise HTTPException(status_code=400, detail="Hai ancora un'attivazione disponibile: attiva l'evento senza acquistare")
-        if product == "planner":
-            pkg = {"id": None, "name": "Attivazione per evento", "price": cfg.get("price"), "events": 1, "videos": 0, "validity_days": None}
-        else:
-            pkg = next((p for p in cfg.get("packages") or [] if p.get("id") == body.package_id and p.get("active")), None)
-            if not pkg:
-                raise HTTPException(status_code=400, detail="Seleziona un pacchetto Event Map")
+        pkg = next((p for p in cfg.get("packages") or [] if p.get("id") == body.package_id and p.get("active")), None)
+        if not pkg:
+            raise HTTPException(status_code=400, detail="Seleziona un pacchetto Event Map")
         if pkg.get("price") is None or float(pkg["price"]) <= 0:
             raise HTTPException(status_code=400, detail="Prezzo non ancora configurato dal team CRMEvent")
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
@@ -312,6 +347,67 @@ def build(db, deps: dict):
             "created_by": user.get("email"), "created_at": _iso(_now()), "history": [{"at": _iso(_now()), "status": "pending", "by": user.get("email")}]})
         return {"checkout_url": sess.url}
 
+    async def _planner_price(svc: dict, cycle: str, cents: int) -> str:
+        """Price ricorrente Stripe del ciclo: riusa quello salvato o uno esistente identico sul prodotto, altrimenti lo crea. Mai modificati i prezzi esistenti."""
+        mode, c = deps["stripe_mode"], PLANNER_CYCLES[cycle]
+        cur = ((svc.get("planner_prices") or {}).get(mode) or {}).get(cycle) or {}
+        if cur.get("price_id") and cur.get("amount_cents") == cents:
+            return cur["price_id"]
+        prod = cur.get("product_id") or ((svc.get("stripe_prices") or {}).get(mode) or {}).get("product_id")
+        price = None
+        if prod:
+            for p in stripe_sdk.Price.list(product=prod, active=True, limit=100).auto_paging_iter():
+                rc = p.get("recurring") or {}
+                if p.get("currency") == "eur" and p.get("unit_amount") == cents and rc.get("interval") == c["interval"] and rc.get("interval_count") == c["count"]:
+                    price = p
+                    break
+        else:
+            prod = stripe_sdk.Product.create(name="CRMEvent · Event Planner", tax_code="txcd_10103001", metadata={"kind": "addon", "product": "planner"}).id
+        if not price:
+            price = stripe_sdk.Price.create(product=prod, currency="eur", unit_amount=cents, recurring={"interval": c["interval"], "interval_count": c["count"]},
+                                            nickname=f"Event Planner {c['label']}", metadata={"kind": "addon", "product": "planner", "cycle": cycle})
+        await db.marketplace_services.update_one({"key": PLANNER_KEY}, {"$set": {f"planner_prices.{mode}.{cycle}": {
+            "product_id": prod, "price_id": price["id"], "amount_cents": cents, "interval": c["interval"], "interval_count": c["count"], "updated_at": _iso(_now())}}})
+        return price["id"]
+
+    async def _planner_checkout(body, user, s) -> dict:
+        if s.get("org_subscription") or s["unrestricted"]:
+            raise HTTPException(status_code=400, detail="Event Planner è già attivo per la tua organizzazione: nessun acquisto necessario")
+        svc = await db.marketplace_services.find_one({"key": PLANNER_KEY}, {"_id": 0}) or {}
+        cyc = next((c for c in s.get("cycles") or [] if c["key"] == body.cycle), None)
+        if not cyc:
+            raise HTTPException(status_code=400, detail="Scegli la modalità di pagamento: semestrale o annuale")
+        if not cyc["total"] or cyc["total"] <= 0 or svc.get("status") != "available":
+            raise HTTPException(status_code=400, detail="Prezzo non ancora configurato dal team CRMEvent")
+        org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+        missing = deps["billing_missing"](org.get("billing") or {})
+        if missing:
+            raise HTTPException(status_code=400, detail="Completa i dati di fatturazione: " + ", ".join(missing))
+        await db.addon_grants.update_many({"org_id": org["id"], "product": "planner", "scope": "org", "status": "pending"}, {"$set": {"status": "expired", "updated_at": _iso(_now())}})
+        gid = uuid.uuid4().hex
+        md = {"kind": "addon", "grant_id": gid, "org_id": org["id"], "product": "planner"}
+        origin = body.origin_url.rstrip("/")
+        try:
+            price_id = await _planner_price(svc, cyc["key"], int(round(cyc["total"] * 100)))
+            sess = stripe_sdk.checkout.Session.create(
+                customer=await deps["ensure_customer"](org, user), mode="subscription", locale="it", client_reference_id=org["id"], metadata=md,
+                line_items=[{"price": price_id, "quantity": 1}], subscription_data={"metadata": md},
+                success_url=f"{origin}/{SLUG['planner']}?session_id={{CHECKOUT_SESSION_ID}}", cancel_url=f"{origin}/marketplace?canceled=1")
+        except stripe_sdk.error.StripeError as e:
+            logger.error(f"planner checkout: {e}")
+            raise HTTPException(status_code=502, detail="Non è stato possibile avviare il pagamento. Riprova più tardi.")
+        await db.addon_grants.insert_one({
+            "id": gid, "org_id": org["id"], "product": "planner", "scope": "org", "source": "purchase", "status": "pending", "events_total": 0, "videos_total": 0,
+            "cycle": cyc["key"], "monthly_price": s["monthly_price"], "price": cyc["total"], "package_name": f"Abbonamento {cyc['label'].lower()}",
+            "event_id": None, "expires_at": None, "stripe_session_id": sess.id, "stripe_price_id": price_id, "stripe_mode": deps["stripe_mode"],
+            "created_by": user.get("email"), "created_at": _iso(_now()), "history": [{"at": _iso(_now()), "status": "pending", "by": user.get("email")}]})
+        return {"checkout_url": sess.url}
+
+    def _sub_period_end(sub) -> Optional[str]:
+        it = sub["items"]["data"][0]
+        cpe = sub.get("current_period_end") or it.get("current_period_end")
+        return datetime.fromtimestamp(cpe, timezone.utc).isoformat() if cpe else None
+
     async def _activate_from_session(sess) -> Optional[dict]:
         """Diritto concesso solo dopo pagamento verificato su Stripe. Idempotente."""
         md = sess.get("metadata") or {}
@@ -321,8 +417,13 @@ def build(db, deps: dict):
         if sess.get("status") != "complete" or sess.get("payment_status") not in ("paid", "no_payment_required"):
             return g
         exp = _iso(_now() + timedelta(days=int(g["validity_days"]))) if g.get("validity_days") else None
+        extra = {}
+        if g.get("scope") == "org" and sess.get("subscription"):
+            sub = stripe_sdk.Subscription.retrieve(sess["subscription"])
+            exp = _sub_period_end(sub)
+            extra = {"stripe_subscription_id": sub["id"]}
         res = await db.addon_grants.update_one({"id": g["id"], "status": {"$in": ["pending", "expired"]}},
-                                               {"$set": {"status": "active", "activated_at": _iso(_now()), "expires_at": exp},
+                                               {"$set": {"status": "active", "activated_at": _iso(_now()), "expires_at": exp, **extra},
                                                 "$push": {"history": {"at": _iso(_now()), "status": "active", "by": "stripe"}}})
         if res.modified_count:
             await audit({"user_id": "stripe", "email": "stripe", "role": "system"}, f"addon_{g['product']}_paid", org_id=g["org_id"], detail=f"{g.get('package_name')} · {g['price']} €")
@@ -349,6 +450,14 @@ def build(db, deps: dict):
             return True
         if t in ("checkout.session.expired", "checkout.session.async_payment_failed"):
             await db.addon_grants.update_one({"id": obj["metadata"].get("grant_id"), "status": "pending"}, {"$set": {"status": "expired", "updated_at": _iso(_now())}})
+            return True
+        if t.startswith("customer.subscription."):  # rinnovi e disdette dell'abbonamento Event Planner
+            sub = stripe_sdk.Subscription.retrieve(obj["id"])
+            st = {"active": "active", "trialing": "active", "past_due": "active", "canceled": "canceled", "unpaid": "suspended"}.get(sub["status"])
+            upd = {"expires_at": _sub_period_end(sub), "cancel_at_period_end": bool(sub.get("cancel_at_period_end")), "stripe_status": sub["status"], "updated_at": _iso(_now())}
+            if st:
+                upd["status"] = st
+            await db.addon_grants.update_one({"id": obj["metadata"].get("grant_id"), "scope": "org", "status": {"$nin": ["pending", "revoked"]}}, {"$set": upd})
             return True
         return t.startswith("checkout.session.") or t.startswith("payment_intent.") or t.startswith("invoice.")
 
@@ -403,6 +512,9 @@ def build(db, deps: dict):
         if not await db.organizations.find_one({"id": org_id}, {"_id": 1}):
             raise HTTPException(status_code=404, detail="Organizzazione non trovata")
         events_total, videos, name, formats = body.events_total, body.videos_total, "Assegnazione manuale", []
+        org_scope = product == "planner" and body.scope == "org"
+        if org_scope:
+            events_total, name = 0, "Omaggio Event Planner · tutti gli eventi"
         if body.package_id:
             pkg = next((p for p in (await get_config())["eventmap"].get("packages") or [] if p.get("id") == body.package_id), None)
             if not pkg or product != "eventmap":
@@ -414,6 +526,7 @@ def build(db, deps: dict):
         gid = uuid.uuid4().hex
         await db.addon_grants.insert_one({
             "id": gid, "org_id": org_id, "product": product, "source": body.source, "status": "active", "events_total": events_total, "formats": formats,
+            "scope": "org" if org_scope else "event",
             "videos_total": videos if product == "eventmap" else 0, "package_id": body.package_id, "package_name": name, "price": 0.0,
             "event_id": None, "expires_at": exp, "note": body.note, "created_by": admin.get("email"), "created_at": _iso(_now()),
             "history": [{"at": _iso(_now()), "status": "active", "by": admin.get("email"), "note": body.note}]})

@@ -121,7 +121,7 @@ def test_free_orgs_same_rights_as_paid(sa):
         assert pr.status_code == 200, (name, pr.text)
         results[name] = (p["included"], p["included_used"], m["included"], m["included_used"], m["videos_total"], m["videos_available"])
     per_event = max(1, int((mdb.addon_config.find_one({"id": "config"}) or {}).get("eventmap", {}).get("included_videos") or 0))
-    assert results["paid"] == results["comp"] == results["interna"] == (3, 1, 3, 1, per_event, per_event), results
+    assert results["paid"] == results["comp"] == results["interna"] == (1, 1, 3, 1, per_event, per_event), results
 
     rows = {r["id"]: r for r in sa.get(f"{API}/platform/addons/orgs").json()}
     for oid in (paid_id, comp_id, int_id):

@@ -20,6 +20,23 @@ const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
 const Sel = ({ value, onChange, opts, testid }) => <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid} className="w-full h-10 rounded-md border border-slate-200 px-2 text-sm">{Object.entries(opts).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>;
 const Chk = ({ label, value, onChange, testid }) => <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} data-testid={testid} />{label}</label>;
 
+const CYCLES = [["semester", "Semestrale", 6], ["yearly", "Annuale", 12]];
+
+// Event Planner: prezzo mensile di riferimento, totali calcolati (×6 / ×12), modalità abilitate. Price Stripe creati/riusati per ciclo al primo acquisto.
+function PlannerPricing({ f, set }) {
+  const m = f.price === "" || f.price == null ? null : f.price_type === "yearly" ? Number(f.price) / 12 : Number(f.price);
+  const on = f.billing_cycles?.length ? f.billing_cycles : ["semester", "yearly"];
+  const toggle = (k) => set("billing_cycles")(on.includes(k) ? on.filter((x) => x !== k) : [...on, k]);
+  return (
+    <div className="sm:col-span-2 rounded-lg bg-slate-50 p-3 space-y-2" data-testid="mkt-admin-planner-pricing">
+      <label className="block">Prezzo mensile € (abbonamento per organizzazione)<Input type="number" step="0.01" min={0} value={m ?? ""} onChange={(e) => { set("price_type")("monthly"); set("price")(e.target.value); }} data-testid="mkt-admin-price" /></label>
+      <div className="flex flex-wrap gap-4">{CYCLES.map(([k, l, n]) => (
+        <label key={k} className="flex items-center gap-2"><input type="checkbox" checked={on.includes(k)} onChange={() => toggle(k)} data-testid={`mkt-admin-cycle-${k}`} />{l}: <b>{m == null ? "—" : `${(m * n).toLocaleString("it-IT", { minimumFractionDigits: 2 })} €`}</b> ogni {n} mesi</label>))}</div>
+      <p className="text-xs text-slate-500">Stesso prezzo mensile per entrambe le modalità, senza sconti. I prezzi Stripe ricorrenti (6 mesi e 12 mesi) vengono riusati se identici o creati al primo acquisto; gli abbonamenti già attivi non cambiano.</p>
+    </div>
+  );
+}
+
 function StripeBox({ f, set, svc, mode }) {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState(svc?.stripe || null);
@@ -75,15 +92,16 @@ function Editor({ svc, cats, mode, onClose, onSaved }) {
           <label>Icona<Sel value={f.icon} onChange={set("icon")} opts={Object.fromEntries(Object.keys(MKT_ICONS).map((k) => [k, k]))} testid="mkt-admin-icon" /></label>
           <label>Immagine (opzionale, max 300 KB)<input type="file" accept="image/*" onChange={img} className="block text-xs mt-1" data-testid="mkt-admin-image" />{f.image && <button type="button" className="text-red-600 mt-1" onClick={() => set("image")(null)}>Rimuovi immagine</button>}</label>
           <label>Ambito<Sel value={f.scope} onChange={set("scope")} opts={{ org: "Organizzazione", event: "Singolo evento" }} testid="mkt-admin-scope" /></label>
+          {f.key === "event-planner" ? <PlannerPricing f={f} set={set} /> : <>
           <label>Prezzo €<Input type="number" step="0.01" value={f.price ?? ""} onChange={(e) => set("price")(e.target.value)} data-testid="mkt-admin-price" /></label>
-          <label>Tipo di prezzo<Sel value={f.price_type} onChange={set("price_type")} opts={PRICE_TYPES} testid="mkt-admin-price-type" /></label>
+          <label>Tipo di prezzo<Sel value={f.price_type} onChange={set("price_type")} opts={PRICE_TYPES} testid="mkt-admin-price-type" /></label></>}
           {f.price_type === "usage" && <label>Unità di consumo<Input value={f.usage_unit || ""} onChange={(e) => set("usage_unit")(e.target.value)} placeholder="es. messaggio" /></label>}
           <label>Addebito<Sel value={f.billing_method} onChange={set("billing_method")} opts={{ stripe: "Stripe" }} testid="mkt-admin-billing" /></label>
           <label className="sm:col-span-2">Limiti di utilizzo<Input value={f.usage_limits || ""} onChange={(e) => set("usage_limits")(e.target.value)} data-testid="mkt-admin-limits" /></label>
           <label className="sm:col-span-2">Condizioni e durata<Input value={f.terms || ""} onChange={(e) => set("terms")(e.target.value)} data-testid="mkt-admin-terms" /></label>
           <label>Stato commerciale<Sel value={f.status} onChange={set("status")} opts={{ coming_soon: "Prossimamente", available: "Disponibile", suspended: "Sospeso" }} testid="mkt-admin-status" /></label>
           <label>Ordine<Input type="number" value={f.sort} onChange={(e) => set("sort")(e.target.value)} /></label>
-          <StripeBox f={f} set={set} svc={svc} mode={mode} />
+          {f.key !== "event-planner" && <StripeBox f={f} set={set} svc={svc} mode={mode} />}
           <VideoBox f={f} set={set} />
         </div>
         <div className="flex flex-wrap gap-4 rounded-lg bg-slate-50 p-3">

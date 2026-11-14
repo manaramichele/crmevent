@@ -9,7 +9,7 @@ import { DemoVideo } from "@/components/landing/PlannerDemoSection";
 import { ADDONS, SOURCE_LABEL, eur } from "@/components/addons/addonInfo";
 
 function PriceLine({ info, s }) {
-  if (info.product === "planner") return <span data-testid="addon-info-price">{s.price != null ? `${eur(s.price)} € per evento` : "Prezzo in definizione"}</span>;
+  if (info.product === "planner") return <span data-testid="addon-info-price">{s.monthly_price != null ? `Da ${eur(s.monthly_price)} €/mese · pagamento semestrale o annuale · per organizzazione` : "Prezzo in definizione"}</span>;
   if (!s.packages?.length) return <span data-testid="addon-info-price">Pacchetti in definizione</span>;
   const min = Math.min(...s.packages.filter((p) => p.price != null).map((p) => p.price));
   return <span data-testid="addon-info-price">{Number.isFinite(min) ? `Pacchetti da ${eur(min)} €` : "Prezzo in definizione"}</span>;

@@ -49,8 +49,14 @@ function ActivePurchase({ s, canPurchase, onChanged }) {
   );
 }
 
+const isPlanner = (s) => s.key === "event-planner";
+const monthly = (s) => (s.price == null ? null : s.price_type === "yearly" ? s.price / 12 : Number(s.price));
+const eurInt = (n) => Number(n).toLocaleString("it-IT", { minimumFractionDigits: Number.isInteger(+n) ? 0 : 2, maximumFractionDigits: 2 });
+const plannerPrice = (s) => (monthly(s) == null ? "Prezzo in definizione" : `Da ${eurInt(monthly(s))} €/mese`);
+const PLANNER_SUB = "Pagamento semestrale o annuale · Per organizzazione";
+
 const badge = (s) => (s.active ? ["Attivo", "bg-emerald-100 text-emerald-800"] : s.status === "suspended" ? ["Sospeso", "bg-red-100 text-red-700"]
-  : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "addon" ? ["Per evento", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "superadmin" && s.status === "available" ? ["Su attivazione", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
+  : s.purchasable_now || (isPlanner(s) && s.status === "available") ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "addon" ? ["Per evento", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "superadmin" && s.status === "available" ? ["Su attivazione", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
 
 function NotifyButton({ s, onToggle, full }) {
   const [busy, setBusy] = useState(false);
@@ -86,7 +92,8 @@ function Card({ s, onOpen, onToggle }) {
       <div className="text-xs text-[#088F8A] font-medium mt-0.5">{s.category}</div>
       <p className="text-sm text-slate-500 mt-2 line-clamp-3 flex-1">{s.description}</p>
       <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-        <span className="font-semibold text-slate-800">{s.activation === "addon" ? "Vedi prezzi e inclusi" : priceLabel(s)}</span><span className="text-slate-500">{s.activation === "addon" ? "Per evento" : PRICE_TYPES[s.price_type]}</span>
+        {isPlanner(s) ? <><span className="font-semibold text-slate-800" data-testid={`mkt-card-price-${s.key}`}>{plannerPrice(s)}</span><span className="text-slate-500 text-right">{PLANNER_SUB}</span></>
+          : <><span className="font-semibold text-slate-800">{s.activation === "addon" ? "Vedi prezzi e inclusi" : priceLabel(s)}</span><span className="text-slate-500">{s.activation === "addon" ? "Per evento" : PRICE_TYPES[s.price_type]}</span></>}
       </div>
       {s.demo_free && s.purchasable_now && !s.active && <div className="mt-2 text-[11px] font-semibold text-amber-700" data-testid={`mkt-card-demo-free-${s.key}`}>Gratuito per organizzazione Demo</div>}
       {s.status === "coming_soon" && <div className="mt-3"><NotifyButton s={s} onToggle={onToggle} /></div>}
@@ -114,18 +121,18 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto rounded-2xl pb-0" data-testid="mkt-detail">
         <div className="flex items-center gap-3"><ServiceIcon s={s} /><div><DialogTitle className="text-xl font-bold">{s.name}</DialogTitle><div className="text-xs text-[#088F8A]">{s.category}</div></div></div>
-        <DialogDescription className="text-sm text-slate-600">{s.description}</DialogDescription>
+        <DialogDescription className="text-sm text-slate-600">{isPlanner(s) ? "Progetta percorsi, strutture e spazi dei tuoi eventi direttamente sulla mappa: gazebo, transenne, archi, palchi, ristori, aree sponsor e postazioni volontari." : s.description}</DialogDescription>
         <YouTubeTutorial id={s.video_id} title={s.video_title} />
         <div className="grid grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 p-3">
-          <div><div className="text-xs text-slate-400">Prezzo{s.demo_free ? " di listino" : ""}</div><b data-testid="mkt-detail-price">{priceLabel(s)}</b>{s.demo_free && <div className="text-xs font-semibold text-amber-700" data-testid="mkt-detail-demo-free">Gratuito per organizzazione Demo</div>}</div>
-          <div><div className="text-xs text-slate-400">Modalità</div><b>{PRICE_TYPES[s.price_type]}</b></div>
+          <div><div className="text-xs text-slate-400">Prezzo{s.demo_free ? " di listino" : ""}</div><b data-testid="mkt-detail-price">{isPlanner(s) ? (monthly(s) == null ? "In definizione" : `${eurInt(monthly(s))} €/mese`) : priceLabel(s)}</b>{s.demo_free && <div className="text-xs font-semibold text-amber-700" data-testid="mkt-detail-demo-free">Gratuito per organizzazione Demo</div>}</div>
+          <div><div className="text-xs text-slate-400">Modalità</div><b>{isPlanner(s) ? "Semestrale o annuale" : PRICE_TYPES[s.price_type]}</b></div>
           {s.usage_limits && <div className="col-span-2"><div className="text-xs text-slate-400">Limiti di utilizzo</div>{s.usage_limits}</div>}
           {s.features?.length > 0 && <div className="col-span-2 space-y-3" data-testid="mkt-detail-features"><div className="text-xs text-slate-400">Funzionalità previste</div>{s.features.map((g) => (
             <div key={g.title}><div className="text-sm font-semibold text-slate-800">{g.title}</div>
               <ul className="mt-1 space-y-0.5">{g.items.map((it) => <li key={it} className="flex gap-2 text-sm text-slate-600"><span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0ABAB5] shrink-0" />{it}</li>)}</ul></div>))}</div>}
           {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">{s.status === "coming_soon" ? "Funzionalità previste" : "Condizioni e durata"}</div>{s.terms}</div>}
         </div>
-        <p className="text-xs text-slate-500">{ADDON_PRODUCT[s.key] ? "Attivazione per singolo evento. Silver include 1 evento, Gold 3 eventi; per gli eventi successivi si acquista un'attivazione aggiuntiva. Il diritto si attiva solo dopo la conferma del pagamento." : "Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto. Appartiene all'organizzazione."}</p>
+        <p className="text-xs text-slate-500">{isPlanner(s) ? "Abbonamento valido per tutti gli eventi dell'organizzazione, pagato in anticipo per il periodo scelto e rinnovato con la stessa periodicità. SILVER e GOLD includono 1 evento; BRONZE e gli eventi aggiuntivi richiedono l'abbonamento. Il servizio si attiva dopo la conferma del pagamento." : ADDON_PRODUCT[s.key] ? "Attivazione per singolo evento. Silver include 1 evento, Gold 3 eventi; per gli eventi successivi si acquista un'attivazione aggiuntiva. Il diritto si attiva solo dopo la conferma del pagamento." : "Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto. Appartiene all'organizzazione."}</p>
         <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-white border-t border-slate-100 space-y-3" data-testid="mkt-detail-actions">
         {ADDON_PRODUCT[s.key] ? <AddonBuy product={ADDON_PRODUCT[s.key]} eventId={params.get("evento")} onDone={onChanged} /> : s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}{s.key === "archivio-iscritti" && <Link to="/iscritti" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-iscritti">Apri servizio</Link>}</div>
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
@@ -165,7 +172,7 @@ export default function Marketplace() {
     else load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const list = useMemo(() => (data?.services || []).filter((s) => (!cat || s.category === cat) && (!q || `${s.name} ${s.description}`.toLowerCase().includes(q.toLowerCase())))
-    .sort((a, b) => Number(!!b.active) - Number(!!a.active)), [data, q, cat]);
+    .sort((a, b) => (a.sort ?? Infinity) - (b.sort ?? Infinity) || (a.name || "").localeCompare(b.name || "", "it")), [data, q, cat]);
   const cats = [...new Set((data?.services || []).map((s) => s.category))];
   const toggle = (id, v) => {
     setData((d) => ({ ...d, services: d.services.map((x) => (x.id === id ? { ...x, notify_me: v } : x)) }));

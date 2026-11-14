@@ -932,3 +932,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: iteration_161 (19/19 + 3 MP4 reali 15/30/60, credito non scalato in errore) + fix date/AID_RE/finale veloce/etichetta.
 - Aperto: nessun endpoint per eliminare tracce GPX duplicate; logo di default "event" via API senza logo anagrafica → nessun logo.
 
+
+## Event Planner in abbonamento per organizzazione (2026-11-14) — NON pubblicato
+- Accesso: (1) evento incluso nel piano SILVER/GOLD = 1 (config planner.included gold 1); attivazioni piano esistenti marcate `legacy` e conservate; (2) abbonamento Stripe per organizzazione (addon_grants scope "org", cycle semester/yearly, expires_at = current_period_end, aggiornato da customer.subscription.*); (3) omaggio Super Admin scope "org" con scadenza o illimitato.
+- Prezzo: marketplace_services key event-planner, price mensile (migrazione: annuale/12 → 29 €/mese), billing_cycles; totali ×6 / ×12 senza sconti. Price Stripe ricorrenti per ciclo in planner_prices.{mode}.{cycle}: riuso salvato → ricerca prezzo identico sul prodotto → creazione; mai modificati/disattivati prezzi esistenti (il vecchio Price ID non è più usato).
+- Scadenza: progetti consultabili in sola lettura (read_only), modifica bloccata; banner in EventPlanner.
+- Marketplace: card "Da 29 €/mese · Pagamento semestrale o annuale · Per organizzazione", dettaglio con selettore modalità e totale, stato abbonamento se attivo; ordinamento per campo Ordine crescente (+ nome), anche per categoria.
+- Super Admin: Modifica servizio Event Planner con prezzo mensile e modalità abilitate; AddonAdmin omaggio "tutti gli eventi".
+- Test: 22 pytest + verifica Stripe test (sessione subscription 174 € / 6 mesi e 348 € / 12 mesi, riuso price, webhook firmato attivazione/disdetta), UI Marketplace.
+

@@ -62,7 +62,7 @@ export default function EventPlanner() {
   }, [loadList, open]);
 
   const persist = useCallback(async (features, lys) => {
-    if (!proj) return;
+    if (!proj || ev?.read_only) return;
     setSave("salvataggio");
     try { const { data } = await api.put(`/planner/projects/${proj.id}/content`, { version: ver.current, features, layers: lys }); ver.current = data.version; dirty.current = false; setSave("salvato"); }
     catch (e) { setSave(e.response?.status === 409 ? "conflitto" : "errore"); toast.error(formatApiError(e.response?.data?.detail)); }
@@ -111,6 +111,7 @@ export default function EventPlanner() {
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] flex-col bg-slate-50" data-testid="event-planner">
+      {ev?.read_only && <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="planner-read-only">Abbonamento Event Planner non attivo: i progetti restano salvati e consultabili, la modifica è sospesa. <a href="/marketplace" className="font-semibold underline">Rinnova dal Marketplace</a></div>}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
         <Button size="sm" variant="ghost" onClick={() => nav("/eventi")} data-testid="planner-back"><ArrowLeft className="h-4 w-4" /></Button>
         <div className="min-w-0"><div className="truncate text-xs text-slate-500">{ev?.nome}</div>

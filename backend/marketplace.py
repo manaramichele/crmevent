@@ -106,6 +106,7 @@ class ServiceIn(BaseModel):
     video_url: Optional[str] = None
     video_title: Optional[str] = None
     stripe_price_id: Optional[str] = None
+    billing_cycles: list[str] = []
 
 
 class GrantIn(BaseModel):
@@ -232,7 +233,7 @@ def build(db, deps: dict):
         why = can_buy(s, demo)
         return {**{k: s.get(k) for k in ("id", "key", "name", "description", "icon", "image", "category", "price", "price_type",
                                           "usage_unit", "usage_limits", "terms", "status", "scope", "activation", "features", "notify_label", "notified_label", "service_code",
-                                          "video_url", "video_id", "video_title")},
+                                          "video_url", "video_id", "video_title", "billing_cycles", "sort")},
                 "free": s.get("price") is not None and float(s["price"]) == 0,
                 "demo_free": demo, "purchasable_now": why is None, "reason": "Attivazione a cura del team CRMEvent" if s.get("activation") == "superadmin" else why,
                 "active": any(p["status"] in ACTIVE for p in mine) or s.get("key") in org_active, "purchases": mine, "notify_me": s["id"] in notify_ids}

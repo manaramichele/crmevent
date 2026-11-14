@@ -63,18 +63,25 @@ def build(db, deps: dict):
     user_dep, admin_dep, audit, covered = deps["get_current_user"], deps["require_admin"], deps["record_audit"], deps["require_covered"]
     member_dep = deps["require_member"]  # letture: org attiva validata dal backend (membership / X-Org-Id Super Admin / assistenza)
 
-    async def event_of(org_id: str, eid: str, user: dict) -> dict:
+    async def event_of(org_id: str, eid: str, user: dict, write: bool = True) -> dict:
         ev = await db.events.find_one({"org_id": org_id, "id": eid}, {"_id": 0, "id": 1, "nome": 1, "luogo": 1, "citta": 1, "data_inizio": 1})
         if not ev:
             raise HTTPException(status_code=404, detail="Evento non trovato")
-        await covered(user, "planner", eid)
+        try:
+            await covered(user, "planner", eid)
+            ev["read_only"] = False
+        except HTTPException:
+            # abbonamento/omaggio scaduto: i progetti già salvati restano consultabili, la modifica è sospesa
+            if write or not await db.planner_projects.find_one({"org_id": org_id, "evento_id": eid}, {"_id": 1}):
+                raise
+            ev["read_only"] = True
         return ev
 
-    async def project_of(org_id: str, pid: str, user: dict) -> dict:
+    async def project_of(org_id: str, pid: str, user: dict, write: bool = True) -> dict:
         p = await db.planner_projects.find_one({"org_id": org_id, "id": pid}, {"_id": 0})
         if not p:
             raise HTTPException(status_code=404, detail="Progetto non trovato")
-        await covered(user, "planner", p["evento_id"])
+        p["read_only"] = (await event_of(org_id, p["evento_id"], user, write))["read_only"]
         return p
 
     @r.get("/config")
@@ -86,7 +93,7 @@ def build(db, deps: dict):
 
     @r.get("/events/{eid}/projects")
     async def projects(eid: str, user: dict = Depends(member_dep)):
-        ev = await event_of(user["org_id"], eid, user)
+        ev = await event_of(user["org_id"], eid, user, write=False)
         rows = await db.planner_projects.find({"org_id": user["org_id"], "evento_id": eid}, {"_id": 0, "features": 0}).sort("created_at", 1).to_list(200)
         return {"evento": ev, "projects": rows}
 
@@ -105,7 +112,7 @@ def build(db, deps: dict):
 
     @r.get("/projects/{pid}")
     async def get_project(pid: str, user: dict = Depends(member_dep)):
-        return await project_of(user["org_id"], pid, user)
+        return await project_of(user["org_id"], pid, user, write=False)
 
     @r.patch("/projects/{pid}")
     async def patch(pid: str, body: ProjectPatch, admin: dict = Depends(admin_dep)):
@@ -134,7 +141,7 @@ def build(db, deps: dict):
 
     @r.get("/projects/{pid}/revisions")
     async def revisions(pid: str, user: dict = Depends(member_dep)):
-        await project_of(user["org_id"], pid, user)
+        await project_of(user["org_id"], pid, user, write=False)
         return {"revisions": await db.planner_revisions.find({"org_id": user["org_id"], "project_id": pid}, {"_id": 0, "features": 0, "layers": 0}).sort("at", -1).to_list(MAX_REVISIONS)}
 
     @r.post("/projects/{pid}/revisions/{rid}/restore")
