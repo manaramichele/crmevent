@@ -200,6 +200,12 @@ def attach(r, db, audit, member_dep, admin_dep, project_of, event_of, org_logo):
         if "status" in data and data["status"] not in STATUSES:
             raise HTTPException(status_code=400, detail="Stato non valido")
         data = {k: (v.strip() if isinstance(v, str) else v) for k, v in data.items() if k in EDIT}
+        bom = await bom_of(admin["org_id"], pid)
+        items = map_items(p.get("features"))
+        ok = key in items or (key.startswith("m:") and any(m["id"] == key[2:] for m in bom.get("manual") or [])) or \
+            ("::" in key and any(c["id"] == key.split("::", 1)[1] for c in (bom.get("components") or {}).get(key.split("::", 1)[0]) or []))
+        if not ok:
+            raise HTTPException(status_code=404, detail="Materiale non trovato nella distinta")
         await db.planner_bom.update_one({"org_id": admin["org_id"], "project_id": pid},
                                         {"$set": {**{f"rows.{key.replace('.', '_')}.{k}": v for k, v in data.items()}, "updated_at": datetime.now(timezone.utc).isoformat()},
                                          "$setOnInsert": {"org_id": admin["org_id"], "project_id": pid}}, upsert=True)

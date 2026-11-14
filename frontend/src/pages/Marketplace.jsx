@@ -52,6 +52,7 @@ function ActivePurchase({ s, canPurchase, onChanged }) {
 const isPlanner = (s) => s.key === "event-planner";
 const isEventMap = (s) => s.key === "event-map";
 const mapMode = (s) => `${PRICE_TYPES[s.price_type] || "Abbonamento"} · Per organizzazione`;
+const mapPrice = (s) => (s.price == null ? "Prezzo in definizione" : `${eurInt(s.price)} €/anno`);
 const monthly = (s) => (s.price == null ? null : s.price_type === "yearly" ? s.price / 12 : Number(s.price));
 const eurInt = (n) => Number(n).toLocaleString("it-IT", { minimumFractionDigits: Number.isInteger(+n) ? 0 : 2, maximumFractionDigits: 2 });
 const plannerPrice = (s) => (monthly(s) == null ? "Prezzo in definizione" : `Da ${eurInt(monthly(s))} €/mese`);
@@ -95,7 +96,7 @@ function Card({ s, onOpen, onToggle }) {
       <p className="text-sm text-slate-500 mt-2 line-clamp-3 flex-1">{s.description}</p>
       <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
         {isPlanner(s) ? <><span className="font-semibold text-slate-800" data-testid={`mkt-card-price-${s.key}`}>{plannerPrice(s)}</span><span className="text-slate-500 text-right">{PLANNER_SUB}</span></>
-          : isEventMap(s) ? <><span className="font-semibold text-slate-800" data-testid={`mkt-card-price-${s.key}`}>{priceLabel(s)}</span><span className="text-slate-500 text-right" data-testid={`mkt-card-mode-${s.key}`}>{mapMode(s)}</span></>
+          : isEventMap(s) ? <><span className="font-semibold text-slate-800" data-testid={`mkt-card-price-${s.key}`}>{mapPrice(s)}</span><span className="text-slate-500 text-right" data-testid={`mkt-card-mode-${s.key}`}>{mapMode(s)}</span></>
           : <><span className="font-semibold text-slate-800">{s.activation === "addon" ? "Vedi prezzi e inclusi" : priceLabel(s)}</span><span className="text-slate-500">{s.activation === "addon" ? "Per evento" : PRICE_TYPES[s.price_type]}</span></>}
       </div>
       {s.demo_free && s.purchasable_now && !s.active && <div className="mt-2 text-[11px] font-semibold text-amber-700" data-testid={`mkt-card-demo-free-${s.key}`}>Gratuito per organizzazione Demo</div>}
@@ -127,7 +128,7 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
         <DialogDescription className="text-sm text-slate-600">{isPlanner(s) ? "Progetta percorsi, strutture e spazi dei tuoi eventi direttamente sulla mappa: gazebo, transenne, archi, palchi, ristori, aree sponsor e postazioni volontari." : s.description}</DialogDescription>
         <YouTubeTutorial id={s.video_id} title={s.video_title} />
         <div className="grid grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 p-3">
-          <div><div className="text-xs text-slate-400">Prezzo{s.demo_free ? " di listino" : ""}</div><b data-testid="mkt-detail-price">{isPlanner(s) ? (monthly(s) == null ? "In definizione" : `${eurInt(monthly(s))} €/mese`) : priceLabel(s)}</b>{s.demo_free && <div className="text-xs font-semibold text-amber-700" data-testid="mkt-detail-demo-free">Gratuito per organizzazione Demo</div>}</div>
+          <div><div className="text-xs text-slate-400">Prezzo{s.demo_free ? " di listino" : ""}</div><b data-testid="mkt-detail-price">{isPlanner(s) ? (monthly(s) == null ? "In definizione" : `${eurInt(monthly(s))} €/mese`) : isEventMap(s) ? mapPrice(s) : priceLabel(s)}</b>{s.demo_free && <div className="text-xs font-semibold text-amber-700" data-testid="mkt-detail-demo-free">Gratuito per organizzazione Demo</div>}</div>
           <div><div className="text-xs text-slate-400">Modalità</div><b data-testid="mkt-detail-mode">{isPlanner(s) ? "Semestrale o annuale" : isEventMap(s) ? mapMode(s) : PRICE_TYPES[s.price_type]}</b></div>
           {s.usage_limits && <div className="col-span-2"><div className="text-xs text-slate-400">Limiti di utilizzo</div>{s.usage_limits}</div>}
           {s.features?.length > 0 && <div className="col-span-2 space-y-3" data-testid="mkt-detail-features"><div className="text-xs text-slate-400">Funzionalità previste</div>{s.features.map((g) => (

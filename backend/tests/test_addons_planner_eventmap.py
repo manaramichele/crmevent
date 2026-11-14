@@ -207,13 +207,8 @@ def test_eventmap_packages_and_grant(sa, silver):
     if not pk:
         pytest.skip("TEST_Pack not configured (checkout test must run first)")
     d = s.get(f"{API}/addons/eventmap").json()
-    assert any(p["id"] == pk["id"] for p in d["packages"])
+    assert d["packages"] == []  # iter163: Event Map is sold only as annual org subscription; SA package grants still work
     assert d["videos_total"] == max(1, int(mdb_cfg()["eventmap"].get("included_videos") or 0)) * d["included_used"]
-    r = s.post(f"{API}/addons/eventmap/checkout", json={"origin_url": BASE_URL})
-    assert r.status_code == 400 and "pacchetto" in r.json()["detail"].lower()
-    r = s.post(f"{API}/addons/eventmap/checkout", json={"origin_url": BASE_URL, "package_id": pk["id"]})
-    print("em checkout:", r.status_code, r.text[:150])
-    assert r.status_code in (200, 400)
     before = d["videos_total"]
     r = sa.post(f"{API}/platform/addons/orgs/{oid}/grants", json={"product": "eventmap", "source": "superadmin", "package_id": pk["id"], "event_ids": [e1]})
     assert r.status_code == 200, r.text

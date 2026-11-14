@@ -255,7 +255,7 @@ def build(db, deps: dict):
         return user.get("role") == "superadmin"
 
     def _timing(rc, t):
-        aids = _aid_list(t) if t and rc.get("show_aid", True) else []
+        aids = [a for a in _aid_list(t) if 0 < float(a.get("km") or 0) * 1000 < float(t.get("distance_m") or 0)] if t and rc.get("show_aid", True) else []
         return ER.timing(int(rc.get("duration") or 30), aids, rc.get("speed") or "normal", float(rc.get("aid_pause", 3) or 0), bool(rc.get("aid_pause_auto")))
 
     async def _race_out(org_id, rid):

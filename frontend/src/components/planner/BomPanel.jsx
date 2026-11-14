@@ -34,7 +34,7 @@ function Row({ r, statuses, ro, save, onComps, onDelete }) {
   return (
     <tr className="border-b border-slate-100 align-top" data-testid={`bom-row-${tid}`}>
       <td className="p-1">{r.source === "manual" ? <Cell value={r.categoria} onSave={(v) => s({ categoria: v })} disabled={ro} testid={`bom-cat-${tid}`} w="w-24" /> : <span className="text-xs">{r.categoria}</span>}</td>
-      <td className="p-1"><Cell value={r.code} onSave={(v) => s({ code: v })} disabled={ro} testid={`bom-code-${tid}`} w="w-28" /></td>
+      <td className="p-1"><Cell value={r.code} onSave={(v) => s({ code: v })} disabled={ro} testid={`bom-code-${tid}`} w="w-36" /></td>
       <td className="p-1"><Cell value={r.description} onSave={(v) => s({ description: v })} disabled={ro} testid={`bom-desc-${tid}`} w="w-48" />
         {r.source === "component" && <div className="mt-0.5 text-[10px] text-slate-400">componente</div>}</td>
       <td className="p-1"><Cell value={r.unit} onSave={(v) => s({ unit: v })} disabled={ro} testid={`bom-unit-${tid}`} w="w-14" /></td>
