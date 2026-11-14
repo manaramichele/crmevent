@@ -1,0 +1,39 @@
+{
+  "summary": "Event Map rights bug fix verified on PREVIEW DB, where config eventmap.included_videos is 0, the same as production. Backend 12/12 pytest pass (tests/test_eventmap_rights_iter.py). PUT config with eventmap_included_videos 0 returns 422 and the config is unchanged. /public/addons-included returns 1. GOLD: included 3 / used 0 / videos_total 0 before activation. After 1 activation: 3/1, videos_total 1, available 1, rights active with videos_remaining 1, video-check allowed. After 3 activations: videos_total 3. The 4th activation is refused with 403 addon_required. SILVER: 1 event gives 1 video; the 2nd activation is refused. Generation (SILVER, 1 video): while queued, in_progress 1, remaining 0, used 0. A second request gets 403 addon_videos (no double generation). On completion: used 1, remaining 0, in_progress 0, consumed=true. Failed job (GPX deleted from disk): status error, videos_used 0, remaining back to 3. SA manual grant (1 event + 2 videos): grant_free 1 and videos_total 3; the extra event can be activated (source superadmin) and all events share the same pool. Revoke: status revoked, history kept (2 entries), activation row kept, event no longer covered, videos_total back to 1. BRONZE: activation refused without a purchase. A DB-simulated purchase grant (no Stripe) with videos_total 2 activates the event with 2 videos. A purchase grant with videos_total 0 activates the event but gives 0 videos ('Hai esaurito' shown). Frontend (GOLD UI org): hub shows 1/3 and 'Video disponibili / generati' 1 / 0. Studio shows 'Video disponibili: 1 · generati 0 · in elaborazione 0', no 'Hai esaurito', and 'Genera video' is enabled after GPX upload. After clicking it, the studio shows 0 · 0 · 1 and the button is disabled, but the hub still shows 1 / 0 (inconsistent). After completion both show 0 / 1 and the archive shows Completato. The SA page /piattaforma/event-planner-map has the label 'Video compresi per ogni evento incluso (Silver/Gold, minimo 1)' with input min=1, value 1.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/addons/eventmap", "issue": "videos_available = videos_total - videos_used does not subtract in-flight (queued/processing) jobs and there is no in_progress field. _rights() in eventmap.py subtracts inflight, so the hub and the studio show different available counts while a video is rendering (hub 1, studio 0)."},
+      {"endpoint": "DELETE /api/platform/organizations/{org_id}", "issue": "ORG_CASCADE_COLLECTIONS does not include addon_grants, addon_activations, addon_usage, eventmap_tracks or eventmap_videos, and storage_data/eventmap/{org_id} is not removed. Deleting an org leaves orphan data and files."},
+      {"endpoint": "eventmap _process error message", "issue": "When the render fails, the user-facing error is 'Generazione non riuscita: eventmap/{org}/{event}/{track}.gpx' (raw FileNotFoundError path). This exposes internal storage paths and is not a friendly message."},
+      {"endpoint": "Bronze purchase without videos", "issue": "A purchase/grant with videos_total 0 (e.g. base 'Attivazione per evento') activates Event Map but gives 0 videos, so 'Genera video' is disabled with 'Hai esaurito'. The min-1 rule only applies to plan-included events. Product decision needed: should every activated event (also Bronze purchase) get at least 1 video, or should the Marketplace say clearly that video packages are separate?"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Hub vs Studio counters", "issue": "The /event-map hub card 'Video disponibili / generati' shows only available/used, with no 'in elaborazione' counter and no inflight subtraction. The request asked for the same counters as the studio ('Video disponibili: X · generati Y · in elaborazione Z'). During rendering the hub showed 1 / 0 while the studio showed 0 · 0 · 1.", "affected_selectors": ["[data-testid='addon-videos']", "[data-testid='em-counters']"]}
+    ],
+    "design_issues": [
+      {"screen": "/piattaforma/event-planner-map", "issues": ["The included-videos input displays Math.max(1, value), so it shows 1 while the DB still holds 0. This is acceptable (saving writes 1), but the field cannot be cleared or edited naturally because an empty value is forced back to 1."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_eventmap_rights_iter.py", "/app/backend/tests/cleanup_em_rights_orgs.py", "/app/backend/tests/em_rights_ui_seed.py", "/app/test_reports/pytest/pytest_em_rights.xml"],
+  "action_items": [
+    "Make the hub use the same rights computation as the studio: subtract in-flight jobs in summary() (or in org_status) and expose in_progress. Render 'Video disponibili: X · generati Y · in elaborazione Z' in AddonHub (data-testid addon-videos).",
+    "Add the addon_* and eventmap_* collections (and storage cleanup) to the org delete cascade.",
+    "Replace raw exception text in the eventmap render error with a user-friendly message; log the details server-side.",
+    "Decide the Bronze/purchase-without-videos policy (currently 0 videos)."
+  ],
+  "critical_code_review_comments": [
+    "addons.summary(): videos_available ignores in-flight reservations, while eventmap._rights() subtracts them. These are two sources of truth for the same counter.",
+    "create_video uses an in-process asyncio.Lock per org. This does not protect against double reservation with multiple uvicorn workers or replicas in production; consider an atomic DB reservation (e.g. a reserved counter with $inc guarded by $lt).",
+    "eventmap.ensure() marks queued/processing jobs as error on restart, which correctly releases reservations."
+  ],
+  "updated_files": ["/app/backend/tests/test_eventmap_rights_iter.py", "/app/backend/tests/cleanup_em_rights_orgs.py", "/app/backend/tests/em_rights_ui_seed.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "90% (hub counter inconsistency during processing)"},
+  "seed_data_creation": "TEST_EMR gold/silver/bronze/bronze0/uigold orgs were created in the preview DB and deleted afterwards by id (plus their addon_*/eventmap_* rows and storage dirs). Bronze purchase grants were inserted directly into the preview DB, with no Stripe call. addon_config was not modified (still included_videos 0). TEST_EventMap Org was untouched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest tests/test_eventmap_rights_iter.py -n 0 -v (~60s, renders one 15s video), then python tests/cleanup_em_rights_orgs.py (reads /tmp/em_rights_orgs.json; the org name is title-cased on create, so cleanup reads the real name from the DB). BRONZE allows only 1 event. em_rights_ui_seed.py creates a GOLD org with 1 activated event for UI tests. Login testids: email-input/password-input (Enter); Escape closes the demo dialog."
+}

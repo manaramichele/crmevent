@@ -882,3 +882,13 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Causa 2 (emersa dopo): mapbox-vector-tile 2.2.0 richiede protobuf>=6.31, incompatibile con google-ai-generativelanguage 0.6.15 / grpcio-status 1.71.2 (<6). Fissati mapbox-vector-tile==2.1.0 e protobuf==5.29.6.
 - Verifica: venv pulito Python 3.11.18, install completa EXIT 0, pip check ok, uvicorn avviato, LLM reale ok, anteprima e render MP4 Event Map ok.
 
+
+## Fix video Event Map per eventi inclusi (2026-11-14) — NON pubblicato
+- Causa: config eventmap.included_videos = 0 (anche in produzione) → videos_total = 0 × eventi inclusi; caso Trio Events / Maratona di Pisa (GOLD, 1/3) con 0 video.
+- Fix: addons._included_videos = max(1, config) per ogni evento incluso Silver/Gold; config default 1 e minimo 1 in Super Admin; nessuna modifica al DB di produzione necessaria.
+- Contatori unificati: summary espone videos_in_progress e videos_available già al netto dei video in coda; hub e pagina evento mostrano disponibili · generati · in elaborazione.
+- Errore di generazione con messaggio leggibile (nessun percorso interno), video non scalato.
+- Cancellazione organizzazione: aggiunte collezioni addon_* ed eventmap_* al cascade (i file MP4 su storage non vengono ancora rimossi).
+- Test: iteration_159 (12/12 backend) + rerun 12/12 dopo i fix.
+- Aperto: acquisto Bronze "Attivazione per evento" senza video nel pacchetto → 0 video (decisione commerciale).
+

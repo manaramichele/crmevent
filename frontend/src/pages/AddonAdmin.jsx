@@ -64,7 +64,7 @@ function ConfigCard({ onSaved }) {
       </div>
       <div className="space-y-2"><h3 className="font-semibold text-slate-900">Event Map</h3>
         <IncludedRow label="Eventi inclusi" value={c.eventmap.included} prefix="em" onChange={(v) => setC({ ...c, eventmap: { ...c.eventmap, included: v } })} />
-        <label className="block text-xs text-slate-500 max-w-xs">Video compresi per ogni evento incluso (Silver/Gold, minimo 1)<Input type="number" min={1} value={Math.max(1, Number(c.eventmap.included_videos || 1))} onChange={(e) => setC({ ...c, eventmap: { ...c.eventmap, included_videos: e.target.value } })} data-testid="em-included-videos" /></label>
+        <label className="block text-xs text-slate-500 max-w-xs">Video compresi per ogni evento incluso (Silver/Gold, minimo 1)<Input type="number" min={1} value={c.eventmap.included_videos || ""} placeholder="1" onChange={(e) => setC({ ...c, eventmap: { ...c.eventmap, included_videos: e.target.value } })} data-testid="em-included-videos" /></label>
         <div className="space-y-2">{pkgs.map((p, i) => <PackageRow key={p.id || i} i={i} p={p} onChange={(np) => setPk(pkgs.map((x, j) => (j === i ? np : x)))} onDel={() => setPk(pkgs.filter((_, j) => j !== i))} />)}</div>
         <Button variant="outline" size="sm" onClick={() => setPk([...pkgs, { name: "Nuovo pacchetto", price: null, videos: 1, events: 1, validity_days: 365, formats: [], active: true }])} data-testid="em-package-add"><Plus className="w-4 h-4 mr-1" />Aggiungi pacchetto</Button>
       </div>

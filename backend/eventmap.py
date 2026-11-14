@@ -67,14 +67,14 @@ def build(db, deps: dict):
     async def _rights(org_id, eid):
         s = await addons["summary"](org_id, "eventmap")
         on = s["unrestricted"] or any(a["event_id"] == eid and a["covered"] for a in s["activations"])
-        inflight = await db.eventmap_videos.count_documents({"org_id": org_id, "status": {"$in": ["queued", "processing"]}})
+        inflight = s["videos_in_progress"]
         now = _now()
         valid = [g for g in s["grants"] if g.get("status") == "active" and (not g.get("expires_at") or g["expires_at"] > now)]
         if s["unrestricted"] or s["included_used"] > 0 or any(not g.get("formats") for g in valid):
             formats = list(ER.SIZES)
         else:
             formats = sorted({f for g in valid for f in g.get("formats") or []} & set(ER.SIZES))
-        remaining = None if s["unrestricted"] else max(0, s["videos_total"] - s["videos_used"] - inflight)
+        remaining = None if s["unrestricted"] else s["videos_available"]
         return {"active": on, "unrestricted": s["unrestricted"], "videos_total": s.get("videos_total", 0), "videos_used": s.get("videos_used", 0),
                 "in_progress": inflight, "videos_remaining": remaining, "formats": formats,
                 "expires_at": min([g["expires_at"] for g in valid if g.get("expires_at")], default=None)}
@@ -220,7 +220,8 @@ def build(db, deps: dict):
                     await db.addon_usage.update_one({"org_id": v["org_id"], "product": "eventmap"}, {"$inc": {"videos_used": 1}}, upsert=True)
             except Exception as e:
                 logger.error(f"eventmap render {vid}: {e}")
-                await db.eventmap_videos.update_one({"id": vid}, {"$set": {"status": "error", "error": f"Generazione non riuscita: {e}"[:300], "completed_at": _now()}})
+                await db.eventmap_videos.update_one({"id": vid}, {"$set": {"status": "error", "completed_at": _now(),
+                                                                    "error": "Generazione non riuscita: il video non è stato scalato, riprova o carica di nuovo la traccia GPX."}})
 
     @r.post("/events/{eid}/videos")
     async def create_video(eid: str, body: VideoIn, user: dict = Depends(admin_dep)):

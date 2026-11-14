@@ -143,7 +143,8 @@ def build(db, deps: dict):
             u = await db.addon_usage.find_one({"org_id": org_id, "product": product}, {"_id": 0}) or {}
             out["videos_total"] = _included_videos(cfg) * out["included_used"] + sum(int(g.get("videos_total") or 0) for g in valid)
             out["videos_used"] = int(u.get("videos_used") or 0)
-            out["videos_available"] = max(0, out["videos_total"] - out["videos_used"])
+            out["videos_in_progress"] = await db.eventmap_videos.count_documents({"org_id": org_id, "status": {"$in": ["queued", "processing"]}})
+            out["videos_available"] = max(0, out["videos_total"] - out["videos_used"] - out["videos_in_progress"])
             out["packages"] = [p for p in cfg.get("packages") or [] if p.get("active")]
         else:
             out["price"] = cfg.get("price")
