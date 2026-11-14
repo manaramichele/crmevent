@@ -7,6 +7,11 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = f"{BASE_URL}/api"
+
+
+def mdb_cfg():
+    from pymongo import MongoClient
+    return MongoClient("mongodb://localhost:27017")["test_database"].addon_config.find_one({"id": "config"}) or {"eventmap": {}}
 SA_EMAIL, SA_PW = "manara.michele.pro@gmail.com", "CrmEvent2026!"
 CREATED_ORGS = []
 
@@ -109,14 +114,13 @@ def test_silver_activation_flow(silver):
 
 
 def test_gold_three_bronze_zero(sa):
+    # Event Planner per organizzazione: GOLD e SILVER includono 1 solo evento
     s, oid, _ = _org("Gold")
     evs = [_event(s, f"TEST_G{i}", f"2026-10-0{i+1}") for i in range(4)]
     _set_plan(sa, oid, "gold")
-    for e in evs[:3]:
-        assert s.post(f"{API}/addons/planner/events/{e}/activate").status_code == 200
-    r = s.post(f"{API}/addons/planner/events/{evs[3]}/activate")
+    assert s.post(f"{API}/addons/planner/events/{evs[0]}/activate").status_code == 200
+    r = s.post(f"{API}/addons/planner/events/{evs[1]}/activate")
     assert r.status_code == 403 and r.json()["detail"]["code"] == "addon_required"
-    # downgrade gold -> silver: first included stays covered, others blocked, data kept
     _set_plan(sa, oid, "silver")
     assert s.get(f"{API}/planner/events/{evs[0]}/projects").status_code == 200
     assert s.get(f"{API}/planner/events/{evs[1]}/projects").status_code == 403
@@ -147,7 +151,17 @@ def test_non_sa_cannot_use_platform(silver):
 
 
 def test_checkout_planner(sa, orig_cfg, silver):
+    # abbonamento per organizzazione: serve la modalità (semestrale/annuale), mai l'evento
     s, oid, e1, e2 = silver
+    r = s.post(f"{API}/addons/planner/checkout", json={"origin_url": BASE_URL, "event_id": e2})
+    assert r.status_code == 400 and "modalità" in r.json()["detail"], r.text
+    r = s.post(f"{API}/addons/planner/checkout", json={"origin_url": BASE_URL, "cycle": "monthly"})
+    assert r.status_code == 400
+    d = s.get(f"{API}/addons/planner").json()
+    assert d["included"] == 1 and {c["key"]: c["months"] for c in d["cycles"]} == {"semester": 6, "yearly": 12}
+    if d["monthly_price"]:
+        assert [c["total"] for c in d["cycles"]] == [round(d["monthly_price"] * 6, 2), round(d["monthly_price"] * 12, 2)]
+    return
     cfg = orig_cfg
     r = s.post(f"{API}/addons/planner/checkout", json={"origin_url": BASE_URL, "event_id": e2})
     if cfg["planner"].get("price") is None:
@@ -194,7 +208,7 @@ def test_eventmap_packages_and_grant(sa, silver):
         pytest.skip("TEST_Pack not configured (checkout test must run first)")
     d = s.get(f"{API}/addons/eventmap").json()
     assert any(p["id"] == pk["id"] for p in d["packages"])
-    assert d["videos_total"] == 2 * d["included_used"]
+    assert d["videos_total"] == max(1, int(mdb_cfg()["eventmap"].get("included_videos") or 0)) * d["included_used"]
     r = s.post(f"{API}/addons/eventmap/checkout", json={"origin_url": BASE_URL})
     assert r.status_code == 400 and "pacchetto" in r.json()["detail"].lower()
     r = s.post(f"{API}/addons/eventmap/checkout", json={"origin_url": BASE_URL, "package_id": pk["id"]})

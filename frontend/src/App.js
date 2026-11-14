@@ -12,6 +12,7 @@ import Register from "@/pages/Register";
 import CompleteOrg from "@/pages/CompleteOrg";
 import CompleteProfile from "@/pages/CompleteProfile";
 import Legal from "@/pages/Legal";
+import PromoVideo from "@/pages/PromoVideo";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import ResetPassword from "@/pages/ResetPassword";
@@ -142,6 +143,7 @@ function Shell() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/demo" element={<DemoPage />} />
+        <Route path="/video/:slug" element={<PromoVideo />} />
         <Route path="/partecipa/:code" element={<Partecipa />} />
         <Route path="/prezzi" element={<Pricing />} />
         <Route path="/registrati" element={<Register />} />

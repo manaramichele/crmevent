@@ -1,5 +1,6 @@
 """Event Map — tracce GPX, anteprime e generazione video MP4 in coda (processo separato con FFmpeg)."""
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -7,13 +8,13 @@ import re
 import sys
 import tempfile
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import date, datetime, timezone
+from typing import List, Optional
 
 import imageio_ffmpeg
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 import eventmap_render as ER
 import storage_utils as SU
@@ -24,6 +25,7 @@ CACHE = os.environ.get("EVENTMAP_CACHE_DIR") or os.path.join(tempfile.gettempdir
 MUSIC = {"sportiva": "Sportiva ed energica", "emozionale": "Emozionale", "elettronica": "Elettronica", "cinematografica": "Cinematografica"}
 STYLES = {"dark": "Scuro", "streets": "Stradale"}
 DURATIONS = (15, 30, 60)
+SPEEDS = {"slow": ("Lenta", "Movimento panoramico e dettagliato"), "normal": ("Normale", "Movimento equilibrato"), "fast": ("Veloce", "Movimento dinamico e sportivo")}
 MAX_GPX = 15 * 1024 * 1024
 MAX_LOGO = 5 * 1024 * 1024
 STATUS = ("queued", "processing", "completed", "error")
@@ -40,12 +42,68 @@ class VideoIn(BaseModel):
     duration: int = 30
     music: Optional[str] = None
     logo: Optional[str] = "event"  # "event" = logo dell'anagrafica, id di un logo caricato, None = senza logo
+    speed: str = "normal"
+    show_aid: bool = True
+    show_elevation: bool = True
 
 
 class PreviewIn(BaseModel):
     style: str = "dark"
     format: str = "9:16"
     logo: Optional[str] = "event"
+    speed: str = "normal"
+    show_aid: bool = True
+    show_elevation: bool = True
+
+
+class SettingsIn(BaseModel):
+    date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")  # None = data dell'anagrafica
+
+    @field_validator("date")
+    @classmethod
+    def _real_date(cls, v):
+        if v:
+            date.fromisoformat(v)  # ValueError -> 422 per date impossibili (es. 2026-02-31)
+        return v
+
+
+class RaceIn(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=80)
+    title: Optional[str] = Field(default=None, max_length=60)
+    subtitle: Optional[str] = Field(default=None, max_length=60)
+    date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    distance_km: Optional[float] = Field(default=None, gt=0, le=1000)
+    track_id: Optional[str] = None
+    logo: Optional[str] = None
+    style: Optional[str] = None
+    format: Optional[str] = None
+    duration: Optional[int] = None
+    music: Optional[str] = None
+    speed: Optional[str] = None
+    show_aid: Optional[bool] = None
+    show_elevation: Optional[bool] = None
+
+    @field_validator("date")
+    @classmethod
+    def _real_date(cls, v):
+        if v:
+            date.fromisoformat(v)
+        return v
+
+
+RACE_SETTINGS = ("logo", "style", "format", "duration", "music", "speed", "show_aid", "show_elevation")
+RACE_DEFAULTS = {"style": "dark", "format": "9:16", "duration": 30, "music": "sportiva", "speed": "normal", "show_aid": True, "show_elevation": True}
+
+
+class AidIn(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    km: float = Field(ge=0)
+    desc: str = Field(default="", max_length=120)
+    source: str = "manual"
+
+
+class AidListIn(BaseModel):
+    items: List[AidIn] = Field(default_factory=list, max_length=30)
 
 
 def build(db, deps: dict):
@@ -58,6 +116,8 @@ def build(db, deps: dict):
     async def ensure():
         await db.eventmap_tracks.create_index([("org_id", 1), ("event_id", 1)])
         await db.eventmap_logos.create_index([("org_id", 1), ("event_id", 1)])
+        await db.eventmap_settings.create_index([("org_id", 1), ("event_id", 1)], unique=True)
+        await db.eventmap_races.create_index([("org_id", 1), ("event_id", 1)])
         await db.eventmap_videos.create_index([("org_id", 1), ("event_id", 1), ("created_at", -1)])
         await db.eventmap_videos.update_many({"status": {"$in": ["queued", "processing"]}},
                                              {"$set": {"status": "error", "error": "Elaborazione interrotta dal riavvio del server: riprova (nessun video scalato)"}})
@@ -86,23 +146,213 @@ def build(db, deps: dict):
     def _date_it(d):
         mesi = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
         m = re.match(r"(\d{4})-(\d{2})-(\d{2})", d or "")
-        return f"{int(m.group(3))} {mesi[int(m.group(2)) - 1]} {m.group(1)}" if m else ""
+        return f"{int(m.group(3))} {mesi[int(m.group(2)) - 1]} {m.group(1)}" if m and 1 <= int(m.group(2)) <= 12 and 1 <= int(m.group(3)) <= 31 else ""
 
     @r.get("/options")
     async def options(user: dict = Depends(admin_dep)):
         return {"styles": [{"key": k, "label": v} for k, v in STYLES.items()] + [{"key": "satellite", "label": "Satellitare", "disabled": True, "note": "Disponibile con MapTiler"}],
                 "formats": [{"key": "9:16", "label": "9:16 · Reels, Stories, TikTok"}, {"key": "1:1", "label": "1:1 · Post social"}, {"key": "16:9", "label": "16:9 · YouTube, Facebook, siti web"}],
-                "durations": list(DURATIONS), "music": [{"key": k, "label": v, "preview": f"/media/music/{k}.mp3"} for k, v in MUSIC.items()]}
+                "durations": list(DURATIONS), "music": [{"key": k, "label": v, "preview": f"/media/music/{k}.mp3"} for k, v in MUSIC.items()],
+                "speeds": [{"key": k, "label": v[0], "note": v[1]} for k, v in SPEEDS.items()]}
+
+    async def _settings(org_id, eid):
+        return await db.eventmap_settings.find_one({"org_id": org_id, "event_id": eid}, {"_id": 0, "org_id": 0}) or {"date": None}
+
+    async def _upgrade_track(t):
+        """Tracce caricate prima di altimetria/ristori: dati ricalcolati una volta dal GPX salvato."""
+        if "has_elevation" in t:
+            return t
+        try:
+            sm = ER.summary(SU.read(t["storage"]["path"], t["storage"].get("backend"))[0])
+        except Exception:
+            return t
+        upd = {k: sm[k] for k in ("has_elevation", "ele_min", "ele_max", "ele_gain", "aid_detected", "waypoints") if k in sm}
+        await db.eventmap_tracks.update_one({"id": t["id"]}, {"$set": upd})
+        return {**t, **upd}
+
+    def _aid_list(t):
+        return t["aid_stations"] if "aid_stations" in t else (t.get("aid_detected") or [])
+
+    @r.put("/events/{eid}/settings")
+    async def put_settings(eid: str, body: SettingsIn, user: dict = Depends(admin_dep)):
+        await _event(user["org_id"], eid)
+        await _require_active(user["org_id"], eid)
+        await db.eventmap_settings.update_one({"org_id": user["org_id"], "event_id": eid},
+                                              {"$set": {"date": body.date, "updated_at": _now(), "updated_by": user.get("email")}}, upsert=True)
+        return await _settings(user["org_id"], eid)
+
+    @r.put("/tracks/{tid}/aid-stations")
+    async def put_aid(tid: str, body: AidListIn, user: dict = Depends(admin_dep)):
+        t = await _track(user["org_id"], tid)
+        await _require_active(user["org_id"], t["event_id"])
+        tot = t["distance_m"] / 1000
+        pts, _, _ = ER.parse_gpx(SU.read(t["storage"]["path"], t["storage"].get("backend"))[0])
+        dist = ER.cumdist(pts)
+        items = []
+        for a in sorted(body.items, key=lambda x: x.km):
+            if a.km > tot + 0.01:
+                raise HTTPException(status_code=400, detail=f"Il ristoro «{a.name}» è oltre la lunghezza del percorso ({tot:.2f} km)".replace(".", ","))
+            lat, lon = ER.locate(pts, dist, a.km * 1000)
+            items.append({"name": a.name.strip(), "km": round(a.km, 2), "desc": a.desc.strip(), "lat": round(lat, 6), "lon": round(lon, 6),
+                          "source": "gpx" if a.source == "gpx" else "manual"})
+        await db.eventmap_tracks.update_one({"id": tid, "org_id": user["org_id"]}, {"$set": {"aid_stations": items}})
+        await audit(user, "eventmap_aid_update", detail=f"{t['event_id']} · {len(items)} ristori")
+        return {"aid_stations": items}
 
     @r.get("/events/{eid}")
     async def event_state(eid: str, user: dict = Depends(admin_dep)):
         ev = await _event(user["org_id"], eid)
         maps = await db.event_maps.find({"org_id": user["org_id"], "evento_id": eid, "gpx_url": {"$nin": [None, ""]}}, {"_id": 0, "id": 1, "nome": 1, "titolo": 1}).to_list(100)
-        return {"event": {"id": ev["id"], "nome": ev.get("nome"), "data": _date_it(ev.get("data_inizio")), "has_logo": bool(ev.get("logo_url"))},
+        sett = await _settings(user["org_id"], eid)
+        tracks = [await _upgrade_track(t) for t in await db.eventmap_tracks.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0}).sort("created_at", -1).to_list(50)]
+        for t in tracks:
+            t["aid_stations"] = _aid_list(t)
+            t.pop("storage", None)
+            t.pop("preview", None)
+        races = await _races(user["org_id"], eid)
+        if not races and len(tracks) == 1 and not sett.get("races_initialized"):  # evento con una sola gara: scheda creata una sola volta dal GPX già caricato
+            res = await db.eventmap_settings.update_one({"org_id": user["org_id"], "event_id": eid, "races_initialized": {"$ne": True}},
+                                                        {"$set": {"races_initialized": True}, "$setOnInsert": {"date": None}}, upsert=True)
+            if res.modified_count or res.upserted_id:
+                races = [await _new_race(user, ev, tracks[0])]
+        by_track = {r["track_id"]: r["name"] for r in reversed(races) if r.get("track_id")}
+        used = {r.get("track_id") for r in races}
+        videos = await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(200)
+        for v in videos:
+            v["race_label"] = v.get("race_name") or by_track.get(v.get("track_id")) or re.sub(r"\.gpx$", "", v.get("track_name") or "Percorso", flags=re.I)
+        return {"event": {"id": ev["id"], "nome": ev.get("nome"), "data": _date_it(sett.get("date") or ev.get("data_inizio")), "data_iso": (ev.get("data_inizio") or "")[:10],
+                          "has_logo": bool(ev.get("logo_url"))}, "settings": sett,
                 "rights": await _rights(user["org_id"], eid), "maps": maps,
-                "tracks": await db.eventmap_tracks.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0}).sort("created_at", -1).to_list(50),
+                "tracks": tracks, "races": races, "unassigned_tracks": [t["id"] for t in tracks if t["id"] not in used],
                 "logos": await db.eventmap_logos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0}).sort("created_at", -1).to_list(20),
-                "videos": await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(100)}
+                "videos": videos}
+
+    async def _races(org_id, eid):
+        return await db.eventmap_races.find({"org_id": org_id, "event_id": eid}, {"_id": 0, "org_id": 0}).sort([("order", 1), ("created_at", 1)]).to_list(100)
+
+    async def _race(org_id, rid):
+        rc = await db.eventmap_races.find_one({"org_id": org_id, "id": rid}, {"_id": 0})
+        if not rc:
+            raise HTTPException(status_code=404, detail="Gara non trovata")
+        return rc
+
+    async def _check_race(org_id, ev, data: dict):
+        for k in ("style", "format", "duration", "speed", "show_aid", "show_elevation"):
+            if k in data and data[k] is None:
+                data.pop(k)
+        if data.get("track_id"):
+            t = await _track(org_id, data["track_id"])
+            if t["event_id"] != ev["id"]:
+                raise HTTPException(status_code=400, detail="Il file GPX appartiene a un altro evento")
+        if data.get("logo") and data["logo"] != "event" and not await db.eventmap_logos.find_one({"org_id": org_id, "event_id": ev["id"], "id": data["logo"]}):
+            raise HTTPException(status_code=404, detail="Logo non trovato")
+        bad = ("style" in data and data["style"] not in STYLES) or ("format" in data and data["format"] not in ER.SIZES) or \
+              ("duration" in data and data["duration"] not in DURATIONS) or (data.get("music") and data["music"] not in MUSIC) or ("speed" in data and data["speed"] not in SPEEDS)
+        if bad:
+            raise HTTPException(status_code=400, detail="Impostazioni video non valide")
+        for k in ("name", "title", "subtitle"):
+            if isinstance(data.get(k), str):
+                data[k] = data[k].strip()
+        if "name" in data and not data["name"]:
+            raise HTTPException(status_code=400, detail="Indica il nome della gara")
+        return data
+
+    async def _new_race(user, ev, track=None, data=None):
+        org_id = user["org_id"]
+        sett = await _settings(org_id, ev["id"])
+        name = (data or {}).get("name") or (re.sub(r"\.gpx$", "", track["name"], flags=re.I) if track else "Gara")
+        doc = {"id": uuid.uuid4().hex, "org_id": org_id, "event_id": ev["id"], "name": name[:80], "title": ev.get("nome") or "", "subtitle": "",
+               "date": sett.get("date"), "distance_km": None, "track_id": track["id"] if track else None,
+               "logo": "event" if ev.get("logo_url") else None, **RACE_DEFAULTS,
+               "order": await db.eventmap_races.count_documents({"org_id": org_id, "event_id": ev["id"]}),
+               "created_by": user.get("email"), "created_at": _now(), "updated_at": _now()}
+        doc.update({k: v for k, v in (data or {}).items() if k != "name"})
+        await db.eventmap_races.insert_one({**doc})
+        doc.pop("org_id")
+        return doc
+
+    @r.post("/events/{eid}/races")
+    async def create_race(eid: str, body: RaceIn, user: dict = Depends(admin_dep)):
+        ev = await _event(user["org_id"], eid)
+        await _require_active(user["org_id"], eid)
+        data = await _check_race(user["org_id"], ev, body.model_dump(exclude_unset=True))
+        if not data.get("name"):
+            raise HTTPException(status_code=400, detail="Indica il nome della gara")
+        track = await _track(user["org_id"], data["track_id"]) if data.get("track_id") else None
+        rc = await _new_race(user, ev, track, data)
+        await audit(user, "eventmap_race_create", detail=f"{eid} · {rc['name']}")
+        return rc
+
+    @r.post("/events/{eid}/races/from-tracks")
+    async def races_from_tracks(eid: str, user: dict = Depends(admin_dep)):
+        ev = await _event(user["org_id"], eid)
+        await _require_active(user["org_id"], eid)
+        used = {x.get("track_id") for x in await _races(user["org_id"], eid)}
+        tracks = await db.eventmap_tracks.find({"org_id": user["org_id"], "event_id": eid, "id": {"$nin": list(used)}}, {"_id": 0, "storage": 0}).sort("created_at", 1).to_list(50)
+        out = [await _new_race(user, ev, t) for t in tracks]
+        await audit(user, "eventmap_race_from_tracks", detail=f"{eid} · {len(out)} gare")
+        return {"created": out}
+
+    @r.put("/races/{rid}")
+    async def update_race(rid: str, body: RaceIn, user: dict = Depends(admin_dep)):
+        rc = await _race(user["org_id"], rid)
+        ev = await _event(user["org_id"], rc["event_id"])
+        await _require_active(user["org_id"], rc["event_id"])
+        data = await _check_race(user["org_id"], ev, body.model_dump(exclude_unset=True))
+        await db.eventmap_races.update_one({"org_id": user["org_id"], "id": rid}, {"$set": {**data, "updated_at": _now(), "updated_by": user.get("email")}})
+        return await db.eventmap_races.find_one({"id": rid}, {"_id": 0, "org_id": 0})
+
+    @r.post("/races/{rid}/copy-from/{src}")
+    async def copy_race(rid: str, src: str, user: dict = Depends(admin_dep)):
+        rc, s = await _race(user["org_id"], rid), await _race(user["org_id"], src)
+        if rc["event_id"] != s["event_id"] or rid == src:
+            raise HTTPException(status_code=400, detail="Scegli un'altra gara dello stesso evento")
+        await _require_active(user["org_id"], rc["event_id"])
+        await db.eventmap_races.update_one({"id": rid}, {"$set": {**{k: s.get(k) for k in RACE_SETTINGS}, "updated_at": _now()}})
+        await audit(user, "eventmap_race_copy", detail=f"{s['name']} → {rc['name']}")
+        return await db.eventmap_races.find_one({"id": rid}, {"_id": 0, "org_id": 0})
+
+    @r.delete("/races/{rid}")
+    async def delete_race(rid: str, user: dict = Depends(admin_dep)):
+        rc = await _race(user["org_id"], rid)
+        await _require_active(user["org_id"], rc["event_id"])
+        await db.eventmap_races.delete_one({"org_id": user["org_id"], "id": rid})  # GPX e video restano in archivio
+        await audit(user, "eventmap_race_delete", detail=f"{rc['event_id']} · {rc['name']}")
+        return {"ok": True}
+
+    def _race_opts(rc, t):
+        return {"title": rc.get("title"), "subtitle": rc.get("subtitle"), "date": rc.get("date"),
+                "distance_display_m": round(rc["distance_km"] * 1000, 1) if rc.get("distance_km") else None,
+                **{k: rc.get(k, RACE_DEFAULTS.get(k)) for k in RACE_SETTINGS}, "aid_stations": _aid_list(t)}
+
+    async def _race_track(user, rid):
+        rc = await _race(user["org_id"], rid)
+        await _require_active(user["org_id"], rc["event_id"])
+        if not rc.get("track_id"):
+            raise HTTPException(status_code=400, detail="Associa un file GPX alla gara")
+        return rc, await _upgrade_track(await _track(user["org_id"], rc["track_id"])), await _event(user["org_id"], rc["event_id"])
+
+    @r.post("/races/{rid}/preview")
+    async def race_preview(rid: str, user: dict = Depends(admin_dep)):
+        rc, t, ev = await _race_track(user, rid)
+        opts = _race_opts(rc, t)
+        with tempfile.TemporaryDirectory() as tmp:
+            gpx, logo = await _job_files(tmp, t, ev, opts["logo"])
+            job = {**_base_job(t, ev, opts["style"], opts["format"], tmp, gpx, logo, opts), "still": True, "out_path": os.path.join(tmp, "preview.jpg")}
+            ok, err = await _run(job)
+            if not ok:
+                raise HTTPException(status_code=500, detail=f"Anteprima non riuscita{': ' + err if err else ''}")
+            return Response(content=open(job["out_path"], "rb").read(), media_type="image/jpeg")
+
+    @r.post("/races/{rid}/videos")
+    async def race_video(rid: str, user: dict = Depends(admin_dep)):
+        rc, t, ev = await _race_track(user, rid)
+        o = _race_opts(rc, t)
+        body = VideoIn(track_id=t["id"], **{k: o[k] for k in RACE_SETTINGS})
+        ver = await db.eventmap_videos.count_documents({"org_id": user["org_id"], "race_id": rid}) + 1
+        extra = {"race_id": rid, "race_name": rc["name"], "title": o["title"], "subtitle": o["subtitle"], "distance_display_m": o["distance_display_m"],
+                 "date": o["date"], "version": ver}
+        return await _enqueue(user, ev, t, body, extra)
 
     async def _require_active(org_id, eid):
         if not (await _rights(org_id, eid))["active"]:
@@ -117,9 +367,19 @@ def build(db, deps: dict):
             sm = ER.summary(data)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"GPX non valido: {e}" if isinstance(e, ValueError) else "GPX non valido: il file non è leggibile")
+        sha = hashlib.sha256(data).hexdigest()
+        async for old in db.eventmap_tracks.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0}):
+            if "sha256" not in old:  # GPX caricati prima: impronta calcolata una volta
+                try:
+                    old["sha256"] = hashlib.sha256(SU.read(old["storage"]["path"], old["storage"].get("backend"))[0]).hexdigest()
+                    await db.eventmap_tracks.update_one({"id": old["id"]}, {"$set": {"sha256": old["sha256"]}})
+                except Exception:
+                    continue
+            if old["sha256"] == sha:
+                return {**{k: v for k, v in old.items() if k not in ("storage", "preview")}, "duplicate": True}
         tid = uuid.uuid4().hex
         st = SU.save(f"eventmap/{user['org_id']}/{eid}/{tid}.gpx", data, "application/gpx+xml")
-        doc = {"id": tid, "org_id": user["org_id"], "event_id": eid, "name": name[:120], "storage": st, **sm, "created_by": user.get("email"), "created_at": _now()}
+        doc = {"id": tid, "org_id": user["org_id"], "event_id": eid, "name": name[:120], "storage": st, "sha256": sha, **sm, "created_by": user.get("email"), "created_at": _now()}
         await db.eventmap_tracks.insert_one({**doc})
         await audit(user, "eventmap_track_upload", detail=f"{eid} · {name} · {sm['distance_m']} m")
         return {k: v for k, v in doc.items() if k != "storage"}
@@ -236,20 +496,25 @@ def build(db, deps: dict):
         code = await p.wait()
         return code == 0 and os.path.exists(job["out_path"]), err
 
-    def _base_job(t, ev, style, fmt, tmp, gpx, logo):
-        return {"gpx_path": gpx, "style": style, "format": fmt, "title": ev.get("nome"), "date": _date_it(ev.get("data_inizio")),
-                "logo_path": logo, "cache_dir": CACHE, "ffmpeg": imageio_ffmpeg.get_ffmpeg_exe()}
+    def _base_job(t, ev, style, fmt, tmp, gpx, logo, opts):
+        return {"gpx_path": gpx, "style": style, "format": fmt, "title": opts.get("title") or ev.get("nome"), "subtitle": opts.get("subtitle") or "",
+                "distance_display_m": opts.get("distance_display_m"), "date": _date_it(opts.get("date") or ev.get("data_inizio")),
+                "logo_path": logo, "cache_dir": CACHE, "ffmpeg": imageio_ffmpeg.get_ffmpeg_exe(), "speed": opts.get("speed") or "normal",
+                "show_aid": opts.get("show_aid", True), "show_elevation": opts.get("show_elevation", True), "aid_stations": opts.get("aid_stations") or []}
 
     @r.post("/tracks/{tid}/preview")
     async def preview(tid: str, body: PreviewIn, user: dict = Depends(admin_dep)):
         t = await _track(user["org_id"], tid)
         ev = await _event(user["org_id"], t["event_id"])
         await _require_active(user["org_id"], t["event_id"])
-        if body.style not in STYLES or body.format not in ER.SIZES:
+        if body.style not in STYLES or body.format not in ER.SIZES or body.speed not in SPEEDS:
             raise HTTPException(status_code=400, detail="Stile o formato non valido")
+        t = await _upgrade_track(t)
+        opts = {"date": (await _settings(user["org_id"], t["event_id"])).get("date"), "speed": body.speed, "show_aid": body.show_aid,
+                "show_elevation": body.show_elevation, "aid_stations": _aid_list(t)}
         with tempfile.TemporaryDirectory() as tmp:
             gpx, logo = await _job_files(tmp, t, ev, body.logo)
-            job = {**_base_job(t, ev, body.style, body.format, tmp, gpx, logo), "still": True, "out_path": os.path.join(tmp, "preview.jpg")}
+            job = {**_base_job(t, ev, body.style, body.format, tmp, gpx, logo, opts), "still": True, "out_path": os.path.join(tmp, "preview.jpg")}
             ok, err = await _run(job)
             if not ok:
                 raise HTTPException(status_code=500, detail=f"Anteprima non riuscita{': ' + err if err else ''}")
@@ -268,7 +533,7 @@ def build(db, deps: dict):
                     gpx, logo = await _job_files(tmp, t, ev, v.get("logo", "event"))
                     if v.get("logo") and not logo:
                         raise RuntimeError("logo non disponibile")
-                    job = {**_base_job(t, ev, v["style"], v["format"], tmp, gpx, logo), "duration": v["duration"], "out_path": os.path.join(tmp, "video.mp4"),
+                    job = {**_base_job(t, ev, v["style"], v["format"], tmp, gpx, logo, v), "duration": v["duration"], "out_path": os.path.join(tmp, "video.mp4"),
                            "music_path": os.path.join(HERE, "eventmap_assets", "music", f"{v['music']}.mp3") if v.get("music") else None}
 
                     async def prog(n):
@@ -289,13 +554,16 @@ def build(db, deps: dict):
 
     @r.post("/events/{eid}/videos")
     async def create_video(eid: str, body: VideoIn, user: dict = Depends(admin_dep)):
-        await _event(user["org_id"], eid)
+        ev = await _event(user["org_id"], eid)
         t = await _track(user["org_id"], body.track_id)
         if t["event_id"] != eid:
             raise HTTPException(status_code=400, detail="La traccia appartiene a un altro evento")
-        if body.style not in STYLES or body.format not in ER.SIZES or body.duration not in DURATIONS or (body.music and body.music not in MUSIC):
+        return await _enqueue(user, ev, t, body, {"date": (await _settings(user["org_id"], eid)).get("date")})
+
+    async def _enqueue(user, ev, t, body: VideoIn, extra: dict):
+        eid = ev["id"]
+        if body.style not in STYLES or body.format not in ER.SIZES or body.duration not in DURATIONS or (body.music and body.music not in MUSIC) or body.speed not in SPEEDS:
             raise HTTPException(status_code=400, detail="Opzioni video non valide")
-        ev = await _event(user["org_id"], eid)
         if body.logo and body.logo != "event":
             await _logo_bytes(user["org_id"], ev, body.logo)
         elif body.logo == "event" and not await _logo_bytes(user["org_id"], ev, "event"):
@@ -311,14 +579,19 @@ def build(db, deps: dict):
             if rg["videos_remaining"] is not None and rg["videos_remaining"] <= 0:
                 raise HTTPException(status_code=403, detail={"code": "addon_videos", "message": "Non hai video disponibili: acquista un pacchetto Event Map nel Marketplace"})
             vid = uuid.uuid4().hex
+            t = await _upgrade_track(t)
+            # impostazioni fotografate alla richiesta: modifiche successive non cambiano i video già in coda
             doc = {"id": vid, "org_id": user["org_id"], "event_id": eid, "track_id": t["id"], "track_name": t.get("name"), "distance_m": t["distance_m"],
-                   "style": body.style, "format": body.format, "duration": body.duration, "music": body.music, "logo": body.logo, "status": "queued", "progress": 0,
+                   "style": body.style, "format": body.format, "duration": body.duration, "music": body.music, "logo": body.logo,
+                   **extra, "speed": body.speed, "show_aid": body.show_aid,
+                   "show_elevation": body.show_elevation and bool(t.get("has_elevation")), "aid_stations": _aid_list(t) if body.show_aid else [],
+                   "status": "queued", "progress": 0,
                    "created_by": user.get("email"), "created_at": _now()}
             await db.eventmap_videos.insert_one({**doc})
         task = asyncio.create_task(_process(vid))
         tasks.add(task)
         task.add_done_callback(tasks.discard)
-        await audit(user, "eventmap_video_request", detail=f"{eid} · {body.format} · {body.duration}s · {body.music or 'senza musica'}")
+        await audit(user, "eventmap_video_request", detail=f"{eid} · {extra.get('race_name') or t.get('name')} · {body.format} · {body.duration}s · {body.music or 'senza musica'}")
         return {k: v for k, v in doc.items() if k != "org_id"}
 
     @r.get("/videos/{vid}")
@@ -334,8 +607,9 @@ def build(db, deps: dict):
         if not v:
             raise HTTPException(status_code=404, detail="Video non disponibile")
         data, _ = SU.read(v["storage"]["path"], v["storage"].get("backend"))
-        base = re.sub(r"\.gpx$", "", v.get("track_name") or "percorso", flags=re.I)
-        name = re.sub(r"[^A-Za-z0-9_-]+", "-", f"event-map-{base}-{v['format'].replace(':', 'x')}-{v['duration']}s").strip("-")
+        base = v.get("race_name") or re.sub(r"\.gpx$", "", v.get("track_name") or "percorso", flags=re.I)
+        ver = f"-v{v['version']}" if v.get("version", 1) > 1 else ""
+        name = re.sub(r"[^A-Za-z0-9_-]+", "-", f"event-map-{base}-{v['format'].replace(':', 'x')}-{v['duration']}s{ver}").strip("-")
         disp = "attachment" if download else "inline"
         hdr = {"Content-Disposition": f'{disp}; filename="{name}.mp4"', "Accept-Ranges": "bytes"}
         m = re.match(r"bytes=(\d*)-(\d*)", request.headers.get("range") or "")

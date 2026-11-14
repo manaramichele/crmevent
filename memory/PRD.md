@@ -920,3 +920,50 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 
 
+
+## Event Map: data, velocità, ristori, altimetria (2026-11-14) — NON pubblicato
+- Data modificabile: eventmap_settings.date (PUT /api/eventmap/events/{eid}/settings, date reali validate, 422 altrimenti); anagrafica invariata.
+- Velocità: SPEEDS slow/normal/fast (fasi, zoom, smussamento camera); percorso sempre completo a t_end; scena finale ferma (t_settle ≤ 0.95).
+- Ristori: rilevati solo da waypoint GPX chiari (AID_RE con confini di parola, sym Drinking Water ecc., entro 300 m dal tracciato); modifica manuale PUT /api/eventmap/tracks/{tid}/aid-stations; icona, evidenziazione all'arrivo della camera, tacca sul profilo; interruttore.
+- Altimetria: profilo da <ele> (≥80% punti), fascia in basso adattata ai formati, indicatore sincronizzato con quota e km; nascosta con avviso se assente; interruttore.
+- Inquadratura finale calcolata tra scheda titolo e grafico. Anteprima a 2 pannelli (momento sul percorso + finale), non consuma video.
+- Snapshot impostazioni nel video doc; tracce vecchie aggiornate al primo accesso (_upgrade_track).
+- Frontend: components/eventmap/EventMapExtras.jsx (DateField, SpeedPick, AidEditor, ElevationToggle).
+- Test: iteration_161 (19/19 + 3 MP4 reali 15/30/60, credito non scalato in errore) + fix date/AID_RE/finale veloce/etichetta.
+- Aperto: nessun endpoint per eliminare tracce GPX duplicate; logo di default "event" via API senza logo anagrafica → nessun logo.
+
+
+## Event Planner in abbonamento per organizzazione (2026-11-14) — NON pubblicato
+- Accesso: (1) evento incluso nel piano SILVER/GOLD = 1 (config planner.included gold 1); attivazioni piano esistenti marcate `legacy` e conservate; (2) abbonamento Stripe per organizzazione (addon_grants scope "org", cycle semester/yearly, expires_at = current_period_end, aggiornato da customer.subscription.*); (3) omaggio Super Admin scope "org" con scadenza o illimitato.
+- Prezzo: marketplace_services key event-planner, price mensile (migrazione: annuale/12 → 29 €/mese), billing_cycles; totali ×6 / ×12 senza sconti. Price Stripe ricorrenti per ciclo in planner_prices.{mode}.{cycle}: riuso salvato → ricerca prezzo identico sul prodotto → creazione; mai modificati/disattivati prezzi esistenti (il vecchio Price ID non è più usato).
+- Scadenza: progetti consultabili in sola lettura (read_only), modifica bloccata; banner in EventPlanner.
+- Marketplace: card "Da 29 €/mese · Pagamento semestrale o annuale · Per organizzazione", dettaglio con selettore modalità e totale, stato abbonamento se attivo; ordinamento per campo Ordine crescente (+ nome), anche per categoria.
+- Super Admin: Modifica servizio Event Planner con prezzo mensile e modalità abilitate; AddonAdmin omaggio "tutti gli eventi".
+- Test: 22 pytest + verifica Stripe test (sessione subscription 174 € / 6 mesi e 348 € / 12 mesi, riuso price, webhook firmato attivazione/disdetta), UI Marketplace.
+
+
+## Event Map — gare indipendenti (2026-11-14) — NON pubblicato
+- Collezione `eventmap_races` (org_id, event_id, name, title, subtitle, date, distance_km, track_id, logo, style, format, duration, music, speed, show_aid, show_elevation, order). Endpoint: POST /api/eventmap/events/{eid}/races, POST .../races/from-tracks, PUT/DELETE /api/eventmap/races/{rid}, POST /races/{rid}/copy-from/{src}, /races/{rid}/preview, /races/{rid}/videos.
+- Video: race_id, race_name, title, subtitle, distance_display_m, date, version (rigenera = nuova versione). Crediti invariati (org, solo a completamento).
+- Compatibilità: evento con 1 GPX → scheda gara creata una sola volta (eventmap_settings.races_initialized); più GPX → banner «Crea schede gara dai GPX». GPX dedup via sha256. Eliminare una gara non tocca GPX/video. eventmap_races nella cascata eliminazione org.
+- Render: sottotitolo sotto il titolo, distanza ufficiale (scala km mostrati).
+- UI: RaceBar (Seleziona gara, Nuova, Modifica, Duplica), salvataggio automatico con flush al cambio gara, archivio con etichetta gara + filtro + Rigenera; anteprima sticky.
+- Test: tests/test_eventmap_races.py 13/13. Test legacy stale: test_eventmap_video.py (upload prima dell'attivazione), soglia pixel in test_eventmap_logo.py (render identico al commit precedente).
+
+## Rimozione testo "Silver ne include 1, Gold 3." (2026-11-14)
+- AddonHub.jsx (pagine /event-planner e /event-map, utenti senza eventi inclusi): frase rimossa; solo testo, nessuna regola cambiata. Verificato desktop e mobile.
+
+
+## Nuovo video demo Event Map "Green Valley Trail" (2026-11-14) — in attesa di approvazione
+- Pisa (mappa del vecchio demo) è piatta: quote reali 4–18 m (DEM Copernicus), profilo poco dimostrativo. Scelto percorso reale su strade OpenStreetMap (OSRM foot) Calci → Monte Serra (Monte Pisano, stessa zona di Pisa): 13,0 km, quote reali DEM Copernicus via Open-Meteo 41–919 m, D+ 1013 m. Nessun ristoro (nessuno nel GPX).
+- Generato con eventmap_render.py (sistema Event Map): 16:9 1920x1080, 30 s, stile scuro, musica originale «sportiva», logo fittizio generato con AI, «Powered by CRMEvent».
+- File: frontend/public/media/event-map-demo-gvt.mp4 (+ -poster.jpg); GPX e logo in /app/memory/demo_assets/. Homepage NON ancora aggiornata (usa ancora event-map-demo.mp4 in 9:16).
+- Prossimi passi dopo l'ok: sostituire il video in homepage (riquadro 16:9), anteprima Brevo con Play, pagina pubblica + URL stabili, download per il Super Admin, materiali Event Planner.
+
+
+## Materiali promozionali Brevo (2026-11-14) — NON pubblicato
+- Anteprime 16:9 1200×675 JPG (fascia titolo, Play centrale, logo CRMEvent): /media/brevo/event-planner-anteprima.jpg, /media/brevo/event-map-anteprima.jpg; script backend/scripts/make_brevo_previews.py.
+- Pagine pubbliche senza login: /video/event-planner, /video/event-map (PromoVideo.jsx, config lib/promoMaterials.js) con player, download MP4, CTA /registrati.
+- Event Map usa il video Green Valley Trail (event-map-demo-gvt.mp4); la homepage usa ancora il vecchio demo 9:16 finché non approvato lo scambio.
+- Super Admin: Marketing → Email & Brevo → tab «Materiali promozionali» (anteprime, download immagine/MP4, copia URL pagina/MP4/immagine, copia HTML Brevo).
+
