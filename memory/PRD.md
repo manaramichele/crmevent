@@ -912,4 +912,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Build: compression-webpack-plugin genera .gz per JS/CSS (CSS 199 KB → 36 KB). Serve `gzip_static on;` (o `gzip on; gzip_types text/css application/javascript;`) nell'nginx Aruba.
 - (2026-11-14) Testo statico ampliato: "Come funziona" + piani con prezzi mensili, limiti e inclusioni (valori presi da /api/saas/plans-public di produzione). Rapporto testo/HTML build 54%. Da aggiornare a mano se cambiano i prezzi.
 
+## Fix download Event Map + organizzazioni omaggio (2026-11-14) — NON pubblicato
+- Causa download: link diretto <a href> e <video src> senza header X-Org-Id → per Super Admin 428 "Seleziona un'organizzazione attiva". Fix: EventMapStudio VideoCard scarica/riproduce via api (axios, cookie + X-Org-Id) come blob; nome file come backend; errori leggibili.
+- Causa elenco: GET /api/platform/addons/orgs filtrava type in [cliente, None] → escluse le org Interne/Test (formula omaggio assegnata dal SA). Ora tutte le org tranne __platform__; campo `type` in risposta. Diritti (summary) già identici per pagante / omaggio cliente / interna con formula.
+- Test: tests/test_eventmap_download_free_orgs.py (8) + regressione planner/rights/addons; UI SA download verificato.
+- Nota test: test_addons_planner_eventmap imposta included_videos=2 senza ripristino (inquina altri test in preview).
+
+
 

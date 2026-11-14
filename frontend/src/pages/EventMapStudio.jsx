@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import api, { API, formatApiError } from "@/lib/api";
+import api, { formatApiError } from "@/lib/api";
 import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -69,19 +69,50 @@ function LogoPick({ eid, st, value, onChange, onUpload, onDelete, busy }) {
   );
 }
 
+const videoName = (v) => `event-map-${(v.track_name || "percorso").replace(/\.gpx$/i, "")}-${v.format.replace(":", "x")}-${v.duration}s`.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") + ".mp4";
+
+// Il file passa da una richiesta API autenticata (cookie + X-Org-Id): un link diretto non porterebbe l'organizzazione attiva.
+async function fetchVideo(v, download) {
+  try {
+    const { data } = await api.get(`/eventmap/videos/${v.id}/file`, { params: download ? { download: 1 } : {}, responseType: "blob" });
+    return new Blob([data], { type: "video/mp4" });
+  } catch (e) {
+    let msg = "Impossibile recuperare il video. Riprova.";
+    try { msg = formatApiError(JSON.parse(await e.response.data.text()).detail); } catch (_) { /* risposta non JSON */ }
+    toast.error(msg);
+    return null;
+  }
+}
+
 function VideoCard({ v }) {
   const [label, cls] = ST[v.status] || ST.queued;
-  const src = `${API}/eventmap/videos/${v.id}/file`;
+  const [url, setUrl] = useState(null);
+  const [busy, setBusy] = useState("");
   const vertical = v.format === "9:16";
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  const play = async () => { setBusy("play"); const b = await fetchVideo(v, false); if (b) setUrl(URL.createObjectURL(b)); setBusy(""); };
+  const download = async () => {
+    setBusy("dl");
+    const b = await fetchVideo(v, true);
+    if (b) {
+      const u = URL.createObjectURL(b);
+      const a = document.createElement("a");
+      a.href = u; a.download = videoName(v); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 60000);
+    }
+    setBusy("");
+  };
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2" data-testid={`em-video-${v.id}`}>
       <div className="flex items-center gap-2 text-xs"><span className={`rounded-full px-2 py-0.5 font-semibold ${cls}`} data-testid={`em-video-status-${v.id}`}>{label}{v.status === "processing" ? ` · ${v.progress || 0}%` : ""}</span>
         <span className="text-slate-500">{v.format} · {v.duration}s · {v.music || "senza musica"}</span></div>
-      {v.status === "completed" ? (
-        <video src={src} controls playsInline preload="metadata" className={`w-full rounded-lg bg-black ${vertical ? "max-h-[420px] object-contain" : ""}`} data-testid={`em-video-player-${v.id}`} />
+      {v.status === "completed" ? (url
+        ? <video src={url} controls autoPlay playsInline className={`w-full rounded-lg bg-black ${vertical ? "max-h-[420px] object-contain" : ""}`} data-testid={`em-video-player-${v.id}`} />
+        : <button type="button" onClick={play} disabled={!!busy} className="w-full h-32 rounded-lg bg-slate-900 text-white flex items-center justify-center gap-2 text-sm font-semibold hover:bg-slate-800" data-testid={`em-video-play-${v.id}`}>
+            {busy === "play" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}Riproduci</button>
       ) : v.status === "error" ? <p className="text-xs text-red-600">{v.error}</p> : <div className="h-24 flex items-center justify-center text-slate-400"><Loader2 className="w-5 h-5 animate-spin" /></div>}
       <div className="flex items-center justify-between text-xs text-slate-500"><span>{v.track_name} · {km(v.distance_m)}</span>
-        {v.status === "completed" && <a href={`${src}?download=1`} className="inline-flex items-center gap-1 font-semibold text-[#088F8A]" data-testid={`em-video-download-${v.id}`}><Download className="w-3.5 h-3.5" />Scarica MP4</a>}</div>
+        {v.status === "completed" && <button type="button" onClick={download} disabled={!!busy} className="inline-flex items-center gap-1 font-semibold text-[#088F8A] disabled:opacity-60" data-testid={`em-video-download-${v.id}`}>{busy === "dl" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}Scarica MP4</button>}</div>
     </div>
   );
 }
