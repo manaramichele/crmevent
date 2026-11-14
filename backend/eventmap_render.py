@@ -27,9 +27,30 @@ STYLES = {
                 "route": (230, 40, 70), "glow": (255, 90, 110), "text": (255, 255, 255)},
 }
 # velocità animazione: fasi (intro, fine percorso), zoom della camera che segue, oscillazione dello zoom, finestra di smussamento
-SPEEDS = {"slow": {"t_in": 0.16, "t_end": 0.78, "zoom": 1.45, "wob": 0.03, "win": 0.07},
-          "normal": {"t_in": 0.12, "t_end": 0.82, "zoom": 1.0, "wob": 0.08, "win": 0.04},
-          "fast": {"t_in": 0.07, "t_end": 0.85, "zoom": 0.72, "wob": 0.1, "win": 0.025}}
+SPEEDS = {"slow": {"t_in": 0.13, "t_end": 0.84, "zoom": 1.6, "wob": 0.03, "win": 0.08},
+          "normal": {"t_in": 0.11, "t_end": 0.85, "zoom": 1.2, "wob": 0.05, "win": 0.05},
+          "fast": {"t_in": 0.07, "t_end": 0.86, "zoom": 0.8, "wob": 0.08, "win": 0.03}}
+RAMP_S = 1.4  # secondi di frenata/ripartenza ai ristori
+
+
+def aid_pause_s(a, base, auto):
+    """Pausa per un ristoro: base, + tempo di lettura per testi lunghi (max +3 s) se richiesto."""
+    if base <= 0:
+        return 0.0
+    extra = max(0, len(a.get("name") or "") + len(a.get("desc") or "") - 40) * 0.04 if auto else 0
+    return float(base) + min(3.0, extra)
+
+
+def timing(duration, aids, speed="normal", pause=3, auto=False):
+    """Stessa logica per anteprima, MP4 e avviso: secondi di animazione e di pausa nella durata scelta."""
+    sp = SPEEDS.get(speed, SPEEDS["normal"])
+    window = duration * (sp["t_end"] - sp["t_in"])
+    pauses = sum(aid_pause_s(a, pause, auto) for a in aids)
+    move = window - pauses
+    need = max(6.0, 0.45 * window)
+    ok = move >= need
+    suggest = next((d for d in (15, 30, 60) if d * (sp["t_end"] - sp["t_in"]) - pauses >= max(6.0, 0.45 * d * (sp["t_end"] - sp["t_in"]))), None)
+    return {"window_s": round(window, 1), "pause_s": round(pauses, 1), "move_s": round(max(0.0, move), 1), "ok": ok, "suggest": None if ok else suggest}
 CHART_H = {"9:16": 210, "1:1": 150, "16:9": 150}
 AID_RE = re.compile(r"ristor|rifornim|refresh|aid ?station|feed ?zone|\bfood\b|\bdrinks?\b|\bwater\b(?! ?front)|\bacqua\b|spugna|ravitaill|verpfleg|avituall|vettovagl", re.I)
 AID_SYM = {"food", "drinking water", "water source", "restaurant", "water"}
@@ -284,6 +305,17 @@ def lerp(a, b, t):
     return a + (b - a) * t
 
 
+def ramp_pos(u, r1, r2):
+    """Posizione 0..1 con velocità costante e rampe sinusoidali (partenza/arrivo da fermo) di durata r1, r2 (frazioni)."""
+    vmax = 1 / (1 - (r1 + r2) / 2)
+    if r1 and u < r1:
+        return vmax * (u / 2 - r1 / (2 * math.pi) * math.sin(math.pi * u / r1))
+    if r2 and u > 1 - r2:
+        w = 1 - u
+        return 1 - vmax * (w / 2 - r2 / (2 * math.pi) * math.sin(math.pi * w / r2))
+    return vmax * (r1 / 2 + (u - r1))
+
+
 def fmt_km(m):
     return f"{m / 1000:.1f}".replace(".", ",") + " km"
 
@@ -306,6 +338,8 @@ class Renderer:
         self.t_settle = min(0.95, self.t_fin + 0.08)  # scena finale ferma negli ultimi istanti
         self.prof = profile(eles, self.dist) if job.get("show_elevation", True) else None
         self.aid = [dict(a, m=min(self.total, max(0.0, float(a["km"]) * 1000))) for a in (job.get("aid_stations") or [])] if job.get("show_aid", True) else []
+        self.aid.sort(key=lambda a: a["m"])
+        self._timeline(float(job.get("duration") or 30))
         lat_c = sum(p[0] for p in pts) / len(pts)
         span_m = max(hav((min(p[0] for p in pts), min(p[1] for p in pts)), (max(p[0] for p in pts), max(p[1] for p in pts))), 300)
         z = 15
@@ -378,6 +412,41 @@ class Renderer:
 
     def logo_bottom(self):
         return (int(LOGO_MARGIN * self.U) + self.logo.height + int(2 * LOGO_PAD * self.U)) if self.logo else 0
+
+    def _timeline(self, dur):
+        """Segmenti di movimento (rampe morbide) e soste ai ristori, in tempo normalizzato 0..1."""
+        a, b = self.sp["t_in"], self.sp["t_end"]
+        base, auto = float(self.job.get("aid_pause", 3) or 0), bool(self.job.get("aid_pause_auto"))
+        stops = [x for x in self.aid if 0 < x["m"] < self.total] if base > 0 else []
+        pauses = [aid_pause_s(x, base, auto) / dur for x in stops]
+        move = (b - a) - sum(pauses)
+        if move < 0.25 * (b - a):  # durata insufficiente: soste ridotte in proporzione (l'interfaccia lo segnala prima)
+            k = 0.75 * (b - a) / sum(pauses)
+            pauses, move = [p * k for p in pauses], 0.25 * (b - a)
+        marks = [0.0] + [x["m"] for x in stops] + [self.total]
+        rn = RAMP_S / dur
+        self.tl, t = [], a
+        for i in range(len(marks) - 1):
+            L = marks[i + 1] - marks[i]
+            T = move * L / self.total if self.total else 0
+            r1 = min(0.4, rn / T) if T and i > 0 else min(0.3, 0.5 * rn / T) if T else 0
+            r2 = min(0.4, rn / T) if T and i < len(marks) - 2 else min(0.2, 0.4 * rn / T) if T else 0
+            self.tl.append((t, t + T, marks[i], L, r1, r2, None))
+            t += T
+            if i < len(stops):
+                self.tl.append((t, t + pauses[i], marks[i + 1], 0, 0, 0, stops[i]))
+                t += pauses[i]
+
+    def state(self, t):
+        """(metri percorsi, ristoro in sosta o None, avanzamento 0..1 della sosta)."""
+        if t <= self.sp["t_in"]:
+            return 0.0, None, 0
+        for t0, t1, s0, L, r1, r2, stop in self.tl:
+            if t < t1:
+                if stop is not None:
+                    return s0, stop, (t - t0) / ((t1 - t0) or 1)
+                return s0 + L * ramp_pos((t - t0) / ((t1 - t0) or 1), r1, r2), None, 0
+        return self.total, None, 0
 
     def _static(self):
         """Elementi fissi: Powered by CRMEvent (non rimovibile) e attribuzione OpenStreetMap."""
@@ -459,31 +528,63 @@ class Renderer:
             layer.putalpha(layer.getchannel("A").point(lambda v: int(v * alpha)))
         base.alpha_composite(layer, (x0, y0))
 
-    def draw_aid(self, d, tr, m, t):
+    def draw_aid(self, d, tr, m, t, stop=None, sk=0):
         U = self.U
         win = max(self.total * 0.035, 150)
         for a in self.aid:
             px, py = tr(a["xy"])
             if not (-60 < px < self.W + 60 and -60 < py < self.H + 60):
                 continue
-            k = max(0.0, 1 - abs(m - a["m"]) / win) if t < self.t_fin else 0.0
+            here = stop is a
+            k = 1.0 if here else max(0.0, 1 - abs(m - a["m"]) / win) if t < self.t_fin else 0.0
             r = int((16 + 8 * k) * U)
             if k > 0:
-                rr = r + int(18 * U * k)
+                rr = r + int(18 * U * k * (0.8 + 0.2 * math.sin(sk * math.pi * 4) if here else 1))
                 d.ellipse((px - rr, py - rr, px + rr, py + rr), outline=(56, 189, 248, int(220 * k)), width=max(2, int(4 * U)))
             d.ellipse((px - r, py - r, px + r, py + r), fill=(14, 165, 233, 255), outline=(255, 255, 255, 255), width=max(2, int(3 * U)))
             c = r * 0.5  # icona bicchiere
             d.polygon([(px - c, py - c), (px + c, py - c), (px + c * 0.65, py + c), (px - c * 0.65, py + c)], fill=(255, 255, 255, 255))
-            if k > 0.25:
-                a8 = int(255 * min(1, (k - 0.25) / 0.3))
-                f1, f2 = font(26 * U), font(20 * U, False)
-                sub = f"km {str(a['km']).replace('.', ',')}" + (f" · {a['desc'][:34]}" if a.get("desc") else "")
-                tw = max(d.textlength(a["name"], font=f1), d.textlength(sub, font=f2), d.textlength("RISTORO", font=f2))
-                bx0, by1 = px - tw / 2 - 16 * U, py - r - 14 * U
-                d.rounded_rectangle((bx0, by1 - 96 * U, bx0 + tw + 32 * U, by1), radius=int(12 * U), fill=(8, 47, 73, int(a8 * 0.92)))
-                d.text((px, by1 - 86 * U), "RISTORO", font=f2, fill=(125, 211, 252, a8), anchor="mt")
-                d.text((px, by1 - 62 * U), a["name"], font=f1, fill=(255, 255, 255, a8), anchor="mt")
-                d.text((px, by1 - 32 * U), sub, font=f2, fill=(186, 230, 253, a8), anchor="mt")
+            show = (min(1.0, sk / 0.12, (1 - sk) / 0.12) if here else 0) if stop is not None else (min(1, (k - 0.6) / 0.3) if k > 0.6 else 0)
+            if show > 0:
+                self.aid_box(d, a, px, py, r, int(255 * max(0.0, show)))
+
+    def aid_box(self, d, a, px, py, r, a8):
+        """Riquadro informativo sopra il ristoro (non copre cursore e altimetria)."""
+        U = self.U
+        f0, f1, f2 = font(24 * U), font(36 * U), font(26 * U, False)
+        head = f"RISTORO · KM {str(round(float(a['km']), 1)).replace('.', ',')}"
+        name = (a.get("name") or "Ristoro")[:34]
+        maxw = min(self.W - 80 * U, 640 * U)
+        lines, cur = [], ""
+        for w in (a.get("desc") or "").split():
+            nxt = f"{cur} {w}".strip()
+            if d.textlength(nxt, font=f2) > maxw - 48 * U and cur:
+                lines.append(cur)
+                cur = w
+            else:
+                cur = nxt
+        if cur:
+            lines.append(cur)
+        if len(lines) > 2:
+            lines = lines[:2]
+            lines[1] = lines[1][:max(4, len(lines[1]) - 1)].rstrip() + "…"
+        tw = max([d.textlength(head, font=f0) + 40 * U, d.textlength(name, font=f1)] + [d.textlength(x, font=f2) for x in lines])
+        bw = min(maxw, tw + 48 * U)
+        bh = (40 + 48 + 36 * len(lines) + 24) * U
+        bx0 = min(max(40 * U, px - bw / 2), self.W - 40 * U - bw)
+        by1 = py - r - 22 * U
+        top = self.logo_bottom() + 12 * U
+        if by1 - bh < top:  # poco spazio sopra: riquadro sotto il ristoro, lontano dal cursore
+            by0 = py + r + 22 * U
+        else:
+            by0 = by1 - bh
+        d.rounded_rectangle((bx0, by0, bx0 + bw, by0 + bh), radius=int(16 * U), fill=(8, 30, 48, int(a8 * 0.94)), outline=(10, 186, 181, a8), width=max(2, int(3 * U)))
+        ix, iy = bx0 + 24 * U, by0 + 20 * U
+        d.polygon([(ix, iy), (ix + 22 * U, iy), (ix + 17 * U, iy + 24 * U), (ix + 5 * U, iy + 24 * U)], fill=(125, 211, 252, a8))
+        d.text((ix + 34 * U, iy - 1 * U), head, font=f0, fill=(125, 211, 252, a8))
+        d.text((bx0 + 24 * U, by0 + 56 * U), name, font=f1, fill=(255, 255, 255, a8))
+        for i, ln in enumerate(lines):
+            d.text((bx0 + 24 * U, by0 + (104 + 36 * i) * U), ln, font=f2, fill=(203, 230, 245, a8))
 
     def point_at(self, m):
         import bisect
@@ -499,17 +600,14 @@ class Renderer:
         return (sum(p[0] for p in xs) / len(xs), sum(p[1] for p in xs) / len(xs))
 
     def progress(self, t):
-        """Metri percorsi al tempo t: accelerazione e frenata morbide, percorso completo a t_end."""
-        a, b = self.sp["t_in"], self.sp["t_end"]
-        p = min(1.0, max(0.0, (t - a) / (b - a)))
-        return self.total * (0.8 * p + 0.2 * ease(p))
+        return self.state(t)[0]
 
     def t_for(self, m):
         lo, hi = self.sp["t_in"], self.sp["t_end"]
         for _ in range(40):
             mid = (lo + hi) / 2
             lo, hi = (mid, hi) if self.progress(mid) < m else (lo, mid)
-        return hi
+        return hi + 0.5 * next((x[1] - x[0] for x in self.tl if x[6] is not None and abs(x[2] - m) < 1), 0)  # a metà sosta, se c'è
 
     def camera(self, t):
         """Scene: intro (avvicinamento) · partenza · percorso con camera che segue · arrivo · finale panoramico."""
@@ -521,7 +619,7 @@ class Renderer:
             return (lerp(c0[0], c1[0], k), lerp(c0[1], c1[1], k)), w, 0.0
         if t < b:
             m = self.progress(t)
-            p = (t - a) / (b - a)
+            p = m / (self.total or 1)  # oscillazione legata alla posizione: ferma durante le soste
             return self.cam_follow(m), self.follow_w * (1 + self.sp["wob"] * math.sin(p * math.pi * 2)), m
         if t < self.t_fin:
             return self.cam_follow(self.total), self.follow_w, self.total
@@ -558,6 +656,7 @@ class Renderer:
 
     def frame(self, t):
         (cx, cy), w, m = self.camera(t)
+        _, stop, sk = self.state(t) if self.sp["t_in"] < t < self.sp["t_end"] else (0, None, 0)
         h = w * self.H / self.W
         x0, y0 = cx - w / 2, cy - h / 2
         base = self.mosaic.transform((self.W, self.H), Image.EXTENT, (x0, y0, x0 + w, y0 + h), Image.BILINEAR, fillcolor=self.st["bg"]).convert("RGBA")
@@ -597,7 +696,7 @@ class Renderer:
                     tw = d.textlength(wpt["name"], font=f)
                     d.rounded_rectangle((px - tw / 2 - 14 * U, py - 66 * U, px + tw / 2 + 14 * U, py - 22 * U), radius=int(10 * U), fill=(15, 23, 42, 230))
                     d.text((px, py - 44 * U), wpt["name"], font=f, fill=(255, 255, 255, 255), anchor="mm")
-        self.draw_aid(d, tr, m, t)
+        self.draw_aid(d, tr, m, t, stop, sk)
         a_in, fin = self.sp["t_in"] * 0.8, self.t_fin
         if a_in < t < fin + 0.02:
             hx, hy = tr(head)

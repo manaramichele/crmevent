@@ -38,6 +38,9 @@ def _included_videos(cfg: dict) -> int:
 PLANNER_CYCLES = {"semester": {"months": 6, "interval": "month", "count": 6, "label": "Semestrale"},
                   "yearly": {"months": 12, "interval": "year", "count": 1, "label": "Annuale"}}
 PLANNER_KEY = "event-planner"
+EVENTMAP_KEY = "event-map"
+EVENTMAP_DESC = ("Trasforma la traccia GPX del tuo evento in un video animato con il logo della manifestazione, pronto da condividere sui social. "
+                 "Abbonamento annuale valido per tutti gli eventi dell'organizzazione, con video inclusi ogni anno.")
 
 
 def planner_monthly(svc: dict) -> Optional[float]:
@@ -117,6 +120,10 @@ def build(db, deps: dict):
             if svc.get("price") is not None:
                 upd.update(price=planner_monthly(svc), price_type="monthly")
             await db.marketplace_services.update_one({"key": PLANNER_KEY}, {"$set": upd})
+        em = await db.marketplace_services.find_one({"key": EVENTMAP_KEY}, {"_id": 0})
+        if em and em.get("scope") != "org":  # una sola volta: Event Map in abbonamento annuale per organizzazione (prezzo configurato conservato)
+            await db.marketplace_services.update_one({"key": EVENTMAP_KEY}, {"$set": {"scope": "org", "price_type": "yearly", "purchasable": True, "description": EVENTMAP_DESC,
+                                                                               "videos_per_year": int(em.get("videos_per_year") or 1)}})
 
     async def get_config() -> dict:
         doc = await db.addon_config.find_one({"id": "config"}, {"_id": 0})
@@ -151,7 +158,7 @@ def build(db, deps: dict):
         covered_plan = {a["event_id"] for a in [x for x in plan_acts if not (product == "planner" and x.get("legacy"))][:limit]}
         if product == "planner" and limit:
             covered_plan |= {a["event_id"] for a in plan_acts if a.get("legacy")}
-        org_sub = next((g for g in grants if g.get("scope") == "org" and _valid(g, now)), None) if product == "planner" else None
+        org_sub = next((g for g in grants if g.get("scope") == "org" and _valid(g, now)), None)
         rows = []
         for a in acts:
             g = gmap.get(a["grant_id"])
@@ -174,9 +181,13 @@ def build(db, deps: dict):
             u = await db.addon_usage.find_one({"org_id": org_id, "product": product}, {"_id": 0}) or {}
             out["videos_total"] = _included_videos(cfg) * out["included_used"] + sum(int(g.get("videos_total") or 0) for g in valid)
             out["videos_used"] = int(u.get("videos_used") or 0)
-            out["videos_in_progress"] = await db.eventmap_videos.count_documents({"org_id": org_id, "status": {"$in": ["queued", "processing"]}})
+            out["videos_in_progress"] = await db.eventmap_videos.count_documents({"org_id": org_id, "status": {"$in": ["queued", "processing"]}, "regen": {"$ne": True}})
             out["videos_available"] = max(0, out["videos_total"] - out["videos_used"] - out["videos_in_progress"])
-            out["packages"] = [p for p in cfg.get("packages") or [] if p.get("active")]
+            out["packages"] = []  # Event Map si acquista solo in abbonamento annuale; i pacchetti già acquistati restano validi
+            svc = await db.marketplace_services.find_one({"key": EVENTMAP_KEY}, {"_id": 0}) or {}
+            out["yearly_price"] = float(svc["price"]) if svc.get("price") not in (None, "") and svc.get("price_type") == "yearly" else None
+            out["videos_per_year"] = int(svc.get("videos_per_year") or 1)
+            out["sale_open"] = svc.get("status") == "available"
         else:
             svc = await db.marketplace_services.find_one({"key": PLANNER_KEY}, {"_id": 0}) or {}
             m = planner_monthly(svc)
@@ -306,10 +317,12 @@ def build(db, deps: dict):
         product = _product(product)
         if not _can_buy(user):
             raise HTTPException(status_code=403, detail="Non hai il permesso di acquistare servizi Marketplace")
-        cfg = (await get_config())[product]
         s = await summary(user["org_id"], product)
         if product == "planner":
             return await _planner_checkout(body, user, s)
+        return await _eventmap_checkout(body, user, s)
+
+    async def _legacy_package_checkout(product, body, user, s, cfg):
         ev = await _event(user["org_id"], body.event_id) if body.event_id else None
         if ev and any(a["event_id"] == ev["id"] and a["covered"] for a in s["activations"]):
             raise HTTPException(status_code=400, detail=f"{PRODUCTS[product]} è già attivo per questo evento: nessun acquisto necessario")
@@ -348,9 +361,13 @@ def build(db, deps: dict):
         return {"checkout_url": sess.url}
 
     async def _planner_price(svc: dict, cycle: str, cents: int) -> str:
-        """Price ricorrente Stripe del ciclo: riusa quello salvato o uno esistente identico sul prodotto, altrimenti lo crea. Mai modificati i prezzi esistenti."""
-        mode, c = deps["stripe_mode"], PLANNER_CYCLES[cycle]
-        cur = ((svc.get("planner_prices") or {}).get(mode) or {}).get(cycle) or {}
+        c = PLANNER_CYCLES[cycle]
+        return await _recurring_price(PLANNER_KEY, "planner", "Event Planner", svc, cycle, cents, c["interval"], c["count"], c["label"])
+
+    async def _recurring_price(key, product, label, svc, cycle, cents, interval, count, clabel) -> str:
+        """Price ricorrente Stripe: riusa quello salvato o uno esistente identico sul prodotto, altrimenti lo crea. Mai modificati i prezzi esistenti."""
+        mode, field = deps["stripe_mode"], f"{product}_prices"
+        cur = ((svc.get(field) or {}).get(mode) or {}).get(cycle) or {}
         if cur.get("price_id") and cur.get("amount_cents") == cents:
             return cur["price_id"]
         prod = cur.get("product_id") or ((svc.get("stripe_prices") or {}).get(mode) or {}).get("product_id")
@@ -358,17 +375,47 @@ def build(db, deps: dict):
         if prod:
             for p in stripe_sdk.Price.list(product=prod, active=True, limit=100).auto_paging_iter():
                 rc = p.get("recurring") or {}
-                if p.get("currency") == "eur" and p.get("unit_amount") == cents and rc.get("interval") == c["interval"] and rc.get("interval_count") == c["count"]:
+                if p.get("currency") == "eur" and p.get("unit_amount") == cents and rc.get("interval") == interval and rc.get("interval_count") == count:
                     price = p
                     break
         else:
-            prod = stripe_sdk.Product.create(name="CRMEvent · Event Planner", tax_code="txcd_10103001", metadata={"kind": "addon", "product": "planner"}).id
+            prod = stripe_sdk.Product.create(name=f"CRMEvent · {label}", tax_code="txcd_10103001", metadata={"kind": "addon", "product": product}).id
         if not price:
-            price = stripe_sdk.Price.create(product=prod, currency="eur", unit_amount=cents, recurring={"interval": c["interval"], "interval_count": c["count"]},
-                                            nickname=f"Event Planner {c['label']}", metadata={"kind": "addon", "product": "planner", "cycle": cycle})
-        await db.marketplace_services.update_one({"key": PLANNER_KEY}, {"$set": {f"planner_prices.{mode}.{cycle}": {
-            "product_id": prod, "price_id": price["id"], "amount_cents": cents, "interval": c["interval"], "interval_count": c["count"], "updated_at": _iso(_now())}}})
+            price = stripe_sdk.Price.create(product=prod, currency="eur", unit_amount=cents, recurring={"interval": interval, "interval_count": count},
+                                            nickname=f"{label} {clabel}", metadata={"kind": "addon", "product": product, "cycle": cycle})
+        await db.marketplace_services.update_one({"key": key}, {"$set": {f"{field}.{mode}.{cycle}": {
+            "product_id": prod, "price_id": price["id"], "amount_cents": cents, "interval": interval, "interval_count": count, "updated_at": _iso(_now())}}})
         return price["id"]
+
+    async def _eventmap_checkout(body, user, s) -> dict:
+        if s.get("org_subscription") or s["unrestricted"]:
+            raise HTTPException(status_code=400, detail="Event Map è già attivo per la tua organizzazione: nessun acquisto necessario")
+        if not s.get("yearly_price") or s["yearly_price"] <= 0 or not s.get("sale_open"):
+            raise HTTPException(status_code=400, detail="Prezzo non ancora configurato dal team CRMEvent")
+        svc = await db.marketplace_services.find_one({"key": EVENTMAP_KEY}, {"_id": 0}) or {}
+        org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0})
+        missing = deps["billing_missing"](org.get("billing") or {})
+        if missing:
+            raise HTTPException(status_code=400, detail="Completa i dati di fatturazione: " + ", ".join(missing))
+        await db.addon_grants.update_many({"org_id": org["id"], "product": "eventmap", "scope": "org", "status": "pending"}, {"$set": {"status": "expired", "updated_at": _iso(_now())}})
+        gid = uuid.uuid4().hex
+        md = {"kind": "addon", "grant_id": gid, "org_id": org["id"], "product": "eventmap"}
+        try:
+            price_id = await _recurring_price(EVENTMAP_KEY, "eventmap", "Event Map", svc, "yearly", int(round(s["yearly_price"] * 100)), "year", 1, "annuale")
+            sess = stripe_sdk.checkout.Session.create(
+                customer=await deps["ensure_customer"](org, user), mode="subscription", locale="it", client_reference_id=org["id"], metadata=md,
+                line_items=[{"price": price_id, "quantity": 1}], subscription_data={"metadata": md},
+                success_url=f"{body.origin_url.rstrip('/')}/{SLUG['eventmap']}?session_id={{CHECKOUT_SESSION_ID}}", cancel_url=f"{body.origin_url.rstrip('/')}/marketplace?canceled=1")
+        except stripe_sdk.error.StripeError as e:
+            logger.error(f"eventmap checkout: {e}")
+            raise HTTPException(status_code=502, detail="Non è stato possibile avviare il pagamento. Riprova più tardi.")
+        await db.addon_grants.insert_one({
+            "id": gid, "org_id": org["id"], "product": "eventmap", "scope": "org", "source": "purchase", "status": "pending", "events_total": 0,
+            "videos_total": s["videos_per_year"], "videos_per_year": s["videos_per_year"], "formats": [], "cycle": "yearly", "price": s["yearly_price"],
+            "package_name": "Abbonamento annuale", "event_id": None, "expires_at": None, "stripe_session_id": sess.id, "stripe_price_id": price_id,
+            "stripe_mode": deps["stripe_mode"], "created_by": user.get("email"), "created_at": _iso(_now()),
+            "history": [{"at": _iso(_now()), "status": "pending", "by": user.get("email")}]})
+        return {"checkout_url": sess.url}
 
     async def _planner_checkout(body, user, s) -> dict:
         if s.get("org_subscription") or s["unrestricted"]:
@@ -457,7 +504,12 @@ def build(db, deps: dict):
             upd = {"expires_at": _sub_period_end(sub), "cancel_at_period_end": bool(sub.get("cancel_at_period_end")), "stripe_status": sub["status"], "updated_at": _iso(_now())}
             if st:
                 upd["status"] = st
-            await db.addon_grants.update_one({"id": obj["metadata"].get("grant_id"), "scope": "org", "status": {"$nin": ["pending", "revoked"]}}, {"$set": upd})
+            g = await db.addon_grants.find_one({"id": obj["metadata"].get("grant_id"), "scope": "org", "status": {"$nin": ["pending", "revoked"]}}, {"_id": 0})
+            inc = {}
+            if g and g.get("product") == "eventmap" and st == "active" and g.get("expires_at") and upd["expires_at"] and upd["expires_at"][:10] > g["expires_at"][:10]:
+                inc = {"$inc": {"videos_total": int(g.get("videos_per_year") or 1)}}  # rinnovo annuale: nuovi video inclusi
+            if g:
+                await db.addon_grants.update_one({"id": g["id"]}, {"$set": upd, **inc})
             return True
         return t.startswith("checkout.session.") or t.startswith("payment_intent.") or t.startswith("invoice.")
 
