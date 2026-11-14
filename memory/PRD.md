@@ -892,3 +892,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: iteration_159 (12/12 backend) + rerun 12/12 dopo i fix.
 - Aperto: acquisto Bronze "Attivazione per evento" senza video nel pacchetto → 0 video (decisione commerciale).
 
+## Fix Event Planner 500 KeyError org_id (2026-11-14) — NON pubblicato
+- Causa: GET /api/planner/events/{eid}/projects, /projects/{pid}, /projects/{pid}/revisions usavano get_current_user (senza org attiva) e leggevano user["org_id"] → KeyError per Super Admin "Accedi come" e utenti senza org_id sul documento utente.
+- Fix: letture con require_org_member (→ _resolve_active_org: membership attiva, X-Org-Id validato, sessioni assistenza); scritture invariate con require_admin (permessi + piano). Query sempre filtrate per org risolta dal backend.
+- File: backend/planner.py, backend/server.py (dep require_member), backend/tests/test_planner_org_scope.py (nuovo).
+- Test: 4/4 nuovi + 10/10 test_addons_planner_eventmap; pip check ok; requirements.txt invariato.
+
+
