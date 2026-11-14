@@ -336,7 +336,7 @@ export default function LandingPage() {
       <Section id="come-funziona" className="py-20">
         <div className="text-center max-w-2xl mx-auto"><Eyebrow>Come funziona</Eyebrow><H2>Parti in pochi minuti.</H2></div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-12">
-          {[["Crea il tuo evento", "Inserisci date e informazioni principali."], ["Aggiungi le persone", "Staff, volontari, aziende, sponsor e partner."], ["Organizza", "Assegna ruoli, team, turni, attività e follow-up."], ["Condividi", "Ogni persona trova le informazioni che le servono."]].map(([t, d], i) => (
+          {[["Crea il tuo evento", "Inserisci date e informazioni principali."], ["Aggiungi le persone", "Staff, volontari, aziende, sponsor e partner."], ["Organizza", "Assegna ruoli, team e turni."], ["Condividi", "Ogni persona trova le informazioni che le servono."]].map(([t, d], i) => (
             <div key={t} className="relative bg-white rounded-xl border border-slate-200 p-6">
               <div className="w-9 h-9 rounded-lg bg-tiffany text-slate-900 font-bold font-display flex items-center justify-center mb-4">{i + 1}</div>
               <h3 className="font-display font-bold text-slate-900">{t}</h3><p className="text-sm text-slate-500 mt-1.5">{d}</p></div>))}

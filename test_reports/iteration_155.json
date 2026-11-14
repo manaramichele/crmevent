@@ -1,0 +1,36 @@
+{
+  "summary": "Tested the simplification (Follow-up/Attività/Anagrafiche removed) and the referenti inside the company dialog, through the API and the UI (desktop 1920 and mobile 390). Almost everything works. Sidebar and mobile menu have no Anagrafiche/Attività/Follow-up. There is no notifications bell. /persone goes to /aziende; /attivita and /followup go to /app. The dashboard To Do List shows only Pipeline items. Azioni rapide has none of the removed actions. Company create/edit works: 4 fields per referente, the add button, confirm when removing a saved referente, values pre-filled when reopening, and edits stay after reload. A removed contact is unlinked but not deleted. Email matching ignores case and links the existing contact (cellulare matching was checked through the API). The detail dialog tabs are Anagrafica/Referenti/Eventi/Trattative/Sponsorship, and the Referenti tab is read-only with 'Modifica referenti'. GET/PUT referenti return 404 for another org. The permissions API has no hidden sections. The Super Admin integration page works: preview, run with confirm, links created, Telefono copied to Cellulare only when empty, a second run creates 0, restore works and a second restore returns 400. /prezzi is clean. Staff/Volontari, Sponsor, Eventi, Ospitalità and Marketplace load. One leftover: the 'Come funziona' step on the homepage still says 'follow-up'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/companies/{id}/referenti", "issue": "When an existing linked referente is edited, the new email/cellulare is not checked against other contacts, so two contacts can end up with the same email."},
+      {"endpoint": "PUT /api/companies/{id}/referenti", "issue": "When a new referente matches an existing contact by email or cellulare, the Nome/Cognome the user typed are thrown away without notice if the contact already has them (e.g. 'Anna2' typed, 'Anna' kept). Clearing all 4 fields of a saved referente also unlinks it without the confirm."},
+      {"endpoint": "GET /api/my/todo", "issue": "Still returns activity/followup items; the frontend TodoPanel filters them out (tipo==='pipeline'). Better to filter on the server."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Public homepage / 'Come funziona' (LandingPage.jsx line 339)", "issues": ["The 'Organizza' step still says 'Assegna ruoli, team, turni, attività e follow-up.' This is the only follow-up mention left on the homepage."]},
+      {"screen": "Legal.jsx (privacy, Google Calendar section, lines 279/336)", "issues": ["Still mentions syncing 'attività e follow-up'. It may be kept on purpose as legal text; please check."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_referenti_inline.py", "/app/test_reports/pytest/pytest_referenti.xml"],
+  "action_items": [
+    "Remove 'e follow-up' from the 'Organizza' step in LandingPage.jsx (line 339)",
+    "Optional: in PUT referenti, check for duplicates when an existing referente's email/cellulare is changed",
+    "Optional: filter /my/todo to pipeline items on the server"
+  ],
+  "critical_code_review_comments": [
+    "put_company_referenti: N+1 queries per referente (fine at max 100). The cellulare match uses a regex on the last 6 digits plus a full 9-digit compare: correct, but it cannot use an index.",
+    "referenti_integrazione.run loops over all orgs and writes to the DB one record at a time; fine at current size. Restore is protected by origine='integrazione_referenti' and only puts back a cellulare if it still equals the copied value. Good.",
+    "PlatformReferenti: a run with 0 changes still shows a 'Ripristina' button (harmless, but it adds clutter)."
+  ],
+  "updated_files": ["/app/backend/tests/test_referenti_inline.py"],
+  "success_rate": {"backend": "100% (11/11 pytest + integration run/idempotency/restore script)", "frontend": "97% (one homepage follow-up text left)"},
+  "seed_data_creation": "Created TEST_RefInline_a_82523d, TEST_RefInline_a_b5a853, TEST_RefInline_b_622fa5 (all deleted with their data by org_id). Added 3 TEST_Leg persons through mongo for the integration test (deleted with the org). The integration was run twice on preview and both runs that created links were restored, so TabTest Org is back to its original state (2 pending links). 3 run records stay in referenti_integrazione_runs (2 ripristinato, 1 with 0 changes).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression test file: backend/tests/test_referenti_inline.py (it registers its own TEST_ orgs; the teardown writes them to /tmp/ri_created_orgs.txt; delete them afterwards). The company row has a hidden mobile card duplicate, so use locator('tr', has_text=...). The permissions editor needs a staff person to open; the hidden sections were checked through GET /api/org/permissions."
+}

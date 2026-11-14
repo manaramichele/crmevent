@@ -2229,6 +2229,9 @@ async def put_company_referenti(company_id: str, body: ReferentiIn, admin: dict 
         if not any(vals.values()):
             continue
         if r.person_id and r.person_id in current:
+            if vals["email"] and vals["email"].lower() != (current[r.person_id]["person"].get("email") or "").lower() and await db.persons.find_one(
+                    {"org_id": oid, "id": {"$ne": r.person_id}, "email": {"$regex": f"^{re.escape(vals['email'])}$", "$options": "i"}}, {"_id": 1}):
+                raise HTTPException(status_code=400, detail=f"L'email {vals['email']} è già usata da un altro contatto")
             await db.persons.update_one({"id": r.person_id, "org_id": oid}, {"$set": {**vals, "updated_at": datetime.now(timezone.utc).isoformat()}})
             keep.add(r.person_id)
             continue

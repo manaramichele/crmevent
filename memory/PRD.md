@@ -831,3 +831,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Aggiunto GET /api/health (ping MongoDB in sola lettura, 200 {"status":"ok"} / 503).
 - Blocco sostitutivo in /app/deploy/backend-readiness.sh: tentativi ogni 5s fino a 120s, verifica systemd + HTTP, 502/503/000 temporanei, riserva /docs se /api/health risponde 404, `false` finale → rollback come prima. Testato con simulazioni (502→200, mai pronto, 404→/docs).
 - Da applicare a mano sul server Aruba (backup dello script originale); non ancora applicato.
+
+## Semplificazione menu e referenti in Aziende (2026-11-14) — ANTEPRIMA, NON PUBBLICATA
+- Rimossi dall'interfaccia Follow-up, Attività (sezioni autonome) e Anagrafiche: menu, rotte (redirect /persone→/aziende, /attivita e /followup→/app), azioni rapide, tour, assistente, tab scheda azienda, campanella notifiche (solo follow-up), To Do List (solo Pipeline), homepage, piani /prezzi (VISIBLE_FEATURES), editor permessi (HIDDEN_SECTIONS). Dati e endpoint backend conservati. KB assistente: voci archiviate.
+- Referenti: GET/PUT /api/companies/{id}/referenti (Nome, Cognome, Email, Cellulare) sui contatti esistenti collegati (person_companies + azienda_id legacy), dedupe per email/cellulare, rimozione = scollegamento. UI: components/ReferentiFields.jsx in CompanyDialog.
+- Super Admin /piattaforma/integrazione-referenti (backend/referenti_integrazione.py): anteprima, esecuzione con backup (referenti_integrazione_runs), ripristino; idempotente.
+- Test iteration_155: backend 100%, frontend OK (testo homepage corretto dopo il test). Aperto: Legal.jsx cita ancora "attività e follow-up" (testo legale, da confermare con l'utente).
+- In pausa: video promozionale Event Planner (scripts/planner_video/record.py, registrazione con Playwright + MapTiler; bloccata da lentezza WebGL in registrazione).
