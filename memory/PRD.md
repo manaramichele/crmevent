@@ -850,3 +850,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Event Map: video verticale 20 s 540x960 (event-map-demo.mp4/.webm + poster), generato con MapLibre/MapTiler (scripts/planner_video/render_eventmap.py), dichiarato "Esempio dimostrativo · risultato previsto" (Event Map non esiste ancora). Logo evento fittizio "PISA RUN" grande, "Powered by CRMEvent" piccolo.
 - Homepage: components/landing/EventMapSection.jsx (sotto Event Planner), CTA unica "Registrati a CRMEvent" in entrambe. Video: autoplay muto, loop, playsInline, preload none + caricamento solo se visibile.
 - In attesa: Event Map applicativo vero + pacchetti/assegnazioni/campagne Super Admin (prezzi da approvare dall'utente).
+
+## Riorganizzazione homepage (2026-11-14) — ANTEPRIMA, NON PUBBLICATA
+- Ordine: Hero (immagine reale Event Planner, /media/hero-event-planner.webp|jpg) → Funzionalità (10 schede, Event Map "In arrivo") → Staff & Volontari (mock Maratona di Pisa, 13 Dic 2026 esempio) → Sponsor (pipeline sponsor sportivi, esempio) → Event Planner video → Event Map video → Come funziona (4 passi) → CTA registrati → Prezzi.
+- Rimosse: Problema, Multi-evento, Per chi è, Meno fogli Excel, Guarda CRMEvent in azione, DashboardMock. Tutti i CTA "Registrati gratis" → /registrati. Menu desktop da xl (≥1280px), sotto hamburger.
+- Test: iteration_156 ok (header affollato a lg sistemato dopo).
+

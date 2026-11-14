@@ -39,7 +39,7 @@ function BrowserFrame({ children, url = "app.crmevent.it" }) {
     <div className="rounded-xl border border-slate-200 shadow-2xl shadow-slate-300/40 overflow-hidden bg-white">
       <div className="h-9 bg-slate-50 border-b border-slate-200 flex items-center px-3 gap-1.5">
         <span className="w-3 h-3 rounded-full bg-red-300" /><span className="w-3 h-3 rounded-full bg-amber-300" /><span className="w-3 h-3 rounded-full bg-emerald-300" />
-        <div className="ml-3 flex-1 h-5 rounded bg-white border border-slate-200 text-[10px] text-slate-400 flex items-center px-2">{url}</div>
+        <div className="ml-3 flex-1 h-5 rounded bg-white border border-slate-200 text-[10px] text-slate-400 flex items-center px-2 min-w-0"><span className="truncate">{url}</span></div>
       </div>
       <div className="bg-slate-50/60">{children}</div>
     </div>
@@ -53,7 +53,7 @@ function PipelineMock() {
     ["Confermato", [["Banca del Territorio", "Title sponsor", "€ 25.000"]], "border-t-emerald-400"]];
   return (
     <div className="text-left" data-testid="home-sponsor-pipeline">
-      <div className="px-4 pt-3 flex items-center justify-between"><span className="text-xs font-semibold text-slate-700">Sponsor · Maratona di Pisa (esempio)</span><span className="text-[10px] text-slate-400">Pipeline € 46.500</span></div>
+      <div className="px-4 pt-3 flex items-center justify-between"><span className="text-xs font-semibold text-slate-700">Sponsor · Maratona di Pisa (esempio)</span><span className="text-[11px] text-slate-500">Pipeline € 46.500</span></div>
       <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
         {cols.map(([t, cards, b]) => (
           <div key={t} className={`bg-slate-50 rounded-lg border border-slate-200 border-t-4 ${b}`}>
@@ -61,7 +61,7 @@ function PipelineMock() {
             <div className="p-1.5 space-y-1.5">
               {cards.map(([n, p, v]) => (<div key={n} className="bg-white rounded border border-slate-200 p-2">
                 <div className="text-[10px] font-semibold text-slate-800 leading-tight">{n}</div>
-                <div className="text-[9px] text-slate-400 mt-0.5">{p}</div><div className="text-[10px] font-semibold text-tiffany-active mt-0.5">{v}</div></div>))}
+                <div className="text-[10px] text-slate-500 mt-0.5">{p}</div><div className="text-[10px] font-semibold text-tiffany-active mt-0.5">{v}</div></div>))}
             </div>
           </div>))}
       </div>
@@ -196,17 +196,17 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 bg-[#FFFFFF] border-b border-slate-100 pt-[env(safe-area-inset-top)]" data-testid="landing-header">
         <div className="max-w-6xl mx-auto px-6 min-h-[4.75rem] py-2.5 flex items-center justify-between">
           <Link to="/" data-testid="landing-logo"><img src="/logo-crmevent-header.png?v=1" alt="CRMEvent" className="h-14 sm:h-16 w-auto" /></Link>
-          <nav className="hidden lg:flex items-center gap-7">
-            {NAV.map(([l, id]) => <button key={id} onClick={() => scrollTo(id)} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{l}</button>)}
+          <nav className="hidden xl:flex items-center gap-6 mx-6">
+            {NAV.map(([l, id]) => <button key={id} onClick={() => scrollTo(id)} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap">{l}</button>)}
           </nav>
-          <div className="hidden lg:flex items-center gap-3">
+          <div className="hidden xl:flex items-center gap-4 shrink-0">
             <Link to="/login" data-testid="landing-login" className="text-sm font-semibold text-slate-700 hover:text-slate-900">Accedi</Link>
             <Link to="/registrati" data-testid="landing-try-cta" className="cta-shimmer h-10 px-5 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center">Registrati gratis</Link>
           </div>
-          <button className="lg:hidden" onClick={() => setOpen((o) => !o)} data-testid="landing-menu">{open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
+          <button className="xl:hidden" onClick={() => setOpen((o) => !o)} data-testid="landing-menu">{open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
         </div>
         {open && (
-          <div className="lg:hidden border-t border-slate-100 bg-[#FFFFFF] px-6 py-4 space-y-3" data-testid="landing-mobile-menu">
+          <div className="xl:hidden border-t border-slate-100 bg-[#FFFFFF] px-6 py-4 space-y-3" data-testid="landing-mobile-menu">
             {NAV.map(([l, id]) => <button key={id} onClick={() => goMobile(id)} className="block text-sm font-medium text-slate-600">{l}</button>)}
             <div className="flex gap-3 pt-2"><Link to="/login" className="flex-1 h-10 rounded-lg border border-slate-200 flex items-center justify-center text-sm font-semibold">Accedi</Link>
               <Link to="/registrati" onClick={() => setOpen(false)} data-testid="landing-mobile-try-cta" className="cta-shimmer flex-1 h-10 rounded-lg bg-tiffany text-slate-900 text-sm font-semibold flex items-center justify-center">Registrati gratis</Link></div>
@@ -232,7 +232,7 @@ export default function LandingPage() {
             <BrowserFrame url="app.crmevent.it/eventi/maratona-di-pisa/planner">
               <picture>
                 <source srcSet="/media/hero-event-planner.webp" type="image/webp" />
-                <img src="/media/hero-event-planner.jpg" width="672" height="570" fetchpriority="high" alt="Event Planner di CRMEvent: area arrivo della Maratona di Pisa con segreteria, arco di arrivo, corridoio transennato, ristoro, palco premiazioni e stand sponsor" className="block w-full h-auto" />
+                <img src="/media/hero-event-planner.jpg" width="672" height="570" fetchPriority="high" alt="Event Planner di CRMEvent: area arrivo della Maratona di Pisa con segreteria, arco di arrivo, corridoio transennato, ristoro, palco premiazioni e stand sponsor" className="block w-full h-auto" />
               </picture>
             </BrowserFrame>
             <p className="mt-2 text-xs text-slate-400 text-right">Event Planner · esempio con percorso dimostrativo</p>
@@ -263,7 +263,7 @@ export default function LandingPage() {
               {[["Quando", "Data e ora di arrivo"], ["Dove", "Luogo e punto di ritrovo"], ["Cosa", "Ruolo e attività"], ["Con chi", "Team e colleghi"], ["Turni", "Programma personale"], ["Mappe", "Percorsi e info operative"]].map(([t, d]) => (
                 <div key={t} className="bg-white/5 rounded-lg p-3 ring-1 ring-white/10"><div className="text-tiffany text-sm font-semibold">{t}</div><div className="text-slate-300 text-xs mt-0.5">{d}</div></div>))}
             </div>
-            <button onClick={() => scrollTo("demo")} className="mt-8 inline-flex items-center gap-2 text-tiffany font-semibold hover:gap-3 transition-all">Scopri la gestione Staff & Volontari <ArrowRight className="w-4 h-4" /></button>
+            <button onClick={() => scrollTo("registrati")} className="mt-8 inline-flex items-center gap-2 text-tiffany font-semibold hover:gap-3 transition-all">Scopri la gestione Staff & Volontari <ArrowRight className="w-4 h-4" /></button>
           </div>
           <PhoneFrame><VolunteerMock /></PhoneFrame>
         </div>
@@ -275,11 +275,11 @@ export default function LandingPage() {
           <div><Eyebrow>Sponsor & Partner</Eyebrow><H2>Dai contatti alle partnership.</H2>
             <p className="text-slate-500 mt-5 max-w-lg">Gestisci aziende e referenti, invia proposte commerciali e segui ogni trattativa fino alla partnership firmata: title sponsor, fornitori del ristoro, stand expo e pacco gara in un'unica pipeline.</p>
             <div className="flex flex-wrap gap-2 mt-6">
-              {["Prospect", "Contattato", "Interessato", "Proposta inviata", "Negoziazione", "Confermato"].map((s, i) => (
-                <span key={s} className={`px-3 py-1.5 rounded-full text-xs font-semibold ${i === 5 ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-tiffany-light text-tiffany-fg ring-1 ring-tiffany-border"}`}>{s}</span>))}
+              {["Prospect", "Proposta inviata", "In trattativa", "Confermato"].map((s, i) => (
+                <span key={s} className={`px-3 py-1.5 rounded-full text-xs font-semibold ${i === 3 ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-tiffany-light text-tiffany-fg ring-1 ring-tiffany-border"}`}>{s}</span>))}
             </div>
             <div className="grid grid-cols-2 gap-3 mt-6 max-w-md text-sm">
-              {[["Valore pipeline", "€ 46.500"], ["Confermato", "€ 25.000"], ["Proposte inviate", "4 aziende"], ["Evento", "Maratona di Pisa"]].map(([l, v]) => (
+              {[["Valore pipeline", "€ 46.500"], ["Confermato", "€ 25.000"], ["Aziende in pipeline", "6 aziende"], ["Evento", "Maratona di Pisa"]].map(([l, v]) => (
                 <div key={l} className="bg-white rounded-lg border border-slate-200 p-3"><div className="text-[11px] text-slate-400 uppercase font-semibold">{l}</div><div className="font-semibold text-slate-800">{v}</div></div>))}
             </div>
           </div>

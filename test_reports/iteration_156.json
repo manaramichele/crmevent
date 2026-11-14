@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only test of the reorganized public homepage (/) at 1920, 1280, 1024 and 390px. Section order is correct: funzionalita, staff, sponsor, event-planner, event-map, come-funziona, registrati, prezzi. All removed texts are absent (Multi-evento, Azienda X/Persona Y, Per chi è, Triathlon, Meno fogli Excel, Prima/Con CRMEvent, Guarda CRMEvent in azione, 'Organizzare un evento significa gestire centinaia', Green Food Festival, Prova Event Planner/Map, follow-up, Richiedi una demo). The hero title, subtitle, 14-day trial note and no-card note match the request. The hero image loads (webp, naturalWidth 672). There are 10 feature cards in the requested order, and Event Map has the 'In arrivo' badge. The phone mock shows Maratona di Pisa, Addetto ristoro, Volontari percorso, Area arrivo and Google Calendar (13 Dic 2026 is a Sunday). Sponsor pipeline values add up to € 46.500. Both videos are muted and looping, start playing when scrolled into view, and keep advancing (2.9s to 4.4s). All 8 'Registrati gratis' CTAs open /registrati, and the planner/map buttons add ?da=event-planner / ?da=event-map. The 7 desktop nav buttons scroll each section to 53px below the viewport top. The mobile menu works and closes after each choice. Mobile has no horizontal overflow (scrollWidth 390), and the sponsor pipeline (2x2) and features are readable. Title and meta/OG tags are kept. The only console errors are expected 401s from /api/auth/me for anonymous users.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Landing header (lg 1024-1279px)", "issue": "The nav is too crowded: labels wrap to 2 lines ('Staff & / Volontari', 'Come / funziona', 'Registrati / gratis'), and there is 0px between logo and nav and between 'Prezzi' and 'Accedi'. At 1280 and 1920 those gaps are still only 2px, so 'PrezziAccedi' looks glued together.", "selector": "[data-testid=landing-header] nav", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Staff & Volontari", "issues": ["The 'Scopri la gestione Staff & Volontari' button calls scrollTo('demo'). That goes to the empty <span id=demo> after the register CTA, which is confusing now the demo form is gone. Point it to #registrati or /registrati."]},
+      {"screen": "Sponsor & Partner", "issues": ["The stage pills (Contattato/Interessato/Negoziazione) don't match the mock columns (Prospect/Proposta inviata/In trattativa/Confermato).", "'Proposte inviate: 4 aziende' doesn't match the single card in the 'Proposta inviata' column.", "Mock text is 9-10px, with slate-400 sub-labels: low contrast on desktop."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix header crowding at lg (1024-1279px): show the full nav only from xl, or shrink the gap/labels, and add a margin between logo/nav and nav/Accedi",
+    "Change the Staff section 'Scopri...' button target from #demo to #registrati or /registrati, and remove the unused <span id='demo'>",
+    "Optional: remove the dead DemoForm component in LandingPage.jsx (unused, about 65 lines)",
+    "Optional: make the sponsor pill labels and the 'Proposte inviate' count match the pipeline mock"
+  ],
+  "critical_code_review_comments": [
+    "The DemoForm component in LandingPage.jsx is never rendered (dead code).",
+    "PlannerDemoSection returns null when /api/public/planner-demo has abilitata=false. The 'Event Planner' nav button and the section order then break silently. It is currently true.",
+    "The hero <img> used a lowercase 'fetchpriority' attribute, which made React 19 log a console warning. Fixed to fetchPriority."
+  ],
+  "updated_files": ["/app/frontend/src/pages/LandingPage.jsx (fetchpriority -> fetchPriority)"],
+  "success_rate": {"backend": "N/A", "frontend": "97%"},
+  "seed_data_creation": "None. No accounts registered and no forms submitted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The homepage is in LandingPage.jsx and components/landing/*. Accept the cookie banner with the 'Accept all' button. The 401 from /api/auth/me is expected for anonymous users. The Event Planner section depends on GET /api/public/planner-demo returning abilitata:true."
+}
