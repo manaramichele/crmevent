@@ -6,13 +6,13 @@ import { ArrowRight, Users, ListChecks, Route, Handshake, FileText, CalendarDays
 
 const VIDEO_MP4 = "/media/event-planner-demo.mp4";
 const VIDEO_WEBM = "/media/event-planner-demo.webm";
-const POSTER = "/media/event-planner-poster.jpg";
+const POSTER = "/media/event-planner-demo-poster.jpg";
 const LINKS = [[Users, "Staff e volontari", "persone assegnate alle postazioni"], [ListChecks, "Pipeline evento", "compiti operativi legati all'evento"],
   [Route, "Percorsi", "tracciati dell'evento"], [Handshake, "Sponsor e partner", "aree sponsor sulla mappa"],
   [FileText, "Briefing", "informazioni operative condivise"], [CalendarDays, "Eventi", "ogni planimetria è legata al suo evento"]];
 
-// Il video si scarica e parte solo quando la sezione è visibile; fuori schermo va in pausa.
-function DemoVideo() {
+// Il video si scarica e parte solo quando è visibile; fuori schermo va in pausa.
+export function DemoVideo({ mp4 = VIDEO_MP4, webm = VIDEO_WEBM, poster = POSTER, label = "Video dimostrativo di Event Planner", testid = "home-planner-video", className = "aspect-video" }) {
   const ref = useRef(null);
   useEffect(() => {
     const v = ref.current;
@@ -24,11 +24,11 @@ function DemoVideo() {
     return () => io.disconnect();
   }, []);
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_30px_80px_-20px_rgba(15,23,42,0.35)] ring-1 ring-black/5" data-testid="home-planner-video-wrap">
-      <video ref={ref} className="block aspect-video h-auto w-full" muted loop playsInline preload="none" poster={POSTER}
-        aria-label="Video dimostrativo di Event Planner" data-testid="home-planner-video">
-        <source src={VIDEO_WEBM} type="video/webm" />
-        <source src={VIDEO_MP4} type="video/mp4" />
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_30px_80px_-20px_rgba(15,23,42,0.35)] ring-1 ring-black/5" data-testid={`${testid}-wrap`}>
+      <video ref={ref} className={`block h-auto w-full ${className}`} muted loop playsInline preload="none" poster={poster}
+        aria-label={label} data-testid={testid}>
+        <source src={webm} type="video/webm" />
+        <source src={mp4} type="video/mp4" />
       </video>
     </div>
   );

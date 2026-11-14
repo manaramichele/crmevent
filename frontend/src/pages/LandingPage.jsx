@@ -5,6 +5,7 @@ import { trackEvent } from "@/lib/analytics";
 import Footer from "@/components/Footer";
 import PlansSection from "@/components/PlansSection";
 import PlannerDemoSection from "@/components/landing/PlannerDemoSection";
+import EventMapSection from "@/components/landing/EventMapSection";
 import { toast } from "sonner";
 import {
   CalendarDays, Building2, Users, Handshake, UserCog, Users2, Clock, Map as MapIcon,
@@ -268,6 +269,7 @@ export default function LandingPage() {
       </Section>
 
       <PlannerDemoSection />
+      <EventMapSection />
 
       {/* Funzionalità */}
       <Section id="funzionalita" className="py-20">
