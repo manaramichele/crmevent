@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
+import { DateField, SpeedPick, ElevationToggle, AidEditor } from "@/components/eventmap/EventMapExtras";
 import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -105,7 +106,7 @@ function VideoCard({ v }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2" data-testid={`em-video-${v.id}`}>
       <div className="flex items-center gap-2 text-xs"><span className={`rounded-full px-2 py-0.5 font-semibold ${cls}`} data-testid={`em-video-status-${v.id}`}>{label}{v.status === "processing" ? ` · ${v.progress || 0}%` : ""}</span>
-        <span className="text-slate-500">{v.format} · {v.duration}s · {v.music || "senza musica"}</span></div>
+        <span className="text-slate-500">{v.format} · {v.duration}s · {v.music || "senza musica"}{v.speed ? ` · ${{ slow: "lenta", normal: "normale", fast: "veloce" }[v.speed]}` : ""}</span></div>
       {v.status === "completed" ? (url
         ? <video src={url} controls autoPlay playsInline className={`w-full rounded-lg bg-black ${vertical ? "max-h-[420px] object-contain" : ""}`} data-testid={`em-video-player-${v.id}`} />
         : <button type="button" onClick={play} disabled={!!busy} className="w-full h-32 rounded-lg bg-slate-900 text-white flex items-center justify-center gap-2 text-sm font-semibold hover:bg-slate-800" data-testid={`em-video-play-${v.id}`}>
@@ -121,7 +122,7 @@ export default function EventMapStudio() {
   const { id } = useParams();
   const [st, setSt] = useState(null);
   const [opt, setOpt] = useState(null);
-  const [f, setF] = useState({ track_id: "", style: "dark", format: "9:16", duration: 30, music: "sportiva", logo: undefined });
+  const [f, setF] = useState({ track_id: "", style: "dark", format: "9:16", duration: 30, music: "sportiva", logo: undefined, speed: "normal", show_aid: true, show_elevation: true });
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState("");
   const load = useCallback(() => api.get(`/eventmap/events/${id}`).then(({ data }) => {
@@ -162,7 +163,7 @@ export default function EventMapStudio() {
   };
   const doPreview = async () => {
     setBusy("preview");
-    try { const { data } = await api.post(`/eventmap/tracks/${f.track_id}/preview`, { style: f.style, format: f.format, logo: f.logo }, { responseType: "blob" }); setPreview(URL.createObjectURL(data)); }
+    try { const { data } = await api.post(`/eventmap/tracks/${f.track_id}/preview`, { style: f.style, format: f.format, logo: f.logo, speed: f.speed, show_aid: f.show_aid, show_elevation: f.show_elevation }, { responseType: "blob" }); setPreview(URL.createObjectURL(data)); }
     catch { toast.error("Anteprima non riuscita"); }
     setBusy("");
   };
@@ -175,11 +176,13 @@ export default function EventMapStudio() {
   if (st?.missing) return <p className="text-sm text-slate-600" data-testid="em-missing">Evento non trovato. <Link to="/event-map" className="font-semibold text-[#088F8A]">Torna a Event Map</Link></p>;
   if (!st || !opt) return <p className="text-sm text-slate-400">Caricamento...</p>;
   const rg = st.rights;
+  const track = st.tracks.find((t) => t.id === f.track_id);
   const fmts = opt.formats.map((x) => ({ ...x, disabled: !rg.formats.includes(x.key) }));
   return (
     <div className="animate-fade-up space-y-6" data-testid="em-studio">
       <Link to="/event-map" className="inline-flex items-center gap-1 text-sm text-slate-500"><ArrowLeft className="w-4 h-4" />Event Map</Link>
       <PageHeader title={st.event.nome} subtitle={`Event Map${st.event.data ? ` · ${st.event.data}` : ""}`} />
+      {rg.active && <DateField key={st.settings?.date || "e"} eid={id} st={st} onSaved={load} />}
       {!rg.active ? <p className="text-sm text-slate-600" data-testid="em-not-active">Event Map non è attivo per questo evento. <Link to={`/marketplace?servizio=event-map&evento=${id}`} className="font-semibold text-[#088F8A]">Attivalo dal Marketplace</Link>.</p> : (
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-5">
@@ -197,6 +200,9 @@ export default function EventMapStudio() {
           <div className="space-y-2"><div className="text-sm font-semibold">4. Durata</div><Choice items={opt.durations.map((d) => ({ key: d, label: `${d} secondi` }))} value={f.duration} onChange={(v) => setF({ ...f, duration: v })} testid="em-duration" /></div>
           <div className="space-y-2"><div className="text-sm font-semibold">5. Musica (brani originali CRMEvent)</div><MusicPick list={opt.music} value={f.music} onChange={(v) => setF({ ...f, music: v })} /></div>
           <div className="space-y-2"><div className="text-sm font-semibold">6. Logo evento</div><LogoPick eid={id} st={st} value={f.logo} onChange={(v) => setF({ ...f, logo: v })} onUpload={uploadLogo} onDelete={deleteLogo} busy={busy === "logo"} /></div>
+          <div className="space-y-2"><div className="text-sm font-semibold">7. Velocità animazione</div><SpeedPick list={opt.speeds} value={f.speed} onChange={(v) => setF({ ...f, speed: v })} /></div>
+          <div className="space-y-2"><div className="text-sm font-semibold">8. Punti ristoro</div><AidEditor track={track} show={f.show_aid} onShow={(v) => setF({ ...f, show_aid: v })} onSaved={load} /></div>
+          <div className="space-y-2"><div className="text-sm font-semibold">9. Altimetria</div><ElevationToggle track={track} value={f.show_elevation} onChange={(v) => setF({ ...f, show_elevation: v })} /></div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" disabled={!f.track_id || !!busy} onClick={doPreview} data-testid="em-preview-btn"><ImageIcon className="w-4 h-4 mr-1" />{busy === "preview" ? "Anteprima…" : "Anteprima"}</Button>
             <Button disabled={!f.track_id || !!busy || rg.videos_remaining === 0} onClick={generate} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid="em-generate-btn"><Film className="w-4 h-4 mr-1" />{busy === "gen" ? "Invio…" : "Genera video"}</Button>
@@ -204,7 +210,7 @@ export default function EventMapStudio() {
           {rg.videos_remaining === 0 && <p className="text-sm text-slate-500" data-testid="em-no-videos">Hai esaurito i video disponibili: <Link to={`/marketplace?servizio=event-map&evento=${id}`} className="font-semibold text-[#088F8A]">acquista un pacchetto</Link>.</p>}
         </div>
         <div className="space-y-3">
-          {preview ? <img src={preview} alt="Anteprima del percorso" className="mx-auto max-h-[520px] rounded-xl border border-slate-200" data-testid="em-preview-img" /> : <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">L'anteprima mostra il percorso completo sulla mappa con lo stile e il formato scelti.</div>}
+          {preview ? <img src={preview} alt="Anteprima del percorso" className="mx-auto max-h-[520px] rounded-xl border border-slate-200" data-testid="em-preview-img" /> : <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">L'anteprima mostra un momento lungo il percorso e la scena finale, con data, velocità, ristori, altimetria, logo e stile scelti. Non consuma video.</div>}
         </div>
       </div>)}
       <div className="space-y-3"><h2 className="font-display text-lg font-bold">Archivio video</h2>
