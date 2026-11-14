@@ -910,4 +910,6 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 ## SEO: rapporto testo/HTML e compressione (2026-11-14) — NON pubblicato
 - index.html: script consenso spostato in public/consent.js (stesso comportamento, sempre primo script); contenuto testuale statico dentro #root (sostituito da React); emergent-main.js caricato solo fuori da crmevent.it. Rapporto testo/HTML build: ~39% (prima ~0%).
 - Build: compression-webpack-plugin genera .gz per JS/CSS (CSS 199 KB → 36 KB). Serve `gzip_static on;` (o `gzip on; gzip_types text/css application/javascript;`) nell'nginx Aruba.
+- (2026-11-14) Testo statico ampliato: "Come funziona" + piani con prezzi mensili, limiti e inclusioni (valori presi da /api/saas/plans-public di produzione). Rapporto testo/HTML build 54%. Da aggiornare a mano se cambiano i prezzi.
+
 
