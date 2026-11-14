@@ -298,6 +298,9 @@ class Renderer:
         self.wpts = [w for w in wpts if not is_aid(w)]
         self.dist = cumdist(pts)
         self.total = self.dist[-1]
+        dm = job.get("distance_display_m")
+        self.k = dm / self.total if dm and self.total else 1.0
+        self.total_label = (f"{dm / 1000:.3f}".rstrip("0").rstrip(".").replace(".", ",") + " km") if dm else fmt_km(self.total)
         self.sp = SPEEDS.get(job.get("speed"), SPEEDS["normal"])
         self.t_fin = self.sp["t_end"] + 0.04
         self.t_settle = min(0.95, self.t_fin + 0.08)  # scena finale ferma negli ultimi istanti
@@ -534,17 +537,24 @@ class Renderer:
         title = j.get("title") or "Evento"
         while d.textlength(title, font=tf) > self.W - 140 * U and len(title) > 8:
             title = title[:-2]
-        h = int(64 * U) + int(48 * U) + int(40 * U)
+        sub = (j.get("subtitle") or "").strip()
+        sf = font(34 * U)
+        while sub and d.textlength(sub, font=sf) > self.W - 140 * U and len(sub) > 8:
+            sub = sub[:-2]
+        h = int(64 * U) + int(48 * U) + int(40 * U) + (int(48 * U) if sub else 0)
         y = max(int(self.H * (0.07 if big else 0.08)), self.logo_bottom() + int(20 * U))
         d.rounded_rectangle((int(48 * U), y, self.W - int(48 * U), y + h + (int(60 * U) if big else 0)), radius=int(28 * U), fill=(10, 14, 22, int(200 * alpha)))
         cy = y + int(26 * U)
         d.text((self.W / 2, cy), title, font=tf, fill=(255, 255, 255, a), anchor="mt")
         cy += int(72 * U)
+        if sub:
+            d.text((self.W / 2, cy), sub, font=sf, fill=self.st["route"] + (a,), anchor="mt")
+            cy += int(48 * U)
         if j.get("date"):
             d.text((self.W / 2, cy), j["date"], font=df, fill=(203, 213, 225, a), anchor="mt")
             cy += int(46 * U)
         if big:
-            d.text((self.W / 2, cy), fmt_km(self.total), font=font(58 * U), fill=self.st["route"] + (a,), anchor="mt")
+            d.text((self.W / 2, cy), self.total_label, font=font(58 * U), fill=self.st["route"] + (a,), anchor="mt")
 
     def frame(self, t):
         (cx, cy), w, m = self.camera(t)
@@ -602,8 +612,8 @@ class Renderer:
             bx, by = int(36 * U), (self.cbox[1] - bh - int(16 * U)) if self.chart else self.H - bh - int(70 * U)
             d.rounded_rectangle((bx, by, bx + bw, by + bh), radius=int(22 * U), fill=(10, 14, 22, int(a * 0.82)))
             d.text((bx + 26 * U, by + 18 * U), (self.job.get("title") or "")[:26].upper(), font=font(20 * U), fill=(148, 163, 184, a))
-            d.text((bx + 26 * U, by + 46 * U), fmt_km(m), font=font(62 * U), fill=(255, 255, 255, a))
-            d.text((bx + 26 * U, by + 112 * U), f"di {fmt_km(self.total)}", font=font(22 * U, False), fill=(203, 213, 225, a))
+            d.text((bx + 26 * U, by + 46 * U), fmt_km(m * self.k), font=font(62 * U), fill=(255, 255, 255, a))
+            d.text((bx + 26 * U, by + 112 * U), f"di {self.total_label}", font=font(22 * U, False), fill=(203, 213, 225, a))
             pw = bw - int(52 * U)
             d.rounded_rectangle((bx + 26 * U, by + bh - 14 * U, bx + 26 * U + pw, by + bh - 8 * U), radius=3, fill=(255, 255, 255, int(a * 0.25)))
             d.rounded_rectangle((bx + 26 * U, by + bh - 14 * U, bx + 26 * U + max(6, pw * m / self.total), by + bh - 8 * U), radius=3, fill=self.st["route"] + (a,))
