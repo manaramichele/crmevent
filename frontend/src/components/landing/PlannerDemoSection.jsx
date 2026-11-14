@@ -58,7 +58,7 @@ export default function PlannerDemoSection() {
         </div>
         <div className="mt-10"><DemoVideo /></div>
         <div className="mt-8 flex justify-center">
-          <button type="button" onClick={register} className="cta-shimmer inline-flex h-12 items-center gap-2 rounded-lg bg-tiffany px-7 font-semibold text-slate-900 shadow-sm transition-transform hover:bg-tiffany-hover active:scale-[0.98]" data-testid="home-planner-register">Registrati a CRMEvent <ArrowRight className="h-4 w-4" /></button>
+          <button type="button" onClick={register} className="cta-shimmer inline-flex h-12 items-center gap-2 rounded-lg bg-tiffany px-7 font-semibold text-slate-900 shadow-sm transition-transform hover:bg-tiffany-hover active:scale-[0.98]" data-testid="home-planner-register">Registrati gratis <ArrowRight className="h-4 w-4" /></button>
         </div>
         <div className="mt-12">
           <div className="mb-4 text-sm font-semibold text-slate-700">Integrato con il resto di CRMEvent</div>
