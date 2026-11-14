@@ -13982,7 +13982,7 @@ async def _planner_org_logo(org_id: str) -> Optional[bytes]:
 
 PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit,
                              "require_covered": ADDONS["require_covered"], "require_member": require_org_member,
-                             "org_logo": lambda oid: _planner_org_logo(oid)})
+                             "org_logo": lambda oid: _planner_org_logo(oid), "resolve_attachment": _resolve_attachment, "read_file_rec": _read_file_rec})
 app.include_router(PLANNER["router"])
 app.add_event_handler("startup", PLANNER["ensure"])
 PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})

@@ -96,14 +96,20 @@ export function RaceFields({ race, st, upd, onUpload, onFromMap, busy }) {
             : <span className="text-xs text-slate-400">dall'anagrafica dell'evento</span>}</div>
         <DistanceField key={`${race.id}-${race.track_id}`} race={race} track={track} onChange={(d) => upd({ distance_km: d })} />
       </div>
-      <div className="space-y-2"><span className="text-xs text-slate-500">File GPX della gara</span>
+      <div className="space-y-2"><span className="text-xs text-slate-500">Seleziona percorso</span>
         <select value={race.track_id || ""} onChange={(e) => upd({ track_id: e.target.value || null, distance_km: null })} className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm" data-testid="em-track-select">
           <option value="">Seleziona un file GPX…</option>{st.tracks.map((t) => <option key={t.id} value={t.id}>{t.name} · {kmTxt(t.distance_m)} · {t.points} punti</option>)}</select>
         <div className="flex flex-wrap gap-2">
-          <label className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold cursor-pointer hover:bg-slate-50" data-testid="em-upload-label"><Upload className="w-4 h-4" />{busy ? "Caricamento…" : "Carica GPX"}
+          <select value="" onChange={(e) => e.target.value && onFromMap(e.target.value)} className="h-9 min-w-[220px] flex-1 rounded-md border border-slate-200 px-2 text-sm" data-testid="em-route-select">
+            <option value="">{st.routes?.length ? "Scegli da Percorsi Eventi…" : "Nessun percorso in Percorsi Eventi"}</option>
+            {(st.routes || []).map((m) => <option key={m.map_id} value={m.map_id}>{m.nome}{m.gare?.length ? ` · ${m.gare.join(", ")}` : ""} · {m.format}{m.distance ? ` · ${m.distance} km` : ""} · agg. {new Date(m.updated_at).toLocaleDateString("it-IT")}</option>)}</select>
+          <label className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold cursor-pointer hover:bg-slate-50" data-testid="em-upload-label"><Upload className="w-4 h-4" />{busy ? "Caricamento…" : "Carica nuovo file"}
             <input type="file" accept=".gpx" className="hidden" onChange={(e) => { onUpload(e.target.files?.[0]); e.target.value = ""; }} data-testid="em-upload-input" /></label>
-          {st.maps.map((m) => <Button key={m.id} size="sm" variant="outline" onClick={() => onFromMap(m.id)} data-testid={`em-from-map-${m.id}`}>Usa «{m.nome || m.titolo || "percorso"}»</Button>)}
-        </div></div>
+        </div>
+        {track && !track.has_elevation && <p className="text-xs text-amber-700" data-testid="em-no-elevation">Questo percorso non contiene dati altimetrici: il profilo altimetrico non sarà disponibile.</p>}
+        {race.route_update && track?.source_map_id && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-sm text-sky-900" data-testid="em-route-update">
+          <span className="flex-1">È disponibile una versione aggiornata del percorso. Vuoi utilizzarla?</span>
+          <Button size="sm" variant="outline" onClick={() => onFromMap(track.source_map_id)} data-testid="em-route-update-use">Usa versione aggiornata</Button></div>}</div>
     </div>
   );
 }

@@ -240,7 +240,7 @@ export default function EventMapStudio() {
       <div className="space-y-3"><div className="flex flex-wrap items-center gap-3"><h2 className="font-display text-lg font-bold flex-1">Archivio video</h2>
         {st.races.length > 1 && <select value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 rounded-lg border border-slate-200 px-3 text-sm" data-testid="em-archive-filter"><option value="">Tutte le gare</option>{st.races.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>}</div>
         {!groups.length ? <p className="text-sm text-slate-500" data-testid="em-archive-empty">Nessun video generato {filter ? "per questa gara" : "per questo evento"}.</p>
-          : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="em-archive">{groups.map(({ g, versions }) => <VideoGroupCard key={g.id} g={g} versions={versions} sa={st.is_superadmin} label={versions[0].race_label} onRegen={regen} onReload={load} />)}</div>}
+          : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="em-archive">{groups.map(({ g, versions }) => <VideoGroupCard key={g.id} g={g} versions={versions} sa={st.is_superadmin} label={versions[0].race_label} evName={st.event.nome} onRegen={regen} onReload={load} />)}</div>}
       </div>
     </div>
   );

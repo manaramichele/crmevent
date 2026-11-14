@@ -9,9 +9,9 @@ const EMPTY = { type: "FeatureCollection", features: [] };
 
 // Mappa MapLibre con disegno (punto, linea, poligono, rettangolo, cerchio, misura), selezione e trascinamento.
 export default function PlannerMap({ apiKey, stile, center, zoom, features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft, onView, flyTo,
-  bounds, minZoom, cooperative = false, onError, emptyText, fitReq = 0 }) {
+  bounds, minZoom, cooperative = false, onError, emptyText, fitReq = 0, hidden }) {
   const box = useRef(null), map = useRef(null), st = useRef({}), draft = useRef([]), fitDone = useRef(0);
-  st.current = { features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft };
+  st.current = { features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft, hidden };
   // Inquadra tutti gli elementi (apertura/cambio progetto o pulsante): mai durante il lavoro.
   const fit = (animate) => {
     const m = map.current;
@@ -53,12 +53,12 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
       m.addSource("feat", { type: "geojson", data: EMPTY });
       m.addSource("draft", { type: "geojson", data: EMPTY });
       m.addLayer({ id: "f-fill", type: "fill", source: "feat", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": ["get", "colore"], "fill-opacity": ["case", ["==", ["get", "sel"], 1], 0.55, 0.35] } });
-      m.addLayer({ id: "f-line", type: "line", source: "feat", filter: ["!=", ["geometry-type"], "Point"], paint: { "line-color": ["case", ["==", ["get", "sel"], 1], "#0f172a", ["get", "colore"]], "line-width": ["case", ["==", ["get", "sel"], 1], 3.5, 2.5] } });
+      m.addLayer({ id: "f-line", type: "line", source: "feat", filter: ["!=", ["geometry-type"], "Point"], paint: { "line-color": ["case", ["==", ["get", "sel"], 1], "#0f172a", ["get", "colore"]], "line-width": ["case", ["==", ["get", "sel"], 1], ["+", ["get", "spessore"], 1], ["get", "spessore"]] } });
       m.addLayer({ id: "f-pt", type: "circle", source: "feat", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": ["case", ["==", ["get", "sel"], 1], 9, 7], "circle-color": ["get", "colore"], "circle-stroke-width": 2, "circle-stroke-color": ["case", ["==", ["get", "sel"], 1], "#0f172a", "#ffffff"] } });
       m.addLayer({ id: "f-lbl", type: "symbol", source: "feat", layout: { "text-field": ["get", "etichetta"], "text-size": 11, "text-offset": [0, 1.2], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#0f172a", "text-halo-color": "#fff", "text-halo-width": 1.5 }, minzoom: 15 });
       m.addLayer({ id: "d-line", type: "line", source: "draft", paint: { "line-color": "#0f172a", "line-width": 2, "line-dasharray": [2, 2] } });
       m.addLayer({ id: "d-pt", type: "circle", source: "draft", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 4, "circle-color": "#0f172a" } });
-      m.getSource("feat").setData(displayCollection(st.current.features, st.current.layers, st.current.selectedId));
+      m.getSource("feat").setData(displayCollection(st.current.features, st.current.layers, st.current.selectedId, st.current.hidden));
     });
     const HIT = ["f-pt", "f-line", "f-fill"];
     const hit = (e) => m.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], { layers: HIT.filter((l) => m.getLayer(l)) })[0];
@@ -103,7 +103,7 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
 
   useEffect(() => { const c = map.current?.cooperativeGestures; if (c) { if (cooperative) c.enable(); else c.disable(); } }, [cooperative]);
   useEffect(() => { if (map.current?.loaded()) fit(fitDone.current > 0); }, [fitReq]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { map.current?.getSource("feat")?.setData(displayCollection(features, layers, selectedId)); }, [features, layers, selectedId]);
+  useEffect(() => { map.current?.getSource("feat")?.setData(displayCollection(features, layers, selectedId, hidden)); }, [features, layers, selectedId, hidden]);
   useEffect(() => { if (flyTo && map.current) map.current.flyTo({ center: flyTo.center, zoom: flyTo.zoom || 16 }); }, [flyTo]);
   useEffect(() => { pushDraft([]); if (map.current) map.current.getCanvas().style.cursor = mode === "select" && !placing ? "" : "crosshair"; }, [mode, placing]); // eslint-disable-line react-hooks/exhaustive-deps
 

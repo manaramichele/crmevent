@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import planner_bom
+import planner_staff
 
 MAX_FEATURES = 5000
 MAX_REVISIONS = 30
@@ -87,6 +88,7 @@ def build(db, deps: dict):
         return p
 
     bom_copy = planner_bom.attach(r, db, audit, member_dep, admin_dep, project_of, event_of, deps["org_logo"])
+    station_cleanup = planner_staff.attach(r, db, audit, member_dep, admin_dep, project_of, event_of, deps["resolve_attachment"], deps["read_file_rec"], deps["org_logo"])
     @r.get("/config")
     async def config(user: dict = Depends(user_dep)):
         # Chiave pubblica MapTiler (va limitata ai domini CRMEvent nel pannello MapTiler); mai nel codice frontend.
@@ -142,6 +144,7 @@ def build(db, deps: dict):
         old = await db.planner_revisions.find({"org_id": admin["org_id"], "project_id": pid}, {"_id": 0, "id": 1}).sort("at", -1).skip(MAX_REVISIONS).to_list(1000)
         if old:
             await db.planner_revisions.delete_many({"id": {"$in": [o["id"] for o in old]}})
+        await station_cleanup(admin["org_id"], pid, body.features)
         return {"version": body.version + 1}
 
     @r.get("/projects/{pid}/revisions")

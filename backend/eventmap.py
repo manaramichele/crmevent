@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
+import event_routes as EVR
 import eventmap_render as ER
 import storage_utils as SU
 
@@ -222,7 +223,8 @@ def build(db, deps: dict):
     @r.get("/events/{eid}")
     async def event_state(eid: str, user: dict = Depends(admin_dep)):
         ev = await _event(user["org_id"], eid)
-        maps = await db.event_maps.find({"org_id": user["org_id"], "evento_id": eid, "gpx_url": {"$nin": [None, ""]}}, {"_id": 0, "id": 1, "nome": 1, "titolo": 1}).to_list(100)
+        routes = EVR.public(await EVR.list_routes(db, user["org_id"], eid, deps["resolve_attachment"]))
+        maps = [{"id": x["map_id"], "nome": x["nome"]} for x in routes]
         sett = await _settings(user["org_id"], eid)
         tracks = [await _upgrade_track(t) for t in await db.eventmap_tracks.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0}).sort("created_at", -1).to_list(50)]
         for t in tracks:
@@ -237,19 +239,27 @@ def build(db, deps: dict):
                 races = [await _new_race(user, ev, tracks[0])]
         by_track = {r["track_id"]: r["name"] for r in reversed(races) if r.get("track_id")}
         tmap = {t["id"]: t for t in tracks}
+        rver = {x["map_id"]: x["version"] for x in routes}
         for rc in races:
             rc["timing"] = _timing(rc, tmap.get(rc.get("track_id")))
+            t = tmap.get(rc.get("track_id")) or {}
+            rc["route_update"] = bool(t.get("source_map_id") and rver.get(t["source_map_id"]) and rver[t["source_map_id"]] != t.get("source_version"))
+        for x in routes:
+            x["gare"] = [rc["name"] for rc in races if (tmap.get(rc.get("track_id")) or {}).get("source_map_id") == x["map_id"]]
         used = {r.get("track_id") for r in races}
-        videos = await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(200)
+        sa = _is_sa(user)
+        groups = await db.eventmap_video_groups.find({"org_id": user["org_id"], "event_id": eid, **({} if sa else {"deleted_at": None})}, {"_id": 0, "org_id": 0}).sort("created_at", -1).to_list(200)
+        gids = {g["id"] for g in groups}
+        videos = [v for v in await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(300)
+                  if (v.get("group_id") or v["id"]) in gids]
         for v in videos:
             v["race_label"] = v.get("race_name") or by_track.get(v.get("track_id")) or re.sub(r"\.gpx$", "", v.get("track_name") or "Percorso", flags=re.I)
         return {"event": {"id": ev["id"], "nome": ev.get("nome"), "data": _date_it(sett.get("date") or ev.get("data_inizio")), "data_iso": (ev.get("data_inizio") or "")[:10],
                           "has_logo": bool(ev.get("logo_url"))}, "settings": sett,
-                "rights": await _rights(user["org_id"], eid), "maps": maps,
+                "rights": await _rights(user["org_id"], eid), "maps": maps, "routes": routes,
                 "tracks": tracks, "races": races, "unassigned_tracks": [t["id"] for t in tracks if t["id"] not in used],
                 "logos": await db.eventmap_logos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0}).sort("created_at", -1).to_list(20),
-                "videos": videos, "is_superadmin": _is_sa(user),
-                "groups": await db.eventmap_video_groups.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "org_id": 0}).sort("created_at", -1).to_list(200)}
+                "videos": videos, "is_superadmin": sa, "groups": groups}
 
     def _is_sa(user):
         return user.get("role") == "superadmin"
@@ -404,6 +414,8 @@ def build(db, deps: dict):
     async def regenerate(gid: str, body: RegenIn, user: dict = Depends(admin_dep)):
         """Nuova versione dello stesso video acquistato: gratuita, consentita fino al primo download (sempre al Super Admin)."""
         g = await _group(user["org_id"], gid)
+        if g.get("deleted_at"):
+            raise HTTPException(status_code=400, detail="Video eliminato: ripristinalo prima di rigenerarlo")
         if g["status"] != "modificabile" and not _is_sa(user):
             raise HTTPException(status_code=403, detail={"code": "video_final", "message": "Video definitivo: è già stato scaricato e non può più essere modificato"})
         if await db.eventmap_videos.find_one({"group_id": gid, "status": {"$in": ["queued", "processing"]}}, {"_id": 1}):
@@ -451,7 +463,14 @@ def build(db, deps: dict):
             raise HTTPException(status_code=403, detail={"code": "addon_required", "product": "eventmap", "slug": "event-map",
                                                          "message": "Event Map non è attivo per questo evento: attivalo dal Marketplace"})
 
-    async def _save_track(user, eid, data: bytes, name: str):
+    async def _save_track(user, eid, data: bytes, name: str, source=None):
+        out = await _save_track_raw(user, eid, data, name)
+        if source:  # riferimento al percorso originale in Percorsi Eventi + versione del file usata
+            await db.eventmap_tracks.update_one({"org_id": user["org_id"], "id": out["id"]}, {"$set": source})
+            out.update(source)
+        return out
+
+    async def _save_track_raw(user, eid, data: bytes, name: str):
         await _require_active(user["org_id"], eid)
         if len(data) > MAX_GPX:
             raise HTTPException(status_code=400, detail="File GPX troppo grande (max 15 MB)")
@@ -486,12 +505,70 @@ def build(db, deps: dict):
     @r.post("/events/{eid}/tracks/from-map/{map_id}")
     async def track_from_map(eid: str, map_id: str, user: dict = Depends(admin_dep)):
         await _event(user["org_id"], eid)
-        mp = await db.event_maps.find_one({"org_id": user["org_id"], "evento_id": eid, "id": map_id}, {"_id": 0})
-        rec = await deps["resolve_attachment"](mp.get("gpx_url"), user["org_id"]) if mp else None
-        if not rec or not rec.get("storage_path"):
-            raise HTTPException(status_code=404, detail="Traccia GPX dell'evento non trovata")
-        data, _ = await deps["read_file_rec"](rec)
-        return await _save_track(user, eid, data, mp.get("nome") or mp.get("titolo") or rec.get("original_filename") or "Percorso evento")
+        rt = next((x for x in await EVR.list_routes(db, user["org_id"], eid, deps["resolve_attachment"]) if x["map_id"] == map_id), None)
+        if not rt:
+            raise HTTPException(status_code=404, detail="Percorso non trovato in Percorsi Eventi")
+        data, _ = await deps["read_file_rec"](rt["_rec"])
+        try:
+            gpx = EVR.to_gpx(data, rt["filename"])
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Percorso {rt['format']} non leggibile: {e}")
+        out = await _save_track(user, eid, gpx, rt["nome"], {"source_map_id": map_id, "source_version": rt["version"], "source_format": rt["format"]})
+        if not out.get("has_elevation"):
+            out["warning"] = "Il percorso non contiene dati altimetrici: il profilo altimetrico non sarà disponibile"
+        return out
+
+    @r.delete("/video-groups/{gid}")
+    async def sa_delete_video(gid: str, user: dict = Depends(admin_dep)):
+        """Eliminazione logica (solo Super Admin): fuori dagli elenchi, file conservati, crediti invariati."""
+        _sa_only(user)
+        await _group(user["org_id"], gid)
+        ev = {"at": _now(), "by": user.get("email"), "action": "eliminazione", "sa": True}
+        await db.eventmap_video_groups.update_one({"id": gid}, {"$set": {"deleted_at": ev["at"], "deleted_by": ev["by"]}, "$push": {"history": ev}})
+        await audit(user, "eventmap_video_delete", detail=gid)
+        return await _group(user["org_id"], gid)
+
+    @r.post("/video-groups/{gid}/undelete")
+    async def sa_undelete_video(gid: str, user: dict = Depends(admin_dep)):
+        _sa_only(user)
+        await _group(user["org_id"], gid)
+        await db.eventmap_video_groups.update_one({"id": gid}, {"$set": {"deleted_at": None, "deleted_by": None},
+                                                              "$push": {"history": {"at": _now(), "by": user.get("email"), "action": "ripristino eliminazione", "sa": True}}})
+        await audit(user, "eventmap_video_undelete", detail=gid)
+        return await _group(user["org_id"], gid)
+
+    @r.delete("/video-groups/{gid}/purge")
+    async def sa_purge_video(gid: str, user: dict = Depends(admin_dep)):
+        """Eliminazione fisica definitiva: solo per video già eliminati logicamente; GPX e altri video della gara restano."""
+        _sa_only(user)
+        g = await _group(user["org_id"], gid)
+        if not g.get("deleted_at"):
+            raise HTTPException(status_code=400, detail="Elimina prima il video: la rimozione definitiva vale solo per i video nel cestino")
+        vs = await db.eventmap_videos.find({"org_id": user["org_id"], "group_id": gid}, {"_id": 0, "id": 1, "storage": 1}).to_list(200)
+        for v in vs:
+            st = v.get("storage") or {}
+            if st.get("path") and st.get("backend") == "local":  # su object storage il file resta senza riferimenti
+                try:
+                    os.remove(SU._safe_local_path(st["path"]))
+                except OSError as e:
+                    logger.warning(f"eventmap purge {v['id']}: {e}")
+        await db.eventmap_videos.delete_many({"org_id": user["org_id"], "group_id": gid})
+        await db.eventmap_video_groups.update_one({"id": gid}, {"$set": {"purged_at": _now(), "purged_by": user.get("email")}})
+        await audit(user, "eventmap_video_purge", detail=f"{gid} · {len(vs)} versioni")
+        return {"ok": True, "versions": len(vs)}
+
+    @r.post("/video-groups/{gid}/refund-credit")
+    async def sa_refund_credit(gid: str, user: dict = Depends(admin_dep)):
+        """Restituzione credito: azione separata e tracciata, una sola volta per video."""
+        _sa_only(user)
+        g = await _group(user["org_id"], gid)
+        res = await db.eventmap_video_groups.update_one({"id": gid, "credit_consumed": True, "credit_refunded": {"$ne": True}},
+                                                        {"$set": {"credit_refunded": True}, "$push": {"history": {"at": _now(), "by": user.get("email"), "action": "credito restituito", "sa": True}}})
+        if not res.modified_count:
+            raise HTTPException(status_code=400, detail="Nessun credito da restituire per questo video")
+        await db.addon_usage.update_one({"org_id": g["org_id"], "product": "eventmap", "videos_used": {"$gt": 0}}, {"$inc": {"videos_used": -1}})
+        await audit(user, "eventmap_video_refund_credit", detail=gid)
+        return await _group(user["org_id"], gid)
 
     async def _track(org_id, tid):
         t = await db.eventmap_tracks.find_one({"org_id": org_id, "id": tid}, {"_id": 0})
@@ -710,7 +787,9 @@ def build(db, deps: dict):
         v = await db.eventmap_videos.find_one({"org_id": user["org_id"], "id": vid, "status": "completed"}, {"_id": 0})
         if not v:
             raise HTTPException(status_code=404, detail="Video non disponibile")
-        g = await db.eventmap_video_groups.find_one({"org_id": user["org_id"], "id": v.get("group_id") or vid}, {"_id": 0, "status": 1})
+        g = await db.eventmap_video_groups.find_one({"org_id": user["org_id"], "id": v.get("group_id") or vid}, {"_id": 0, "status": 1, "deleted_at": 1})
+        if g and g.get("deleted_at") and not _is_sa(user):
+            raise HTTPException(status_code=404, detail="Video non disponibile")
         first = bool(download and g and g["status"] == "modificabile" and not _is_sa(user))
         if first and not confirm:
             raise HTTPException(status_code=409, detail={"code": "confirm_first_download", "message": "Con il primo download il video diventerà definitivo e non potrai più modificarlo. Vuoi continuare?"})

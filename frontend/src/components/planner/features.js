@@ -25,16 +25,19 @@ export function measures(f) {
   return {};
 }
 
-export function displayCollection(features, layers, selectedId) {
+export function displayCollection(features, layers, selectedId, hidden) {
   const vis = new Set(layers.filter((l) => l.visibile).map((l) => l.id));
   const col = Object.fromEntries(layers.map((l) => [l.id, l.colore]));
+  const KC = { team: "#0F766E", staff: "#2563EB", volontario: "#16A34A", generica: "#94A3B8" };
   return {
     type: "FeatureCollection",
-    features: features.filter((f) => vis.has(f.properties.layer_id)).map((f) => {
+    features: features.filter((f) => vis.has(f.properties.layer_id) && !(hidden && hidden.has(f.properties.id))).map((f) => {
       const m = measures(f);
+      const st = f.properties.station;
       return { type: "Feature", id: undefined, geometry: geometryOf(f),
-        properties: { fid: f.properties.id, colore: f.properties.colore || col[f.properties.layer_id] || "#0ABAB5", sel: f.properties.id === selectedId ? 1 : 0,
-          etichetta: [f.properties.nome, m.testo].filter(Boolean).join(" · ") } };
+        properties: { fid: f.properties.id, colore: (st && KC[st.kind]) || f.properties.colore || col[f.properties.layer_id] || "#0ABAB5", sel: f.properties.id === selectedId ? 1 : 0,
+          spessore: Number(f.properties.spessore) || 2.5,
+          etichetta: [f.properties.nome, st && st.kind !== "generica" ? `${{ team: "Team", staff: "Staff", volontario: "Volontari" }[st.kind]}${f.properties.n_persone ? ` (${f.properties.n_persone})` : ""}` : st ? "da assegnare" : null, m.testo].filter(Boolean).join(" · ") } };
     }),
   };
 }
