@@ -207,6 +207,17 @@ def build(db, deps: dict):
                 "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 110, "created_at": _now()}}, upsert=True)
             await db.marketplace_meta.insert_one({"id": "contracts_staff_v1", "applied_at": _now()})
 
+        if not await db.marketplace_meta.find_one({"id": "addons_v1"}):
+            for key, name, icon, sort, desc in (
+                ("event-planner", "Event Planner", "Map", 5, "Progetta percorsi, strutture e spazi del tuo evento direttamente sulla mappa: gazebo, transenne, arco di arrivo, palco, ristori, aree sponsor e postazioni volontari. Attivazione per singolo evento."),
+                ("event-map", "Event Map", "Film", 6, "Trasforma la traccia GPX del tuo evento in un video animato con il logo della manifestazione, pronto da condividere sui social. Pacchetti con numero di eventi e di video.")):
+                await db.marketplace_services.update_one({"key": key}, {"$setOnInsert": {
+                    "id": uuid.uuid4().hex, "key": key, "name": name, "description": desc, "icon": icon, "image": None, "category": "Logistica",
+                    "price": None, "price_type": "one_time", "usage_unit": None, "usage_limits": None, "terms": None, "status": "available",
+                    "visible": True, "purchasable": False, "tech_ready": True, "activation": "addon", "billing_method": "stripe",
+                    "credit_service_key": None, "scope": "event", "sort": sort, "created_at": _now()}}, upsert=True)
+            await db.marketplace_meta.insert_one({"id": "addons_v1", "applied_at": _now()})
+
     def _can_purchase(user: dict) -> bool:
         p = user.get("perm") or {}
         return user.get("org_role") in ("admin_org", "superadmin") or bool(p.get("admin")) or bool(p.get("marketplace_purchase"))

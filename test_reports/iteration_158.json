@@ -1,0 +1,43 @@
+{
+  "summary": "Event Map GPX->MP4 generator E2E. Backend: 14/14 pytest pass (tests/test_eventmap_video.py): options (styles dark/streets + satellite disabled 'Disponibile con MapTiler', formats, durations 15/30/60, 4 music previews served as real MP3 >100KB), auth required, upload invalid GPX/non-.gpx/binary -> 400, valid pisa_run.gpx (3.8 km, 267 pts), event state (data '13 dicembre 2026', tracks, maps, videos, rights), preview image/jpeg (satellite -> 400), 403 addon_required when not active, 403 addon_videos with 0 videos, invalid duration/format/style/music -> 400, unknown track -> 404, queued job reserves slot (2nd request 403 while in-flight, videos_used stays 0), polling queued->processing->completed in ~50s, download video/mp4 attachment (ftyp; ffmpeg: 15.00s h264 1080x1920 30fps + AAC, decodes clean), inline disposition without download=1, videos_used incremented to 1 only after completion, cross-org 404 on status/file/event/preview/foreign track, ready org has 3 completed videos, /api/public/addons-included returns planner/eventmap included bronze 0/silver 1/gold 3. Frontend: /event-map hub (Silver ready org) counters + 'Apri Event Map' -> /event-map/{eid} em-studio; GPX upload via em-upload-input (toast, auto-selected), satellite button disabled, streets/1:1/15s/emozionale selection, music play toggles to pause icon, Anteprima -> em-preview-img 1080x1080, Genera video -> card 'In elaborazione · N%' auto-polled to 'Completato' without reload, em-video-player plays (readyState 4, 15s, 1080x1080), em-video-download triggers download (event-map-pisa_run-gpx-1x1-15s.mp4), counters update (remaining 2->1). Pricing /prezzi and homepage: plan-addon-event-planner/event-map-{bronze,silver,gold} = Marketplace / 1 evento incluso / 3 eventi inclusi, comparison rows Event Planner & Event Map, default 12 mesi, Silver 'Fino a 50 Staff e Volontari'. Homepage: no 'In arrivo', Event Map feature card present, home-eventmap-video plays (webm 720x1280 15s; mp4 fallback 200). Trial org /event-map: info page, video plays, 'Pacchetti in definizione', 'Attiva dal Marketplace' -> /marketplace?servizio=event-map with mkt-detail. Only minor issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/eventmap/videos/{vid}/file", "issue": "No HTTP Range support (Range request returns 200 full body, header 'Accept-Ranges: none') and whole MP4 read into memory. iOS/macOS Safari requires 206 byte-range responses for <video> playback/seek, so the archive player em-video-player-* will likely not play on iPhone/Safari (Chrome works). Use FileResponse/StreamingResponse with Range handling."},
+      {"endpoint": "POST /api/eventmap/tracks/{tid}/preview and /events/{eid}/tracks", "issue": "No Event Map rights/active check (any org admin can upload tracks and render previews without the add-on) and preview subprocess bypasses the render semaphore, so concurrent previews compete for CPU with queued renders."},
+      {"endpoint": "eventmap.py create_video", "issue": "asyncio.create_task(_process(vid)) result not referenced (task can be GC'd per asyncio docs); keep a set of background tasks. Per-org asyncio.Lock only protects a single worker process."},
+      {"endpoint": "POST /api/eventmap/events/{eid}/tracks", "issue": "Same GPX uploaded twice creates duplicate tracks with identical labels in the select ('pisa_run.gpx · 3,8 km · 267 punti' x2); no delete-track endpoint/UI."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EventMapStudio", "issue": "/event-map/{invalid-or-foreign-eid} stays on 'Caricamento...' forever (load() error only toasts, st stays null). Show not-found state / redirect to /event-map.", "selector": "[data-testid='em-studio']", "priority": "LOW"},
+      {"component": "VideoCard download filename", "issue": "Filename includes the extension of the track name: 'event-map-pisa_run-gpx-1x1-15s.mp4' (strip .gpx from track_name).", "selector": "[data-testid^='em-video-download-']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Cookie banner (app + homepage)", "issues": ["Banner shows in English (EN toggle selected) on an Italian UI for a headless browser locale; consider defaulting to IT."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_eventmap_video.py", "/app/test_reports/pytest/pytest_eventmap_video.xml"],
+  "action_items": [
+    "Add Range/206 streaming to /api/eventmap/videos/{vid}/file (Safari/iOS playback)",
+    "Gate track upload/preview on Event Map rights; run previews under the same semaphore or a small separate one",
+    "Studio: handle 404 event (no infinite 'Caricamento...')",
+    "Strip '.gpx' from track name in download filename; optionally dedupe/delete tracks",
+    "Clean up TEST_ orgs created by this run (listed in seed_data_creation)"
+  ],
+  "critical_code_review_comments": [
+    "eventmap.py video_file: Response(content=whole file) + Accept-Ranges none -> memory heavy for 60s 16:9 videos and breaks Safari",
+    "eventmap.py: open(...) without context managers in _job_files/_run/_process (fd leaks minor)",
+    "eventmap.py preview/upload: no rights check",
+    "EventMapStudio.jsx: load error leaves page in loading state"
+  ],
+  "updated_files": ["/app/backend/tests/test_eventmap_video.py"],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% of requested flows (2 low-priority UI bugs)"},
+  "seed_data_creation": "TEST_ orgs created (please clean up): d2b328fbb5234bc8897b301f3388e8bb (test_emv_silver_e7dbaf74@example.com), 3e8bc4fb76af411699e3ca92878d9a93 (test_emv_other_39e457b7@example.com), 4b6316d72e594b6b9d28e1d9a519354f (test_emv_silver_bccd6626@example.com, 1 completed 15s video), 357f2ccf6c3044238552576467219e25 (test_emv_other_e6323f66@example.com), 1e9254c0de1d4d2a865b326c4afe8712 (test_emv_trial_1794651676@example.com, trial). TEST_EventMap Org (4343e7742dd04ff8ad9d9157b34176ac) kept: SA grant added events_total 1 + videos_total 2 as instructed; 1 new 15s 1:1 streets/emozionale video generated in UI and a duplicate pisa_run.gpx track uploaded -> now videos 4 generated / 1 remaining, 2 extra activations available.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest tests/test_eventmap_video.py -n 0 -v (sequential, ~60s, creates 2 TEST_ silver orgs each run and renders one 15s video). SA grants require events_total>=1. Ready org event id 87d6098128cc4feda081e8a7de01b32f. Login testids email-input/password-input (Enter submits); press Escape for demo dialog; cookie banner 'Accept all'.",
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026!; ready org test_em_1794651032@example.com / TestEventMap2026!; trial test_emv_trial_1794651676@example.com / TestEventMap2026!"
+}

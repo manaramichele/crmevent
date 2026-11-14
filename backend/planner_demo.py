@@ -58,10 +58,7 @@ def build(db, deps: dict):
         s = await settings()
         if not s["abilitata"]:
             return {"abilitata": False}
-        # Chiave pubblica MapTiler (limitata ai domini CRMEvent nel pannello MapTiler)
-        return {**s, "maptiler_key": os.environ.get("MAPTILER_API_KEY") or None, "scenari": SCENARIOS,
-                "library": [{"id": f"lib{i}", "categoria": c, "nome": n, "larghezza": w, "lunghezza": l, "colore": col, "tipo": t}
-                            for i, (c, n, w, l, col, t) in enumerate(LIBRARY)]}
+        return {"abilitata": True}
 
     @r.post("/public/planner-demo/track")
     async def track(body: TrackIn, request: Request):

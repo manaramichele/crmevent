@@ -60,18 +60,20 @@ class SaveIn(BaseModel):
 
 def build(db, deps: dict):
     r = APIRouter(prefix="/api/planner")
-    user_dep, admin_dep, audit = deps["get_current_user"], deps["require_admin"], deps["record_audit"]
+    user_dep, admin_dep, audit, covered = deps["get_current_user"], deps["require_admin"], deps["record_audit"], deps["require_covered"]
 
-    async def event_of(org_id: str, eid: str) -> dict:
+    async def event_of(org_id: str, eid: str, user: dict) -> dict:
         ev = await db.events.find_one({"org_id": org_id, "id": eid}, {"_id": 0, "id": 1, "nome": 1, "luogo": 1, "citta": 1, "data_inizio": 1})
         if not ev:
             raise HTTPException(status_code=404, detail="Evento non trovato")
+        await covered(user, "planner", eid)
         return ev
 
-    async def project_of(org_id: str, pid: str) -> dict:
+    async def project_of(org_id: str, pid: str, user: dict) -> dict:
         p = await db.planner_projects.find_one({"org_id": org_id, "id": pid}, {"_id": 0})
         if not p:
             raise HTTPException(status_code=404, detail="Progetto non trovato")
+        await covered(user, "planner", p["evento_id"])
         return p
 
     @r.get("/config")
@@ -83,14 +85,14 @@ def build(db, deps: dict):
 
     @r.get("/events/{eid}/projects")
     async def projects(eid: str, user: dict = Depends(user_dep)):
-        ev = await event_of(user["org_id"], eid)
+        ev = await event_of(user["org_id"], eid, user)
         rows = await db.planner_projects.find({"org_id": user["org_id"], "evento_id": eid}, {"_id": 0, "features": 0}).sort("created_at", 1).to_list(200)
         return {"evento": ev, "projects": rows}
 
     @r.post("/events/{eid}/projects")
     async def create(eid: str, body: ProjectIn, admin: dict = Depends(admin_dep)):
-        await event_of(admin["org_id"], eid)
-        base = await project_of(admin["org_id"], body.duplica_da) if body.duplica_da else None
+        await event_of(admin["org_id"], eid, admin)
+        base = await project_of(admin["org_id"], body.duplica_da, admin) if body.duplica_da else None
         layers = base["layers"] if base else [{"id": uuid.uuid4().hex[:8], "nome": n, "colore": COLORS[i], "visibile": True, "bloccato": False, "ordine": i}
                                               for i, n in enumerate(DEFAULT_LAYERS)]
         doc = {"id": uuid.uuid4().hex, "org_id": admin["org_id"], "evento_id": eid, "nome": body.nome, "archiviato": False, "version": 1,
@@ -102,11 +104,11 @@ def build(db, deps: dict):
 
     @r.get("/projects/{pid}")
     async def get_project(pid: str, user: dict = Depends(user_dep)):
-        return await project_of(user["org_id"], pid)
+        return await project_of(user["org_id"], pid, user)
 
     @r.patch("/projects/{pid}")
     async def patch(pid: str, body: ProjectPatch, admin: dict = Depends(admin_dep)):
-        await project_of(admin["org_id"], pid)
+        await project_of(admin["org_id"], pid, admin)
         upd = {k: v for k, v in body.model_dump().items() if v is not None}
         await db.planner_projects.update_one({"org_id": admin["org_id"], "id": pid}, {"$set": {**upd, "updated_at": _now()}})
         return {"ok": True}
@@ -116,7 +118,7 @@ def build(db, deps: dict):
         """Salvataggio con controllo versione: se un altro utente ha salvato nel frattempo → 409, nessuna sovrascrittura."""
         if len(body.features) > MAX_FEATURES:
             raise HTTPException(status_code=400, detail=f"Massimo {MAX_FEATURES} oggetti per progetto")
-        cur = await project_of(admin["org_id"], pid)
+        cur = await project_of(admin["org_id"], pid, admin)
         res = await db.planner_projects.update_one({"org_id": admin["org_id"], "id": pid, "version": body.version},
                                                    {"$set": {"features": body.features, "layers": body.layers, "updated_at": _now(), "updated_by": admin.get("email")},
                                                     "$inc": {"version": 1}})
@@ -131,12 +133,12 @@ def build(db, deps: dict):
 
     @r.get("/projects/{pid}/revisions")
     async def revisions(pid: str, user: dict = Depends(user_dep)):
-        await project_of(user["org_id"], pid)
+        await project_of(user["org_id"], pid, user)
         return {"revisions": await db.planner_revisions.find({"org_id": user["org_id"], "project_id": pid}, {"_id": 0, "features": 0, "layers": 0}).sort("at", -1).to_list(MAX_REVISIONS)}
 
     @r.post("/projects/{pid}/revisions/{rid}/restore")
     async def restore(pid: str, rid: str, admin: dict = Depends(admin_dep)):
-        cur = await project_of(admin["org_id"], pid)
+        cur = await project_of(admin["org_id"], pid, admin)
         rev = await db.planner_revisions.find_one({"org_id": admin["org_id"], "project_id": pid, "id": rid}, {"_id": 0})
         if not rev:
             raise HTTPException(status_code=404, detail="Revisione non trovata")

@@ -17,9 +17,15 @@ export function limitsLabel(p) {
   return { ev, us };
 }
 
+export const addonLabel = (name, n) => (n > 0 ? `${name}: ${n} ${n === 1 ? "evento incluso" : "eventi inclusi"}` : `${name}: acquistabile nel Marketplace`);
+
 export function usePlans() {
   const [data, setData] = useState(null);
-  useEffect(() => { fetch(`${API}/api/saas/plans-public`).then((r) => r.json()).then(setData).catch(() => setData({ plans: [], features: [] })); }, []);
+  useEffect(() => {
+    Promise.all([fetch(`${API}/api/saas/plans-public`).then((r) => r.json()), fetch(`${API}/api/public/addons-included`).then((r) => r.json()).catch(() => null)])
+      .then(([d, a]) => setData({ ...d, plans: (d.plans || []).map((p) => ({ ...p, addons: a ? { planner: a.planner.included[p.key] ?? 0, eventmap: a.eventmap.included[p.key] ?? 0 } : null })) }))
+      .catch(() => setData({ plans: [], features: [] }));
+  }, []);
   return data;
 }
 
@@ -60,6 +66,8 @@ export function PlanCard({ p, cycle, features, cta, current }) {
         <li className="flex gap-2 text-slate-800 font-medium" data-testid={`plan-events-${p.key}`}><InfinityIcon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{lim.ev}</li>
         <li className="flex gap-2 text-slate-800 font-medium" data-testid={`plan-users-${p.key}`}><Users className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{lim.us}</li>
         <li className="flex gap-2 text-slate-800 font-medium"><sup.icon className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{sup.text}</li>
+        {p.addons && [["Event Planner", p.addons.planner], ["Event Map", p.addons.eventmap]].map(([n, v]) => (
+          <li key={n} className="flex gap-2 text-slate-800 font-medium" data-testid={`plan-addon-${n.replace(" ", "-").toLowerCase()}-${p.key}`}><Check className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{addonLabel(n, v)}</li>))}
         {features.filter((f) => p.features.includes(f.key)).map((f) => (
           <li key={f.key} className="flex gap-2 text-slate-600"><Check className="w-4 h-4 text-[#0ABAB5] mt-0.5 shrink-0" />{f.label}</li>
         ))}
@@ -70,12 +78,14 @@ export function PlanCard({ p, cycle, features, cta, current }) {
 }
 
 export function ComparisonTable({ plans, features }) {
+  const addonCell = (n) => (n > 0 ? `${n} ${n === 1 ? "evento incluso" : "eventi inclusi"}` : "Marketplace");
   const cell = (v, k) => <td key={k} className="px-1 py-1.5 sm:px-2 sm:py-2 text-center align-middle">{v === true ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0ABAB5] mx-auto" /> : v === false ? <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300 mx-auto" /> : <span className="text-[11px] sm:text-sm leading-tight text-slate-700">{v}</span>}</td>;
   const rows = [
     ...features.map((f) => [f.label, plans.map((p) => p.features.includes(f.key))]),
     ["Eventi", plans.map((p) => (p.max_events < 0 ? "Illimitati" : p.max_events === 1 ? "1" : `Fino a ${p.max_events}`))],
     ["Staff e Volontari", plans.map((p) => (p.max_users < 0 ? "Illimitati" : `Fino a ${p.max_users}`))],
     ["Assistenza email", plans.map(() => true)],
+    ...(plans[0]?.addons ? [["Event Planner", plans.map((p) => addonCell(p.addons.planner))], ["Event Map", plans.map((p) => addonCell(p.addons.eventmap))]] : []),
     ["Videochiamate Google Meet", plans.map((p) => (p.video_quota === 0 ? false : p.video_quota < 0 ? "Illimitate e prioritarie" : `${p.video_quota}/mese`))],
   ];
   return (
@@ -98,7 +108,7 @@ export function ComparisonTable({ plans, features }) {
 
 export default function PlansSection({ authed, claim }) {
   const data = usePlans();
-  const [cycle, setCycle] = useState("semester");
+  const [cycle, setCycle] = useState("yearly");
   if (!data) return <p className="text-center text-sm text-slate-400">Caricamento piani…</p>;
   return (
     <div className="space-y-10" data-testid="plans-section">

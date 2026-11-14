@@ -838,3 +838,41 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Super Admin /piattaforma/integrazione-referenti (backend/referenti_integrazione.py): anteprima, esecuzione con backup (referenti_integrazione_runs), ripristino; idempotente.
 - Test iteration_155: backend 100%, frontend OK (testo homepage corretto dopo il test). Aperto: Legal.jsx cita ancora "attività e follow-up" (testo legale, da confermare con l'utente).
 - In pausa: video promozionale Event Planner (scripts/planner_video/record.py, registrazione con Playwright + MapTiler; bloccata da lentezza WebGL in registrazione).
+
+## Video dimostrativo Event Planner in homepage (2026-11-14) — ANTEPRIMA, NON PUBBLICATO
+- Video reale 38 s registrato dall'interfaccia vera di Event Planner (anteprima, mappa MapTiler stradale, Milano Parco Sempione): /app/frontend/public/media/event-planner-demo.mp4 (4,5 MB, H.264) + .webm (3,8 MB, VP9) + event-planner-poster.jpg.
+- Produzione: scripts/planner_video/render_frames.py (Playwright, fotogramma per fotogramma, organizzazione TEST_ temporanea poi cancellata) + encode.sh (ffmpeg). Hook di registrazione in PlannerMap: window.__PLANNER_RECORDING (nessun effetto per gli utenti).
+- Homepage: components/landing/PlannerDemoSection.jsx ora mostra il video (autoplay muto, loop, playsInline, caricamento solo quando visibile, pausa fuori schermo) e un solo pulsante "Registrati a CRMEvent". Demo interattiva rimossa dalla homepage; endpoint pubblico non espone più la chiave MapTiler. Admin /piattaforma/event-planner-demo: solo on/off + statistiche.
+- In attesa: Event Map (nuovo applicativo video GPX) — pacchetti Marketplace, assegnazioni, campagne: da confermare l'avvio.
+
+## Homepage: video Event Planner (Pisa) + sezione Event Map (2026-11-14) — ANTEPRIMA, NON PUBBLICATO
+- Event Planner: nuovo video reale 44,6 s dall'interfaccia vera (Pisa, percorso DIMOSTRATIVO 3,8 km che segue le strade, da OSRM foot/OpenStreetMap; area arrivo nel Parco Urbano della Cittadella con arco, corridoio transenne, ristoro, segreteria/ritiro pettorali, palco + area pubblico, stand sponsor, arco sponsor, volontari, trascinamento). File: frontend/public/media/event-planner-demo.mp4/.webm + -poster.jpg. Script: scripts/planner_video/render_pisa.py.
+- Event Map: video verticale 20 s 540x960 (event-map-demo.mp4/.webm + poster), generato con MapLibre/MapTiler (scripts/planner_video/render_eventmap.py), dichiarato "Esempio dimostrativo · risultato previsto" (Event Map non esiste ancora). Logo evento fittizio "PISA RUN" grande, "Powered by CRMEvent" piccolo.
+- Homepage: components/landing/EventMapSection.jsx (sotto Event Planner), CTA unica "Registrati a CRMEvent" in entrambe. Video: autoplay muto, loop, playsInline, preload none + caricamento solo se visibile.
+- In attesa: Event Map applicativo vero + pacchetti/assegnazioni/campagne Super Admin (prezzi da approvare dall'utente).
+
+## Riorganizzazione homepage (2026-11-14) — ANTEPRIMA, NON PUBBLICATA
+- Ordine: Hero (immagine reale Event Planner, /media/hero-event-planner.webp|jpg) → Funzionalità (10 schede, Event Map "In arrivo") → Staff & Volontari (mock Maratona di Pisa, 13 Dic 2026 esempio) → Sponsor (pipeline sponsor sportivi, esempio) → Event Planner video → Event Map video → Come funziona (4 passi) → CTA registrati → Prezzi.
+- Rimosse: Problema, Multi-evento, Per chi è, Meno fogli Excel, Guarda CRMEvent in azione, DashboardMock. Tutti i CTA "Registrati gratis" → /registrati. Menu desktop da xl (≥1280px), sotto hamburger.
+- Test: iteration_156 ok (header affollato a lg sistemato dopo).
+
+
+## Formule, Event Planner, Event Map e Marketplace (2026-11-14) — ANTEPRIMA, NON PUBBLICATA
+- Prezzi: durata predefinita 12 mesi (pagina pubblica e "Il mio abbonamento").
+- Silver: max 50 Staff e Volontari (DEFAULT_LIMITS + migrazione silver_limits_v3), blocco backend con invito a Gold.
+- backend/addons.py: eventi inclusi per piano (Bronze 0, Silver 1, Gold 3; prova 0), attivazioni per evento (addon_activations), diritti (addon_grants: purchase/superadmin/promo), Stripe one-time con attivazione solo a pagamento confermato (webhook kind=addon + confirmation), contatori video Event Map (addon_usage, consume_video pronto per il generatore). Planner API bloccate (403 addon_required) su eventi non coperti.
+- Menu: Event Planner (/event-planner) ed Event Map (/event-map) sempre visibili; pagina informativa con video e "Attiva dal Marketplace"; Marketplace con prodotti event-planner/event-map.
+- Super Admin: /piattaforma/event-planner-map (configurazione, pacchetti, omaggi, promozioni con scadenza, revoca).
+- Prezzi vuoti finché non impostati dal Super Admin; video inclusi 0. Generazione video Event Map non ancora sviluppata.
+- Test: iteration_157 (backend 10/10, frontend ok), fix minori applicati dopo.
+
+
+## Event Map: generatore video GPX → MP4 (2026-11-14) — ANTEPRIMA, NON PUBBLICATO
+- backend/eventmap_render.py: renderer in processo separato (PIL + FFmpeg da imageio-ffmpeg), dati OpenStreetMap da tile vettoriali OpenFreeMap disegnati localmente (stili Scuro/Stradale), provider sostituibile (EVENTMAP_MAP_PROVIDER=maptiler + MAPTILER_VIDEO_KEY per satellite in futuro). Scene: intro, partenza, camera che segue, punti di interesse (wpt), arrivo, finale panoramico; km progressivi, logo evento, Powered by CRMEvent, attribuzione OSM. Formati 9:16/1:1/16:9 a 1080p, 15/30/60 s.
+- Musica: 4 brani originali sintetizzati (backend/scripts/make_music.py) in backend/eventmap_assets/music e frontend/public/media/music.
+- backend/eventmap.py: tracce GPX (upload o da Mappe evento), anteprima, coda (concorrenza 1), stati queued/processing/completed/error, video scalato solo dopo MP4 salvato, slot riservati per i video in coda, limitazione formati per pacchetto, download con Range (Safari).
+- Frontend: /event-map/:id (EventMapStudio), tabella formule con righe Event Planner/Event Map, homepage senza "In arrivo" e con video generato dal renderer.
+- Prestazioni misurate in preview: ~1 core CPU, ~125 MB RAM; 15 s ≈ 50 s, 30 s ≈ 100 s, 60 s 16:9 ≈ 190 s; file 6–15 MB.
+- Test: iteration_158 (backend 14/14, frontend ok) + fix (Range, controllo attivazione su upload/anteprima, nome file, evento non trovato).
+- Org demo mantenuta: TEST_EventMap Org (vedi test_credentials.md).
+

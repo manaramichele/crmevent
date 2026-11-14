@@ -1,29 +1,25 @@
-import asyncio, json, time
+"""Screenshot con griglia per scegliere le coordinate. Uso: python3 probe.py lng lat zoom out.png"""
+import asyncio, sys
 from playwright.async_api import async_playwright
-BASE = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split()[0].strip()
-async def main():
-    async with async_playwright() as p:
-        b = await p.chromium.launch(args=["--use-gl=angle","--use-angle=swiftshader","--enable-webgl","--ignore-gpu-blocklist"])
-        ctx = await b.new_context(viewport={"width":1600,"height":900})
-        n={"c":0,"err":0}
-        async def mt(route):
-            try:
-                h={**route.request.headers,"origin":"https://crmevent.it","referer":"https://crmevent.it/"}
-                r=await route.fetch(headers=h); n["c"]+=1
-                if r.status!=200: n["err"]+=1
-                await route.fulfill(response=r, headers={**r.headers,"access-control-allow-origin":"*"})
-            except Exception as e: print("route err", e)
-        await ctx.route("https://api.maptiler.com/**", mt)
-        await ctx.add_init_script("window.__PLANNER_RECORDING = true;")
-        email=json.load(open("out/test_account.json"))["email"]
-        r=await ctx.request.post(f"{BASE}/api/auth/login", data={"email":email,"password":"VideoDemo2026!"}); print("login",r.status)
-        evs=await (await ctx.request.get(f"{BASE}/api/events")).json(); ev=(evs if isinstance(evs,list) else evs.get("items"))[0]
-        page=await ctx.new_page(); page.on("console", lambda m: print("console", m.type, m.text[:150]) if m.type in ("error","warning") else None)
-        t=time.time(); await page.goto(f"{BASE}/eventi/{ev['id']}/planner")
-        for i in range(8):
-            await page.wait_for_timeout(5000)
-            st=await page.evaluate("() => ({hook: !!window.__plannerMap, loaded: window.__plannerMap ? window.__plannerMap.loaded() : null, style: window.__plannerMap ? window.__plannerMap.isStyleLoaded() : null})")
-            print(round(time.time()-t), st, n)
-        await page.screenshot(path="out/probe.png")
+import mapkit
+
+GRID_JS = """() => { const c = document.createElement('canvas'); c.width = innerWidth; c.height = innerHeight;
+  c.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9'; const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(255,0,0,.55)'; g.fillStyle = '#d00'; g.font = 'bold 12px Arial';
+  for (let x = 0; x <= innerWidth; x += 100) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, innerHeight); g.stroke(); g.fillText(x, x + 2, 12); }
+  for (let y = 0; y <= innerHeight; y += 100) { g.beginPath(); g.moveTo(0, y); g.lineTo(innerWidth, y); g.stroke(); g.fillText(y, 2, y - 2); }
+  document.body.appendChild(c); const a = map.unproject([0, 0]), b = map.unproject([innerWidth, innerHeight]);
+  return [a.lng, a.lat, b.lng, b.lat]; }"""
+
+
+async def main(lng, lat, z, out):
+    async with async_playwright() as pw:
+        b = await pw.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist"])
+        ctx = await b.new_context(viewport={"width": 1000, "height": 700})
+        await mapkit.setup(ctx, {})
+        page = await mapkit.open_map(ctx, [lng, lat], z)
+        print("bounds lng0 lat0 lng1 lat1", await page.evaluate(GRID_JS))
+        await page.screenshot(path=out)
         await b.close()
-asyncio.run(main())
+
+asyncio.run(main(float(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3]), sys.argv[4]))
