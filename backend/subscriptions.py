@@ -40,7 +40,7 @@ FEATURE_KEYS = [k for k, _ in FEATURES]
 HIDDEN_FEATURES = {"anagrafiche", "attivita", "followup"}  # sezioni rimosse dall'interfaccia
 VISIBLE_FEATURES = [(k, l) for k, l in FEATURES if k not in HIDDEN_FEATURES]
 # Limiti per piano (-1 = illimitati). Usati se la configurazione salvata non li specifica.
-DEFAULT_LIMITS = {"bronze": {"max_events": 1, "max_users": 10}, "silver": {"max_events": 5, "max_users": 30},
+DEFAULT_LIMITS = {"bronze": {"max_events": 1, "max_users": 10}, "silver": {"max_events": 5, "max_users": 50},
                   "gold": {"max_events": -1, "max_users": -1}}
 UPGRADE_TO = {"bronze": "SILVER o GOLD", "silver": "GOLD"}
 
@@ -69,7 +69,7 @@ def _live_enabled() -> bool:
 
 
 # Marketplace e moduli acquistati: indipendenti dal piano (restano utilizzabili con prova/abbonamento terminati)
-WRITE_EXEMPT = ("/saas", "/account", "/auth", "/notifications", "/my/", "/support", "/news", "/marketplace", "/iscritti", "/press")
+WRITE_EXEMPT = ("/saas", "/account", "/auth", "/notifications", "/my/", "/support", "/news", "/marketplace", "/addons", "/iscritti", "/press")
 WRITE_EXEMPT_EXACT = ()
 SAFE = ("GET", "HEAD", "OPTIONS")
 GOLD_NOTICE_HOURS = 4
@@ -316,6 +316,9 @@ def build(db, deps: dict):
         if not doc.get("silver_limits_v2"):  # migrazione una tantum: SILVER 5 eventi / 30 utenti / 3 videochiamate
             await db.saas_config.update_one({"id": "config"}, {"$set": {"plans.silver.max_events": 5, "plans.silver.max_users": 30,
                                                                        "plans.silver.video_quota": 3, "silver_limits_v2": True}})
+            doc = await db.saas_config.find_one({"id": "config"}, {"_id": 0})
+        if not doc.get("silver_limits_v3"):  # migrazione una tantum: SILVER fino a 50 Staff e Volontari
+            await db.saas_config.update_one({"id": "config"}, {"$set": {"plans.silver.max_users": 50, "silver_limits_v3": True}})
             doc = await db.saas_config.find_one({"id": "config"}, {"_id": 0})
         _cfg_cache.update(at=time.time(), cfg=doc)
         return doc

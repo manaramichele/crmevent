@@ -167,7 +167,7 @@ export default function MySubscription() {
   const { checkAuth } = useAuth();
   const plans = usePlans();
   const [s, setS] = useState(null);
-  const [cycle, setCycle] = useState("semester");
+  const [cycle, setCycle] = useState("yearly");
   const [pv, setPv] = useState(null);
   const [busy, setBusy] = useState(false);
   const [params, setParams] = useSearchParams();

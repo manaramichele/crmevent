@@ -98,7 +98,7 @@ export function ComparisonTable({ plans, features }) {
 
 export default function PlansSection({ authed, claim }) {
   const data = usePlans();
-  const [cycle, setCycle] = useState("semester");
+  const [cycle, setCycle] = useState("yearly");
   if (!data) return <p className="text-center text-sm text-slate-400">Caricamento piani…</p>;
   return (
     <div className="space-y-10" data-testid="plans-section">

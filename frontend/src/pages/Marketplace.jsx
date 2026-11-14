@@ -9,6 +9,9 @@ import { toast } from "sonner";
 import { Search, Store, CheckCircle2, Clock, Bell, BellRing } from "lucide-react";
 import { ServiceIcon, PRICE_TYPES, STATUS, priceLabel } from "@/lib/marketplace";
 import { YouTubeTutorial } from "@/components/marketplace/YouTubeTutorial";
+import AddonBuy from "@/components/addons/AddonBuy";
+
+const ADDON_PRODUCT = { "event-planner": "planner", "event-map": "eventmap" };
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : null);
 
@@ -121,16 +124,16 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
               <ul className="mt-1 space-y-0.5">{g.items.map((it) => <li key={it} className="flex gap-2 text-sm text-slate-600"><span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0ABAB5] shrink-0" />{it}</li>)}</ul></div>))}</div>}
           {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">{s.status === "coming_soon" ? "Funzionalità previste" : "Condizioni e durata"}</div>{s.terms}</div>}
         </div>
-        <p className="text-xs text-slate-500">Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto. Appartiene all'organizzazione.</p>
+        <p className="text-xs text-slate-500">{ADDON_PRODUCT[s.key] ? "Attivazione per singolo evento. Silver include 1 evento, Gold 3 eventi; per gli eventi successivi si acquista un'attivazione aggiuntiva. Il diritto si attiva solo dopo la conferma del pagamento." : "Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto. Appartiene all'organizzazione."}</p>
         <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-white border-t border-slate-100 space-y-3" data-testid="mkt-detail-actions">
-        {s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}{s.key === "archivio-iscritti" && <Link to="/iscritti" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-iscritti">Apri servizio</Link>}</div>
+        {ADDON_PRODUCT[s.key] ? <AddonBuy product={ADDON_PRODUCT[s.key]} onDone={onChanged} /> : s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}{s.key === "archivio-iscritti" && <Link to="/iscritti" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-iscritti">Apri servizio</Link>}</div>
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">
                 {s.scope === "event" && <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm" data-testid="mkt-detail-event"><option value="">Seleziona l'evento…</option>{events.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>}
                 <Button disabled={busy || (s.scope === "event" && !eventId)} onClick={buy} className="w-full h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-detail-buy">{busy ? "Attendi..." : s.free || s.demo_free ? "Attiva gratuitamente" : "Conferma e vai al pagamento"}</Button>
               </div>)}
-        {s.active && <ActivePurchase s={s} canPurchase={canPurchase} onChanged={onChanged} />}
+        {s.active && !ADDON_PRODUCT[s.key] && <ActivePurchase s={s} canPurchase={canPurchase} onChanged={onChanged} />}
         {s.status === "coming_soon" && !s.active && <NotifyButton s={s} onToggle={onToggle} full />}
         </div>
       </DialogContent>
@@ -144,7 +147,11 @@ export default function Marketplace() {
   const [cat, setCat] = useState("");
   const [open, setOpen] = useState(null);
   const [params, setParams] = useSearchParams();
-  const load = () => api.get("/marketplace/services").then(({ data }) => { setData(data); setOpen((o) => (o ? data.services.find((x) => x.id === o.id) || null : o)); }).catch(() => setData({ services: [], categories: [] }));
+  const load = () => api.get("/marketplace/services").then(({ data }) => {
+    setData(data);
+    const want = params.get("servizio");
+    setOpen((o) => (o ? data.services.find((x) => x.id === o.id) || null : want ? data.services.find((x) => x.key === want) || null : o));
+  }).catch(() => setData({ services: [], categories: [] }));
   const handled = useRef(false);
   useEffect(() => {
     if (handled.current) return;

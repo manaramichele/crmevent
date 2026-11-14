@@ -55,7 +55,10 @@ export default function EventPlanner() {
   }, [h.reset]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     api.get("/planner/config").then(({ data }) => setCfg(data)).catch(() => setCfg({ library: [] }));
-    loadList().then((ps) => { const p = ps.find((x) => !x.archiviato); if (p) open(p.id); }).catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
+    loadList().then((ps) => { const p = ps.find((x) => !x.archiviato); if (p) open(p.id); }).catch((e) => {
+      if (e.response?.data?.detail?.code === "addon_required") { toast.info(e.response.data.detail.message); nav("/event-planner", { replace: true }); return; }
+      toast.error(formatApiError(e.response?.data?.detail));
+    });
   }, [loadList, open]);
 
   const persist = useCallback(async (features, lys) => {

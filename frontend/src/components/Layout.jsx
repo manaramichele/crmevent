@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, Handshake, Contact,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning, Map as MapIcon, Film,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
@@ -45,6 +45,8 @@ const ORG_NAV = [
   { to: "/azioni-rapide", label: "Azioni rapide", icon: Zap, id: "azioni-rapide", perm: "*" },
   { to: "/marketplace", label: "Marketplace", icon: Store, id: "marketplace", perm: "*" },
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi", perm: "eventi" },
+  { to: "/event-planner", label: "Event Planner", icon: MapIcon, id: "event-planner", perm: "*" },
+  { to: "/event-map", label: "Event Map", icon: Film, id: "event-map", perm: "*" },
   { to: "/staff-volontari", label: "Staff / Volontari", icon: UserCog, id: "staff-volontari", perm: "staff" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende", perm: "aziende" },
   { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita", perm: "ospitalita" },
@@ -77,6 +79,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo", badge: "demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
   { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
+  { to: "/piattaforma/event-planner-map", label: "Event Planner & Event Map", icon: MapIcon, id: "piattaforma-addons" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },

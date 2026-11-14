@@ -45,6 +45,7 @@ import iscritti
 import calendario_italia
 import avail_prefs
 import planner
+import addons
 import planner_demo
 import referenti_integrazione
 import gcal_availability
@@ -7054,7 +7055,7 @@ async def stripe_webhook(request: Request):
     if t == "charge.refunded":
         await PARTNER["on_refund"](obj)
         return {"received": True}
-    if await SAAS["handle_webhook"](t, obj) or await MKT["handle_webhook"](t, obj):
+    if await ADDONS["handle_webhook"](t, obj) or await SAAS["handle_webhook"](t, obj) or await MKT["handle_webhook"](t, obj):
         return {"received": True}
     if t == "customer.subscription.deleted":
         await db.organizations.update_one({"subscription.stripe_subscription_id": obj["id"]},
@@ -13963,7 +13964,13 @@ app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
 app.include_router(AVP["router"])
-PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit})
+ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
+                           "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
+                           "stripe_mode": STRIPE_MODE})
+app.include_router(ADDONS["router"])
+app.add_event_handler("startup", ADDONS["ensure"])
+PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit,
+                             "require_covered": ADDONS["require_covered"]})
 app.include_router(PLANNER["router"])
 app.add_event_handler("startup", PLANNER["ensure"])
 PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})
