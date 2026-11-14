@@ -210,8 +210,11 @@ def build(db, deps: dict):
             t.pop("storage", None)
             t.pop("preview", None)
         races = await _races(user["org_id"], eid)
-        if not races and len(tracks) == 1:  # evento con una sola gara: scheda creata dal GPX già caricato
-            races = [await _new_race(user, ev, tracks[0])]
+        if not races and len(tracks) == 1 and not sett.get("races_initialized"):  # evento con una sola gara: scheda creata una sola volta dal GPX già caricato
+            res = await db.eventmap_settings.update_one({"org_id": user["org_id"], "event_id": eid, "races_initialized": {"$ne": True}},
+                                                        {"$set": {"races_initialized": True}, "$setOnInsert": {"date": None}}, upsert=True)
+            if res.modified_count or res.upserted_id:
+                races = [await _new_race(user, ev, tracks[0])]
         by_track = {r["track_id"]: r["name"] for r in reversed(races) if r.get("track_id")}
         used = {r.get("track_id") for r in races}
         videos = await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(200)
@@ -234,6 +237,9 @@ def build(db, deps: dict):
         return rc
 
     async def _check_race(org_id, ev, data: dict):
+        for k in ("style", "format", "duration", "speed", "show_aid", "show_elevation"):
+            if k in data and data[k] is None:
+                data.pop(k)
         if data.get("track_id"):
             t = await _track(org_id, data["track_id"])
             if t["event_id"] != ev["id"]:
@@ -249,9 +255,6 @@ def build(db, deps: dict):
                 data[k] = data[k].strip()
         if "name" in data and not data["name"]:
             raise HTTPException(status_code=400, detail="Indica il nome della gara")
-        for k in ("style", "format", "duration", "speed", "show_aid", "show_elevation"):
-            if k in data and data[k] is None:
-                data.pop(k)
         return data
 
     async def _new_race(user, ev, track=None, data=None):

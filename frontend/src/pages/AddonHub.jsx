@@ -28,7 +28,7 @@ function InfoPage({ info, s }) {
         <ul className="space-y-2" data-testid="addon-info-benefits">{info.benefits.map((b) => <li key={b} className="flex gap-2 text-sm text-slate-700"><CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-[#0ABAB5]" />{b}</li>)}</ul>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-1">
           <div className="font-semibold text-slate-900"><PriceLine info={info} s={s} /></div>
-          <div className="text-slate-500">{s.included > 0 ? `Il tuo piano include ${info.name} su ${s.included} ${s.included === 1 ? "evento" : "eventi"}: già tutti assegnati.` : `Il tuo piano attuale non include eventi ${info.name}. Silver ne include 1, Gold 3.`}</div>
+          <div className="text-slate-500">{s.included > 0 ? `Il tuo piano include ${info.name} su ${s.included} ${s.included === 1 ? "evento" : "eventi"}: già tutti assegnati.` : `Il tuo piano attuale non include eventi ${info.name}.`}</div>
         </div>
         <Link to={`/marketplace?servizio=${info.slug}`} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#0ABAB5] px-6 font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="addon-info-marketplace"><Store className="w-4 h-4" />Attiva dal Marketplace</Link>
       </div>

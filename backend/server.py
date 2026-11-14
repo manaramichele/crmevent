@@ -4527,7 +4527,7 @@ ORG_CASCADE_COLLECTIONS = ["events", "companies", "persons", "deals", "staff", "
                            "person_companies", "lodgings", "meals", "briefing_versions", "invoices",
                            "structures", "fic_settings", "org_invites", "leads", "memberships",
                            "planner_projects", "planner_revisions", "addon_grants", "addon_activations",
-                           "addon_usage", "eventmap_tracks", "eventmap_videos", "eventmap_logos", "eventmap_settings"]
+                           "addon_usage", "eventmap_tracks", "eventmap_videos", "eventmap_logos", "eventmap_settings", "eventmap_races"]
 ROLE_LABELS_USER = {"superadmin": "Super Admin", "admin": "Admin Organizzazione",
                     "member": "Utente", "staff": "Staff", "volunteer": "Volontario"}
 

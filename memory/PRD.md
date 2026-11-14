@@ -941,3 +941,15 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Super Admin: Modifica servizio Event Planner con prezzo mensile e modalità abilitate; AddonAdmin omaggio "tutti gli eventi".
 - Test: 22 pytest + verifica Stripe test (sessione subscription 174 € / 6 mesi e 348 € / 12 mesi, riuso price, webhook firmato attivazione/disdetta), UI Marketplace.
 
+
+## Event Map — gare indipendenti (2026-11-14) — NON pubblicato
+- Collezione `eventmap_races` (org_id, event_id, name, title, subtitle, date, distance_km, track_id, logo, style, format, duration, music, speed, show_aid, show_elevation, order). Endpoint: POST /api/eventmap/events/{eid}/races, POST .../races/from-tracks, PUT/DELETE /api/eventmap/races/{rid}, POST /races/{rid}/copy-from/{src}, /races/{rid}/preview, /races/{rid}/videos.
+- Video: race_id, race_name, title, subtitle, distance_display_m, date, version (rigenera = nuova versione). Crediti invariati (org, solo a completamento).
+- Compatibilità: evento con 1 GPX → scheda gara creata una sola volta (eventmap_settings.races_initialized); più GPX → banner «Crea schede gara dai GPX». GPX dedup via sha256. Eliminare una gara non tocca GPX/video. eventmap_races nella cascata eliminazione org.
+- Render: sottotitolo sotto il titolo, distanza ufficiale (scala km mostrati).
+- UI: RaceBar (Seleziona gara, Nuova, Modifica, Duplica), salvataggio automatico con flush al cambio gara, archivio con etichetta gara + filtro + Rigenera; anteprima sticky.
+- Test: tests/test_eventmap_races.py 13/13. Test legacy stale: test_eventmap_video.py (upload prima dell'attivazione), soglia pixel in test_eventmap_logo.py (render identico al commit precedente).
+
+## Rimozione testo "Silver ne include 1, Gold 3." (2026-11-14)
+- AddonHub.jsx (pagine /event-planner e /event-map, utenti senza eventi inclusi): frase rimossa; solo testo, nessuna regola cambiata. Verificato desktop e mobile.
+

@@ -266,7 +266,7 @@ export default function EventMapStudio() {
           </div>
           {rg.videos_remaining === 0 && <p className="text-sm text-slate-500" data-testid="em-no-videos">Hai esaurito i video disponibili: <Link to={`/marketplace?servizio=event-map&evento=${id}`} className="font-semibold text-[#088F8A]">acquista un pacchetto</Link>.</p>}
         </div>
-        <div className="space-y-3">
+        <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
           {preview ? <img src={preview} alt="Anteprima del percorso" className="mx-auto max-h-[520px] rounded-xl border border-slate-200" data-testid="em-preview-img" /> : <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">L'anteprima mostra un momento lungo il percorso e la scena finale, con data, velocità, ristori, altimetria, logo e stile scelti. Non consuma video.</div>}
         </div>
       </div>)}
