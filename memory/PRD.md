@@ -906,3 +906,8 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Home: card "Mappe & Percorsi" rimossa, Event Planner con nuova descrizione; nomi demo → City Run Festival / Urban Marathon / Auto City Mobility; video Event Map e Event Planner rigenerati con gli stessi percorso, mappa, zoom e animazioni (cambiano solo i testi). Le etichette della mappa (nomi di vie/città) restano quelle reali.
 - Test: iteration_160 (backend 17/17, frontend ok) + delete logo.
 
+
+## SEO: rapporto testo/HTML e compressione (2026-11-14) — NON pubblicato
+- index.html: script consenso spostato in public/consent.js (stesso comportamento, sempre primo script); contenuto testuale statico dentro #root (sostituito da React); emergent-main.js caricato solo fuori da crmevent.it. Rapporto testo/HTML build: ~39% (prima ~0%).
+- Build: compression-webpack-plugin genera .gz per JS/CSS (CSS 199 KB → 36 KB). Serve `gzip_static on;` (o `gzip on; gzip_types text/css application/javascript;`) nell'nginx Aruba.
+
