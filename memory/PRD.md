@@ -960,3 +960,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - File: frontend/public/media/event-map-demo-gvt.mp4 (+ -poster.jpg); GPX e logo in /app/memory/demo_assets/. Homepage NON ancora aggiornata (usa ancora event-map-demo.mp4 in 9:16).
 - Prossimi passi dopo l'ok: sostituire il video in homepage (riquadro 16:9), anteprima Brevo con Play, pagina pubblica + URL stabili, download per il Super Admin, materiali Event Planner.
 
+
+## Materiali promozionali Brevo (2026-11-14) — NON pubblicato
+- Anteprime 16:9 1200×675 JPG (fascia titolo, Play centrale, logo CRMEvent): /media/brevo/event-planner-anteprima.jpg, /media/brevo/event-map-anteprima.jpg; script backend/scripts/make_brevo_previews.py.
+- Pagine pubbliche senza login: /video/event-planner, /video/event-map (PromoVideo.jsx, config lib/promoMaterials.js) con player, download MP4, CTA /registrati.
+- Event Map usa il video Green Valley Trail (event-map-demo-gvt.mp4); la homepage usa ancora il vecchio demo 9:16 finché non approvato lo scambio.
+- Super Admin: Marketing → Email & Brevo → tab «Materiali promozionali» (anteprime, download immagine/MP4, copia URL pagina/MP4/immagine, copia HTML Brevo).
+
