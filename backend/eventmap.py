@@ -194,6 +194,14 @@ def build(db, deps: dict):
         await audit(user, "eventmap_logo_upload", detail=f"{eid} · {doc['name']}")
         return {k: v for k, v in doc.items() if k not in ("storage", "org_id")}
 
+    @r.delete("/events/{eid}/logos/{lid}")
+    async def delete_logo(eid: str, lid: str, user: dict = Depends(admin_dep)):
+        lg = await db.eventmap_logos.find_one_and_delete({"org_id": user["org_id"], "event_id": eid, "id": lid}, {"_id": 0})
+        if not lg:
+            raise HTTPException(status_code=404, detail="Logo non trovato")
+        await audit(user, "eventmap_logo_delete", detail=f"{eid} · {lg.get('name')}")
+        return {"ok": True}
+
     @r.get("/events/{eid}/logos/{lid}/image")
     async def logo_image(eid: str, lid: str, user: dict = Depends(admin_dep)):
         ev = await _event(user["org_id"], eid)
@@ -290,8 +298,8 @@ def build(db, deps: dict):
         ev = await _event(user["org_id"], eid)
         if body.logo and body.logo != "event":
             await _logo_bytes(user["org_id"], ev, body.logo)
-        elif body.logo == "event" and not ev.get("logo_url"):
-            body.logo = None
+        elif body.logo == "event" and not await _logo_bytes(user["org_id"], ev, "event"):
+            body.logo = None  # logo in anagrafica non leggibile: video senza logo invece di un errore in coda
         lock = locks.setdefault(user["org_id"], asyncio.Lock())
         async with lock:
             rg = await _rights(user["org_id"], eid)

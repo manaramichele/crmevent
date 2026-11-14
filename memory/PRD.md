@@ -899,3 +899,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: 4/4 nuovi + 10/10 test_addons_planner_eventmap; pip check ok; requirements.txt invariato.
 
 
+
+## Logo evento nei video Event Map + Home page (2026-11-14) — NON pubblicato
+- Event Map: sezione "6. Logo evento" (logo anagrafica proposto, upload PNG max 5 MB, miniature, rimozione, "Senza logo"). Endpoint: POST/DELETE /api/eventmap/events/{eid}/logos, GET .../logos/{lid}/image; campo `logo` in anteprima e video. Collezione eventmap_logos (nel cascade org).
+- Renderer: logo fisso in alto a destra per tutto il video (riquadro bianco semitrasparente, proporzioni originali, LOGO_BOX per formato); scheda titolo spostata sotto il logo. Verificato nel file MP4 in 9:16, 1:1, 16:9.
+- Home: card "Mappe & Percorsi" rimossa, Event Planner con nuova descrizione; nomi demo → City Run Festival / Urban Marathon / Auto City Mobility; video Event Map e Event Planner rigenerati con gli stessi percorso, mappa, zoom e animazioni (cambiano solo i testi). Le etichette della mappa (nomi di vie/città) restano quelle reali.
+- Test: iteration_160 (backend 17/17, frontend ok) + delete logo.
+
