@@ -1,0 +1,21 @@
+goto
+caricata
+stato 0 [True, False, '/eventi/d1d43799b5504f119a31e05bda03fa00/planner']
+stato 1 [True, False, '/eventi/d1d43799b5504f119a31e05bda03fa00/planner']
+stato 2 [True, True, '/eventi/d1d43799b5504f119a31e05bda03fa00/planner']
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: write EPIPE
+    at WriteWrap.onWriteComplete [as oncomplete] (node:internal/stream_base_commons:95:16)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:169:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:128:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v20.18.0

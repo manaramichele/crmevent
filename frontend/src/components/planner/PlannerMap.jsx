@@ -32,6 +32,7 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
       center: center || [12.4964, 41.9028], zoom: zoom || (center ? 16 : 5), attributionControl: { compact: true }, doubleClickZoom: false,
       maxBounds: bounds, minZoom: minZoom || 0, cooperativeGestures: cooperative });
     map.current = m;
+    if (window.__PLANNER_RECORDING) window.__plannerMap = m;
     let loaded = false;
     m.on("load", () => { loaded = true; });
     m.on("error", (e) => { if (!loaded && onError) onError(e?.error?.status || 0); });

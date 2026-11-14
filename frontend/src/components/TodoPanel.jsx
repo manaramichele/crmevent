@@ -5,12 +5,12 @@ import { toast } from "sonner";
 import { Check, ListTodo } from "lucide-react";
 import AssignSelect from "@/components/AssignSelect";
 
-const TIPO = { pipeline: ["Pipeline", "bg-violet-50 text-violet-700"], attivita: ["Attività", "bg-sky-50 text-sky-700"], followup: ["Follow-up", "bg-amber-50 text-amber-700"] };
+const TIPO = { pipeline: ["Pipeline", "bg-violet-50 text-violet-700"] };
 const BUCKET = { ritardo: ["In ritardo", "text-red-600"], scadenza: ["In scadenza", "text-amber-600"], da_fare: ["Da completare", "text-slate-500"] };
 const STATO = { da_fare: "Da fare", in_corso: "In corso", in_attesa: "In attesa", aperto: "Aperto" };
 const PRIO = { critica: "bg-red-100 text-red-800", alta: "bg-red-50 text-red-700", urgente: "bg-red-50 text-red-700", media: "bg-slate-100 text-slate-600", normale: "bg-slate-100 text-slate-600", bassa: "bg-slate-50 text-slate-500" };
 const dmy = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "Senza scadenza");
-const href = (i) => (i.tipo === "pipeline" ? `/eventi/${i.evento_id}/pipeline` : i.tipo === "attivita" ? "/attivita" : "/followup");
+const href = (i) => `/eventi/${i.evento_id}/pipeline`;
 
 function TodoRow({ i, onDone, onAssigned }) {
   const [lbl, cls] = TIPO[i.tipo];
@@ -62,7 +62,7 @@ export default function TodoPanel() {
   const [tipo, setTipo] = useState("all");
   const [ev, setEv] = useState("all");
   const [err, setErr] = useState(false);
-  const load = () => { setErr(false); setItems(null); api.get("/my/todo").then(({ data }) => setItems(data.items)).catch(() => { setErr(true); setItems([]); }); };
+  const load = () => { setErr(false); setItems(null); api.get("/my/todo").then(({ data }) => setItems(data.items.filter((i) => i.tipo === "pipeline"))).catch(() => { setErr(true); setItems([]); }); };
   useEffect(() => { load(); }, []);
   const assigned = (it, pid, name) => setItems((l) => l.map((x) => (x.id === it.id && x.tipo === it.tipo ? { ...x, responsabile_id: pid, responsabile: name } : x)));
   const done = async (i) => {

@@ -9,8 +9,8 @@ import { RechargeDialog } from "@/components/CreditsSection";
 import { toast } from "sonner";
 
 const CTX = {
-  "/": "Dashboard", "/eventi": "Eventi", "/aziende": "Aziende", "/persone": "Anagrafiche",
-  "/sponsor": "Sponsor & Partner", "/attivita": "Attività", "/followup": "Follow-up",
+  "/": "Dashboard", "/eventi": "Eventi", "/aziende": "Aziende",
+  "/sponsor": "Sponsor & Partner",
   "/lead": "Lead", "/impostazioni": "Impostazioni", "/supporto": "Supporto", "/profilo": "Profilo",
   "/app": "Area personale — I miei eventi",
 };

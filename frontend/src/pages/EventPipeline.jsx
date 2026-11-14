@@ -23,9 +23,9 @@ const PRIO = { normale: "Normale", importante: "Importante", critica: "Critica" 
 const PRIO_CLS = { normale: "bg-slate-100 text-slate-500", importante: "bg-indigo-50 text-indigo-700", critica: "bg-red-50 text-red-700" };
 const dmy = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
 const CRM_NAV = {
-  staff: { label: "Staff e volontari", to: () => `/persone` },
-  volunteers: { label: "Staff e volontari", to: () => `/persone` },
-  persons: { label: "Persone", to: () => `/persone` },
+  staff: { label: "Staff e volontari", to: () => `/staff-volontari` },
+  volunteers: { label: "Staff e volontari", to: () => `/staff-volontari` },
+  persons: { label: "Aziende e referenti", to: () => `/aziende` },
   companies: { label: "Aziende", to: () => `/aziende` },
   sponsors: { label: "Sponsor & Partner", to: (id) => `/sponsor?evento=${id}` },
   hospitality: { label: "Ospitalità & Pasti", to: (id) => `/ospitalita?evento=${id}` },

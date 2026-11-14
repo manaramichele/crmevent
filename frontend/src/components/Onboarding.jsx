@@ -42,22 +42,12 @@ const SECTIONS = [
     { t: "Turni scoperti", b: "Un turno senza persona assegnata risulta scoperto ed è segnalato anche in Dashboard.", s: [T("tab-turni")] },
   ]},
   { key: "aziende", label: "Aziende", route: () => "/aziende", steps: [
-    { t: "Aziende", b: "Gestisci le aziende collegate ai tuoi eventi e i relativi referenti, utili anche per Sponsor & Partner.", s: [T("add-company-button")] },
+    { t: "Aziende", b: "Gestisci le aziende collegate ai tuoi eventi e i loro referenti (nome, cognome, email e cellulare) direttamente nella scheda azienda.", s: [T("add-company-button")] },
     { t: "Ricerca", b: "Trova rapidamente un'azienda per nome o dati di contatto.", s: [T("search-company-input")] },
-  ]},
-  { key: "anagrafiche", label: "Anagrafiche", route: () => "/persone", steps: [
-    { t: "Anagrafiche", b: "L'archivio dei referenti e contatti della tua organizzazione, riutilizzabili nei vari moduli.", s: [T("add-person-button")] },
-  ]},
-  { key: "attivita", label: "Attività", route: () => "/attivita", steps: [
-    { t: "Attività", b: "Crea le cose da fare, assegna i responsabili e tieni sotto controllo scadenze, priorità e stati.", s: [T("add-activity-button")] },
-    { t: "Cerca e filtra", b: "Ritrova le attività per titolo o tipo.", s: [T("search-activity-input")] },
-  ]},
-  { key: "followup", label: "Follow-up", route: () => "/followup", steps: [
-    { t: "Follow-up", b: "Pianifica i ricontatti (telefonate, email, appuntamenti) per non perdere nessuna opportunità.", s: [T("add-followup-button")] },
   ]},
   { key: "sponsor", label: "Sponsor & Partner", route: () => "/sponsor", steps: [
     { t: "Sponsor & Partner", b: "Gestisci le trattative commerciali con aziende e referenti collegate all'evento.", s: [T("add-deal-button")] },
-    { t: "Filtra per evento", b: "Visualizza solo le trattative dell'evento che ti interessa, con stato, importi e follow-up.", s: [T("sponsor-event-filter")] },
+    { t: "Filtra per evento", b: "Visualizza solo le trattative dell'evento che ti interessa, con stato e importi.", s: [T("sponsor-event-filter")] },
   ]},
   { key: "ospitalita", label: "Ospitalità & Pasti", route: () => "/ospitalita", steps: [
     { t: "Seleziona l'evento", b: "Ospitalità e pasti si gestiscono per evento: scegli qui l'evento di riferimento.", s: [T("hosp-event-select")] },

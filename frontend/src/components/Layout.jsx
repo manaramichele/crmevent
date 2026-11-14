@@ -47,11 +47,8 @@ const ORG_NAV = [
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi", perm: "eventi" },
   { to: "/staff-volontari", label: "Staff / Volontari", icon: UserCog, id: "staff-volontari", perm: "staff" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende", perm: "aziende" },
-  { to: "/persone", label: "Anagrafiche", icon: Users, id: "persone", perm: "anagrafiche" },
   { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita", perm: "ospitalita" },
   { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor", perm: "sponsor" },
-  { to: "/attivita", label: "Attività", icon: ListChecks, id: "attivita", perm: "attivita" },
-  { to: "/followup", label: "Follow-up", icon: BellRing, id: "followup", perm: "followup" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
 ];
 // Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
@@ -65,11 +62,11 @@ const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
   return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [n] : [];
 });
 
-// Moduli Marketplace attivi: voce di menu dopo "Anagrafiche".
+// Moduli Marketplace attivi: voce di menu dopo "Aziende".
 const ISCRITTI_NAV = { to: "/iscritti", label: "Elenco Iscritti", icon: Contact, id: "iscritti", perm: "*" };
 const withIscritti = (items, on) => {
   if (!on) return items;
-  const i = items.findIndex((n) => n.id === "persone");
+  const i = items.findIndex((n) => n.id === "aziende");
   return i < 0 ? [...items, ISCRITTI_NAV] : [...items.slice(0, i + 1), ISCRITTI_NAV, ...items.slice(i + 1)];
 };
 
@@ -89,6 +86,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/calendario-eventi-italia", label: "Calendario Eventi Italia", icon: CalendarDays, id: "piattaforma-calendario-italia" },
   { to: "/piattaforma/preferenze-volontari", label: "Recupero preferenze volontari", icon: CalendarDays, id: "piattaforma-preferenze" },
   { to: "/piattaforma/event-planner-demo", label: "Event Planner in homepage", icon: Sparkles, id: "piattaforma-planner-demo" },
+  { to: "/piattaforma/integrazione-referenti", label: "Integrazione referenti", icon: Building2, id: "piattaforma-referenti" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
 ];
@@ -184,7 +182,7 @@ export function GlobalSearch() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const routeFor = { evento: "/eventi", azienda: "/aziende", persona: "/persone" };
+  const routeFor = { evento: "/eventi", azienda: "/aziende", persona: "/staff-volontari" };
 
   return (
     <div ref={box} className="relative w-full max-w-md">
@@ -442,7 +440,6 @@ export default function Layout({ children }) {
           {!isSuper && <div className="shrink-0"><NewsButton /></div>}
           <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
             className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>
-          <div className="shrink-0"><Notifications /></div>
           <div className="relative shrink-0">
             <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} aria-label="Profilo" aria-expanded={menuOpen} className="flex items-center gap-1.5 h-9 min-w-9 px-1.5 rounded-lg hover:bg-slate-100 transition-colors">
               {user?.picture ? <img src={user.picture} alt="" className="w-6 h-6 rounded-full object-cover" /> : <CircleUserRound className="w-5 h-5 text-slate-600" />}
