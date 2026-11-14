@@ -369,11 +369,12 @@ def build(db, deps: dict):
 
     @r.get("/platform/addons/orgs")
     async def sa_orgs(admin: dict = Depends(sa_dep)):
-        orgs = await db.organizations.find({"type": {"$in": ["cliente", None]}}, {"_id": 0, "id": 1, "nome": 1}).sort("nome", 1).to_list(2000)
+        # tutte le organizzazioni (Clienti, Interne, Test, anche con formula omaggio): i diritti li calcola summary()
+        orgs = await db.organizations.find({"id": {"$ne": "__platform__"}}, {"_id": 0, "id": 1, "nome": 1, "type": 1}).sort("nome", 1).to_list(2000)
         out = []
         for o in orgs:
             p, m = await summary(o["id"], "planner"), await summary(o["id"], "eventmap")
-            out.append({"id": o["id"], "nome": o.get("nome"), "plan_label": p["plan_label"], "mode": p["mode"], "unrestricted": p["unrestricted"],
+            out.append({"id": o["id"], "nome": o.get("nome"), "type": o.get("type") or "cliente", "plan_label": p["plan_label"], "mode": p["mode"], "unrestricted": p["unrestricted"],
                         "planner": {k: p[k] for k in ("included", "included_used", "purchased", "granted")} | {"active": sum(a["covered"] for a in p["activations"])},
                         "eventmap": {k: m[k] for k in ("included", "included_used", "purchased", "granted", "videos_total", "videos_used")} | {"active": sum(a["covered"] for a in m["activations"])},
                         "promos": len(p["promos"]) + len(m["promos"])})
