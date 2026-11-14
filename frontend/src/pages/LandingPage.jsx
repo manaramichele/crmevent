@@ -49,11 +49,11 @@ function BrowserFrame({ children, url = "app.crmevent.it" }) {
 function PipelineMock() {
   const cols = [["Prospect", [["Sport Point Toscana", "Stand expo", "€ 2.000"], ["Bici & Run Store", "Area sponsor", "€ 1.500"]], "border-t-slate-300"],
     ["Proposta inviata", [["Acqua Fonte Alta", "Fornitore ristoro", "€ 4.000"]], "border-t-amber-400"],
-    ["In trattativa", [["Energy Bar Italia", "Pacco gara", "€ 6.000"], ["Auto Pisa Mobility", "Auto ufficiale", "€ 8.000"]], "border-t-tiffany"],
+    ["In trattativa", [["Energy Bar Italia", "Pacco gara", "€ 6.000"], ["Auto City Mobility", "Auto ufficiale", "€ 8.000"]], "border-t-tiffany"],
     ["Confermato", [["Banca del Territorio", "Title sponsor", "€ 25.000"]], "border-t-emerald-400"]];
   return (
     <div className="text-left" data-testid="home-sponsor-pipeline">
-      <div className="px-4 pt-3 flex items-center justify-between"><span className="text-xs font-semibold text-slate-700">Sponsor · Maratona di Pisa (esempio)</span><span className="text-[11px] text-slate-500">Pipeline € 46.500</span></div>
+      <div className="px-4 pt-3 flex items-center justify-between"><span className="text-xs font-semibold text-slate-700">Sponsor · City Run Festival (esempio)</span><span className="text-[11px] text-slate-500">Pipeline € 46.500</span></div>
       <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
         {cols.map(([t, cards, b]) => (
           <div key={t} className={`bg-slate-50 rounded-lg border border-slate-200 border-t-4 ${b}`}>
@@ -83,7 +83,7 @@ function VolunteerMock() {
     <div className="text-left" data-testid="home-volunteer-mock">
       <div className="bg-slate-900 p-4 text-white">
         <div className="text-[10px] text-tiffany font-semibold uppercase">Prossimo evento</div>
-        <div className="font-display font-bold">Maratona di Pisa</div>
+        <div className="font-display font-bold">Urban Marathon</div>
         <div className="text-[10px] text-slate-300 mt-1 flex items-center gap-1"><CalendarDays className="w-3 h-3" />Domenica 13 Dic 2026 · esempio</div>
       </div>
       <div className="p-3 space-y-2">
@@ -102,8 +102,7 @@ const FEATURES = [
   [UserCog, "Staff & Volontari", "Assegna persone, ruoli, aree operative e responsabilità."],
   [Users2, "Team", "Crea squadre operative e mostra subito chi lavora con chi."],
   [Clock, "Turni", "Organizza giorni, orari, punti di ritrovo e attività."],
-  [MapIcon, "Mappe & Percorsi", "Condividi percorsi, mappe operative e punti di riferimento."],
-  [MapIcon, "Event Planner", "Progetta percorsi, strutture e spazi del tuo evento direttamente sulla mappa."],
+  [MapIcon, "Event Planner", "Progetta il tuo evento direttamente sulla mappa. Organizza percorsi, aree operative, gazebo, strutture, sponsor e punti di assistenza in un unico spazio."],
   [CalendarCheck2, "Google Calendar", "Porta eventi e turni nel calendario degli utenti."],
   [Film, "Event Map", "Genera dalla traccia GPX un video animato del percorso, pronto per i social."],
 ];
@@ -229,10 +228,10 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="animate-fade-up" data-testid="hero-planner-image">
-            <BrowserFrame url="app.crmevent.it/eventi/maratona-di-pisa/planner">
+            <BrowserFrame url="app.crmevent.it/eventi/city-run-festival/planner">
               <picture>
                 <source srcSet="/media/hero-event-planner.webp" type="image/webp" />
-                <img src="/media/hero-event-planner.jpg" width="672" height="570" fetchPriority="high" alt="Event Planner di CRMEvent: area arrivo della Maratona di Pisa con segreteria, arco di arrivo, corridoio transennato, ristoro, palco premiazioni e stand sponsor" className="block w-full h-auto" />
+                <img src="/media/hero-event-planner.jpg" width="672" height="570" fetchPriority="high" alt="Event Planner di CRMEvent: area arrivo del City Run Festival (evento di fantasia) con segreteria, arco di arrivo, corridoio transennato, ristoro, palco premiazioni e stand sponsor" className="block w-full h-auto" />
               </picture>
             </BrowserFrame>
             <p className="mt-2 text-xs text-slate-400 text-right">Event Planner · esempio con percorso dimostrativo</p>
@@ -279,7 +278,7 @@ export default function LandingPage() {
                 <span key={s} className={`px-3 py-1.5 rounded-full text-xs font-semibold ${i === 3 ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-tiffany-light text-tiffany-fg ring-1 ring-tiffany-border"}`}>{s}</span>))}
             </div>
             <div className="grid grid-cols-2 gap-3 mt-6 max-w-md text-sm">
-              {[["Valore pipeline", "€ 46.500"], ["Confermato", "€ 25.000"], ["Aziende in pipeline", "6 aziende"], ["Evento", "Maratona di Pisa"]].map(([l, v]) => (
+              {[["Valore pipeline", "€ 46.500"], ["Confermato", "€ 25.000"], ["Aziende in pipeline", "6 aziende"], ["Evento", "City Run Festival"]].map(([l, v]) => (
                 <div key={l} className="bg-white rounded-lg border border-slate-200 p-3"><div className="text-[11px] text-slate-400 uppercase font-semibold">{l}</div><div className="font-semibold text-slate-800">{v}</div></div>))}
             </div>
           </div>

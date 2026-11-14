@@ -25,6 +25,7 @@ MUSIC = {"sportiva": "Sportiva ed energica", "emozionale": "Emozionale", "elettr
 STYLES = {"dark": "Scuro", "streets": "Stradale"}
 DURATIONS = (15, 30, 60)
 MAX_GPX = 15 * 1024 * 1024
+MAX_LOGO = 5 * 1024 * 1024
 STATUS = ("queued", "processing", "completed", "error")
 
 
@@ -38,11 +39,13 @@ class VideoIn(BaseModel):
     format: str = "9:16"
     duration: int = 30
     music: Optional[str] = None
+    logo: Optional[str] = "event"  # "event" = logo dell'anagrafica, id di un logo caricato, None = senza logo
 
 
 class PreviewIn(BaseModel):
     style: str = "dark"
     format: str = "9:16"
+    logo: Optional[str] = "event"
 
 
 def build(db, deps: dict):
@@ -54,6 +57,7 @@ def build(db, deps: dict):
 
     async def ensure():
         await db.eventmap_tracks.create_index([("org_id", 1), ("event_id", 1)])
+        await db.eventmap_logos.create_index([("org_id", 1), ("event_id", 1)])
         await db.eventmap_videos.create_index([("org_id", 1), ("event_id", 1), ("created_at", -1)])
         await db.eventmap_videos.update_many({"status": {"$in": ["queued", "processing"]}},
                                              {"$set": {"status": "error", "error": "Elaborazione interrotta dal riavvio del server: riprova (nessun video scalato)"}})
@@ -97,6 +101,7 @@ def build(db, deps: dict):
         return {"event": {"id": ev["id"], "nome": ev.get("nome"), "data": _date_it(ev.get("data_inizio")), "has_logo": bool(ev.get("logo_url"))},
                 "rights": await _rights(user["org_id"], eid), "maps": maps,
                 "tracks": await db.eventmap_tracks.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0}).sort("created_at", -1).to_list(50),
+                "logos": await db.eventmap_logos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0}).sort("created_at", -1).to_list(20),
                 "videos": await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(100)}
 
     async def _require_active(org_id, eid):
@@ -142,21 +147,70 @@ def build(db, deps: dict):
             raise HTTPException(status_code=404, detail="Traccia non trovata")
         return t
 
-    async def _job_files(tmp, t, ev):
+    async def _logo_bytes(org_id, ev, choice):
+        if not choice:
+            return None
+        if choice == "event":
+            if not ev.get("logo_url"):
+                return None
+            fid = ev["logo_url"].rstrip("/").split("/")[-1]
+            rec = await db.files.find_one({"org_id": org_id, "$or": [{"id": fid}, {"public_token": fid}], "is_deleted": {"$ne": True}}, {"_id": 0})
+            if not rec:
+                return None
+            try:
+                return (await deps["read_file_rec"](rec))[0]
+            except Exception:
+                return None
+        lg = await db.eventmap_logos.find_one({"org_id": org_id, "event_id": ev["id"], "id": choice}, {"_id": 0})
+        if not lg:
+            raise HTTPException(status_code=404, detail="Logo non trovato")
+        return SU.read(lg["storage"]["path"], lg["storage"].get("backend"))[0]
+
+    @r.post("/events/{eid}/logos")
+    async def upload_logo(eid: str, file: UploadFile = File(...), user: dict = Depends(admin_dep)):
+        await _event(user["org_id"], eid)
+        await _require_active(user["org_id"], eid)
+        data = await file.read(MAX_LOGO + 1)
+        if len(data) > MAX_LOGO:
+            raise HTTPException(status_code=400, detail="Logo troppo grande (max 5 MB)")
+        try:
+            from PIL import Image
+            import io
+            im = Image.open(io.BytesIO(data))
+            if im.format != "PNG":
+                raise ValueError
+            im = im.convert("RGBA")
+            im.thumbnail((1600, 1600))
+            buf = io.BytesIO()
+            im.save(buf, "PNG")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Carica un'immagine PNG valida (preferibilmente con sfondo trasparente)")
+        lid = uuid.uuid4().hex
+        st = SU.save(f"eventmap/{user['org_id']}/{eid}/logo-{lid}.png", buf.getvalue(), "image/png")
+        transparent = im.getchannel("A").getextrema()[0] < 255
+        doc = {"id": lid, "org_id": user["org_id"], "event_id": eid, "name": (file.filename or "logo.png")[:120], "width": im.width, "height": im.height,
+               "transparent": transparent, "storage": st, "created_by": user.get("email"), "created_at": _now()}
+        await db.eventmap_logos.insert_one({**doc})
+        await audit(user, "eventmap_logo_upload", detail=f"{eid} · {doc['name']}")
+        return {k: v for k, v in doc.items() if k not in ("storage", "org_id")}
+
+    @r.get("/events/{eid}/logos/{lid}/image")
+    async def logo_image(eid: str, lid: str, user: dict = Depends(admin_dep)):
+        ev = await _event(user["org_id"], eid)
+        data = await _logo_bytes(user["org_id"], ev, lid)
+        if not data:
+            raise HTTPException(status_code=404, detail="Logo non disponibile")
+        return Response(content=data, media_type="image/png" if data[:4] == b"\x89PNG" else "image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+    async def _job_files(tmp, t, ev, logo_choice="event"):
         gpx = os.path.join(tmp, "track.gpx")
         data, _ = SU.read(t["storage"]["path"], t["storage"].get("backend"))
         open(gpx, "wb").write(data)
+        b = await _logo_bytes(t["org_id"], ev, logo_choice)
         logo = None
-        if ev.get("logo_url"):
-            try:
-                fid = ev["logo_url"].rstrip("/").split("/")[-1]
-                rec = await db.files.find_one({"$or": [{"id": fid}, {"public_token": fid}], "is_deleted": {"$ne": True}}, {"_id": 0})
-                if rec:
-                    b, _ = await deps["read_file_rec"](rec)
-                    logo = os.path.join(tmp, "logo.img")
-                    open(logo, "wb").write(b)
-            except Exception:
-                logo = None
+        if b:
+            logo = os.path.join(tmp, "logo.img")
+            open(logo, "wb").write(b)
         return gpx, logo
 
     async def _run(job: dict, on_progress=None) -> tuple:
@@ -186,7 +240,7 @@ def build(db, deps: dict):
         if body.style not in STYLES or body.format not in ER.SIZES:
             raise HTTPException(status_code=400, detail="Stile o formato non valido")
         with tempfile.TemporaryDirectory() as tmp:
-            gpx, logo = await _job_files(tmp, t, ev)
+            gpx, logo = await _job_files(tmp, t, ev, body.logo)
             job = {**_base_job(t, ev, body.style, body.format, tmp, gpx, logo), "still": True, "out_path": os.path.join(tmp, "preview.jpg")}
             ok, err = await _run(job)
             if not ok:
@@ -203,7 +257,9 @@ def build(db, deps: dict):
                 t = await _track(v["org_id"], v["track_id"])
                 ev = await _event(v["org_id"], v["event_id"])
                 with tempfile.TemporaryDirectory() as tmp:
-                    gpx, logo = await _job_files(tmp, t, ev)
+                    gpx, logo = await _job_files(tmp, t, ev, v.get("logo", "event"))
+                    if v.get("logo") and not logo:
+                        raise RuntimeError("logo non disponibile")
                     job = {**_base_job(t, ev, v["style"], v["format"], tmp, gpx, logo), "duration": v["duration"], "out_path": os.path.join(tmp, "video.mp4"),
                            "music_path": os.path.join(HERE, "eventmap_assets", "music", f"{v['music']}.mp3") if v.get("music") else None}
 
@@ -231,6 +287,11 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="La traccia appartiene a un altro evento")
         if body.style not in STYLES or body.format not in ER.SIZES or body.duration not in DURATIONS or (body.music and body.music not in MUSIC):
             raise HTTPException(status_code=400, detail="Opzioni video non valide")
+        ev = await _event(user["org_id"], eid)
+        if body.logo and body.logo != "event":
+            await _logo_bytes(user["org_id"], ev, body.logo)
+        elif body.logo == "event" and not ev.get("logo_url"):
+            body.logo = None
         lock = locks.setdefault(user["org_id"], asyncio.Lock())
         async with lock:
             rg = await _rights(user["org_id"], eid)
@@ -243,7 +304,7 @@ def build(db, deps: dict):
                 raise HTTPException(status_code=403, detail={"code": "addon_videos", "message": "Non hai video disponibili: acquista un pacchetto Event Map nel Marketplace"})
             vid = uuid.uuid4().hex
             doc = {"id": vid, "org_id": user["org_id"], "event_id": eid, "track_id": t["id"], "track_name": t.get("name"), "distance_m": t["distance_m"],
-                   "style": body.style, "format": body.format, "duration": body.duration, "music": body.music, "status": "queued", "progress": 0,
+                   "style": body.style, "format": body.format, "duration": body.duration, "music": body.music, "logo": body.logo, "status": "queued", "progress": 0,
                    "created_by": user.get("email"), "created_at": _now()}
             await db.eventmap_videos.insert_one({**doc})
         task = asyncio.create_task(_process(vid))

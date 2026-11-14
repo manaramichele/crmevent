@@ -16,6 +16,8 @@ ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eventmap_asse
 TS = 512
 UA = {"User-Agent": "CRMEvent-EventMap/1.0 (+https://crmevent.it)"}
 SIZES = {"9:16": (1080, 1920), "1:1": (1080, 1080), "16:9": (1920, 1080)}
+LOGO_BOX = {"9:16": (300, 140), "1:1": (240, 110), "16:9": (300, 120)}  # riquadro massimo del logo (unità U)
+LOGO_MARGIN, LOGO_PAD = 32, 14
 FPS = 30
 STYLES = {
     "dark": {"bg": (24, 28, 36), "green": (30, 44, 40), "water": (18, 46, 66), "building": (40, 45, 56), "road": (72, 80, 96), "major": (104, 112, 128),
@@ -258,7 +260,7 @@ class Renderer:
         fw = max(bx1 - bx0, (by1 - by0) * ar) * 1.3
         self.full_w = fw
         self.follow_w = max(min(fw * 0.45, 1400 / self.mpp * (self.W / 1080)), self.W * 0.55)
-        self.logo = self._img(job.get("logo_path"), int(150 * self.U))
+        self.logo = self._fit(job.get("logo_path"), *LOGO_BOX[job.get("format", "9:16")], self.U)
         self.static = self._static()
 
     def _img(self, path, h):
@@ -269,6 +271,22 @@ class Renderer:
             return im.resize((max(1, int(im.width * h / im.height)), h), Image.LANCZOS)
         except Exception:
             return None
+
+    def _fit(self, path, bw, bh, U):
+        """Logo evento ridimensionato nel riquadro del formato, proporzioni originali."""
+        if not path or not os.path.exists(path):
+            return None
+        try:
+            im = Image.open(path).convert("RGBA")
+            bb = im.getchannel("A").getbbox()
+            im = im.crop(bb) if bb else im
+            k = min(bw * U / im.width, bh * U / im.height)
+            return im.resize((max(1, int(im.width * k)), max(1, int(im.height * k))), Image.LANCZOS)
+        except Exception:
+            return None
+
+    def logo_bottom(self):
+        return (int(LOGO_MARGIN * self.U) + self.logo.height + int(2 * LOGO_PAD * self.U)) if self.logo else 0
 
     def _static(self):
         """Elementi fissi: Powered by CRMEvent (non rimovibile) e attribuzione OpenStreetMap."""
@@ -282,6 +300,11 @@ class Renderer:
         d.rounded_rectangle((x, y, x + pw, y + ph), radius=int(12 * U), fill=(255, 255, 255, 225))
         d.text((x + int(14 * U), y + int(6 * U)), "Powered by", font=f, fill=(71, 85, 105, 255))
         ov.alpha_composite(lg, (x + int(14 * U), y + int(24 * U)))
+        if self.logo:  # logo evento fisso in alto a destra per tutto il video
+            p, mg = int(LOGO_PAD * U), int(LOGO_MARGIN * U)
+            lx, ly = self.W - mg - self.logo.width - 2 * p, mg
+            d.rounded_rectangle((lx, ly, lx + self.logo.width + 2 * p, ly + self.logo.height + 2 * p), radius=int(16 * U), fill=(255, 255, 255, 215))
+            ov.alpha_composite(self.logo, (lx + p, ly + p))
         d.text((int(24 * U), self.H - int(30 * U)), self.attribution, font=font(13 * U, False), fill=(255, 255, 255, 170) if self.job.get("style") != "streets" else (40, 40, 40, 190))
         return ov
 
@@ -323,16 +346,10 @@ class Renderer:
         title = j.get("title") or "Evento"
         while d.textlength(title, font=tf) > self.W - 140 * U and len(title) > 8:
             title = title[:-2]
-        lh = self.logo.height + int(26 * U) if self.logo else 0
-        h = lh + int(64 * U) + int(48 * U) + int(40 * U)
-        y = int(self.H * (0.07 if big else 0.08))
+        h = int(64 * U) + int(48 * U) + int(40 * U)
+        y = max(int(self.H * (0.07 if big else 0.08)), self.logo_bottom() + int(20 * U))
         d.rounded_rectangle((int(48 * U), y, self.W - int(48 * U), y + h + (int(60 * U) if big else 0)), radius=int(28 * U), fill=(10, 14, 22, int(200 * alpha)))
         cy = y + int(26 * U)
-        if self.logo:
-            lg = self.logo.copy()
-            lg.putalpha(lg.getchannel("A").point(lambda v: v * alpha))
-            ov.alpha_composite(lg, ((self.W - lg.width) // 2, cy))
-            cy += lh
         d.text((self.W / 2, cy), title, font=tf, fill=(255, 255, 255, a), anchor="mt")
         cy += int(72 * U)
         if j.get("date"):

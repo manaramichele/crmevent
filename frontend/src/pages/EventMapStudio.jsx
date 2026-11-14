@@ -38,6 +38,34 @@ function MusicPick({ list, value, onChange }) {
   );
 }
 
+function LogoThumb({ eid, lid }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => {
+    let url = null;
+    api.get(`/eventmap/events/${eid}/logos/${lid}/image`, { responseType: "blob" }).then(({ data }) => { url = URL.createObjectURL(data); setSrc(url); }).catch(() => setSrc(""));
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [eid, lid]);
+  return src ? <img src={src} alt="Logo evento" className="h-12 w-auto max-w-[140px] object-contain" data-testid={`em-logo-thumb-${lid}`} /> : <div className="h-12 w-16 rounded bg-slate-100" />;
+}
+
+function LogoPick({ eid, st, value, onChange, onUpload, busy }) {
+  const opts = [...(st.event.has_logo ? [{ id: "event", label: "Logo dell'evento" }] : []), ...st.logos.map((l) => ({ id: l.id, label: l.name }))];
+  const box = "rounded-lg border p-2 flex flex-col items-center justify-center gap-1 text-xs min-w-[120px] bg-[repeating-conic-gradient(#f1f5f9_0_25%,#fff_0_50%)] bg-[length:16px_16px]";
+  return (
+    <div className="space-y-2" data-testid="em-logo">
+      <div className="flex flex-wrap gap-2">
+        {opts.map((o) => (
+          <button key={o.id} type="button" onClick={() => onChange(o.id)} className={`${box} ${value === o.id ? "border-slate-900 ring-1 ring-slate-900" : "border-slate-200"}`} data-testid={`em-logo-opt-${o.id}`}>
+            <LogoThumb eid={eid} lid={o.id} /><span className="max-w-[140px] truncate text-slate-600">{o.label}</span></button>))}
+        <button type="button" onClick={() => onChange(null)} className={`rounded-lg border px-3 text-sm min-h-[76px] ${!value ? "border-slate-900 ring-1 ring-slate-900" : "border-slate-200"}`} data-testid="em-logo-none">Senza logo</button>
+      </div>
+      <label className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold cursor-pointer hover:bg-slate-50" data-testid="em-logo-upload-label"><Upload className="w-4 h-4" />{busy ? "Caricamento…" : st.event.has_logo || st.logos.length ? "Sostituisci con un PNG" : "Carica logo PNG"}
+        <input type="file" accept="image/png" className="hidden" onChange={(e) => { onUpload(e.target.files?.[0]); e.target.value = ""; }} data-testid="em-logo-upload-input" /></label>
+      <p className="text-xs text-slate-500">PNG, preferibilmente con sfondo trasparente (max 5 MB). Il logo resta fisso in alto a destra per tutta la durata del video.</p>
+    </div>
+  );
+}
+
 function VideoCard({ v }) {
   const [label, cls] = ST[v.status] || ST.queued;
   const src = `${API}/eventmap/videos/${v.id}/file`;
@@ -59,11 +87,11 @@ export default function EventMapStudio() {
   const { id } = useParams();
   const [st, setSt] = useState(null);
   const [opt, setOpt] = useState(null);
-  const [f, setF] = useState({ track_id: "", style: "dark", format: "9:16", duration: 30, music: "sportiva" });
+  const [f, setF] = useState({ track_id: "", style: "dark", format: "9:16", duration: 30, music: "sportiva", logo: undefined });
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState("");
   const load = useCallback(() => api.get(`/eventmap/events/${id}`).then(({ data }) => {
-    setSt(data); setF((x) => ({ ...x, track_id: x.track_id || data.tracks[0]?.id || "" }));
+    setSt(data); setF((x) => ({ ...x, track_id: x.track_id || data.tracks[0]?.id || "", logo: x.logo !== undefined ? x.logo : (data.event.has_logo ? "event" : data.logos[0]?.id || null) }));
   }).catch((e) => { toast.error(formatApiError(e.response?.data?.detail)); setSt((x) => x || { missing: true }); }), [id]);
   useEffect(() => { load(); api.get("/eventmap/options").then(({ data }) => setOpt(data)); }, [load]);
   const pending = st?.videos?.some((v) => v.status === "queued" || v.status === "processing");
@@ -86,9 +114,17 @@ export default function EventMapStudio() {
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     setBusy("");
   };
+  const uploadLogo = async (file) => {
+    if (!file) return;
+    setBusy("logo");
+    const fd = new FormData(); fd.append("file", file);
+    try { const { data } = await api.post(`/eventmap/events/${id}/logos`, fd); toast.success(data.transparent ? "Logo caricato" : "Logo caricato (senza trasparenza: comparirà su un riquadro bianco)"); setF((x) => ({ ...x, logo: data.id })); await load(); }
+    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    setBusy("");
+  };
   const doPreview = async () => {
     setBusy("preview");
-    try { const { data } = await api.post(`/eventmap/tracks/${f.track_id}/preview`, { style: f.style, format: f.format }, { responseType: "blob" }); setPreview(URL.createObjectURL(data)); }
+    try { const { data } = await api.post(`/eventmap/tracks/${f.track_id}/preview`, { style: f.style, format: f.format, logo: f.logo }, { responseType: "blob" }); setPreview(URL.createObjectURL(data)); }
     catch { toast.error("Anteprima non riuscita"); }
     setBusy("");
   };
@@ -105,7 +141,7 @@ export default function EventMapStudio() {
   return (
     <div className="animate-fade-up space-y-6" data-testid="em-studio">
       <Link to="/event-map" className="inline-flex items-center gap-1 text-sm text-slate-500"><ArrowLeft className="w-4 h-4" />Event Map</Link>
-      <PageHeader title={st.event.nome} subtitle={`Event Map${st.event.data ? ` · ${st.event.data}` : ""}${st.event.has_logo ? " · logo evento incluso" : " · nessun logo evento caricato"}`} />
+      <PageHeader title={st.event.nome} subtitle={`Event Map${st.event.data ? ` · ${st.event.data}` : ""}`} />
       {!rg.active ? <p className="text-sm text-slate-600" data-testid="em-not-active">Event Map non è attivo per questo evento. <Link to={`/marketplace?servizio=event-map&evento=${id}`} className="font-semibold text-[#088F8A]">Attivalo dal Marketplace</Link>.</p> : (
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-5">
@@ -122,6 +158,7 @@ export default function EventMapStudio() {
           <div className="space-y-2"><div className="text-sm font-semibold">3. Formato</div><Choice items={fmts} value={f.format} onChange={(v) => setF({ ...f, format: v })} testid="em-format" /></div>
           <div className="space-y-2"><div className="text-sm font-semibold">4. Durata</div><Choice items={opt.durations.map((d) => ({ key: d, label: `${d} secondi` }))} value={f.duration} onChange={(v) => setF({ ...f, duration: v })} testid="em-duration" /></div>
           <div className="space-y-2"><div className="text-sm font-semibold">5. Musica (brani originali CRMEvent)</div><MusicPick list={opt.music} value={f.music} onChange={(v) => setF({ ...f, music: v })} /></div>
+          <div className="space-y-2"><div className="text-sm font-semibold">6. Logo evento</div><LogoPick eid={id} st={st} value={f.logo} onChange={(v) => setF({ ...f, logo: v })} onUpload={uploadLogo} busy={busy === "logo"} /></div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" disabled={!f.track_id || !!busy} onClick={doPreview} data-testid="em-preview-btn"><ImageIcon className="w-4 h-4 mr-1" />{busy === "preview" ? "Anteprima…" : "Anteprima"}</Button>
             <Button disabled={!f.track_id || !!busy || rg.videos_remaining === 0} onClick={generate} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid="em-generate-btn"><Film className="w-4 h-4 mr-1" />{busy === "gen" ? "Invio…" : "Genera video"}</Button>

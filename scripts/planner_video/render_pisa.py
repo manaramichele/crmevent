@@ -1,4 +1,4 @@
-"""Video Event Planner (Pisa, percorso dimostrativo) dall'interfaccia reale: fotogramma per fotogramma.
+"""Video Event Planner (City Run Festival, evento di fantasia, percorso dimostrativo) dall'interfaccia reale: fotogramma per fotogramma.
 Uso: setsid nohup python3 render_pisa.py > pisa.log 2>&1 &  poi  OUT_NAME=event-planner-demo FRAMES=frames bash encode.sh"""
 import asyncio, json, time, uuid
 from pathlib import Path
@@ -30,7 +30,12 @@ async def main():
         r = await rq.post(f"{BASE}/api/auth/register-organization", data={"nome": "Video", "cognome": "Demo", "email": email, "password": "VideoDemo2026!",
                           "org_name": "TEST_Video Planner", "telefono": "+3933312345" + str(int(time.time()) % 90 + 10), "accept_terms": True}, timeout=90000)
         assert r.ok, await r.text()
-        ev = await (await rq.post(f"{BASE}/api/events", data={"nome": "Maratona di Pisa (demo)"})).json()
+        ev = await (await rq.post(f"{BASE}/api/events", data={"nome": "City Run Festival (demo)"})).json()
+        oid = (await (await rq.get(f"{BASE}/api/auth/me")).json())["org_id"]
+        sa = await pw.request.new_context()
+        assert (await sa.post(f"{BASE}/api/auth/login", data={"email": "manara.michele.pro@gmail.com", "password": "CrmEvent2026!"})).ok
+        assert (await sa.put(f"{BASE}/api/platform/saas/orgs/{oid}/admin", data={"plan": "gold", "status": "active"})).ok
+        assert (await rq.post(f"{BASE}/api/addons/planner/events/{ev['id']}/activate")).ok
         pr = await (await rq.post(f"{BASE}/api/planner/events/{ev['id']}/projects", data={"nome": "Area arrivo – Cittadella"})).json()
         await rq.patch(f"{BASE}/api/planner/projects/{pr['id']}", data={"center": [10.40, 43.716], "zoom": 12.4})
         page = await ctx.new_page()
@@ -76,7 +81,7 @@ async def main():
                 await page.locator('[data-testid="planner-prop-nome"]').fill(nome)
             await rec.idle(); await rec.shot(); await rec.hold(3)
 
-        await rec.caption("Maratona di Pisa · esempio con percorso dimostrativo")
+        await rec.caption("City Run Festival · esempio con percorso dimostrativo")
         await rec.shot(); await rec.hold(40)
         await rec.caption("Parti dalla mappa reale della città")
         await rec.camera({"lng": 10.3957, "lat": 43.7177, "zoom": 14.7}, 3.6)
@@ -132,7 +137,7 @@ async def main():
         await rec.caption("")
         await page.evaluate("""() => { document.querySelector('#rec-end').innerHTML = '<img src="/logo-crmevent.png" style="height:70px">' +
           '<div style="font-size:30px;font-weight:800;color:#0f172a">Organizza ogni dettaglio del tuo evento con Event Planner.</div>' +
-          '<div style="font-size:16px;color:#64748b">Esempio dimostrativo · percorso non ufficiale della Maratona di Pisa</div>'; }""")
+          '<div style="font-size:16px;color:#64748b">Esempio dimostrativo · percorso non ufficiale del City Run Festival</div>'; }""")
         for i in range(1, 16):
             await page.evaluate("(o) => { document.getElementById('rec-end').style.opacity = o; }", i / 15)
             await rec.shot()
