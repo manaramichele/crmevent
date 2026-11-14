@@ -20,7 +20,7 @@ export default function PromoVideo() {
           <p className="mt-1 text-base md:text-lg text-slate-300" data-testid="promo-subtitle">{p.subtitle}</p>
         </div>
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
-          <video className="block aspect-video w-full" controls playsInline preload="metadata" poster={p.poster} data-testid="promo-video">
+          <video key={p.slug} className="block aspect-video w-full" controls playsInline preload="metadata" poster={p.poster} data-testid="promo-video">
             {p.webm && <source src={p.webm} type="video/webm" />}
             <source src={p.mp4} type="video/mp4" />
           </video>
@@ -32,7 +32,7 @@ export default function PromoVideo() {
             <Link to="/registrati" className="inline-flex items-center gap-2 rounded-full bg-[#0ABAB5] px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="promo-cta">Inizia con CRMEvent<ArrowRight className="h-4 w-4" /></Link>
           </div>
         </div>
-        <Link to={`/video/${other.slug}`} className="mt-10 inline-flex items-center gap-2 text-sm font-semibold text-[#5EEAD4]" data-testid="promo-other-link">Guarda anche il video di {other.name}<ArrowRight className="h-4 w-4" /></Link>
+        <a href={`/video/${other.slug}`} className="mt-10 inline-flex items-center gap-2 text-sm font-semibold text-[#5EEAD4]" data-testid="promo-other-link">Guarda anche il video di {other.name}<ArrowRight className="h-4 w-4" /></a>
       </main>
       <Footer />
     </div>

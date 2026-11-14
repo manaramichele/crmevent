@@ -13971,8 +13971,25 @@ ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin":
                            "stripe_mode": STRIPE_MODE})
 app.include_router(ADDONS["router"])
 app.add_event_handler("startup", ADDONS["ensure"])
+async def _route_file_rec(url: str, org_id: str) -> Optional[dict]:
+    """Record completo del file CRMEvent (id, storage_path, original_filename...) per Percorsi Eventi; None se esterno/non dell'org."""
+    if not url:
+        return None
+    url_path = url.split("?", 1)[0].split("#", 1)[0]
+    alive = {"is_deleted": {"$ne": True}}
+    m = re.search(r"/api/files/public/([A-Za-z0-9_\-]+)$", url_path)
+    if m:
+        rec = await db.files.find_one({"public_token": m.group(1), **alive}, {"_id": 0})
+    else:
+        m = re.search(r"/api/files/([A-Za-z0-9_\-]+)$", url_path)
+        rec = await db.files.find_one({"id": m.group(1), **alive}, {"_id": 0}) if m else None
+    if not rec or rec.get("org_id") not in (None, org_id):
+        return None
+    return rec
+
+
 EVENTMAP = eventmap.build(db, {"require_admin": require_admin, "record_audit": record_audit, "addons": ADDONS,
-                               "resolve_attachment": _resolve_attachment, "read_file_rec": _read_file_rec})
+                               "resolve_attachment": _route_file_rec, "read_file_rec": _read_file_rec})
 app.include_router(EVENTMAP["router"])
 app.add_event_handler("startup", EVENTMAP["ensure"])
 async def _planner_org_logo(org_id: str) -> Optional[bytes]:
@@ -13982,7 +13999,7 @@ async def _planner_org_logo(org_id: str) -> Optional[bytes]:
 
 PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit,
                              "require_covered": ADDONS["require_covered"], "require_member": require_org_member,
-                             "org_logo": lambda oid: _planner_org_logo(oid)})
+                             "org_logo": lambda oid: _planner_org_logo(oid), "resolve_attachment": _route_file_rec, "read_file_rec": _read_file_rec})
 app.include_router(PLANNER["router"])
 app.add_event_handler("startup", PLANNER["ensure"])
 PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})
