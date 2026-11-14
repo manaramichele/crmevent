@@ -953,3 +953,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 ## Rimozione testo "Silver ne include 1, Gold 3." (2026-11-14)
 - AddonHub.jsx (pagine /event-planner e /event-map, utenti senza eventi inclusi): frase rimossa; solo testo, nessuna regola cambiata. Verificato desktop e mobile.
 
+
+## Nuovo video demo Event Map "Green Valley Trail" (2026-11-14) — in attesa di approvazione
+- Pisa (mappa del vecchio demo) è piatta: quote reali 4–18 m (DEM Copernicus), profilo poco dimostrativo. Scelto percorso reale su strade OpenStreetMap (OSRM foot) Calci → Monte Serra (Monte Pisano, stessa zona di Pisa): 13,0 km, quote reali DEM Copernicus via Open-Meteo 41–919 m, D+ 1013 m. Nessun ristoro (nessuno nel GPX).
+- Generato con eventmap_render.py (sistema Event Map): 16:9 1920x1080, 30 s, stile scuro, musica originale «sportiva», logo fittizio generato con AI, «Powered by CRMEvent».
+- File: frontend/public/media/event-map-demo-gvt.mp4 (+ -poster.jpg); GPX e logo in /app/memory/demo_assets/. Homepage NON ancora aggiornata (usa ancora event-map-demo.mp4 in 9:16).
+- Prossimi passi dopo l'ok: sostituire il video in homepage (riquadro 16:9), anteprima Brevo con Play, pagina pubblica + URL stabili, download per il Super Admin, materiali Event Planner.
+
