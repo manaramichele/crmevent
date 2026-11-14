@@ -105,7 +105,7 @@ const FEATURES = [
   [MapIcon, "Mappe & Percorsi", "Condividi percorsi, mappe operative e punti di riferimento."],
   [MapIcon, "Event Planner", "Progetta percorsi, strutture e spazi del tuo evento direttamente sulla mappa."],
   [CalendarCheck2, "Google Calendar", "Porta eventi e turni nel calendario degli utenti."],
-  [Film, "Event Map", "Genera dalla traccia GPX un video animato del percorso, pronto per i social.", "In arrivo"],
+  [Film, "Event Map", "Genera dalla traccia GPX un video animato del percorso, pronto per i social."],
 ];
 
 function DemoForm() {

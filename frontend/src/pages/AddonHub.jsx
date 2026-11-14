@@ -21,7 +21,7 @@ function InfoPage({ info, s }) {
     <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr] items-start" data-testid="addon-info-page">
       <div className={v.vertical ? "mx-auto w-full max-w-[280px]" : ""}>
         <DemoVideo mp4={v.mp4} webm={v.webm} poster={v.poster} label={`Video dimostrativo di ${info.name}`} testid="addon-info-video" className={v.vertical ? "aspect-[9/16]" : "aspect-video"} />
-        {info.product === "eventmap" && <p className="mt-2 text-center text-xs text-slate-400">Esempio dimostrativo del risultato previsto</p>}
+        {info.product === "eventmap" && <p className="mt-2 text-center text-xs text-slate-400">Video generato da Event Map con una traccia GPX reale</p>}
       </div>
       <div className="space-y-5">
         <div><h2 className="font-display text-2xl font-bold text-slate-900">{info.tagline}</h2><p className="mt-2 text-slate-600">{info.description}</p></div>
@@ -45,7 +45,7 @@ function EventRow({ e, info, s, onActivate, busy }) {
         <div className="text-xs text-slate-500">{e.active ? `${SOURCE_LABEL[e.source] || "Attivo"}${e.expires_at ? ` · scade il ${new Date(e.expires_at).toLocaleDateString("it-IT")}` : ""}` : e.assigned ? "Attivazione non più coperta dal piano: i dati restano conservati" : "Non attivo"}</div></div>
       {e.active ? (info.product === "planner"
         ? <Button size="sm" onClick={() => nav(`/eventi/${e.id}/planner`)} className="bg-slate-900 text-white" data-testid={`addon-open-${e.id}`}>Apri Event Planner <ArrowRight className="w-3.5 h-3.5 ml-1" /></Button>
-        : <span className="text-xs font-semibold text-emerald-700" data-testid={`addon-active-${e.id}`}>Attivo · generazione video in arrivo</span>)
+        : <Button size="sm" onClick={() => nav(`/event-map/${e.id}`)} className="bg-slate-900 text-white" data-testid={`addon-open-${e.id}`}>Apri Event Map <ArrowRight className="w-3.5 h-3.5 ml-1" /></Button>)
         : canFree && s.can_purchase ? <Button size="sm" disabled={busy} onClick={() => onActivate(e.id)} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid={`addon-activate-${e.id}`}>Attiva (incluso)</Button>
           : <Link to={`/marketplace?servizio=${info.slug}&evento=${e.id}`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50" data-testid={`addon-buy-${e.id}`}><Lock className="w-3.5 h-3.5" />Attiva dal Marketplace</Link>}
     </div>

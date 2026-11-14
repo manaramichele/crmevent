@@ -68,6 +68,7 @@ import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
 import AddonHub from "@/pages/AddonHub";
 import AddonAdmin from "@/pages/AddonAdmin";
+import EventMapStudio from "@/pages/EventMapStudio";
 import Tickets from "@/pages/Tickets";
 import PlatformTickets from "@/pages/PlatformTickets";
 import PressReleases from "@/pages/PressReleases";
@@ -166,6 +167,7 @@ function Shell() {
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
         <Route path="/event-planner" element={<Protected><AddonHub key="ep" slug="event-planner" /></Protected>} />
         <Route path="/event-map" element={<Protected><AddonHub key="em" slug="event-map" /></Protected>} />
+        <Route path="/event-map/:id" element={<Protected><EventMapStudio /></Protected>} />
         <Route path="/piattaforma/event-planner-map" element={<Protected><SuperAdminOnly><AddonAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />

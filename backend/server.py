@@ -46,6 +46,7 @@ import calendario_italia
 import avail_prefs
 import planner
 import addons
+import eventmap
 import planner_demo
 import referenti_integrazione
 import gcal_availability
@@ -13969,6 +13970,10 @@ ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin":
                            "stripe_mode": STRIPE_MODE})
 app.include_router(ADDONS["router"])
 app.add_event_handler("startup", ADDONS["ensure"])
+EVENTMAP = eventmap.build(db, {"require_admin": require_admin, "record_audit": record_audit, "addons": ADDONS,
+                               "resolve_attachment": _resolve_attachment, "read_file_rec": _read_file_rec})
+app.include_router(EVENTMAP["router"])
+app.add_event_handler("startup", EVENTMAP["ensure"])
 PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit,
                              "require_covered": ADDONS["require_covered"]})
 app.include_router(PLANNER["router"])

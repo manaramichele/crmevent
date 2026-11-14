@@ -62,6 +62,7 @@ ROUTE_RULES = [
     ("/demo/", "*", None),
     ("/marketplace", "*", None),
     ("/addons", "*", None),
+    ("/eventmap", "*", None),
     ("/iscritti", "*", None),
     ("/saas/", "*", None),
     ("/events/{event_id}/activate", None, None),

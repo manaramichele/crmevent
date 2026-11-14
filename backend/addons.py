@@ -300,7 +300,7 @@ def build(db, deps: dict):
             logger.error(f"addon checkout: {e}")
             raise HTTPException(status_code=502, detail="Non è stato possibile avviare il pagamento. Riprova più tardi.")
         await db.addon_grants.insert_one({
-            "id": gid, "org_id": org["id"], "product": product, "source": "purchase", "status": "pending", "events_total": int(pkg["events"]),
+            "id": gid, "org_id": org["id"], "product": product, "source": "purchase", "status": "pending", "events_total": int(pkg["events"]), "formats": pkg.get("formats") or [],
             "videos_total": int(pkg.get("videos") or 0), "validity_days": pkg.get("validity_days"), "package_id": pkg.get("id"), "package_name": pkg["name"],
             "price": float(pkg["price"]), "event_id": (ev or {}).get("id"), "expires_at": None, "stripe_session_id": sess.id, "stripe_mode": deps["stripe_mode"],
             "created_by": user.get("email"), "created_at": _iso(_now()), "history": [{"at": _iso(_now()), "status": "pending", "by": user.get("email")}]})
@@ -395,18 +395,18 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="La scadenza deve essere futura")
         if not await db.organizations.find_one({"id": org_id}, {"_id": 1}):
             raise HTTPException(status_code=404, detail="Organizzazione non trovata")
-        events_total, videos, name = body.events_total, body.videos_total, "Assegnazione manuale"
+        events_total, videos, name, formats = body.events_total, body.videos_total, "Assegnazione manuale", []
         if body.package_id:
             pkg = next((p for p in (await get_config())["eventmap"].get("packages") or [] if p.get("id") == body.package_id), None)
             if not pkg or product != "eventmap":
                 raise HTTPException(status_code=400, detail="Pacchetto non trovato")
-            events_total, videos, name = int(pkg["events"]), int(pkg["videos"]), pkg["name"]
+            events_total, videos, name, formats = int(pkg["events"]), int(pkg["videos"]), pkg["name"], pkg.get("formats") or []
         for eid in body.event_ids:
             await _event(org_id, eid)
         exp = f"{body.expires_at[:10]}T23:59:59+00:00" if body.expires_at else None
         gid = uuid.uuid4().hex
         await db.addon_grants.insert_one({
-            "id": gid, "org_id": org_id, "product": product, "source": body.source, "status": "active", "events_total": events_total,
+            "id": gid, "org_id": org_id, "product": product, "source": body.source, "status": "active", "events_total": events_total, "formats": formats,
             "videos_total": videos if product == "eventmap" else 0, "package_id": body.package_id, "package_name": name, "price": 0.0,
             "event_id": None, "expires_at": exp, "note": body.note, "created_by": admin.get("email"), "created_at": _iso(_now()),
             "history": [{"at": _iso(_now()), "status": "active", "by": admin.get("email"), "note": body.note}]})
@@ -430,6 +430,12 @@ def build(db, deps: dict):
                                                        "$push": {"history": {"at": _iso(_now()), "status": "revoked", "by": admin.get("email")}}})
         await audit(admin, f"addon_{g['product']}_revoke", org_id=g["org_id"], detail=gid)
         return {"ok": True}
+
+    async def public_included():
+        c = await get_config()
+        return {p: {"included": c[p]["included"]} for p in PRODUCTS} | {"eventmap_included_videos": c["eventmap"].get("included_videos", 0)}
+
+    r.add_api_route("/public/addons-included", public_included, methods=["GET"])
 
     return {"router": r, "ensure": ensure, "handle_webhook": handle_webhook, "require_covered": require_covered,
             "is_covered": is_covered, "consume_video": consume_video, "summary": summary}
