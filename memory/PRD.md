@@ -876,3 +876,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: iteration_158 (backend 14/14, frontend ok) + fix (Range, controllo attivazione su upload/anteprima, nome file, evento non trovato).
 - Org demo mantenuta: TEST_EventMap Org (vedi test_credentials.md).
 
+
+## Fix dipendenze deploy Aruba (2026-11-14) — NON pubblicato
+- Causa 1: riga esplicita `litellm @ ...whl#sha256=...` vs requisito di emergentintegrations 0.2.1 `litellm @ ...whl` (stesso file, URL diverso per il frammento hash) → pip ResolutionImpossible. Rimossa la riga: litellm 1.80.0 arriva da emergentintegrations. litellm non è importato direttamente dal codice.
+- Causa 2 (emersa dopo): mapbox-vector-tile 2.2.0 richiede protobuf>=6.31, incompatibile con google-ai-generativelanguage 0.6.15 / grpcio-status 1.71.2 (<6). Fissati mapbox-vector-tile==2.1.0 e protobuf==5.29.6.
+- Verifica: venv pulito Python 3.11.18, install completa EXIT 0, pip check ok, uvicorn avviato, LLM reale ok, anteprima e render MP4 Event Map ok.
+
