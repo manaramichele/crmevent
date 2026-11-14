@@ -866,3 +866,13 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Prezzi vuoti finché non impostati dal Super Admin; video inclusi 0. Generazione video Event Map non ancora sviluppata.
 - Test: iteration_157 (backend 10/10, frontend ok), fix minori applicati dopo.
 
+
+## Event Map: generatore video GPX → MP4 (2026-11-14) — ANTEPRIMA, NON PUBBLICATO
+- backend/eventmap_render.py: renderer in processo separato (PIL + FFmpeg da imageio-ffmpeg), dati OpenStreetMap da tile vettoriali OpenFreeMap disegnati localmente (stili Scuro/Stradale), provider sostituibile (EVENTMAP_MAP_PROVIDER=maptiler + MAPTILER_VIDEO_KEY per satellite in futuro). Scene: intro, partenza, camera che segue, punti di interesse (wpt), arrivo, finale panoramico; km progressivi, logo evento, Powered by CRMEvent, attribuzione OSM. Formati 9:16/1:1/16:9 a 1080p, 15/30/60 s.
+- Musica: 4 brani originali sintetizzati (backend/scripts/make_music.py) in backend/eventmap_assets/music e frontend/public/media/music.
+- backend/eventmap.py: tracce GPX (upload o da Mappe evento), anteprima, coda (concorrenza 1), stati queued/processing/completed/error, video scalato solo dopo MP4 salvato, slot riservati per i video in coda, limitazione formati per pacchetto, download con Range (Safari).
+- Frontend: /event-map/:id (EventMapStudio), tabella formule con righe Event Planner/Event Map, homepage senza "In arrivo" e con video generato dal renderer.
+- Prestazioni misurate in preview: ~1 core CPU, ~125 MB RAM; 15 s ≈ 50 s, 30 s ≈ 100 s, 60 s 16:9 ≈ 190 s; file 6–15 MB.
+- Test: iteration_158 (backend 14/14, frontend ok) + fix (Range, controllo attivazione su upload/anteprima, nome file, evento non trovato).
+- Org demo mantenuta: TEST_EventMap Org (vedi test_credentials.md).
+

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import imageio_ffmpeg
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -50,6 +50,7 @@ def build(db, deps: dict):
     admin_dep, audit, addons = deps["require_admin"], deps["record_audit"], deps["addons"]
     sem = asyncio.Semaphore(int(os.environ.get("EVENTMAP_CONCURRENCY", "1")))
     locks: dict = {}
+    tasks: set = set()
 
     async def ensure():
         await db.eventmap_tracks.create_index([("org_id", 1), ("event_id", 1)])
@@ -98,7 +99,13 @@ def build(db, deps: dict):
                 "tracks": await db.eventmap_tracks.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0}).sort("created_at", -1).to_list(50),
                 "videos": await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(100)}
 
+    async def _require_active(org_id, eid):
+        if not (await _rights(org_id, eid))["active"]:
+            raise HTTPException(status_code=403, detail={"code": "addon_required", "product": "eventmap", "slug": "event-map",
+                                                         "message": "Event Map non è attivo per questo evento: attivalo dal Marketplace"})
+
     async def _save_track(user, eid, data: bytes, name: str):
+        await _require_active(user["org_id"], eid)
         if len(data) > MAX_GPX:
             raise HTTPException(status_code=400, detail="File GPX troppo grande (max 15 MB)")
         try:
@@ -175,6 +182,7 @@ def build(db, deps: dict):
     async def preview(tid: str, body: PreviewIn, user: dict = Depends(admin_dep)):
         t = await _track(user["org_id"], tid)
         ev = await _event(user["org_id"], t["event_id"])
+        await _require_active(user["org_id"], t["event_id"])
         if body.style not in STYLES or body.format not in ER.SIZES:
             raise HTTPException(status_code=400, detail="Stile o formato non valido")
         with tempfile.TemporaryDirectory() as tmp:
@@ -237,7 +245,9 @@ def build(db, deps: dict):
                    "style": body.style, "format": body.format, "duration": body.duration, "music": body.music, "status": "queued", "progress": 0,
                    "created_by": user.get("email"), "created_at": _now()}
             await db.eventmap_videos.insert_one({**doc})
-        asyncio.create_task(_process(vid))
+        task = asyncio.create_task(_process(vid))
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
         await audit(user, "eventmap_video_request", detail=f"{eid} · {body.format} · {body.duration}s · {body.music or 'senza musica'}")
         return {k: v for k, v in doc.items() if k != "org_id"}
 
@@ -249,13 +259,21 @@ def build(db, deps: dict):
         return v
 
     @r.get("/videos/{vid}/file")
-    async def video_file(vid: str, download: int = 0, user: dict = Depends(admin_dep)):
+    async def video_file(vid: str, request: Request, download: int = 0, user: dict = Depends(admin_dep)):
         v = await db.eventmap_videos.find_one({"org_id": user["org_id"], "id": vid, "status": "completed"}, {"_id": 0})
         if not v:
             raise HTTPException(status_code=404, detail="Video non disponibile")
         data, _ = SU.read(v["storage"]["path"], v["storage"].get("backend"))
-        name = re.sub(r"[^A-Za-z0-9_-]+", "-", f"event-map-{v.get('track_name') or 'percorso'}-{v['format'].replace(':', 'x')}-{v['duration']}s").strip("-")
+        base = re.sub(r"\.gpx$", "", v.get("track_name") or "percorso", flags=re.I)
+        name = re.sub(r"[^A-Za-z0-9_-]+", "-", f"event-map-{base}-{v['format'].replace(':', 'x')}-{v['duration']}s").strip("-")
         disp = "attachment" if download else "inline"
-        return Response(content=data, media_type="video/mp4", headers={"Content-Disposition": f'{disp}; filename="{name}.mp4"', "Accept-Ranges": "none"})
+        hdr = {"Content-Disposition": f'{disp}; filename="{name}.mp4"', "Accept-Ranges": "bytes"}
+        m = re.match(r"bytes=(\d*)-(\d*)", request.headers.get("range") or "")
+        if m and (m.group(1) or m.group(2)):  # Safari/iPhone richiedono risposte 206
+            n = len(data)
+            a, b = (int(m.group(1)), int(m.group(2) or n - 1)) if m.group(1) else (n - int(m.group(2)), n - 1)
+            a, b = max(0, a), min(b, n - 1)
+            return Response(content=data[a:b + 1], status_code=206, media_type="video/mp4", headers={**hdr, "Content-Range": f"bytes {a}-{b}/{n}"})
+        return Response(content=data, media_type="video/mp4", headers=hdr)
 
     return {"router": r, "ensure": ensure}

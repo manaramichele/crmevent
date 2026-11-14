@@ -64,7 +64,7 @@ export default function EventMapStudio() {
   const [busy, setBusy] = useState("");
   const load = useCallback(() => api.get(`/eventmap/events/${id}`).then(({ data }) => {
     setSt(data); setF((x) => ({ ...x, track_id: x.track_id || data.tracks[0]?.id || "" }));
-  }).catch((e) => toast.error(formatApiError(e.response?.data?.detail))), [id]);
+  }).catch((e) => { toast.error(formatApiError(e.response?.data?.detail)); setSt((x) => x || { missing: true }); }), [id]);
   useEffect(() => { load(); api.get("/eventmap/options").then(({ data }) => setOpt(data)); }, [load]);
   const pending = st?.videos?.some((v) => v.status === "queued" || v.status === "processing");
   useEffect(() => {
@@ -98,6 +98,7 @@ export default function EventMapStudio() {
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     setBusy("");
   };
+  if (st?.missing) return <p className="text-sm text-slate-600" data-testid="em-missing">Evento non trovato. <Link to="/event-map" className="font-semibold text-[#088F8A]">Torna a Event Map</Link></p>;
   if (!st || !opt) return <p className="text-sm text-slate-400">Caricamento...</p>;
   const rg = st.rights;
   const fmts = opt.formats.map((x) => ({ ...x, disabled: !rg.formats.includes(x.key) }));
