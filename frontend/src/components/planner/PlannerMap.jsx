@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { displayCollection, translate, uid } from "./features";
+import { displayCollection, translate, uid, boundsOf } from "./features";
 import { distance } from "@/lib/geo";
 
 const STYLES = { strade: "streets-v2", satellite: "hybrid" };
@@ -9,9 +9,20 @@ const EMPTY = { type: "FeatureCollection", features: [] };
 
 // Mappa MapLibre con disegno (punto, linea, poligono, rettangolo, cerchio, misura), selezione e trascinamento.
 export default function PlannerMap({ apiKey, stile, center, zoom, features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft, onView, flyTo,
-  bounds, minZoom, cooperative = false, onError, emptyText }) {
-  const box = useRef(null), map = useRef(null), st = useRef({}), draft = useRef([]);
+  bounds, minZoom, cooperative = false, onError, emptyText, fitReq = 0 }) {
+  const box = useRef(null), map = useRef(null), st = useRef({}), draft = useRef([]), fitDone = useRef(0);
   st.current = { features, layers, selectedId, mode, placing, onSelect, onCreate, onChange, onDraft };
+  // Inquadra tutti gli elementi (apertura/cambio progetto o pulsante): mai durante il lavoro.
+  const fit = (animate) => {
+    const m = map.current;
+    if (!m || !fitReq || fitDone.current === fitReq) return;
+    fitDone.current = fitReq;
+    const b = boundsOf(st.current.features);
+    if (!b) return;
+    const pad = Math.min(80, Math.round(Math.min(m.getContainer().clientWidth, m.getContainer().clientHeight) * 0.12));
+    if (b[0][0] === b[1][0] && b[0][1] === b[1][1]) m.jumpTo({ center: b[0], zoom: 18 });
+    else m.fitBounds(b, { padding: pad, maxZoom: 19, duration: animate ? 600 : 0 });
+  };
 
   const lockedLayer = (fid) => {
     const f = st.current.features.find((x) => x.properties.id === fid);
@@ -34,7 +45,7 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
     map.current = m;
     if (window.__PLANNER_RECORDING) window.__plannerMap = m;
     let loaded = false;
-    m.on("load", () => { loaded = true; });
+    m.on("load", () => { loaded = true; fit(false); });
     m.on("error", (e) => { if (!loaded && onError) onError(e?.error?.status || 0); });
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "bottom-right");
     m.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
@@ -91,6 +102,7 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
   }, [apiKey, stile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const c = map.current?.cooperativeGestures; if (c) { if (cooperative) c.enable(); else c.disable(); } }, [cooperative]);
+  useEffect(() => { if (map.current?.loaded()) fit(fitDone.current > 0); }, [fitReq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { map.current?.getSource("feat")?.setData(displayCollection(features, layers, selectedId)); }, [features, layers, selectedId]);
   useEffect(() => { if (flyTo && map.current) map.current.flyTo({ center: flyTo.center, zoom: flyTo.zoom || 16 }); }, [flyTo]);
   useEffect(() => { pushDraft([]); if (map.current) map.current.getCanvas().style.cursor = mode === "select" && !placing ? "" : "crosshair"; }, [mode, placing]); // eslint-disable-line react-hooks/exhaustive-deps

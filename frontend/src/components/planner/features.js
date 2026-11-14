@@ -65,6 +65,15 @@ export function makeFeature(spec, c, layers, linePreset) {
   return { type: "Feature", geometry: f.geometry || null, ...f };
 }
 
+// Riquadro [[minLng,minLat],[maxLng,maxLat]] di tutti gli oggetti (di ogni livello, anche nascosti); null se il progetto è vuoto.
+export function boundsOf(features) {
+  let b = null;
+  const add = (c) => { b = b ? [[Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])], [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])]] : [[c[0], c[1]], [c[0], c[1]]]; };
+  const walk = (x) => { if (Array.isArray(x) && typeof x[0] === "number") add(x); else if (Array.isArray(x)) x.forEach(walk); };
+  (features || []).forEach((f) => { const g = geometryOf(f); if (g) walk(g.coordinates); });
+  return b;
+}
+
 export const anchorOf = (f) => {
   const g = geometryOf(f);
   if (f.properties.center) return f.properties.center;

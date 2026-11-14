@@ -967,3 +967,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Event Map usa il video Green Valley Trail (event-map-demo-gvt.mp4); la homepage usa ancora il vecchio demo 9:16 finché non approvato lo scambio.
 - Super Admin: Marketing → Email & Brevo → tab «Materiali promozionali» (anteprime, download immagine/MP4, copia URL pagina/MP4/immagine, copia HTML Brevo).
 
+## Aggiornamento Event Planner + Event Map (2026-11-14) — NON pubblicato
+- Planner: auto-zoom fitBounds (PlannerMap fitReq, features.boundsOf) all'apertura/cambio progetto + pulsante «Inquadra tutti gli elementi» (planner-fit-all).
+- Planner: Distinta materiali (backend/planner_bom.py, collezione planner_bom {rows overrides, manual, components}); quantità da mappa calcolata dal backend (oggetti libreria, linee a pezzi); componenti sostituiscono la riga padre; riepilogo evento; export XLSX/PDF/Stampa; copia su duplica progetto. UI components/planner/BomPanel.jsx.
+- Event Map: gruppi video (eventmap_video_groups): credito una volta per gruppo; rigenerazioni gratuite (POST /video-groups/{gid}/versions) fino al primo download (conferma, ?confirm=1 → definitivo, first_download); SA: unlock/restore/storico; download SA non finalizza. Video precedenti migrati: completati = definitivi (nessuno storico download).
+- Event Map render: timeline con rampe e soste ai ristori (aid_pause 0/2/3/5/custom, aid_pause_auto), riquadro RISTORO · KM; timing() condiviso per avviso durata.
+- Event Map Marketplace: abbonamento annuale per organizzazione, prezzo dal servizio event-map (price, price_type yearly), videos_per_year (1), price Stripe ricorrente eventmap_prices.{mode}.yearly; pacchetti non più in vendita (grant esistenti validi); rinnovo +videos_per_year. Preview DB: price impostato a 29.
+- Test: iteration_163 (backend nuovo 11/11). Da aggiornare test legacy tests/test_eventmap_races.py (3 test sulle versioni con il vecchio modello).
+
+

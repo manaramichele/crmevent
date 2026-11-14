@@ -1,0 +1,44 @@
+{
+  "summary": "Tested both requests end to end in preview with 3 TEST_I163 orgs (BRONZE+subscription, SILVER+planner org grant, BRONZE without sub), all deleted at the end. REQUEST B (Event Map annual subscription): summary, Stripe TEST checkout (mode=subscription, 2900 cents yearly recurring, same price_id reused and saved in marketplace_services.eventmap_prices.<mode>.yearly), pending grant gives no access, active org grant gives rights on ALL events, and checkout is then rejected with 'già attivo'. Marketplace card/detail at 1920 and 390: price, mode and description OK; SILVER shows 'Attiva inclusa' + subscription, BRONZE shows the price line + addon-buy-submit, BRONZE with an active sub shows 'Abbonamento Event Map attivo'. REQUEST A Event Map: video groups (credit consumed once; v2..v7 free; 409 confirm_first_download; confirm -> definitivo with first_download {at,by,version_id,version}; 403 video_final; re-download free; org admin unlock 403; SA unlock/restore OK; SA download does not finalize; history kept), UI archive (MODIFICABILE/DEFINITIVO, 'Modifica e rigenera' -> banner + 'Rigenera video (senza crediti)', first-download dialog cancel/confirm, note) and the 'Pausa ai ristori' UI (autosave, custom 7 s + auto persisted after reload, 15 s/3x3 s warning -> 'Usa 30 secondi' sets 30). Real MP4s rendered: 16:9 30 s p3, 9:16 60 s p5+auto, 1:1 15 s p3, 1:1 15 s p0, 16:9 15 s without aids. Frame analysis: 3 clean stops of ~3 s / ~5 s where the km counter and elevation marker stay still and the 'RISTORO · KM x' box is readable above the cursor without covering the chart; motion resumes; p0 and no-aid videos move continuously. Preview JPEG OK. Event Planner BOM: API + UI (auto rows, read-only map qty, total=max(0,map+adj), edits persist without duplicates after reload, manual add/delete, components 5/5/20 with parent row replaced, filters, event summary with per-project columns, XLSX G=MAX(0,E+F) and event SUM formula, PDF/inline PDF valid %PDF even with '&' and '<' in notes, duplicate copies the BOM independently, cross-org 403/404). Planner auto-fit could NOT be verified visually because the MapLibre canvas was blank in headless Chromium (code reviewed only).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/planner/projects/{pid}/bom/rows/{key}", "issue": "Any key is accepted (e.g. '$bad' -> 200) and creates a phantom BOM row (compute() line 89 adds every override key that does not start with m: and has no ::). The key should be checked against map items, components or manual ids (planner_bom.py:196-206)."},
+      {"endpoint": "PUT /api/eventmap/races/{rid} timing", "issue": "ER.timing() (eventmap_render.py:48) counts every aid station, but Renderer._timeline only stops at 0 < m < total (line 420). An aid at the start or at the finish ('Ristoro Arrivo') adds to pause_s and can trigger a warning or suggestion although the MP4 never pauses there. Filter the aids the same way in both places."},
+      {"endpoint": "planner_bom.compute components", "issue": "When components are defined for a type, the parent row's code, supplier, notes, status and rettifica are dropped without any warning (planner_bom.py:92-95). Consider copying supplier and status onto the component rows, or warning in the editor."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "BOM Stampa", "issue": "bom-print opens a popup that was still about:blank when checked. Whether the inline PDF loads afterwards was not verified in headless; check manually.", "affected_selectors": ["[data-testid='bom-print']"]},
+      {"flow": "Planner auto-fit", "issue": "Could not be verified: the map canvas stayed blank in headless (no tiles or objects drawn). PlannerMap.jsx fit() logic was reviewed and looks correct (fitReq bumps on project load and the planner-fit-all click; single point -> zoom 18; empty -> no-op).", "affected_selectors": ["[data-testid='planner-fit-all']"]}
+    ],
+    "design_issues": [
+      {"screen": "Marketplace Event Map card/detail", "issues": ["The price is shown as '€29,00/anno' (mkt-card-price / mkt-detail-price) while the buy area shows '29,00 €/anno' and the Event Planner card shows 'Da 29 €/mese'. Use one Italian format, e.g. '29 €/anno'."]},
+      {"screen": "Event Map studio", "issues": ["EventMapStudio.jsx:234 em-no-videos still says 'Hai esaurito i video disponibili: acquista un pacchetto'. Packages are no longer sold; mention the subscription or the yearly renewal instead.", "In the 1:1 15 s video with 3x3 s pauses, the cursor moves for only about 0.7 s between stops. This is warned in the UI, but it is the expected outcome if the user ignores the warning."]},
+      {"screen": "BOM panel", "issues": ["The Codice column is narrow, so codes are cut off ('STR-COPERTU', 'VIA-TRANSEN')."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter163_em_sub_bom.py", "/app/backend/tests/test_addons_planner_eventmap.py"],
+  "action_items": [
+    "Update stale regression tests/test_eventmap_races.py::test_race_video_versions_and_credits (and the dependent test_download_name / test_delete_race_keeps_tracks_and_videos). It expects a second POST /races/{rid}/videos to give version 2 and consume a 2nd credit, but under the new design each POST creates a new group. Use POST /video-groups/{gid}/versions for v2, and download with confirm=1.",
+    "Make the ER.timing aid filter match _timeline (0 < m < total)",
+    "Validate the BOM row key in PUT /bom/rows/{key}",
+    "Unify the Event Map price format (card/detail vs buy area)",
+    "Replace the 'acquista un pacchetto' wording in EventMapStudio.jsx:234"
+  ],
+  "critical_code_review_comments": [
+    "eventmap.py _enqueue/_process: credit-once-per-group logic is sound (videos_in_progress excludes regen; credit_consumed set atomically). A group whose first version failed stays with current_version_id None and is never cleaned up: consider hiding or removing empty groups.",
+    "eventmap.py video_file: finalization uses an atomic update on status=modificabile, so simultaneous first downloads are safe. Inline playback does not finalize (verified).",
+    "addons.py handle_webhook: the renewal adds videos_total only when expires_at moves to a later date; the comment at line 501 still says 'Event Planner' only.",
+    "Backend hot reload also watches /app/backend/tests: editing a test file while a video renders restarts uvicorn, and ensure() marks the in-progress videos as error. This caused one spurious regression failure during this run."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter163_em_sub_bom.py (new)", "/app/backend/tests/test_addons_planner_eventmap.py (stale package-checkout assertions replaced with packages == [])"],
+  "success_rate": {"backend": "100% of the new iter163 suite (11/11); regression: addons 10/10, planner_org_scope OK, eventmap_races 10/13 (3 stale tests, see action items)", "frontend": "~95% (all tested flows work; planner fit not visually verifiable, print popup not verified)"},
+  "seed_data_creation": "TEST_I163 Br/Si/B2 orgs with events, tracks, races, videos, BOMs and grants were created and deleted via the SA org-delete endpoint (verified 0 left). 4 open Stripe TEST checkout sessions with metadata product=eventmap were expired; one may belong to another concurrent test run, all in TEST mode. Stripe price price_1UbjRR5H9IaGnKbkah0ruYEN (29 €/year) is now saved in marketplace_services.eventmap_prices.test.yearly as intended.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with: export MONGO_URL/DB_NAME/STRIPE_SECRET_KEY from backend/.env plus REACT_APP_BACKEND_URL; pytest tests/test_iter163_em_sub_bom.py -n 0. BRONZE allows 1 event, so create events before setting the plan. Dismiss the welcome-demo dialog ('Non ora') and the cookie banner ('Accept all') in Playwright. Do not edit files under backend/ while renders run (hot reload kills jobs). Frame-analysis helper: /tmp/frames.py (imageio_ffmpeg, 4 fps, mean-diff detects pauses).",
+  "rca of the issue": "eventmap_races failures: semantic change (a new POST creates a new group; versions now go through /video-groups/{gid}/versions), not a product bug. The first run also hit a hot-reload restart triggered by a test-file edit."
+}

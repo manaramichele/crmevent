@@ -7,6 +7,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+import planner_bom
+
 MAX_FEATURES = 5000
 MAX_REVISIONS = 30
 DEFAULT_LAYERS = ["Percorsi", "Partenza e arrivo", "Strutture", "Ristori", "Sicurezza", "Viabilità", "Staff e volontari", "Sponsor", "Fornitori", "Aree operative"]
@@ -84,6 +86,7 @@ def build(db, deps: dict):
         p["read_only"] = (await event_of(org_id, p["evento_id"], user, write))["read_only"]
         return p
 
+    bom_copy = planner_bom.attach(r, db, audit, member_dep, admin_dep, project_of, event_of, deps["org_logo"])
     @r.get("/config")
     async def config(user: dict = Depends(user_dep)):
         # Chiave pubblica MapTiler (va limitata ai domini CRMEvent nel pannello MapTiler); mai nel codice frontend.
@@ -107,6 +110,8 @@ def build(db, deps: dict):
                "layers": layers, "features": (base or {}).get("features") or [], "center": (base or {}).get("center"), "zoom": (base or {}).get("zoom"),
                "created_by": admin.get("email"), "created_at": _now(), "updated_by": admin.get("email"), "updated_at": _now()}
         await db.planner_projects.insert_one({**doc})
+        if base:  # la copia ha una distinta propria, indipendente dall'originale
+            await bom_copy(admin["org_id"], base["id"], doc["id"])
         await audit(admin, "planner_project_create", detail=f"{eid} · {body.nome}")
         return {k: v for k, v in doc.items() if k != "features"}
 
@@ -153,6 +158,7 @@ def build(db, deps: dict):
         return await save(pid, SaveIn(version=cur["version"], features=rev["features"], layers=rev["layers"]), admin)
 
     async def ensure():
+        await db.planner_bom.create_index([("org_id", 1), ("project_id", 1)], unique=True)
         await db.planner_projects.create_index([("org_id", 1), ("evento_id", 1)])
         await db.planner_projects.create_index("id", unique=True)
         await db.planner_revisions.create_index([("org_id", 1), ("project_id", 1), ("at", -1)])

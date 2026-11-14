@@ -4,7 +4,8 @@ import api, { formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { MousePointer2, MapPin, Spline, Pentagon, Square, Circle, Ruler, Undo2, Redo2, Search, PanelLeft, PanelRight, ArrowLeft, Check } from "lucide-react";
+import { MousePointer2, MapPin, Spline, Pentagon, Square, Circle, Ruler, Undo2, Redo2, Search, PanelLeft, PanelRight, ArrowLeft, Check, Scan, ClipboardList } from "lucide-react";
+import BomPanel from "@/components/planner/BomPanel";
 import PlannerMap from "@/components/planner/PlannerMap";
 import { LibraryPanel, LayersPanel, PropsPanel } from "@/components/planner/Panels";
 import { uid, translate, makeFeature } from "@/components/planner/features";
@@ -47,11 +48,13 @@ export default function EventPlanner() {
   const [save, setSave] = useState("salvato");
   const ver = useRef(1), dirty = useRef(false), timer = useRef(null);
   const [demo, setDemo] = useState(() => loadDemoProject());
+  const [fitReq, setFitReq] = useState(0);
+  const [bom, setBom] = useState(false);
 
   const loadList = useCallback(() => api.get(`/planner/events/${id}/projects`).then(({ data }) => { setEv(data.evento); setProjects(data.projects); return data.projects; }), [id]);
   const open = useCallback(async (pid) => {
     const { data } = await api.get(`/planner/projects/${pid}`);
-    setProj(data); ver.current = data.version; setLayersRaw(data.layers); h.reset(data.features); setSel(null); dirty.current = false; setSave("salvato");
+    setProj(data); ver.current = data.version; setLayersRaw(data.layers); h.reset(data.features); setSel(null); dirty.current = false; setSave("salvato"); setFitReq((x) => x + 1);
   }, [h.reset]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     api.get("/planner/config").then(({ data }) => setCfg(data)).catch(() => setCfg({ library: [] }));
@@ -108,6 +111,7 @@ export default function EventPlanner() {
   const rename = async () => { const nome = window.prompt("Nuovo nome", proj.nome); if (!nome) return; await api.patch(`/planner/projects/${proj.id}`, { nome }); setProj({ ...proj, nome }); loadList(); };
   const archive = async () => { if (!window.confirm("Archiviare il progetto?")) return; await api.patch(`/planner/projects/${proj.id}`, { archiviato: true }); setProj(null); const ps = await loadList(); const p = ps.find((x) => !x.archiviato); if (p) open(p.id); };
   const SAVE = { salvato: "Salvato", modificato: "Modifiche non salvate", salvataggio: "Salvataggio...", errore: "Errore di rete: riprova", conflitto: "Modificato da un altro utente: ricarica" };
+  const openBom = async () => { if (dirty.current) { clearTimeout(timer.current); await persist(h.features, layers); } setBom(true); };
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] flex-col bg-slate-50" data-testid="event-planner">
@@ -118,7 +122,8 @@ export default function EventPlanner() {
           <select className="h-8 max-w-[14rem] rounded-md border border-slate-200 bg-white px-1 text-sm font-semibold" value={proj?.id || ""} onChange={(e) => open(e.target.value)} data-testid="planner-project-select">
             {!proj && <option value="">Nessun progetto</option>}{projects.filter((p) => !p.archiviato).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
         <Button size="sm" variant="outline" onClick={() => newProject(false)} data-testid="planner-new-project">Nuovo</Button>
-        {proj && <><Button size="sm" variant="ghost" onClick={() => newProject(true)} data-testid="planner-dup-project">Duplica</Button><Button size="sm" variant="ghost" onClick={rename} data-testid="planner-rename-project">Rinomina</Button><Button size="sm" variant="ghost" onClick={archive} data-testid="planner-archive-project">Archivia</Button></>}
+        {proj && <><Button size="sm" variant="ghost" onClick={() => newProject(true)} data-testid="planner-dup-project">Duplica</Button><Button size="sm" variant="ghost" onClick={rename} data-testid="planner-rename-project">Rinomina</Button><Button size="sm" variant="ghost" onClick={archive} data-testid="planner-archive-project">Archivia</Button>
+          <Button size="sm" variant="outline" onClick={openBom} data-testid="planner-bom-btn"><ClipboardList className="mr-1 h-4 w-4" />Distinta materiali</Button></>}
         <span className={`text-xs ${save === "salvato" ? "text-green-700" : save === "modificato" || save === "salvataggio" ? "text-slate-500" : "text-red-600"}`} data-testid="planner-save-state">{SAVE[save]}</span>
         {save === "conflitto" && <Button size="sm" variant="outline" onClick={() => open(proj.id)} data-testid="planner-reload">Ricarica</Button>}
         <div className="ml-auto flex items-center gap-1">
@@ -139,11 +144,12 @@ export default function EventPlanner() {
           <main className="relative min-w-0 flex-1">
             <PlannerMap apiKey={cfg?.maptiler_key} stile={stile} center={proj.center} zoom={proj.zoom} features={h.features} layers={layers} selectedId={sel} mode={mode} placing={placing}
               onSelect={(x) => { setSel(x); if (x) setRight(true); }} onCreate={create} onChange={change} onDraft={(p) => setDraftN(p.length)} flyTo={fly}
-              onView={(c, z) => { proj.center = c; proj.zoom = z; }} />
+              onView={(c, z) => { proj.center = c; proj.zoom = z; }} fitReq={fitReq} />
             <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-xl bg-white/95 p-1 shadow-md backdrop-blur" data-testid="planner-toolbar">
               <button type="button" onClick={() => setLeft(!left)} className="rounded-lg p-2.5 hover:bg-slate-100" aria-label="Pannello sinistro" data-testid="planner-toggle-left"><PanelLeft className="h-5 w-5" /></button>
               {TOOLS.map(([k, Icon, t]) => <button key={k} type="button" title={t} aria-label={t} onClick={() => { setMode(k); setPlacing(null); setLinePreset(null); }} data-testid={`planner-tool-${k}`}
                 className={`rounded-lg p-2.5 ${mode === k && !placing ? "bg-slate-900 text-white" : "hover:bg-slate-100"}`}><Icon className="h-5 w-5" /></button>)}
+              <button type="button" title="Inquadra tutti gli elementi" aria-label="Inquadra tutti gli elementi" onClick={() => setFitReq((x) => x + 1)} className="rounded-lg p-2.5 hover:bg-slate-100" data-testid="planner-fit-all"><Scan className="h-5 w-5" /></button>
             </div>
             {["line", "polygon", "measure"].includes(mode) && draftN > 0 && <Button onClick={() => window.__plannerFinish && window.__plannerFinish()} className="absolute bottom-10 left-1/2 z-10 -translate-x-1/2 bg-slate-900 text-white" data-testid="planner-finish"><Check className="mr-1 h-4 w-4" />Termina ({draftN} punti)</Button>}
             <button type="button" onClick={() => setRight(!right)} className="absolute right-2 top-2 z-10 rounded-lg bg-white/95 p-2.5 shadow-md" aria-label="Pannello proprietà" data-testid="planner-toggle-right"><PanelRight className="h-5 w-5" /></button>
@@ -153,6 +159,7 @@ export default function EventPlanner() {
             <PropsPanel f={selected} layers={layers} onPatch={patch} onDuplicate={duplicate} onDelete={remove} />
           </aside>}
         </div>)}
+      <BomPanel open={bom} onClose={() => setBom(false)} proj={proj} eid={id} evName={ev?.nome || "evento"} refresh={save === "salvato" ? ver.current : -1} />
     </div>
   );
 }

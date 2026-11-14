@@ -45,6 +45,8 @@ class VideoIn(BaseModel):
     speed: str = "normal"
     show_aid: bool = True
     show_elevation: bool = True
+    aid_pause: float = Field(default=3, ge=0, le=10)
+    aid_pause_auto: bool = False
 
 
 class PreviewIn(BaseModel):
@@ -82,6 +84,8 @@ class RaceIn(BaseModel):
     speed: Optional[str] = None
     show_aid: Optional[bool] = None
     show_elevation: Optional[bool] = None
+    aid_pause: Optional[float] = Field(default=None, ge=0, le=10)
+    aid_pause_auto: Optional[bool] = None
 
     @field_validator("date")
     @classmethod
@@ -91,8 +95,13 @@ class RaceIn(BaseModel):
         return v
 
 
-RACE_SETTINGS = ("logo", "style", "format", "duration", "music", "speed", "show_aid", "show_elevation")
-RACE_DEFAULTS = {"style": "dark", "format": "9:16", "duration": 30, "music": "sportiva", "speed": "normal", "show_aid": True, "show_elevation": True}
+RACE_SETTINGS = ("logo", "style", "format", "duration", "music", "speed", "show_aid", "show_elevation", "aid_pause", "aid_pause_auto")
+RACE_DEFAULTS = {"style": "dark", "format": "9:16", "duration": 30, "music": "sportiva", "speed": "normal", "show_aid": True, "show_elevation": True,
+                 "aid_pause": 3, "aid_pause_auto": False}
+
+
+class RegenIn(BaseModel):
+    race_id: str
 
 
 class AidIn(BaseModel):
@@ -121,6 +130,17 @@ def build(db, deps: dict):
         await db.eventmap_videos.create_index([("org_id", 1), ("event_id", 1), ("created_at", -1)])
         await db.eventmap_videos.update_many({"status": {"$in": ["queued", "processing"]}},
                                              {"$set": {"status": "error", "error": "Elaborazione interrotta dal riavvio del server: riprova (nessun video scalato)"}})
+        await db.eventmap_video_groups.create_index("id", unique=True)
+        async for v in db.eventmap_videos.find({"group_id": {"$exists": False}}, {"_id": 0, "id": 1, "org_id": 1, "event_id": 1, "race_id": 1, "race_name": 1,
+                                                                                   "status": 1, "consumed": 1, "created_at": 1, "created_by": 1}):
+            # video già esistenti: nessuno storico download registrato → i completati restano definitivi (sbloccabili dal Super Admin)
+            done = v.get("status") == "completed"
+            await db.eventmap_video_groups.update_one({"id": v["id"]}, {"$setOnInsert": {
+                "id": v["id"], "org_id": v["org_id"], "event_id": v["event_id"], "race_id": v.get("race_id"), "race_name": v.get("race_name"),
+                "status": "definitivo" if done else "modificabile", "credit_consumed": bool(v.get("consumed")), "current_version_id": v["id"],
+                "legacy": True, "first_download": None, "created_at": v.get("created_at"), "created_by": v.get("created_by"),
+                "history": [{"at": _now(), "by": "sistema", "action": "migrazione", "note": "Video precedente: storico download non disponibile"}]}}, upsert=True)
+            await db.eventmap_videos.update_one({"id": v["id"]}, {"$set": {"group_id": v["id"]}})
 
     async def _event(org_id, eid):
         ev = await db.events.find_one({"org_id": org_id, "id": eid}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1, "logo_url": 1})
@@ -130,7 +150,7 @@ def build(db, deps: dict):
 
     async def _rights(org_id, eid):
         s = await addons["summary"](org_id, "eventmap")
-        on = s["unrestricted"] or any(a["event_id"] == eid and a["covered"] for a in s["activations"])
+        on = s["unrestricted"] or bool(s.get("org_subscription")) or any(a["event_id"] == eid and a["covered"] for a in s["activations"])
         inflight = s["videos_in_progress"]
         now = _now()
         valid = [g for g in s["grants"] if g.get("status") == "active" and (not g.get("expires_at") or g["expires_at"] > now)]
@@ -216,6 +236,9 @@ def build(db, deps: dict):
             if res.modified_count or res.upserted_id:
                 races = [await _new_race(user, ev, tracks[0])]
         by_track = {r["track_id"]: r["name"] for r in reversed(races) if r.get("track_id")}
+        tmap = {t["id"]: t for t in tracks}
+        for rc in races:
+            rc["timing"] = _timing(rc, tmap.get(rc.get("track_id")))
         used = {r.get("track_id") for r in races}
         videos = await db.eventmap_videos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0, "job": 0}).sort("created_at", -1).to_list(200)
         for v in videos:
@@ -225,7 +248,20 @@ def build(db, deps: dict):
                 "rights": await _rights(user["org_id"], eid), "maps": maps,
                 "tracks": tracks, "races": races, "unassigned_tracks": [t["id"] for t in tracks if t["id"] not in used],
                 "logos": await db.eventmap_logos.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "storage": 0}).sort("created_at", -1).to_list(20),
-                "videos": videos}
+                "videos": videos, "is_superadmin": _is_sa(user),
+                "groups": await db.eventmap_video_groups.find({"org_id": user["org_id"], "event_id": eid}, {"_id": 0, "org_id": 0}).sort("created_at", -1).to_list(200)}
+
+    def _is_sa(user):
+        return user.get("role") == "superadmin"
+
+    def _timing(rc, t):
+        aids = [a for a in _aid_list(t) if 0 < float(a.get("km") or 0) * 1000 < float(t.get("distance_m") or 0)] if t and rc.get("show_aid", True) else []
+        return ER.timing(int(rc.get("duration") or 30), aids, rc.get("speed") or "normal", float(rc.get("aid_pause", 3) or 0), bool(rc.get("aid_pause_auto")))
+
+    async def _race_out(org_id, rid):
+        rc = await db.eventmap_races.find_one({"id": rid}, {"_id": 0, "org_id": 0})
+        t = await db.eventmap_tracks.find_one({"org_id": org_id, "id": rc.get("track_id")}, {"_id": 0}) if rc.get("track_id") else None
+        return {**rc, "timing": _timing(rc, t)}
 
     async def _races(org_id, eid):
         return await db.eventmap_races.find({"org_id": org_id, "event_id": eid}, {"_id": 0, "org_id": 0}).sort([("order", 1), ("created_at", 1)]).to_list(100)
@@ -237,7 +273,7 @@ def build(db, deps: dict):
         return rc
 
     async def _check_race(org_id, ev, data: dict):
-        for k in ("style", "format", "duration", "speed", "show_aid", "show_elevation"):
+        for k in ("style", "format", "duration", "speed", "show_aid", "show_elevation", "aid_pause", "aid_pause_auto"):
             if k in data and data[k] is None:
                 data.pop(k)
         if data.get("track_id"):
@@ -300,7 +336,7 @@ def build(db, deps: dict):
         await _require_active(user["org_id"], rc["event_id"])
         data = await _check_race(user["org_id"], ev, body.model_dump(exclude_unset=True))
         await db.eventmap_races.update_one({"org_id": user["org_id"], "id": rid}, {"$set": {**data, "updated_at": _now(), "updated_by": user.get("email")}})
-        return await db.eventmap_races.find_one({"id": rid}, {"_id": 0, "org_id": 0})
+        return await _race_out(user["org_id"], rid)
 
     @r.post("/races/{rid}/copy-from/{src}")
     async def copy_race(rid: str, src: str, user: dict = Depends(admin_dep)):
@@ -310,7 +346,7 @@ def build(db, deps: dict):
         await _require_active(user["org_id"], rc["event_id"])
         await db.eventmap_races.update_one({"id": rid}, {"$set": {**{k: s.get(k) for k in RACE_SETTINGS}, "updated_at": _now()}})
         await audit(user, "eventmap_race_copy", detail=f"{s['name']} → {rc['name']}")
-        return await db.eventmap_races.find_one({"id": rid}, {"_id": 0, "org_id": 0})
+        return await _race_out(user["org_id"], rid)
 
     @r.delete("/races/{rid}")
     async def delete_race(rid: str, user: dict = Depends(admin_dep)):
@@ -347,12 +383,68 @@ def build(db, deps: dict):
     @r.post("/races/{rid}/videos")
     async def race_video(rid: str, user: dict = Depends(admin_dep)):
         rc, t, ev = await _race_track(user, rid)
+        return await _enqueue_race(user, rc, t, ev, None)
+
+    async def _enqueue_race(user, rc, t, ev, group):
         o = _race_opts(rc, t)
-        body = VideoIn(track_id=t["id"], **{k: o[k] for k in RACE_SETTINGS})
-        ver = await db.eventmap_videos.count_documents({"org_id": user["org_id"], "race_id": rid}) + 1
-        extra = {"race_id": rid, "race_name": rc["name"], "title": o["title"], "subtitle": o["subtitle"], "distance_display_m": o["distance_display_m"],
-                 "date": o["date"], "version": ver}
-        return await _enqueue(user, ev, t, body, extra)
+        body = VideoIn(track_id=t["id"], **{k: o[k] for k in RACE_SETTINGS if o.get(k) is not None or k in ("music", "logo")})
+        gid = group["id"] if group else uuid.uuid4().hex
+        ver = (await db.eventmap_videos.count_documents({"org_id": user["org_id"], "group_id": gid}) + 1) if group else 1
+        extra = {"race_id": rc["id"], "race_name": rc["name"], "title": o["title"], "subtitle": o["subtitle"], "distance_display_m": o["distance_display_m"],
+                 "date": o["date"], "version": ver, "group_id": gid, "regen": bool(group)}
+        return await _enqueue(user, ev, t, body, extra, group)
+
+    async def _group(org_id, gid):
+        g = await db.eventmap_video_groups.find_one({"org_id": org_id, "id": gid}, {"_id": 0})
+        if not g:
+            raise HTTPException(status_code=404, detail="Video non trovato")
+        return g
+
+    @r.post("/video-groups/{gid}/versions")
+    async def regenerate(gid: str, body: RegenIn, user: dict = Depends(admin_dep)):
+        """Nuova versione dello stesso video acquistato: gratuita, consentita fino al primo download (sempre al Super Admin)."""
+        g = await _group(user["org_id"], gid)
+        if g["status"] != "modificabile" and not _is_sa(user):
+            raise HTTPException(status_code=403, detail={"code": "video_final", "message": "Video definitivo: è già stato scaricato e non può più essere modificato"})
+        if await db.eventmap_videos.find_one({"group_id": gid, "status": {"$in": ["queued", "processing"]}}, {"_id": 1}):
+            raise HTTPException(status_code=409, detail="C'è già una versione in elaborazione per questo video")
+        rc = await _race(user["org_id"], body.race_id)
+        if rc["event_id"] != g["event_id"]:
+            raise HTTPException(status_code=400, detail="La gara appartiene a un altro evento")
+        if not rc.get("track_id"):
+            raise HTTPException(status_code=400, detail="Associa un file GPX alla gara")
+        if not _is_sa(user):
+            await _require_active(user["org_id"], rc["event_id"])
+        t = await _upgrade_track(await _track(user["org_id"], rc["track_id"]))
+        out = await _enqueue_race(user, rc, t, await _event(user["org_id"], rc["event_id"]), g)
+        await db.eventmap_video_groups.update_one({"id": gid}, {"$set": {"race_id": rc["id"], "race_name": rc["name"]},
+                                                              "$push": {"history": {"at": _now(), "by": user.get("email"), "action": "rigenerazione", "version": out["version"], "sa": _is_sa(user)}}})
+        return out
+
+    def _sa_only(user):
+        if not _is_sa(user):
+            raise HTTPException(status_code=403, detail="Operazione riservata al Super Admin")
+
+    @r.post("/video-groups/{gid}/unlock")
+    async def unlock(gid: str, user: dict = Depends(admin_dep)):
+        _sa_only(user)
+        await _group(user["org_id"], gid)
+        await db.eventmap_video_groups.update_one({"id": gid}, {"$set": {"status": "modificabile"},
+                                                              "$push": {"history": {"at": _now(), "by": user.get("email"), "action": "sblocco", "sa": True}}})
+        await audit(user, "eventmap_video_unlock", detail=gid)
+        return await _group(user["org_id"], gid)
+
+    @r.post("/video-groups/{gid}/restore/{vid}")
+    async def restore_version(gid: str, vid: str, user: dict = Depends(admin_dep)):
+        _sa_only(user)
+        await _group(user["org_id"], gid)
+        v = await db.eventmap_videos.find_one({"org_id": user["org_id"], "id": vid, "group_id": gid, "status": "completed"}, {"_id": 0, "version": 1})
+        if not v:
+            raise HTTPException(status_code=404, detail="Versione non disponibile")
+        await db.eventmap_video_groups.update_one({"id": gid}, {"$set": {"current_version_id": vid},
+                                                              "$push": {"history": {"at": _now(), "by": user.get("email"), "action": "ripristino", "version": v.get("version"), "sa": True}}})
+        await audit(user, "eventmap_video_restore", detail=f"{gid} → v{v.get('version')}")
+        return await _group(user["org_id"], gid)
 
     async def _require_active(org_id, eid):
         if not (await _rights(org_id, eid))["active"]:
@@ -500,7 +592,8 @@ def build(db, deps: dict):
         return {"gpx_path": gpx, "style": style, "format": fmt, "title": opts.get("title") or ev.get("nome"), "subtitle": opts.get("subtitle") or "",
                 "distance_display_m": opts.get("distance_display_m"), "date": _date_it(opts.get("date") or ev.get("data_inizio")),
                 "logo_path": logo, "cache_dir": CACHE, "ffmpeg": imageio_ffmpeg.get_ffmpeg_exe(), "speed": opts.get("speed") or "normal",
-                "show_aid": opts.get("show_aid", True), "show_elevation": opts.get("show_elevation", True), "aid_stations": opts.get("aid_stations") or []}
+                "show_aid": opts.get("show_aid", True), "show_elevation": opts.get("show_elevation", True), "aid_stations": opts.get("aid_stations") or [],
+                "duration": opts.get("duration") or 30, "aid_pause": opts.get("aid_pause", 3), "aid_pause_auto": bool(opts.get("aid_pause_auto"))}
 
     @r.post("/tracks/{tid}/preview")
     async def preview(tid: str, body: PreviewIn, user: dict = Depends(admin_dep)):
@@ -545,8 +638,12 @@ def build(db, deps: dict):
                 st = SU.save(f"eventmap/{v['org_id']}/{v['event_id']}/{vid}.mp4", data, "video/mp4")
                 res = await db.eventmap_videos.update_one({"id": vid, "status": "processing", "consumed": {"$ne": True}},
                                                           {"$set": {"status": "completed", "progress": 100, "storage": st, "size": len(data), "completed_at": _now(), "consumed": True}})
-                if res.modified_count:  # il video si scala solo a MP4 salvato, una sola volta
-                    await db.addon_usage.update_one({"org_id": v["org_id"], "product": "eventmap"}, {"$inc": {"videos_used": 1}}, upsert=True)
+                gid = v.get("group_id") or vid
+                if res.modified_count:
+                    await db.eventmap_video_groups.update_one({"id": gid}, {"$set": {"current_version_id": vid}})
+                    g = await db.eventmap_video_groups.update_one({"id": gid, "credit_consumed": {"$ne": True}}, {"$set": {"credit_consumed": True}})
+                    if g.modified_count:  # un credito per video acquistato, alla prima versione completata; le rigenerazioni sono gratuite
+                        await db.addon_usage.update_one({"org_id": v["org_id"], "product": "eventmap"}, {"$inc": {"videos_used": 1}}, upsert=True)
             except Exception as e:
                 logger.error(f"eventmap render {vid}: {e}")
                 await db.eventmap_videos.update_one({"id": vid}, {"$set": {"status": "error", "completed_at": _now(),
@@ -560,7 +657,7 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="La traccia appartiene a un altro evento")
         return await _enqueue(user, ev, t, body, {"date": (await _settings(user["org_id"], eid)).get("date")})
 
-    async def _enqueue(user, ev, t, body: VideoIn, extra: dict):
+    async def _enqueue(user, ev, t, body: VideoIn, extra: dict, group=None):
         eid = ev["id"]
         if body.style not in STYLES or body.format not in ER.SIZES or body.duration not in DURATIONS or (body.music and body.music not in MUSIC) or body.speed not in SPEEDS:
             raise HTTPException(status_code=400, detail="Opzioni video non valide")
@@ -571,23 +668,30 @@ def build(db, deps: dict):
         lock = locks.setdefault(user["org_id"], asyncio.Lock())
         async with lock:
             rg = await _rights(user["org_id"], eid)
-            if not rg["active"]:
+            if not rg["active"] and not (group and _is_sa(user)):
                 raise HTTPException(status_code=403, detail={"code": "addon_required", "product": "eventmap", "slug": "event-map",
                                                              "message": "Event Map non è attivo per questo evento: attivalo dal Marketplace"})
-            if body.format not in rg["formats"]:
+            if body.format not in rg["formats"] and not _is_sa(user):
                 raise HTTPException(status_code=403, detail="Formato non incluso nel tuo pacchetto Event Map")
-            if rg["videos_remaining"] is not None and rg["videos_remaining"] <= 0:
+            if not (group and group.get("credit_consumed")) and rg["videos_remaining"] is not None and rg["videos_remaining"] <= 0:
                 raise HTTPException(status_code=403, detail={"code": "addon_videos", "message": "Non hai video disponibili: acquista un pacchetto Event Map nel Marketplace"})
             vid = uuid.uuid4().hex
+            extra = {"group_id": vid, "regen": False, **extra}
             t = await _upgrade_track(t)
             # impostazioni fotografate alla richiesta: modifiche successive non cambiano i video già in coda
             doc = {"id": vid, "org_id": user["org_id"], "event_id": eid, "track_id": t["id"], "track_name": t.get("name"), "distance_m": t["distance_m"],
                    "style": body.style, "format": body.format, "duration": body.duration, "music": body.music, "logo": body.logo,
                    **extra, "speed": body.speed, "show_aid": body.show_aid,
                    "show_elevation": body.show_elevation and bool(t.get("has_elevation")), "aid_stations": _aid_list(t) if body.show_aid else [],
+                   "aid_pause": body.aid_pause, "aid_pause_auto": body.aid_pause_auto,
                    "status": "queued", "progress": 0,
                    "created_by": user.get("email"), "created_at": _now()}
             await db.eventmap_videos.insert_one({**doc})
+            if not group:
+                await db.eventmap_video_groups.insert_one({"id": doc["group_id"], "org_id": user["org_id"], "event_id": eid, "race_id": extra.get("race_id"),
+                                                          "race_name": extra.get("race_name"), "status": "modificabile", "credit_consumed": False,
+                                                          "current_version_id": None, "first_download": None, "created_at": _now(), "created_by": user.get("email"),
+                                                          "history": [{"at": _now(), "by": user.get("email"), "action": "creazione", "version": 1}]})
         task = asyncio.create_task(_process(vid))
         tasks.add(task)
         task.add_done_callback(tasks.discard)
@@ -602,11 +706,22 @@ def build(db, deps: dict):
         return v
 
     @r.get("/videos/{vid}/file")
-    async def video_file(vid: str, request: Request, download: int = 0, user: dict = Depends(admin_dep)):
+    async def video_file(vid: str, request: Request, download: int = 0, confirm: int = 0, user: dict = Depends(admin_dep)):
         v = await db.eventmap_videos.find_one({"org_id": user["org_id"], "id": vid, "status": "completed"}, {"_id": 0})
         if not v:
             raise HTTPException(status_code=404, detail="Video non disponibile")
+        g = await db.eventmap_video_groups.find_one({"org_id": user["org_id"], "id": v.get("group_id") or vid}, {"_id": 0, "status": 1})
+        first = bool(download and g and g["status"] == "modificabile" and not _is_sa(user))
+        if first and not confirm:
+            raise HTTPException(status_code=409, detail={"code": "confirm_first_download", "message": "Con il primo download il video diventerà definitivo e non potrai più modificarlo. Vuoi continuare?"})
         data, _ = SU.read(v["storage"]["path"], v["storage"].get("backend"))
+        if first:  # definitivo solo quando il file è stato letto e il trasferimento parte; richieste simultanee: vince la prima
+            fd = {"at": _now(), "by": user.get("email"), "version_id": vid, "version": v.get("version", 1)}
+            res = await db.eventmap_video_groups.update_one({"id": v.get("group_id") or vid, "status": "modificabile"},
+                                                            {"$set": {"status": "definitivo", "first_download": fd},
+                                                             "$push": {"history": {**fd, "action": "primo download"}}})
+            if res.modified_count:
+                await audit(user, "eventmap_video_first_download", detail=f"{v.get('group_id')} · v{v.get('version', 1)}")
         base = v.get("race_name") or re.sub(r"\.gpx$", "", v.get("track_name") or "percorso", flags=re.I)
         ver = f"-v{v['version']}" if v.get("version", 1) > 1 else ""
         name = re.sub(r"[^A-Za-z0-9_-]+", "-", f"event-map-{base}-{v['format'].replace(':', 'x')}-{v['duration']}s{ver}").strip("-")

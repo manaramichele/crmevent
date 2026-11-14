@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { SpeedPick, ElevationToggle, AidEditor } from "@/components/eventmap/EventMapExtras";
-import { RaceBar, RaceDialog, CopyDialog, RaceFields, UnassignedBanner, kmTxt } from "@/components/eventmap/EventMapRaces";
+import { RaceBar, RaceDialog, CopyDialog, RaceFields, UnassignedBanner } from "@/components/eventmap/EventMapRaces";
+import { VideoGroupCard, AidPausePick, TimingWarning } from "@/components/eventmap/EventMapVideos";
 import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Upload, Film, Download, Loader2, Play, Pause, RotateCcw, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Upload, Film, Play, Pause, Image as ImageIcon } from "lucide-react";
 
-const ST = { queued: ["In attesa", "bg-slate-100 text-slate-700"], processing: ["In elaborazione", "bg-amber-100 text-amber-800"], completed: ["Completato", "bg-emerald-100 text-emerald-800"], error: ["Errore", "bg-red-100 text-red-700"] };
 
 function Choice({ items, value, onChange, testid }) {
   return (
@@ -70,56 +70,6 @@ function LogoPick({ eid, st, value, onChange, onUpload, onDelete, busy }) {
   );
 }
 
-const videoName = (v) => `event-map-${v.race_name || (v.track_name || "percorso").replace(/\.gpx$/i, "")}-${v.format.replace(":", "x")}-${v.duration}s${v.version > 1 ? `-v${v.version}` : ""}`.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") + ".mp4";
-
-// Il file passa da una richiesta API autenticata (cookie + X-Org-Id): un link diretto non porterebbe l'organizzazione attiva.
-async function fetchVideo(v, download) {
-  try {
-    const { data } = await api.get(`/eventmap/videos/${v.id}/file`, { params: download ? { download: 1 } : {}, responseType: "blob" });
-    return new Blob([data], { type: "video/mp4" });
-  } catch (e) {
-    let msg = "Impossibile recuperare il video. Riprova.";
-    try { msg = formatApiError(JSON.parse(await e.response.data.text()).detail); } catch (_) { /* risposta non JSON */ }
-    toast.error(msg);
-    return null;
-  }
-}
-
-function VideoCard({ v, onRegen }) {
-  const [label, cls] = ST[v.status] || ST.queued;
-  const [url, setUrl] = useState(null);
-  const [busy, setBusy] = useState("");
-  const vertical = v.format === "9:16";
-  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
-  const play = async () => { setBusy("play"); const b = await fetchVideo(v, false); if (b) setUrl(URL.createObjectURL(b)); setBusy(""); };
-  const download = async () => {
-    setBusy("dl");
-    const b = await fetchVideo(v, true);
-    if (b) {
-      const u = URL.createObjectURL(b);
-      const a = document.createElement("a");
-      a.href = u; a.download = videoName(v); document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(u), 60000);
-    }
-    setBusy("");
-  };
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2" data-testid={`em-video-${v.id}`}>
-      <div className="text-sm font-semibold text-slate-900" data-testid={`em-video-label-${v.id}`}>{v.race_label} {kmTxt(v.distance_display_m || v.distance_m)} – Video {v.format} – {v.duration} secondi{v.version > 1 ? ` · v${v.version}` : ""}</div>
-      <div className="flex items-center gap-2 text-xs"><span className={`rounded-full px-2 py-0.5 font-semibold ${cls}`} data-testid={`em-video-status-${v.id}`}>{label}{v.status === "processing" ? ` · ${v.progress || 0}%` : ""}</span>
-        <span className="text-slate-500">{v.format} · {v.duration}s · {v.music || "senza musica"}{v.speed ? ` · ${{ slow: "lenta", normal: "normale", fast: "veloce" }[v.speed]}` : ""}</span></div>
-      {v.status === "completed" ? (url
-        ? <video src={url} controls autoPlay playsInline className={`w-full rounded-lg bg-black ${vertical ? "max-h-[420px] object-contain" : ""}`} data-testid={`em-video-player-${v.id}`} />
-        : <button type="button" onClick={play} disabled={!!busy} className="w-full h-32 rounded-lg bg-slate-900 text-white flex items-center justify-center gap-2 text-sm font-semibold hover:bg-slate-800" data-testid={`em-video-play-${v.id}`}>
-            {busy === "play" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}Riproduci</button>
-      ) : v.status === "error" ? <p className="text-xs text-red-600">{v.error}</p> : <div className="h-24 flex items-center justify-center text-slate-400"><Loader2 className="w-5 h-5 animate-spin" /></div>}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span className="flex-1 min-w-[140px]">{v.title ? `${v.title} · ` : ""}{new Date(v.created_at).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}</span>
-        {v.status !== "queued" && v.status !== "processing" && <button type="button" onClick={() => onRegen(v)} className="inline-flex items-center gap-1 font-semibold text-slate-700" data-testid={`em-video-regen-${v.id}`}><RotateCcw className="w-3.5 h-3.5" />Rigenera</button>}
-        {v.status === "completed" && <button type="button" onClick={download} disabled={!!busy} className="inline-flex items-center gap-1 font-semibold text-[#088F8A] disabled:opacity-60" data-testid={`em-video-download-${v.id}`}>{busy === "dl" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}Scarica MP4</button>}</div>
-    </div>
-  );
-}
-
 export default function EventMapStudio() {
   const { id } = useParams();
   const [st, setSt] = useState(null);
@@ -143,7 +93,7 @@ export default function EventMapStudio() {
     const r = fRef.current;
     if (!dirty.current || !r) return true;
     dirty.current = false; setSaving("Salvataggio…");
-    const keys = ["title", "subtitle", "date", "distance_km", "track_id", "logo", "style", "format", "duration", "music", "speed", "show_aid", "show_elevation"];
+    const keys = ["title", "subtitle", "date", "distance_km", "track_id", "logo", "style", "format", "duration", "music", "speed", "show_aid", "show_elevation", "aid_pause", "aid_pause_auto"];
     try {
       const { data } = await api.put(`/eventmap/races/${r.id}`, Object.fromEntries(keys.map((k) => [k, r[k] ?? null])));
       setSt((s) => ({ ...s, races: s.races.map((x) => (x.id === data.id ? data : x)) })); setSaving("Modifiche salvate"); return true;
@@ -181,12 +131,15 @@ export default function EventMapStudio() {
     try { const { data } = await api.post(`/eventmap/events/${id}/races/from-tracks`); await load(); toast.success(`${data.created.length} schede gara create`); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
-  const regen = (v) => {
-    const rid = v.race_id || st.races.find((r) => r.track_id === v.track_id)?.id;
+  const [target, setTarget] = useState(null);
+  const regen = (g, v) => {
+    const rid = g.race_id || v.race_id || st.races.find((r) => r.track_id === v.track_id)?.id;
     if (!rid || !st.races.some((r) => r.id === rid)) { toast.error("La gara di questo video non esiste più: crea una gara e associa il GPX"); return; }
-    selectRace(rid, { style: v.style, format: v.format, duration: v.duration, music: v.music, logo: v.logo, speed: v.speed || "normal", show_aid: v.show_aid !== false, show_elevation: v.show_elevation !== false });
+    selectRace(rid, { style: v.style, format: v.format, duration: v.duration, music: v.music, logo: v.logo, speed: v.speed || "normal", show_aid: v.show_aid !== false,
+      show_elevation: v.show_elevation !== false, aid_pause: v.aid_pause ?? 3, aid_pause_auto: !!v.aid_pause_auto });
+    setTarget(g);
     window.scrollTo({ top: 0, behavior: "smooth" });
-    toast.success("Impostazioni del video caricate: modificale e genera una nuova versione");
+    toast.success("Impostazioni del video caricate: modificale e rigenera senza consumare crediti");
   };
   const pending = st?.videos?.some((v) => v.status === "queued" || v.status === "processing");
   useEffect(() => {
@@ -228,7 +181,13 @@ export default function EventMapStudio() {
   };
   const generate = async () => {
     setBusy("gen");
-    try { if (await flush()) { await api.post(`/eventmap/races/${f.id}/videos`); toast.success(`Video «${f.name}» in coda di elaborazione`); await load(); } }
+    try {
+      if (await flush()) {
+        if (target) { await api.post(`/eventmap/video-groups/${target.id}/versions`, { race_id: f.id }); toast.success("Nuova versione in elaborazione: nessun credito consumato"); setTarget(null); }
+        else { await api.post(`/eventmap/races/${f.id}/videos`); toast.success(`Video «${f.name}» in coda di elaborazione`); }
+        await load();
+      }
+    }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     setBusy("");
   };
@@ -237,8 +196,11 @@ export default function EventMapStudio() {
   const rg = st.rights;
   const track = f && st.tracks.find((t) => t.id === f.track_id);
   const fmts = opt.formats.map((x) => ({ ...x, disabled: !rg.formats.includes(x.key) }));
-  const vids = filter ? st.videos.filter((v) => (v.race_id || st.races.find((r) => r.track_id === v.track_id)?.id) === filter) : st.videos;
+  const raceOf = (x) => x.race_id || st.races.find((r) => r.track_id === x.track_id)?.id;
+  const groups = (st.groups || []).map((g) => ({ g, versions: st.videos.filter((v) => (v.group_id || v.id) === g.id).sort((a, b) => (b.version || 1) - (a.version || 1)) }))
+    .filter(({ g, versions }) => versions.length && (!filter || (g.race_id || raceOf(versions[0])) === filter));
   const editing = st.races.find((r) => r.id === f?.id);
+  const timing = editing?.timing;
   return (
     <div className="animate-fade-up space-y-6" data-testid="em-studio">
       <Link to="/event-map" className="inline-flex items-center gap-1 text-sm text-slate-500"><ArrowLeft className="w-4 h-4" />Event Map</Link>
@@ -260,11 +222,16 @@ export default function EventMapStudio() {
           <div className="space-y-2"><div className="text-sm font-semibold">7. Velocità animazione</div><SpeedPick list={opt.speeds} value={f.speed} onChange={(v) => upd({ speed: v })} /></div>
           <div className="space-y-2"><div className="text-sm font-semibold">8. Punti ristoro e di interesse</div><AidEditor track={track} show={f.show_aid} onShow={(v) => upd({ show_aid: v })} onSaved={load} /></div>
           <div className="space-y-2"><div className="text-sm font-semibold">9. Altimetria</div><ElevationToggle track={track} value={f.show_elevation} onChange={(v) => upd({ show_elevation: v })} /></div>
+          {f.show_aid !== false && <div className="space-y-2"><div className="text-sm font-semibold">10. Pausa ai ristori</div><AidPausePick race={f} upd={upd} /></div>}
+          <TimingWarning timing={timing} onUse={(d) => upd({ duration: d })} />
+          {target && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900" data-testid="em-regen-target"><span className="flex-1">Stai modificando un video già acquistato: la nuova versione non consuma crediti e la precedente resta in archivio.</span>
+            <Button size="sm" variant="ghost" onClick={() => setTarget(null)} data-testid="em-regen-cancel">Annulla modifica</Button></div>}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" disabled={!f.track_id || !!busy} onClick={doPreview} data-testid="em-preview-btn"><ImageIcon className="w-4 h-4 mr-1" />{busy === "preview" ? "Anteprima…" : "Anteprima"}</Button>
-            <Button disabled={!f.track_id || !!busy || rg.videos_remaining === 0} onClick={generate} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid="em-generate-btn"><Film className="w-4 h-4 mr-1" />{busy === "gen" ? "Invio…" : "Genera video"}</Button>
+            <Button disabled={!f.track_id || !!busy || (!target && rg.videos_remaining === 0)} onClick={generate} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid="em-generate-btn"><Film className="w-4 h-4 mr-1" />{busy === "gen" ? "Invio…" : target ? "Rigenera video (senza crediti)" : "Genera video"}</Button>
           </div>
-          {rg.videos_remaining === 0 && <p className="text-sm text-slate-500" data-testid="em-no-videos">Hai esaurito i video disponibili: <Link to={`/marketplace?servizio=event-map&evento=${id}`} className="font-semibold text-[#088F8A]">acquista un pacchetto</Link>.</p>}
+          <p className="text-xs text-slate-500" data-testid="em-edit-note">Puoi modificare e rigenerare il video tutte le volte che vuoi. Dopo il primo download non potrai più modificarlo.</p>
+          {rg.videos_remaining === 0 && <p className="text-sm text-slate-500" data-testid="em-no-videos">Hai esaurito i video disponibili: i nuovi video si aggiungono con il rinnovo annuale dell'abbonamento. <Link to={`/marketplace?servizio=event-map&evento=${id}`} className="font-semibold text-[#088F8A]">Vedi abbonamento Event Map</Link>.</p>}
         </div>
         <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
           {preview ? <img src={preview} alt="Anteprima del percorso" className="mx-auto max-h-[520px] rounded-xl border border-slate-200" data-testid="em-preview-img" /> : <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">L'anteprima mostra un momento lungo il percorso e la scena finale, con data, velocità, ristori, altimetria, logo e stile scelti. Non consuma video.</div>}
@@ -272,8 +239,8 @@ export default function EventMapStudio() {
       </div>)}
       <div className="space-y-3"><div className="flex flex-wrap items-center gap-3"><h2 className="font-display text-lg font-bold flex-1">Archivio video</h2>
         {st.races.length > 1 && <select value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 rounded-lg border border-slate-200 px-3 text-sm" data-testid="em-archive-filter"><option value="">Tutte le gare</option>{st.races.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>}</div>
-        {!vids.length ? <p className="text-sm text-slate-500" data-testid="em-archive-empty">Nessun video generato {filter ? "per questa gara" : "per questo evento"}.</p>
-          : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="em-archive">{vids.map((v) => <VideoCard key={v.id} v={v} onRegen={regen} />)}</div>}
+        {!groups.length ? <p className="text-sm text-slate-500" data-testid="em-archive-empty">Nessun video generato {filter ? "per questa gara" : "per questo evento"}.</p>
+          : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="em-archive">{groups.map(({ g, versions }) => <VideoGroupCard key={g.id} g={g} versions={versions} sa={st.is_superadmin} label={versions[0].race_label} onRegen={regen} onReload={load} />)}</div>}
       </div>
     </div>
   );
