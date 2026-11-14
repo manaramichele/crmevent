@@ -129,8 +129,8 @@ def build(db, deps: dict):
         out = {"product": product, "name": PRODUCTS[product], "unrestricted": unrestricted, "plan": plan, "plan_label": st.get("plan_label") if plan else None,
                "mode": st.get("mode"), "included": limit, "included_used": min(len(plan_acts), limit), "included_assigned": len(plan_acts),
                "included_free": max(0, limit - len(plan_acts)),
-               "purchased": sum(g["events_total"] for g in grants if g["source"] == "purchase"),
-               "granted": sum(g["events_total"] for g in grants if g["source"] in ("superadmin", "promo")),
+               "purchased": sum(g["events_total"] for g in grants if g["source"] == "purchase" and g.get("activated_at")),
+               "granted": sum(g["events_total"] for g in grants if g["source"] in ("superadmin", "promo") and g["status"] != "revoked"),
                "grant_free": sum(max(0, g["events_total"] - used_by.get(g["id"], 0)) for g in valid),
                "activations": rows, "grants": grants,
                "promos": [g for g in valid if g["source"] == "promo"]}
@@ -205,7 +205,10 @@ def build(db, deps: dict):
                 n = await db.addon_activations.count_documents({"org_id": org_id, "product": product, "grant_id": g["id"]})
                 if n <= g["events_total"]:
                     return {"ok": True, "source": g["source"]}
-                await db.addon_activations.update_one({"org_id": org_id, "product": product, "event_id": eid}, {"$set": {"grant_id": (cur or {}).get("grant_id") or "none"}})
+                if cur:
+                    await db.addon_activations.update_one({"org_id": org_id, "product": product, "event_id": eid}, {"$set": {"grant_id": cur["grant_id"]}})
+                else:
+                    await db.addon_activations.delete_one({"org_id": org_id, "product": product, "event_id": eid})
         raise _required(product, s, ev["nome"])
 
     def _can_buy(user: dict) -> bool:

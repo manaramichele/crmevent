@@ -47,7 +47,7 @@ function EventRow({ e, info, s, onActivate, busy }) {
         ? <Button size="sm" onClick={() => nav(`/eventi/${e.id}/planner`)} className="bg-slate-900 text-white" data-testid={`addon-open-${e.id}`}>Apri Event Planner <ArrowRight className="w-3.5 h-3.5 ml-1" /></Button>
         : <span className="text-xs font-semibold text-emerald-700" data-testid={`addon-active-${e.id}`}>Attivo · generazione video in arrivo</span>)
         : canFree && s.can_purchase ? <Button size="sm" disabled={busy} onClick={() => onActivate(e.id)} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid={`addon-activate-${e.id}`}>Attiva (incluso)</Button>
-          : <Link to={`/marketplace?servizio=${info.slug}`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50" data-testid={`addon-buy-${e.id}`}><Lock className="w-3.5 h-3.5" />Attiva dal Marketplace</Link>}
+          : <Link to={`/marketplace?servizio=${info.slug}&evento=${e.id}`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50" data-testid={`addon-buy-${e.id}`}><Lock className="w-3.5 h-3.5" />Attiva dal Marketplace</Link>}
     </div>
   );
 }

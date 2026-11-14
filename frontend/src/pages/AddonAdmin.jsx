@@ -9,6 +9,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { SOURCE_LABEL, eur } from "@/components/addons/addonInfo";
 
 const PLANS = ["bronze", "silver", "gold"];
+const STATUS_IT = { active: "Attivo", revoked: "Revocato", expired: "Scaduto", pending: "In attesa di pagamento" };
+const MODE_IT = { trial: "In prova", expired: "Scaduto", canceled: "Disdetto", suspended: "Sospeso" };
 const num = (v) => (v === "" || v == null ? null : Number(v));
 
 function IncludedRow({ label, value, onChange, prefix }) {
@@ -112,7 +114,7 @@ function ProductPanel({ org, product, d, packages, reload }) {
       <div className="text-xs space-y-1">{d.events.filter((e) => e.assigned).map((e) => <div key={e.id}>{e.nome} · {e.active ? SOURCE_LABEL[e.source] || "attivo" : "non coperto"}</div>)}</div>
       {d.grants.length > 0 && <div className="space-y-1">{d.grants.map((g) => (
         <div key={g.id} className="flex items-center gap-2 text-xs rounded border border-slate-100 p-2" data-testid={`sa-grant-${g.id}`}>
-          <span className="flex-1">{SOURCE_LABEL[g.source]} · {g.package_name} · {g.events_total} eventi{product === "eventmap" && ` · ${g.videos_total} video`}{g.price ? ` · ${eur(g.price)} €` : ""}{g.expires_at ? ` · scad. ${g.expires_at.slice(0, 10)}` : ""} · <b>{g.status}</b></span>
+          <span className="flex-1">{SOURCE_LABEL[g.source]} · {g.package_name} · {g.events_total} eventi{product === "eventmap" && ` · ${g.videos_total} video`}{g.price ? ` · ${eur(g.price)} €` : ""}{g.expires_at ? ` · scad. ${new Date(g.expires_at).toLocaleDateString("it-IT")}` : ""} · <b>{STATUS_IT[g.status] || g.status}</b></span>
           {g.status === "active" && g.source !== "purchase" && <button type="button" onClick={() => revoke(g.id)} className="text-red-600 font-semibold" data-testid={`sa-grant-revoke-${g.id}`}>Revoca</button>}
         </div>))}</div>}
       <GrantForm org={org} product={product} data={d} packages={packages} onDone={reload} />
@@ -153,10 +155,10 @@ export default function AddonAdmin() {
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca organizzazione" className="max-w-sm" data-testid="addon-admin-search" />
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm" data-testid="addon-admin-table">
-          <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr><th className="px-3 py-2">Organizzazione</th><th className="px-3 py-2">Piano</th><th className="px-3 py-2">Event Planner (incl./usati · acquist. · omaggi)</th><th className="px-3 py-2">Event Map (incl./usati · acquist. · omaggi)</th><th className="px-3 py-2">Video (gen./disp.)</th><th className="px-3 py-2">Promo</th><th /></tr></thead>
+          <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr><th className="px-3 py-2">Organizzazione</th><th className="px-3 py-2">Piano</th><th className="px-3 py-2">Event Planner (incl./usati · acquist. · omaggi)</th><th className="px-3 py-2">Event Map (incl./usati · acquist. · omaggi)</th><th className="px-3 py-2">Video (generati/totali)</th><th className="px-3 py-2">Promo</th><th /></tr></thead>
           <tbody>{list.map((r) => (
             <tr key={r.id} className="border-t border-slate-100" data-testid={`addon-admin-row-${r.id}`}>
-              <td className="px-3 py-2 font-medium">{r.nome}</td><td className="px-3 py-2">{r.unrestricted ? "Interna" : r.plan_label || r.mode}</td>
+              <td className="px-3 py-2 font-medium">{r.nome}</td><td className="px-3 py-2">{r.unrestricted ? "Interna" : r.plan_label || MODE_IT[r.mode] || r.mode}</td>
               <td className="px-3 py-2">{r.planner.included_used}/{r.planner.included} · {r.planner.purchased} · {r.planner.granted}</td>
               <td className="px-3 py-2">{r.eventmap.included_used}/{r.eventmap.included} · {r.eventmap.purchased} · {r.eventmap.granted}</td>
               <td className="px-3 py-2">{r.eventmap.videos_used}/{r.eventmap.videos_total}</td><td className="px-3 py-2">{r.promos}</td>

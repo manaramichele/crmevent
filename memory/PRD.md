@@ -856,3 +856,13 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Rimosse: Problema, Multi-evento, Per chi è, Meno fogli Excel, Guarda CRMEvent in azione, DashboardMock. Tutti i CTA "Registrati gratis" → /registrati. Menu desktop da xl (≥1280px), sotto hamburger.
 - Test: iteration_156 ok (header affollato a lg sistemato dopo).
 
+
+## Formule, Event Planner, Event Map e Marketplace (2026-11-14) — ANTEPRIMA, NON PUBBLICATA
+- Prezzi: durata predefinita 12 mesi (pagina pubblica e "Il mio abbonamento").
+- Silver: max 50 Staff e Volontari (DEFAULT_LIMITS + migrazione silver_limits_v3), blocco backend con invito a Gold.
+- backend/addons.py: eventi inclusi per piano (Bronze 0, Silver 1, Gold 3; prova 0), attivazioni per evento (addon_activations), diritti (addon_grants: purchase/superadmin/promo), Stripe one-time con attivazione solo a pagamento confermato (webhook kind=addon + confirmation), contatori video Event Map (addon_usage, consume_video pronto per il generatore). Planner API bloccate (403 addon_required) su eventi non coperti.
+- Menu: Event Planner (/event-planner) ed Event Map (/event-map) sempre visibili; pagina informativa con video e "Attiva dal Marketplace"; Marketplace con prodotti event-planner/event-map.
+- Super Admin: /piattaforma/event-planner-map (configurazione, pacchetti, omaggi, promozioni con scadenza, revoca).
+- Prezzi vuoti finché non impostati dal Super Admin; video inclusi 0. Generazione video Event Map non ancora sviluppata.
+- Test: iteration_157 (backend 10/10, frontend ok), fix minori applicati dopo.
+

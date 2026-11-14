@@ -384,7 +384,7 @@ def build(db, deps: dict):
 
     def _limit_error(st: dict, kind: str, lim: int):
         up = UPGRADE_TO.get(st.get("plan"), "un piano superiore")
-        what = (f"{lim} evento" if lim == 1 else f"{lim} eventi") if kind == "events" else f"{lim} persone Staff e Volontari"
+        what = (f"{lim} evento" if lim == 1 else f"{lim} eventi") if kind == "events" else (f"{lim} persona Staff e Volontari" if lim == 1 else f"{lim} persone Staff e Volontari")
         more = "creare altri eventi" if kind == "events" else "registrare altre persone Staff e Volontari"
         label = st.get("plan_label") or "attuale"
         return HTTPException(status_code=403, detail={

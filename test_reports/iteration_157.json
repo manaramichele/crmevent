@@ -1,0 +1,42 @@
+{
+  "summary": "Event Planner / Event Map add-ons + Silver 50 people + 12-month default pricing. Backend: 10/10 pytest pass (trial/bronze 0, silver 1, gold 3 included; repeat activation 400; over limit 403 addon_required; planner endpoints 403/200 gating; cross-org 404; checkout 400 without price, 400 already active, 400 free slot, 400 billing missing, then real Stripe test checkout_url after billing; pending purchase does not grant; EM packages/checkout requires package_id/SA grant with package adds videos/video-check; promo requires future expires_at; purchase source rejected; revoke works and is idempotent-safe (2nd 400); downgrade gold->silver keeps first included, blocks others, keeps events; silver max_users=50 in plans-public and plan_limit 403 with GOLD message). Frontend: pricing on / and /prezzi defaults to 12 mesi, toggle to 6 mesi works; Event Planner/Event Map in desktop sidebar and 390px drawer; trial info page (video, benefits, 'Prezzo in definizione', Attiva dal Marketplace -> /marketplace?servizio=... with mkt-detail + addon-buy-planner/eventmap); Silver hub counters, Attiva (incluso) -> toast + 1/1, Apri Event Planner -> /eventi/{id}/planner, second event shows Attiva dal Marketplace, uncovered /eventi/{id}/planner redirects to /event-planner with toast; SA page config save, add package, table rows/search, Gestisci dialog grant + revoke all work. Only minor bugs found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/addons/{product}, /api/platform/addons/orgs(/{id}) (addons.summary)", "issue": "'purchased' counts ALL purchase grants regardless of status: abandoned/superseded checkouts (status 'expired', set at addons.py L283 when a new checkout starts) are counted. Reproduced: bronze org, 3 unpaid checkouts -> purchased=2 although nothing was paid. Same for 'granted': revoked omaggi/promo still counted (SA dialog shows 'omaggi/promo 1' after revoke). Fix: filter by status in ('active') (or active+expired-by-date only) in the sums at L132-133."},
+      {"endpoint": "subscriptions._limit_error", "issue": "Grammar when limit == 1: 'include fino a 1 persone Staff e Volontari' (only reachable via org exception max_users=1). Cosmetic."},
+      {"endpoint": "POST /api/platform/addons/orgs/{id}/grants", "issue": "event_ids beyond events_total are silently ignored (no error/feedback); events already covered are silently skipped. Consider returning skipped ids."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EventPlanner.jsx redirect on addon_required", "issue": "Opening /eventi/{uncovered}/planner shows the same info toast twice (two requests/effects each fire toast.info). Use a toast id or guard.", "selector": "[data-sonner-toast]", "priority": "LOW"},
+      {"component": "AddonHub 'Attiva dal Marketplace' per-event link", "issue": "Link is /marketplace?servizio=event-planner without the event id, so AddonBuy event select (addon-buy-event) is not preselected with the event the user clicked; user must pick it again.", "selector": "[data-testid^=addon-buy-]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/piattaforma/event-planner-map Gestisci dialog", "issues": ["Grant expiry 'Scadenza' uses native browser date input (mm/dd/yyyy US format in an Italian UI) instead of shadcn Calendar/date picker", "Grant rows show raw English status 'active'/'revoked' – should be Italian labels (Attivo/Revocato/Scaduto/In attesa)", "Table header 'Video (gen./disp.)' but values are used/total, not used/available"]},
+      {"screen": "Marketplace Event Planner card", "issues": ["Card badge says 'Prossimamente' and 'Prezzo da definire' while the hub says 'Prezzo in definizione' and the product is activatable – inconsistent wording"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_addons_planner_eventmap.py", "/app/backend/tests/ui_addon_setup.py", "/app/test_reports/pytest/addons_results.xml"],
+  "action_items": [
+    "addons.summary: count 'purchased' only for paid (non pending/expired-unpaid) grants and 'granted' only for non-revoked grants",
+    "De-duplicate addon_required toast on /eventi/{id}/planner redirect",
+    "Pass event id in 'Attiva dal Marketplace' link and preselect it in AddonBuy",
+    "Use shadcn date picker for grant expiry; localize grant status labels; fix 'Video (gen./disp.)' header",
+    "Align Marketplace card wording for Event Planner/Event Map (remove 'Prossimamente', use 'Prezzo in definizione')"
+  ],
+  "critical_code_review_comments": [
+    "addons.py L132-133: purchased/granted sums ignore grant status (see minor backend issue)",
+    "addons.py L208: on concurrent overflow a new activation without previous grant is left with grant_id 'none' (orphan row shown as assigned/non coperto) instead of being deleted",
+    "addons.summary is called once per org x2 products in GET /platform/addons/orgs (N+1, several queries each) – will be slow with many orgs",
+    "confirmation endpoint: stripe Session.retrieve is not wrapped in try/except (invalid session_id -> 500)"
+  ],
+  "updated_files": ["/app/backend/tests/test_addons_planner_eventmap.py", "/app/backend/tests/ui_addon_setup.py"],
+  "success_rate": {"backend": "100% (10/10 pytest)", "frontend": "100% of requested flows working; minor UX issues"},
+  "seed_data_creation": "TEST_ orgs created (main agent please delete): TEST_Addon Trial 76c5f7434e4c42e6a9cd6f776cbe1533, TEST_Addon Silver 13c8b112bcd84e55ac3a6047c9daebc7, TEST_Addon Gold 24311a8c228c423e96da6fbf972826d7, TEST_Addon Other faf404ecc2714c3fad4ef3b92ba035f2, TEST_Addon FreeSlot 42d820d52ab74a8f9d222a118aa29b1c, TEST_Addon People b8f01b1236ab4c08b88f530cfdbc0f87, TEST_Addon UISilver c8b41a98d71e4d5cbea711249efe892b (test_addon_uisilver_a7504c@example.com / TestAddon2026!), TEST_Addon UITrial 71e4f61abdd649eea40eb49bb2fbddb3 (test_addon_uitrial_d32c86@example.com / TestAddon2026!), TEST_Addon Purch 323ccdf449b84d0f9f20058dbf02a6c3. Pending Stripe test checkout sessions created for Silver/Purch orgs (unpaid). Addon config restored: planner price null, eventmap packages [] , included 0/1/3, included_videos 0 (verified).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run backend suite with: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest tests/test_addons_planner_eventmap.py -n 0 (module fixtures are order-dependent; test_checkout_planner sets price 19 + TEST_Pack, module teardown restores config). New org after login shows a demo-booking dialog – press Escape. Cookie banner 'Accept all'. Checkout requires billing data (PUT /api/account/billing azienda IT fields). Paid confirmation (webhook/confirmation) not tested end-to-end (requires completing Stripe test payment)."
+}

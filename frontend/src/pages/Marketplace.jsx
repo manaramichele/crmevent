@@ -50,7 +50,7 @@ function ActivePurchase({ s, canPurchase, onChanged }) {
 }
 
 const badge = (s) => (s.active ? ["Attivo", "bg-emerald-100 text-emerald-800"] : s.status === "suspended" ? ["Sospeso", "bg-red-100 text-red-700"]
-  : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "superadmin" && s.status === "available" ? ["Su attivazione", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
+  : s.purchasable_now ? ["Disponibile", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "addon" ? ["Per evento", "bg-[#0ABAB5]/15 text-slate-900"] : s.activation === "superadmin" && s.status === "available" ? ["Su attivazione", "bg-[#0ABAB5]/15 text-slate-900"] : ["Prossimamente", "bg-slate-100 text-slate-600"]);
 
 function NotifyButton({ s, onToggle, full }) {
   const [busy, setBusy] = useState(false);
@@ -86,7 +86,7 @@ function Card({ s, onOpen, onToggle }) {
       <div className="text-xs text-[#088F8A] font-medium mt-0.5">{s.category}</div>
       <p className="text-sm text-slate-500 mt-2 line-clamp-3 flex-1">{s.description}</p>
       <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-        <span className="font-semibold text-slate-800">{priceLabel(s)}</span><span className="text-slate-500">{PRICE_TYPES[s.price_type]}</span>
+        <span className="font-semibold text-slate-800">{s.activation === "addon" ? "Vedi prezzi e inclusi" : priceLabel(s)}</span><span className="text-slate-500">{s.activation === "addon" ? "Per evento" : PRICE_TYPES[s.price_type]}</span>
       </div>
       {s.demo_free && s.purchasable_now && !s.active && <div className="mt-2 text-[11px] font-semibold text-amber-700" data-testid={`mkt-card-demo-free-${s.key}`}>Gratuito per organizzazione Demo</div>}
       {s.status === "coming_soon" && <div className="mt-3"><NotifyButton s={s} onToggle={onToggle} /></div>}
@@ -95,6 +95,7 @@ function Card({ s, onOpen, onToggle }) {
 }
 
 function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
+  const [params] = useSearchParams();
   const [events, setEvents] = useState([]);
   const [eventId, setEventId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -126,7 +127,7 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
         </div>
         <p className="text-xs text-slate-500">{ADDON_PRODUCT[s.key] ? "Attivazione per singolo evento. Silver include 1 evento, Gold 3 eventi; per gli eventi successivi si acquista un'attivazione aggiuntiva. Il diritto si attiva solo dopo la conferma del pagamento." : "Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto. Appartiene all'organizzazione."}</p>
         <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-white border-t border-slate-100 space-y-3" data-testid="mkt-detail-actions">
-        {ADDON_PRODUCT[s.key] ? <AddonBuy product={ADDON_PRODUCT[s.key]} onDone={onChanged} /> : s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}{s.key === "archivio-iscritti" && <Link to="/iscritti" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-iscritti">Apri servizio</Link>}</div>
+        {ADDON_PRODUCT[s.key] ? <AddonBuy product={ADDON_PRODUCT[s.key]} eventId={params.get("evento")} onDone={onChanged} /> : s.active ? <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold" data-testid="mkt-detail-active"><CheckCircle2 className="w-4 h-4" />Servizio attivo per la tua organizzazione{s.key === "comunicati-stampa" && <Link to="/comunicati-stampa" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-press">Apri servizio</Link>}{s.key === "archivio-iscritti" && <Link to="/iscritti" className="ml-auto inline-flex items-center h-9 px-4 rounded-full bg-[#0ABAB5] text-slate-900 font-semibold hover:bg-[#09A8A3]" data-testid="mkt-open-iscritti">Apri servizio</Link>}</div>
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">

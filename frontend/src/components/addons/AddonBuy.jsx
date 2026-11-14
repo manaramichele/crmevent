@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import { eur } from "@/components/addons/addonInfo";
 
 // Acquisto / attivazione Event Planner o Event Map per un evento (usato nel Marketplace).
-export default function AddonBuy({ product, onDone }) {
+export default function AddonBuy({ product, eventId: initialEvent, onDone }) {
   const [s, setS] = useState(null);
-  const [eventId, setEventId] = useState("");
+  const [eventId, setEventId] = useState(initialEvent || "");
   const [pkg, setPkg] = useState("");
   const [busy, setBusy] = useState(false);
   const load = () => api.get(`/addons/${product}`).then(({ data }) => setS(data)).catch(() => setS({ events: [] }));
