@@ -96,10 +96,11 @@ export default function EventPlanner() {
   };
   const discardDemo = () => { clearDemoProject(); setDemo(null); };
 
+  const staffLayerId = (layers.find((l) => l.id === "staff") || layers.find((l) => /^staff/i.test(l.nome || "")))?.id;
   const create = (spec, c) => {
     const f = makeFeature(spec, c, layers, linePreset);
     change([...h.features, f]); setSel(f.properties.id); setPlacing(null); setLinePreset(null); setMode("select"); if (window.innerWidth >= 1024) setRight(true);
-    if (f.properties.layer_id === "staff" && f.properties.tipo === "point") setStDlg(f.properties.id);
+    if (f.properties.layer_id === staffLayerId && f.properties.tipo === "point") setStDlg(f.properties.id);
   };
   const importRoute = (r) => {
     const lay = layers.find((l) => l.id === "percorsi") || layers.find((l) => /percors/i.test(l.nome)) || layers[0];
@@ -133,7 +134,7 @@ export default function EventPlanner() {
   const archive = async () => { if (!window.confirm("Archiviare il progetto?")) return; await api.patch(`/planner/projects/${proj.id}`, { archiviato: true }); setProj(null); const ps = await loadList(); const p = ps.find((x) => !x.archiviato); if (p) open(p.id); };
   const SAVE = { salvato: "Salvato", modificato: "Modifiche non salvate", salvataggio: "Salvataggio...", errore: "Errore di rete: riprova", conflitto: "Modificato da un altro utente: ricarica" };
   const openBom = async () => { if (dirty.current) { clearTimeout(timer.current); await persist(h.features, layers); } setBom(true); };
-  const hidden = useMemo(() => new Set(h.features.filter((f) => !stationMatch(f, flt)).map((f) => f.properties.id)), [h.features, flt]);
+  const hidden = useMemo(() => new Set(h.features.filter((f) => !stationMatch(f, flt, staffLayerId)).map((f) => f.properties.id)), [h.features, flt, staffLayerId]);
   const pid = proj?.id;
   useEffect(() => {
     if (!pid || !fitReq) return;
@@ -181,7 +182,7 @@ export default function EventPlanner() {
               onView={(c, z) => { proj.center = c; proj.zoom = z; }} fitReq={fitReq} hidden={hidden} />
             {routeUpd.length > 0 && <div className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 shadow" data-testid="planner-route-update">
               È disponibile una versione aggiornata del percorso. Vuoi utilizzarla?<Button size="sm" variant="outline" onClick={applyRouteUpdates} data-testid="planner-route-update-use">Usa versione aggiornata</Button><Button size="sm" variant="ghost" onClick={() => setRouteUpd([])} data-testid="planner-route-update-skip">No</Button></div>}
-            {selected && (selected.properties.layer_id === "staff" || selected.properties.source_map_id) && <div className="absolute bottom-3 left-3 z-10 max-w-xs rounded-xl border border-slate-200 bg-white/95 p-3 text-xs shadow-lg space-y-2" data-testid="planner-sel-card">
+            {selected && (selected.properties.layer_id === staffLayerId || selected.properties.source_map_id) && <div className="absolute bottom-3 left-3 z-10 max-w-xs rounded-xl border border-slate-200 bg-white/95 p-3 text-xs shadow-lg space-y-2" data-testid="planner-sel-card">
               {selected.properties.source_map_id ? <>
                 <div className="font-semibold text-sm">{selected.properties.nome}</div><div className="text-slate-500">Collegato a Percorsi Eventi · {selected.properties.source_format || "percorso"}</div>
                 <div className="flex items-center gap-2">Colore <input type="color" value={selected.properties.colore || "#E11D48"} onChange={(e) => patch({ colore: e.target.value })} data-testid="route-color" />

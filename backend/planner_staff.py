@@ -150,7 +150,7 @@ def attach(r, db, audit, member_dep, admin_dep, project_of, event_of, resolve, r
                              "kind": st.get("kind"), "team": tn.get(st.get("team_id")), "ruolo": (sh[0].get("ruolo") if sh else None) or st.get("ruolo"),
                              "data": (sh[0].get("data") if sh else None) or st.get("data"), "ora_inizio": (sh[0].get("ora_inizio") if sh else None) or st.get("ora_inizio"),
                              "ora_fine": (sh[0].get("ora_fine") if sh else None) or st.get("ora_fine"), "note": st.get("note"),
-                             "persone": [{"nome": nm.get(s["persona_id"], "?"), "categoria": cat.get(s["persona_id"])} for s in sh]})
+                             "persone": [{"persona_id": s["persona_id"], "nome": nm.get(s["persona_id"], "?"), "categoria": cat.get(s["persona_id"])} for s in sh]})
         allsh = await db.shifts.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(5000)
         conf = []
         for i, a in enumerate(allsh):
@@ -160,8 +160,8 @@ def attach(r, db, audit, member_dep, admin_dep, project_of, event_of, resolve, r
                                  "b": f"{b.get('luogo') or b.get('area')} {b.get('ora_inizio') or ''}-{b.get('ora_fine') or ''}"})
         pc = [x for r_ in rows for x in r_["persone"]]
         return {"rows": rows, "conflicts": conf, "counts": {"postazioni": len(rows), "coperte": sum(1 for x in rows if x["persone"]), "scoperte": sum(1 for x in rows if not x["persone"]),
-                                                            "team": len({x["team"] for x in rows if x["team"]}), "staff": len({x["nome"] for x in pc if x["categoria"] == "staff"}),
-                                                            "volontari": len({x["nome"] for x in pc if x["categoria"] == "volontario"})}}
+                                                            "team": len({x["team"] for x in rows if x["team"]}), "staff": len({x["persona_id"] for x in pc if x["categoria"] == "staff"}),
+                                                            "volontari": len({x["persona_id"] for x in pc if x["categoria"] == "volontario"})}}
 
     @r.get("/events/{eid}/assignments")
     async def assignments(eid: str, project: Optional[str] = None, user: dict = Depends(member_dep)):

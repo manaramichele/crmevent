@@ -157,7 +157,7 @@ export default function EventMapStudio() {
   };
   const fromMap = async (mid) => {
     setBusy("upload");
-    try { const { data } = await api.post(`/eventmap/events/${id}/tracks/from-map/${mid}`); await load(); upd({ track_id: data.id, distance_km: null }); toast.success(data.duplicate ? "Traccia già importata: associata alla gara" : "Traccia dell'evento importata"); }
+    try { const { data } = await api.post(`/eventmap/events/${id}/tracks/from-map/${mid}`); await load(); upd({ track_id: data.id, distance_km: null, route_update: false }); toast.success(data.duplicate ? "Traccia già importata: associata alla gara" : "Percorso importato da Percorsi Eventi"); if (data.warning) toast.warning(data.warning); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
     setBusy("");
   };

@@ -465,6 +465,8 @@ def build(db, deps: dict):
 
     async def _save_track(user, eid, data: bytes, name: str, source=None):
         out = await _save_track_raw(user, eid, data, name)
+        if source and out.get("duplicate") and out.get("source_map_id") not in (None, source["source_map_id"]):
+            return out  # stesso contenuto gi\u00e0 collegato a un altro percorso: il collegamento originale resta invariato
         if source:  # riferimento al percorso originale in Percorsi Eventi + versione del file usata
             await db.eventmap_tracks.update_one({"org_id": user["org_id"], "id": out["id"]}, {"$set": source})
             out.update(source)

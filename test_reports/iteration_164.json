@@ -1,0 +1,47 @@
+{
+  "summary": "Iter 164: Event Map SA video delete/undelete/purge/refund, Percorsi Eventi routes (GPX/KML/KMZ) shared archive + version tracking, Event Planner import route + staff stations linked to shifts + Riepilogo assegnazioni. I found 2 CRITICAL bugs that blocked the features and applied minimal fixes so testing could go on: (1) the backend Percorsi Eventi route list was always empty; (2) the planner station dialog never opened on real projects. After the fixes, the backend pytest gives 8/8 passed. Frontend flows were checked on desktop and on a 390px screen: as SA and as org admin, delete dialog, ELIMINATO badge, Ripristina, card hidden for the org, route select, KML no-elevation warning, routes dialog import + color/width/remove, station dialog with team/persons/conflict/Assegna comunque, sel-card, assignment panel + Excel download, planner route-update banner. MapTiler tiles do not render in the test browser, but the map canvas accepts clicks, so features could be placed.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/eventmap/events/{eid} (routes[]), POST /api/eventmap/events/{eid}/tracks/from-map/{map_id}, GET /api/planner/events/{eid}/routes[/{map_id}]", "issue": "FIXED BY TESTING AGENT. routes[] was always empty and from-map / routes/{id} always returned 404. Cause: server.py passed _resolve_attachment as deps['resolve_attachment']. That function returns only {url,name,content_type}, but event_routes.list_routes needs the full db.files record (id, storage_path, original_filename, storage_backend), so every map was skipped. Fix: added _route_file_rec(url, org_id) in server.py, which returns the full file record scoped to the org, and wired it into eventmap.build and planner.build deps.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/eventmap/events/{eid}/tracks/from-map/{map_id}", "issue": "If a converted route has the same content (same sha256) as a track already imported from ANOTHER map, _save_track_raw returns the existing track (duplicate) and _save_track then overwrites its source_map_id/source_version with the new map. This silently re-links a track that is already used by another race, so route_update and gare[] for the original map are lost. Suggestion: on duplicate with a different source_map_id, create a new track record (or keep the original link)."},
+      {"endpoint": "planner_staff.summary counts", "issue": "staff/volontari counts are distinct by display name, not by persona_id, so two people with the same name are counted once."},
+      {"endpoint": "POST /api/planner/projects/{pid}/revisions/{rid}/restore", "issue": "Restore calls save, which runs station_cleanup, so planner shifts of stations missing from the old revision are deleted. Restoring a revision that has stations does not recreate their shifts, so there is a possible data mismatch."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EventPlanner create() / sel-card / stationMatch", "issue": "FIXED BY TESTING AGENT. The code checked f.properties.layer_id === 'staff', but real projects get random 8-hex layer ids from the backend (only demo scenarios use 'staff'). As a result, placing a 'Staff e volontari' point never opened station-dialog, planner-sel-card/planner-station-open never showed for staff points, and staff-filter left unassigned staff points visible. Fix: staffLayerId = layers.find(id==='staff' || /^staff/i nome).id, used in create(), the sel-card condition and stationMatch(f, flt, staffLayerId).", "selector": "[data-testid=station-dialog], [data-testid=planner-station-open]", "priority": "CRITICAL"},
+      {"component": "EventMapStudio fromMap / RaceFields em-route-update", "issue": "After clicking 'Usa versione aggiornata' (or choosing a route), the 'È disponibile una versione aggiornata…' banner stays visible until the page is reloaded, even though the backend now returns route_update=false. Cause: fromMap() calls load() BEFORE upd({track_id}), so the reloaded race still has the old track and route_update=true, and the local form state is never refreshed after the race save. Fix: reload after the race update, or set route_update:false locally in upd.", "selector": "[data-testid=em-route-update]", "priority": "MEDIUM"},
+      {"component": "VideoGroupCard (SA, deleted video)", "issue": "On a soft-deleted video the SA still sees 'Modifica e rigenera'. The backend rejects it with 400 'Video eliminato: ripristinalo prima…'. Hide the button when g.deleted_at is set.", "selector": "[data-testid^=em-video-regen-]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Event Planner desktop 1920x1080", "issues": ["The map container is taller than the viewport (canvas 211→1120px), so the bottom of planner-sel-card ('Assegna staff / volontari', 'Rimuovi dal progetto') and the zoom controls are cut off below the fold."]},
+      {"screen": "Event Planner mobile 390px", "issues": ["The toolbar wraps onto about 6 rows (~340px) before the map. The date filter input shows a clipped extra glyph next to it. Consider collapsing the staff filters/import/summary into a menu."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter164_routes_staff_videodel.py", "/app/backend/tests/cleanup_i164_orgs.py", "/app/test_reports/pytest/iter164.xml"],
+  "action_items": [
+    "Review and keep the testing-agent fix in server.py (_route_file_rec passed as resolve_attachment to eventmap/planner); without it the whole Percorsi Eventi integration is broken.",
+    "Review and keep the EventPlanner/StaffTools staffLayerId fix; without it the station dialog never opens on real projects.",
+    "Fix the stale em-route-update banner after 'Usa versione aggiornata' / route choice (EventMapStudio.fromMap: reload after upd, or clear route_update locally).",
+    "Fix duplicate-track re-linking in track_from_map (the existing track's source_map_id gets overwritten by another map).",
+    "Hide 'Modifica e rigenera' for soft-deleted videos.",
+    "Make the planner map fit the viewport so the sel-card is fully visible; compact the mobile toolbar."
+  ],
+  "critical_code_review_comments": [
+    "event_routes.list_routes depends on the resolver's return shape; add a test or type contract. Two resolvers with different shapes caused the critical bug.",
+    "planner_staff.cleanup deletes planner shifts for every station id not present in features, including after a revision restore. Consider also deleting by feature removal diff only.",
+    "summary() conflict detection is O(n^2) over all event shifts (to_list 5000), which could be slow for large events.",
+    "sa_refund_credit decrements addon_usage.videos_used without checking which period/grant consumed the credit; acceptable but not grant-specific."
+  ],
+  "updated_files": ["/app/backend/server.py", "/app/frontend/src/pages/EventPlanner.jsx", "/app/frontend/src/components/planner/StaffTools.jsx", "/app/backend/tests/test_iter164_routes_staff_videodel.py", "/app/backend/tests/cleanup_i164_orgs.py"],
+  "success_rate": {"backend": "100% (8/8) after testing-agent fix; 0% of routes features before the fix", "frontend": "~90% (station dialog only after fix; stale update banner bug)"},
+  "seed_data_creation": "TEST_I164 A/B orgs (gold plan + eventmap grant 2 videos + planner grant), events, uploaded GPX/KML/KMZ files, event_maps, persons/staff/teams/shifts, a planner project, and one rendered video. All orgs were deleted via the platform API, and the 10 leftover TEST_I164 users (org_id None after org deletion) were deleted by exact email.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: set -a; . backend/.env; export REACT_APP_BACKEND_URL=...; pytest tests/test_iter164_routes_staff_videodel.py -n 0 (about 40s incl. one 15s 1:1 render). KEEP_ORG=1 keeps orgs (written to /tmp/i164_orgs.json), then run tests/cleanup_i164_orgs.py, which uses the DB org name because the backend title-cases names. Plans: bronze lacks 'mappe' (POST /api/maps 403), so use gold. Planner page route is /eventi/<eid>/planner (not /event-planner/<eid>). SA acting org = localStorage acting_org_id. Staff library point = planner-lib-lib35/36 then click the .maplibregl-canvas center. Person names get title-cased (TEST_P0 -> Test_p0).",
+  "rca of the issue": "Routes empty: deps['resolve_attachment'] = _resolve_attachment (used by /maps-attachments) returns a UI summary without storage_path/id, so list_routes' `rec.get('storage_path')` was always falsy. Reproduce: upload a GPX, POST /api/maps with gpx_url, then GET /api/eventmap/events/{eid} returns routes []. Mitigation applied: a dedicated resolver that returns the full db.files record. Station dialog: frontend compared layer_id with the literal 'staff', but backend DEFAULT_LAYERS ids are uuid4().hex[:8]. Reproduce: new project, place 'Postazione volontari', and no dialog opens. Mitigation applied: resolve the staff layer by id or name."
+}

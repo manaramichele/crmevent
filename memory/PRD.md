@@ -975,4 +975,13 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Event Map Marketplace: abbonamento annuale per organizzazione, prezzo dal servizio event-map (price, price_type yearly), videos_per_year (1), price Stripe ricorrente eventmap_prices.{mode}.yearly; pacchetti non più in vendita (grant esistenti validi); rinnovo +videos_per_year. Preview DB: price impostato a 29.
 - Test: iteration_163 (backend nuovo 11/11). Da aggiornare test legacy tests/test_eventmap_races.py (3 test sulle versioni con il vecchio modello).
 
+## Percorsi Eventi ↔ Event Map/Planner, SA elimina video, postazioni staff (2026-11-14) — NON pubblicato
+- Event Map SA: DELETE /api/eventmap/video-groups/{gid} (logica, deleted_at/by), POST /undelete, DELETE /purge (solo dopo eliminazione logica), POST /refund-credit (una volta, tracciato). Crediti invariati da elimina/ripristina.
+- backend/event_routes.py: percorsi GPX/KML/KMZ da event_maps (gpx_url/file_url → db.files tramite server._route_file_rec), conversione KML/KMZ, version = id file. Event Map track: source_map_id/source_version/source_format, race.route_update; Planner: linee con source_map_id/source_version, banner aggiornamento.
+- backend/planner_staff.py: /planner/events/{eid}/people, /routes, /projects/{pid}/stations/{fid} → turni in db.shifts (source event_planner, planner_station_id, planner_project_id), conflitti 409 + force; salvataggio progetto elimina solo i turni Planner delle postazioni rimosse; /events/{eid}/assignments (+export xlsx/pdf).
+- DB: nessuna migrazione richiesta; nuovi campi opzionali (shifts.planner_*, eventmap_tracks.source_*, eventmap_video_groups.deleted_*/credit_refunded).
+- Noto: il ripristino di una revisione Planner non ricrea i turni delle postazioni.
+- Test: iteration_164 (backend 8/8).
+
+
 

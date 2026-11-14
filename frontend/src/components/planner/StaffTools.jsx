@@ -138,10 +138,10 @@ export function AssignPanel({ open, eid, pid, onClose }) {
   );
 }
 
-export const stationMatch = (f, flt) => {
+export const stationMatch = (f, flt, staffLayerId = "staff") => {
   const st = f.properties.station;
   if (!flt.kind && !flt.ruolo && !flt.data) return true;
-  if (!st) return f.properties.layer_id !== "staff";
+  if (!st) return f.properties.layer_id !== staffLayerId;
   return (!flt.kind || (flt.kind === "assegnate" ? st.kind !== "generica" : st.kind === flt.kind)) && (!flt.ruolo || (st.ruolo || "").toLowerCase().includes(flt.ruolo.toLowerCase())) && (!flt.data || st.data === flt.data);
 };
 
