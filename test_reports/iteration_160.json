@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the Event Map logo feature and the homepage changes on the PREVIEW DB. Backend: 17/17 pytest pass (tests/test_eventmap_logo.py). PNG upload returns id, width 800, height 300 and transparent true. A JPEG renamed to .png, a text file and a file over 5 MB are all rejected with 400. An org without Event Map active gets 403. Another org gets 404 on both upload and read. GET /events/{eid} lists logos without storage. The image endpoint returns the PNG. 'event' returns 404 when the event has no logo, and returns the PNG when the event has an anagrafica logo uploaded via /api/upload. Previews in 9:16, 1:1 and 16:9 show the white logo box top-right only when a logo is chosen (logo null shows none). An unknown logo id returns 404 for both preview and video. Video renders: one 1:1 15s video via the API and one 9:16 15s video via the UI. Both completed and both video docs store the logo id. videos_used went up by 1 each time. Frames extracted with imageio_ffmpeg at 0.3s, 7.5s and 14.7s show the logo top-right in every frame. The title card is placed below the logo and the live km card stays bottom-left, so nothing important is covered. Frontend studio: section 6 'Logo evento' shows thumbnails, the 'Senza logo' option and an input with accept=image/png. The em-logo-opt-event option is correctly hidden because the event has no logo. Uploading a PNG shows the toast 'Logo caricato' and auto-selects the new logo. Anteprima shows the logo, and choosing 'Senza logo' removes it. The style, format, duration and music choices still work. Genera video queued the job (toast shown, counters 0 · 6 · 1). At 390px the layout has no horizontal overflow. Homepage: there is no 'Pisa' in the DOM text, the attributes or the HTML, and no 'Mappe & Percorsi'. The 'Event Planner' card has the exact new description and 'Event Map' is a separate card. 'City Run Festival (esempio)', 'Urban Marathon' and the 'city-run-festival' URL are present. The mp4, webm and poster files for both demo videos return 200. All 6 'Registrati gratis' CTAs link to /registrati, and the git diff shows the pricing section was not changed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/eventmap/events/{eid}/logos", "issue": "There is no delete endpoint for logos. Every upload adds a new entry, and the UI label 'Sostituisci con un PNG' adds instead of replacing, so duplicates pile up. The event-state list is capped at 20, and logos past 20 silently disappear from the picker."},
+      {"endpoint": "_process / create_video logo='event'", "issue": "create_video only checks that ev.logo_url exists. If the anagrafica logo file is missing or deleted, _logo_bytes returns None and the job fails at render time ('logo non disponibile'). The user only sees the generic error after the queue. Validate that the logo is readable up front, or fall back to no logo."},
+      {"endpoint": "DELETE /api/platform/organizations/{id}", "issue": "Same as iteration 159: the users row stays with org_id=null and the eventmap_logos collection is not in the cascade."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/event-map/{eid} logo picker", "issues": ["The options are labelled with the raw filename. Several uploads of the same file look identical ('test_logo.png' twice) and cannot be told apart or removed."]},
+      {"screen": "Rendered video/preview (pre-existing, not logo related)", "issues": ["The final title card (title, date, km) covers the top part of the route in 1:1 and 16:9, because the route framing does not reserve space for the card. With a logo the card moves slightly lower."]},
+      {"screen": "Homepage features grid", "issues": ["9 cards in a 5-column grid leave the second row with 4 cards and an empty slot. This is cosmetic."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_eventmap_logo.py", "/app/test_reports/pytest/pytest_em_logo.xml"],
+  "action_items": [
+    "Optional: add DELETE /api/eventmap/events/{eid}/logos/{lid} and a remove button in LogoPick, or make 'Sostituisci' really replace.",
+    "Optional: when logo='event', validate that the anagrafica logo file is readable in create_video, or fall back to no logo.",
+    "Optional: add eventmap_logos to ORG_CASCADE_COLLECTIONS."
+  ],
+  "critical_code_review_comments": [
+    "upload_logo checks the format with PIL (im.format == 'PNG') and limits the read to MAX_LOGO+1. This is correct. thumbnail(1600) keeps the aspect ratio.",
+    "PreviewIn and VideoIn default logo to 'event'. When the event has no logo, the default silently falls back to None in create_video. In preview, _logo_bytes returns None for 'event'. This is consistent.",
+    "logo_image is behind admin_dep and scoped by org and event, so there is no IDOR."
+  ],
+  "updated_files": ["/app/backend/tests/test_eventmap_logo.py"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100%"},
+  "seed_data_creation": "Created the temporary org TEST_EMLogo (2 events, 1 file) and deleted it via the SA endpoint. Its orphan user test_emlogo_* was deleted by email. In TEST_EventMap Org: added 2 logos (f0331e0e… named TEST_logo.png from pytest, 639cbee4… from the UI) and 2 completed 15s videos (cc4ad869 1:1, 54659e52 9:16). These are kept because the videos reference the logos. The demo org now has videos_remaining 0 (7/7 used).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest tests/test_eventmap_logo.py -n 0 -v (~40s; renders 1 video, so it needs videos_remaining>=1 in the demo org, which is now 0, so grant more via SA first). The fixture deletes the temp org through the SA endpoint with confirm_name; also delete the leftover users row by email. Login testids: email-input/password-input + Enter, then Escape to close the demo dialog."
+}

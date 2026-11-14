@@ -29,7 +29,7 @@ export default function EventMapSection() {
             <DemoVideo mp4="/media/event-map-demo.mp4" webm="/media/event-map-demo.webm" poster="/media/event-map-demo-poster.jpg"
               label="Video dimostrativo di Event Map" testid="home-eventmap-video" className="aspect-[9/16]" />
           </div>
-          <p className="mt-3 text-center text-xs text-slate-400" data-testid="home-eventmap-note">Video generato da Event Map a partire da una traccia GPX reale nel centro di Pisa (evento dimostrativo).</p>
+          <p className="mt-3 text-center text-xs text-slate-400" data-testid="home-eventmap-note">Video generato da Event Map a partire da una traccia GPX reale (evento di fantasia, a scopo dimostrativo).</p>
         </div>
       </div>
     </section>

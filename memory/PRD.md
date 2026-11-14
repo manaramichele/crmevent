@@ -882,3 +882,34 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Causa 2 (emersa dopo): mapbox-vector-tile 2.2.0 richiede protobuf>=6.31, incompatibile con google-ai-generativelanguage 0.6.15 / grpcio-status 1.71.2 (<6). Fissati mapbox-vector-tile==2.1.0 e protobuf==5.29.6.
 - Verifica: venv pulito Python 3.11.18, install completa EXIT 0, pip check ok, uvicorn avviato, LLM reale ok, anteprima e render MP4 Event Map ok.
 
+
+## Fix video Event Map per eventi inclusi (2026-11-14) — NON pubblicato
+- Causa: config eventmap.included_videos = 0 (anche in produzione) → videos_total = 0 × eventi inclusi; caso Trio Events / Maratona di Pisa (GOLD, 1/3) con 0 video.
+- Fix: addons._included_videos = max(1, config) per ogni evento incluso Silver/Gold; config default 1 e minimo 1 in Super Admin; nessuna modifica al DB di produzione necessaria.
+- Contatori unificati: summary espone videos_in_progress e videos_available già al netto dei video in coda; hub e pagina evento mostrano disponibili · generati · in elaborazione.
+- Errore di generazione con messaggio leggibile (nessun percorso interno), video non scalato.
+- Cancellazione organizzazione: aggiunte collezioni addon_* ed eventmap_* al cascade (i file MP4 su storage non vengono ancora rimossi).
+- Test: iteration_159 (12/12 backend) + rerun 12/12 dopo i fix.
+- Aperto: acquisto Bronze "Attivazione per evento" senza video nel pacchetto → 0 video (decisione commerciale).
+
+## Fix Event Planner 500 KeyError org_id (2026-11-14) — NON pubblicato
+- Causa: GET /api/planner/events/{eid}/projects, /projects/{pid}, /projects/{pid}/revisions usavano get_current_user (senza org attiva) e leggevano user["org_id"] → KeyError per Super Admin "Accedi come" e utenti senza org_id sul documento utente.
+- Fix: letture con require_org_member (→ _resolve_active_org: membership attiva, X-Org-Id validato, sessioni assistenza); scritture invariate con require_admin (permessi + piano). Query sempre filtrate per org risolta dal backend.
+- File: backend/planner.py, backend/server.py (dep require_member), backend/tests/test_planner_org_scope.py (nuovo).
+- Test: 4/4 nuovi + 10/10 test_addons_planner_eventmap; pip check ok; requirements.txt invariato.
+
+
+
+## Logo evento nei video Event Map + Home page (2026-11-14) — NON pubblicato
+- Event Map: sezione "6. Logo evento" (logo anagrafica proposto, upload PNG max 5 MB, miniature, rimozione, "Senza logo"). Endpoint: POST/DELETE /api/eventmap/events/{eid}/logos, GET .../logos/{lid}/image; campo `logo` in anteprima e video. Collezione eventmap_logos (nel cascade org).
+- Renderer: logo fisso in alto a destra per tutto il video (riquadro bianco semitrasparente, proporzioni originali, LOGO_BOX per formato); scheda titolo spostata sotto il logo. Verificato nel file MP4 in 9:16, 1:1, 16:9.
+- Home: card "Mappe & Percorsi" rimossa, Event Planner con nuova descrizione; nomi demo → City Run Festival / Urban Marathon / Auto City Mobility; video Event Map e Event Planner rigenerati con gli stessi percorso, mappa, zoom e animazioni (cambiano solo i testi). Le etichette della mappa (nomi di vie/città) restano quelle reali.
+- Test: iteration_160 (backend 17/17, frontend ok) + delete logo.
+
+
+## SEO: rapporto testo/HTML e compressione (2026-11-14) — NON pubblicato
+- index.html: script consenso spostato in public/consent.js (stesso comportamento, sempre primo script); contenuto testuale statico dentro #root (sostituito da React); emergent-main.js caricato solo fuori da crmevent.it. Rapporto testo/HTML build: ~39% (prima ~0%).
+- Build: compression-webpack-plugin genera .gz per JS/CSS (CSS 199 KB → 36 KB). Serve `gzip_static on;` (o `gzip on; gzip_types text/css application/javascript;`) nell'nginx Aruba.
+- (2026-11-14) Testo statico ampliato: "Come funziona" + piani con prezzi mensili, limiti e inclusioni (valori presi da /api/saas/plans-public di produzione). Rapporto testo/HTML build 54%. Da aggiornare a mano se cambiano i prezzi.
+
+

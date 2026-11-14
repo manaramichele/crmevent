@@ -128,6 +128,12 @@ let webpackConfig = {
         webpackConfig.plugins.push(healthPluginInstance);
       }
 
+      // Build di produzione: file .gz precompressi per JS/CSS (serviti da nginx con gzip_static on)
+      if (!isDevServer) {
+        const CompressionPlugin = require("compression-webpack-plugin");
+        webpackConfig.plugins.push(new CompressionPlugin({ test: /\.(js|css|svg|json)$/, threshold: 1024, minRatio: 0.9 }));
+      }
+
       // Overlay's HTML injection + compile-error capture; self-gates on mode !== development.
       if (emergentOverlay) {
         webpackConfig.plugins.push(emergentOverlay.webpackPlugin);

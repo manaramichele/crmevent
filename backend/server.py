@@ -4526,7 +4526,8 @@ ORG_CASCADE_COLLECTIONS = ["events", "companies", "persons", "deals", "staff", "
                            "event_maps", "activities", "followups", "calendar_event_links", "files",
                            "person_companies", "lodgings", "meals", "briefing_versions", "invoices",
                            "structures", "fic_settings", "org_invites", "leads", "memberships",
-                           "planner_projects", "planner_revisions"]
+                           "planner_projects", "planner_revisions", "addon_grants", "addon_activations",
+                           "addon_usage", "eventmap_tracks", "eventmap_videos", "eventmap_logos"]
 ROLE_LABELS_USER = {"superadmin": "Super Admin", "admin": "Admin Organizzazione",
                     "member": "Utente", "staff": "Staff", "volunteer": "Volontario"}
 
@@ -13975,7 +13976,7 @@ EVENTMAP = eventmap.build(db, {"require_admin": require_admin, "record_audit": r
 app.include_router(EVENTMAP["router"])
 app.add_event_handler("startup", EVENTMAP["ensure"])
 PLANNER = planner.build(db, {"get_current_user": get_current_user, "require_admin": require_admin, "record_audit": record_audit,
-                             "require_covered": ADDONS["require_covered"]})
+                             "require_covered": ADDONS["require_covered"], "require_member": require_org_member})
 app.include_router(PLANNER["router"])
 app.add_event_handler("startup", PLANNER["ensure"])
 PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})

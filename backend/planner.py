@@ -61,6 +61,7 @@ class SaveIn(BaseModel):
 def build(db, deps: dict):
     r = APIRouter(prefix="/api/planner")
     user_dep, admin_dep, audit, covered = deps["get_current_user"], deps["require_admin"], deps["record_audit"], deps["require_covered"]
+    member_dep = deps["require_member"]  # letture: org attiva validata dal backend (membership / X-Org-Id Super Admin / assistenza)
 
     async def event_of(org_id: str, eid: str, user: dict) -> dict:
         ev = await db.events.find_one({"org_id": org_id, "id": eid}, {"_id": 0, "id": 1, "nome": 1, "luogo": 1, "citta": 1, "data_inizio": 1})
@@ -84,7 +85,7 @@ def build(db, deps: dict):
                             for i, (c, n, w, l, col, t) in enumerate(LIBRARY)]}
 
     @r.get("/events/{eid}/projects")
-    async def projects(eid: str, user: dict = Depends(user_dep)):
+    async def projects(eid: str, user: dict = Depends(member_dep)):
         ev = await event_of(user["org_id"], eid, user)
         rows = await db.planner_projects.find({"org_id": user["org_id"], "evento_id": eid}, {"_id": 0, "features": 0}).sort("created_at", 1).to_list(200)
         return {"evento": ev, "projects": rows}
@@ -103,7 +104,7 @@ def build(db, deps: dict):
         return {k: v for k, v in doc.items() if k != "features"}
 
     @r.get("/projects/{pid}")
-    async def get_project(pid: str, user: dict = Depends(user_dep)):
+    async def get_project(pid: str, user: dict = Depends(member_dep)):
         return await project_of(user["org_id"], pid, user)
 
     @r.patch("/projects/{pid}")
@@ -132,7 +133,7 @@ def build(db, deps: dict):
         return {"version": body.version + 1}
 
     @r.get("/projects/{pid}/revisions")
-    async def revisions(pid: str, user: dict = Depends(user_dep)):
+    async def revisions(pid: str, user: dict = Depends(member_dep)):
         await project_of(user["org_id"], pid, user)
         return {"revisions": await db.planner_revisions.find({"org_id": user["org_id"], "project_id": pid}, {"_id": 0, "features": 0, "layers": 0}).sort("at", -1).to_list(MAX_REVISIONS)}
 

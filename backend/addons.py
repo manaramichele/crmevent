@@ -17,7 +17,7 @@ GRANT_SOURCES = ("purchase", "superadmin", "promo")
 DEFAULT_CONFIG = {
     "id": "config",
     "planner": {"included": {"bronze": 0, "silver": 1, "gold": 3}, "price": None},
-    "eventmap": {"included": {"bronze": 0, "silver": 1, "gold": 3}, "included_videos": 0, "packages": []},
+    "eventmap": {"included": {"bronze": 0, "silver": 1, "gold": 3}, "included_videos": 1, "packages": []},
 }
 
 
@@ -27,6 +27,11 @@ def _now() -> datetime:
 
 def _iso(d: datetime) -> str:
     return d.isoformat()
+
+
+def _included_videos(cfg: dict) -> int:
+    # ogni evento incluso nel piano ha sempre almeno 1 video
+    return max(1, int(cfg.get("included_videos") or 0))
 
 
 def _valid(g: dict, now: str) -> bool:
@@ -54,7 +59,7 @@ class ConfigIn(BaseModel):
     planner_included: IncludedIn
     planner_price: Optional[float] = Field(None, ge=0)
     eventmap_included: IncludedIn
-    eventmap_included_videos: int = Field(ge=0)
+    eventmap_included_videos: int = Field(ge=1)
     eventmap_packages: list[PackageIn] = []
 
 
@@ -136,9 +141,10 @@ def build(db, deps: dict):
                "promos": [g for g in valid if g["source"] == "promo"]}
         if product == "eventmap":
             u = await db.addon_usage.find_one({"org_id": org_id, "product": product}, {"_id": 0}) or {}
-            out["videos_total"] = int(cfg.get("included_videos") or 0) * out["included_used"] + sum(int(g.get("videos_total") or 0) for g in valid)
+            out["videos_total"] = _included_videos(cfg) * out["included_used"] + sum(int(g.get("videos_total") or 0) for g in valid)
             out["videos_used"] = int(u.get("videos_used") or 0)
-            out["videos_available"] = max(0, out["videos_total"] - out["videos_used"])
+            out["videos_in_progress"] = await db.eventmap_videos.count_documents({"org_id": org_id, "status": {"$in": ["queued", "processing"]}})
+            out["videos_available"] = max(0, out["videos_total"] - out["videos_used"] - out["videos_in_progress"])
             out["packages"] = [p for p in cfg.get("packages") or [] if p.get("active")]
         else:
             out["price"] = cfg.get("price")
@@ -433,7 +439,7 @@ def build(db, deps: dict):
 
     async def public_included():
         c = await get_config()
-        return {p: {"included": c[p]["included"]} for p in PRODUCTS} | {"eventmap_included_videos": c["eventmap"].get("included_videos", 0)}
+        return {p: {"included": c[p]["included"]} for p in PRODUCTS} | {"eventmap_included_videos": _included_videos(c["eventmap"])}
 
     r.add_api_route("/public/addons-included", public_included, methods=["GET"])
 
