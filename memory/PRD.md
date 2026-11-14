@@ -920,3 +920,15 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 
 
+
+## Event Map: data, velocità, ristori, altimetria (2026-11-14) — NON pubblicato
+- Data modificabile: eventmap_settings.date (PUT /api/eventmap/events/{eid}/settings, date reali validate, 422 altrimenti); anagrafica invariata.
+- Velocità: SPEEDS slow/normal/fast (fasi, zoom, smussamento camera); percorso sempre completo a t_end; scena finale ferma (t_settle ≤ 0.95).
+- Ristori: rilevati solo da waypoint GPX chiari (AID_RE con confini di parola, sym Drinking Water ecc., entro 300 m dal tracciato); modifica manuale PUT /api/eventmap/tracks/{tid}/aid-stations; icona, evidenziazione all'arrivo della camera, tacca sul profilo; interruttore.
+- Altimetria: profilo da <ele> (≥80% punti), fascia in basso adattata ai formati, indicatore sincronizzato con quota e km; nascosta con avviso se assente; interruttore.
+- Inquadratura finale calcolata tra scheda titolo e grafico. Anteprima a 2 pannelli (momento sul percorso + finale), non consuma video.
+- Snapshot impostazioni nel video doc; tracce vecchie aggiornate al primo accesso (_upgrade_track).
+- Frontend: components/eventmap/EventMapExtras.jsx (DateField, SpeedPick, AidEditor, ElevationToggle).
+- Test: iteration_161 (19/19 + 3 MP4 reali 15/30/60, credito non scalato in errore) + fix date/AID_RE/finale veloce/etichetta.
+- Aperto: nessun endpoint per eliminare tracce GPX duplicate; logo di default "event" via API senza logo anagrafica → nessun logo.
+

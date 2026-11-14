@@ -29,9 +29,9 @@ STYLES = {
 # velocità animazione: fasi (intro, fine percorso), zoom della camera che segue, oscillazione dello zoom, finestra di smussamento
 SPEEDS = {"slow": {"t_in": 0.16, "t_end": 0.78, "zoom": 1.45, "wob": 0.03, "win": 0.07},
           "normal": {"t_in": 0.12, "t_end": 0.82, "zoom": 1.0, "wob": 0.08, "win": 0.04},
-          "fast": {"t_in": 0.07, "t_end": 0.88, "zoom": 0.72, "wob": 0.1, "win": 0.025}}
+          "fast": {"t_in": 0.07, "t_end": 0.85, "zoom": 0.72, "wob": 0.1, "win": 0.025}}
 CHART_H = {"9:16": 210, "1:1": 150, "16:9": 150}
-AID_RE = re.compile(r"ristor|rifornim|refresh|aid ?station|feed ?zone|food|drink|water|acqua|spugna|ravitaill|verpfleg|avituall|vettovagl", re.I)
+AID_RE = re.compile(r"ristor|rifornim|refresh|aid ?station|feed ?zone|\bfood\b|\bdrinks?\b|\bwater\b(?! ?front)|\bacqua\b|spugna|ravitaill|verpfleg|avituall|vettovagl", re.I)
 AID_SYM = {"food", "drinking water", "water source", "restaurant", "water"}
 ATTR = {"openfreemap": "© OpenStreetMap contributors · OpenFreeMap", "maptiler": "© MapTiler © OpenStreetMap contributors"}
 
@@ -299,7 +299,8 @@ class Renderer:
         self.dist = cumdist(pts)
         self.total = self.dist[-1]
         self.sp = SPEEDS.get(job.get("speed"), SPEEDS["normal"])
-        self.t_fin = self.sp["t_end"] + 0.06
+        self.t_fin = self.sp["t_end"] + 0.04
+        self.t_settle = min(0.95, self.t_fin + 0.08)  # scena finale ferma negli ultimi istanti
         self.prof = profile(eles, self.dist) if job.get("show_elevation", True) else None
         self.aid = [dict(a, m=min(self.total, max(0.0, float(a["km"]) * 1000))) for a in (job.get("aid_stations") or [])] if job.get("show_aid", True) else []
         lat_c = sum(p[0] for p in pts) / len(pts)
@@ -521,7 +522,7 @@ class Renderer:
             return self.cam_follow(m), self.follow_w * (1 + self.sp["wob"] * math.sin(p * math.pi * 2)), m
         if t < self.t_fin:
             return self.cam_follow(self.total), self.follow_w, self.total
-        k = ease((t - self.t_fin) / (1 - self.t_fin))
+        k = ease((t - self.t_fin) / (self.t_settle - self.t_fin))
         c0 = self.cam_follow(self.total)
         w = math.exp(lerp(math.log(self.follow_w), math.log(self.fin_w), k))
         return (lerp(c0[0], self.fin_c[0], k), lerp(c0[1], self.fin_c[1], k)), w, self.total
@@ -597,12 +598,12 @@ class Renderer:
             self.card(ov, d, min(1.0, (t - fin - 0.02) / 0.04), big=True)
         if a_in < t < fin + 0.04:
             a = int(255 * min(1, (t - a_in) / 0.03, (fin + 0.04 - t) / 0.03))
-            bw, bh = int(420 * U), int(150 * U)
+            bw, bh = int(420 * U), int(164 * U)
             bx, by = int(36 * U), (self.cbox[1] - bh - int(16 * U)) if self.chart else self.H - bh - int(70 * U)
             d.rounded_rectangle((bx, by, bx + bw, by + bh), radius=int(22 * U), fill=(10, 14, 22, int(a * 0.82)))
             d.text((bx + 26 * U, by + 18 * U), (self.job.get("title") or "")[:26].upper(), font=font(20 * U), fill=(148, 163, 184, a))
             d.text((bx + 26 * U, by + 46 * U), fmt_km(m), font=font(62 * U), fill=(255, 255, 255, a))
-            d.text((bx + 26 * U, by + 114 * U), f"di {fmt_km(self.total)}", font=font(22 * U, False), fill=(203, 213, 225, a))
+            d.text((bx + 26 * U, by + 112 * U), f"di {fmt_km(self.total)}", font=font(22 * U, False), fill=(203, 213, 225, a))
             pw = bw - int(52 * U)
             d.rounded_rectangle((bx + 26 * U, by + bh - 14 * U, bx + 26 * U + pw, by + bh - 8 * U), radius=3, fill=(255, 255, 255, int(a * 0.25)))
             d.rounded_rectangle((bx + 26 * U, by + bh - 14 * U, bx + 26 * U + max(6, pw * m / self.total), by + bh - 8 * U), radius=3, fill=self.st["route"] + (a,))
@@ -617,7 +618,7 @@ def render(job):
     R = Renderer(job)
     if job.get("still"):  # anteprima: un momento lungo il percorso (primo ristoro o metà) + scena finale
         m = R.aid[0]["m"] if R.aid else R.total / 2
-        a, b = R.frame(R.t_for(m)), R.frame(0.985)
+        a, b = R.frame(R.t_for(m)), R.frame(1.0)
         k = min(1.0, 1600 / (2 * R.W))
         sw, sh = int(R.W * k), int(R.H * k)
         out = Image.new("RGB", (sw * 2 + 16, sh), (255, 255, 255))

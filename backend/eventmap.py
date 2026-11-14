@@ -7,13 +7,13 @@ import re
 import sys
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import List, Optional
 
 import imageio_ffmpeg
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import eventmap_render as ER
 import storage_utils as SU
@@ -57,6 +57,13 @@ class PreviewIn(BaseModel):
 
 class SettingsIn(BaseModel):
     date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")  # None = data dell'anagrafica
+
+    @field_validator("date")
+    @classmethod
+    def _real_date(cls, v):
+        if v:
+            date.fromisoformat(v)  # ValueError -> 422 per date impossibili (es. 2026-02-31)
+        return v
 
 
 class AidIn(BaseModel):
@@ -109,7 +116,7 @@ def build(db, deps: dict):
     def _date_it(d):
         mesi = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
         m = re.match(r"(\d{4})-(\d{2})-(\d{2})", d or "")
-        return f"{int(m.group(3))} {mesi[int(m.group(2)) - 1]} {m.group(1)}" if m else ""
+        return f"{int(m.group(3))} {mesi[int(m.group(2)) - 1]} {m.group(1)}" if m and 1 <= int(m.group(2)) <= 12 and 1 <= int(m.group(3)) <= 31 else ""
 
     @r.get("/options")
     async def options(user: dict = Depends(admin_dep)):

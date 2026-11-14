@@ -1,0 +1,43 @@
+{
+  "summary": "Event Map improvements (custom date, speed, aid stations, elevation chart, 2-panel preview, real renders, credits, isolation) tested end-to-end. Backend: 19/19 pytest checks passed (the pytest runner was killed during the last 60s test because the shell session ended; the 60s video finished and I checked it by hand: 1920x1080, 60.00s, show_elevation forced false). Three real MP4s were rendered and checked with ffmpeg: hill 15s fast 9:16 with music is 1080x1920, 15.00s, has audio. Hill 30s normal 1:1 is 1080x1080, 30.00s, no audio. Pisa 60s slow 16:9 is 1920x1080, 60.00s. In frames taken at 10%, 50%, 85% and the end, route progress and the chart indicator move together (0.1/2.0/3.7 km). The 'Ristoro Arrivo km 2,09' label appears near km 2.0-2.1. The custom date '20 dicembre 2026' is shown. The final route sits between the title card and the chart in 9:16, 1:1 and 16:9 slow. The logo shows top-right in previews when the uploaded logo is selected. Credits went up by exactly 1 per completed video. A failed render (GPX storage path broken) ended with status=error and videos_used/remaining unchanged. Previews did not consume credits. Frontend flows passed: date field, reset, speed, aid editor, elevation toggle and warning, preview, and mobile at 390px with no horizontal overflow. One real bug: a date with a valid format but impossible value is accepted and then breaks the Event Map page with a 500.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/eventmap/events/{eid}/settings", "issue": "SettingsIn only checks the date format with a regex. {date:'2026-13-45'} returns 200 and is saved. Afterwards GET /api/eventmap/events/{eid} returns 500 (IndexError in _date_it, mesi[12]), so the Event Map studio for that event is broken. Video jobs would also crash in _base_job. {date:'2026-02-31'} is accepted too and renders as '31 febbraio 2026'. Fix: validate with datetime.date.fromisoformat in a pydantic validator (return 422), and make _date_it defensive.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "eventmap_render.AID_RE", "issue": "The regex has no word boundaries, so substrings like 'water', 'acqua' and 'food' can turn ordinary POIs into aid stations. Examples: 'Waterfront', 'Acquario', 'Acquedotto', 'Seafood restaurant'. This goes against 'only clearly identified waypoints'. Consider word boundaries such as \\bacqua\\b and \\bwater\\b (keeping the 'water station' / 'water point' forms)."},
+      {"endpoint": "POST /api/eventmap/events/{eid}/videos", "issue": "The default logo='event' is silently switched to None when the event registry has no logo, even if the org has uploaded an Event Map logo. API callers get no logo. The UI sends an explicit logo id, so it is not affected."},
+      {"endpoint": "eventmap tracks", "issue": "There is no endpoint to delete a track, so duplicate uploads pile up in the select (the demo event now has several identical pisa_run/hill_aid entries)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Render, speed 'fast' (t_end 0.88, t_fin 0.94)", "issues": ["The camera is still zooming out to the final framing until the very last frame, so the final scene is never held. The fast 16:9 preview's final panel (t=0.985) shows the title card still semi-transparent with the top of the route underneath it. Slow and normal are fine. Suggestion: finish the final transition about 0.5s before the end, or cap t_fin, and take the preview's final panel at t=1.0."]},
+      {"screen": "Render info card (bottom-left)", "issues": ["The 'di 3,8 km' sub-label touches or overlaps the progress bar under it in 9:16 and 16:9."]},
+      {"screen": "Event Map studio date field", "issues": ["It uses the browser's native <input type=date> instead of the shadcn Calendar/Popover, so the format depends on the browser locale (mm/dd/yyyy on an en-US browser)."]},
+      {"screen": "Aid editor", "issues": ["After the user deletes every aid station, the empty state still says 'Il GPX non contiene ristori riconoscibili', which is misleading.", "On mobile the delete icon sits alone on its own row between km and description."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_eventmap_extras.py", "/app/test_reports/pytest/pytest_eventmap_extras.xml"],
+  "action_items": [
+    "HIGH: in SettingsIn, validate the date as a real calendar date (date.fromisoformat) and return 422 on failure. Guard _date_it against invalid month/day so a bad stored value cannot cause a 500 on GET /eventmap/events/{eid}.",
+    "MEDIUM: fast speed needs a short hold on the final scene, and the preview's final panel should be taken from the settled final frame.",
+    "LOW: add word boundaries to AID_RE to avoid false-positive aid stations.",
+    "LOW: fix the info card label/progress bar overlap; consider the shadcn date picker; fix the empty-state copy after deleting all aid stations; add a way to delete tracks."
+  ],
+  "critical_code_review_comments": [
+    "eventmap.py SettingsIn: a regex-only date check allows impossible dates, which crash _date_it (IndexError) on every later state, preview and video call.",
+    "eventmap.py put_aid: an edited aid station keeps source='gpx' even after the user moves its km. This is cosmetic.",
+    "EventMapExtras DateField: the PUT fires on every blur even when the value has not changed. The state is only re-synced through the key prop.",
+    "EventMapStudio: the preview image is not cleared when settings change, so a stale preview can mislead the user."
+  ],
+  "updated_files": ["/app/backend/tests/test_eventmap_extras.py"],
+  "success_rate": {"backend": "95% (19/19 tests passed, plus 1 HIGH validation bug found by an extra check)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "As Super Admin I added grant id 715710ef733c409093f534e8f4819bc6 (TEST_emx grant, 4 videos) to TEST_EventMap Org. 4 videos were reserved (3 completed, 1 failed and not charged), so 0 videos remain. New tracks on event 87d6...: hill 932a1dfd1b76426dae158d39ef00133e (aid stations now: Ristoro Arrivo 2.09 plus TEST_UI Ristoro 3.0, edited through the UI) and flat a150119c82e848d992dfbd4d81cdcc8d. I deleted the corrupted track I created for the failure test (817f6930641e4d668a93fe63d3979aed). I also created TEST_EMX Other org 4e419fbad55448479cd74b773ea22de4 and deleted it afterwards. The settings date is back to 2026-12-20. Track 83179bcf... was not changed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest tests/test_eventmap_extras.py -n 0 -s. Run it in the foreground or with a long timeout, because background runs get killed. It needs at least 4 free videos (add a grant via POST /api/platform/addons/orgs/{oid}/grants). Renders here were faster than expected: 15s about 30s, 60s about 3 min. Frames and previews are saved to /tmp/em_extras. test_settings_date should get an assertion that {date:'2026-13-45'} returns 422 once the bug is fixed.",
+  "rca of the issue": "Invalid date: SettingsIn uses Field(pattern=r'^\\d{4}-\\d{2}-\\d{2}$'), which only checks the shape. _date_it then indexes mesi[int(month)-1], and month 13 raises IndexError. event_state calls _date_it(sett.date) on every GET, so a single bad PUT permanently returns 500 for that event until the setting is fixed in the DB. Reproduce: PUT settings {date:'2026-13-45'} (200), then GET /api/eventmap/events/{eid} (500). Mitigation: validate the date with date.fromisoformat and wrap _date_it in try/except."
+}

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 
-const row = "rounded-lg border border-slate-200 p-2 grid gap-2 sm:grid-cols-[1fr_96px_auto]";
+const row = "rounded-lg border border-slate-200 p-2 grid gap-2 grid-cols-[1fr_88px_auto]";
 
 export function DateField({ eid, st, onSaved }) {
   const [v, setV] = useState(st.settings?.date || st.event.data_iso || "");
@@ -54,8 +54,8 @@ function AidRow({ a, i, total, set, del }) {
       <Input value={a.name} maxLength={40} placeholder="Nome ristoro" onChange={(e) => set(i, { name: e.target.value })} data-testid={`em-aid-name-${i}`} />
       <Input type="number" step="0.1" min={0} max={total} value={a.km} onChange={(e) => set(i, { km: e.target.value })} placeholder="km" data-testid={`em-aid-km-${i}`} />
       <Button type="button" variant="ghost" size="sm" onClick={() => del(i)} aria-label="Elimina ristoro" data-testid={`em-aid-del-${i}`}><Trash2 className="w-4 h-4" /></Button>
-      <Input value={a.desc || ""} maxLength={120} placeholder="Descrizione (facoltativa)" onChange={(e) => set(i, { desc: e.target.value })} className="sm:col-span-3" data-testid={`em-aid-desc-${i}`} />
-      {a.source === "gpx" && <span className="text-[11px] text-sky-700 sm:col-span-3">Importato dal GPX</span>}
+      <Input value={a.desc || ""} maxLength={120} placeholder="Descrizione (facoltativa)" onChange={(e) => set(i, { desc: e.target.value })} className="col-span-3" data-testid={`em-aid-desc-${i}`} />
+      {a.source === "gpx" && <span className="text-[11px] text-sky-700 col-span-3">Importato dal GPX</span>}
     </div>
   );
 }
@@ -79,7 +79,7 @@ export function AidEditor({ track, show, onShow, onSaved }) {
   return (
     <div className="space-y-2" data-testid="em-aid">
       <label className="flex items-center gap-3 text-sm"><Switch checked={show} onCheckedChange={onShow} data-testid="em-aid-switch" /><CupSoda className="w-4 h-4 text-slate-500" />Mostra punti ristoro nel video</label>
-      {!items.length && <p className="text-xs text-slate-500" data-testid="em-aid-empty">Il GPX non contiene ristori riconoscibili. Puoi aggiungerli indicando il chilometro (percorso di {String(total).replace(".", ",")} km).</p>}
+      {!items.length && <p className="text-xs text-slate-500" data-testid="em-aid-empty">{(track.aid_detected || []).length ? "Nessun ristoro nel video." : "Il GPX non contiene ristori riconoscibili."} Puoi aggiungerli indicando il chilometro (percorso di {String(total).replace(".", ",")} km).</p>}
       {items.map((a, i) => <AidRow key={i} a={a} i={i} total={total} set={set} del={del} />)}
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="outline" onClick={add} disabled={items.length >= 30} data-testid="em-aid-add"><Plus className="w-4 h-4 mr-1" />Aggiungi ristoro</Button>
