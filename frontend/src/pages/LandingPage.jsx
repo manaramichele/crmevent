@@ -267,7 +267,7 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      <PlannerDemoSection onScroll={scrollTo} />
+      <PlannerDemoSection />
 
       {/* Funzionalità */}
       <Section id="funzionalita" className="py-20">

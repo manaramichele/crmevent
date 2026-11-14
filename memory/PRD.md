@@ -838,3 +838,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Super Admin /piattaforma/integrazione-referenti (backend/referenti_integrazione.py): anteprima, esecuzione con backup (referenti_integrazione_runs), ripristino; idempotente.
 - Test iteration_155: backend 100%, frontend OK (testo homepage corretto dopo il test). Aperto: Legal.jsx cita ancora "attività e follow-up" (testo legale, da confermare con l'utente).
 - In pausa: video promozionale Event Planner (scripts/planner_video/record.py, registrazione con Playwright + MapTiler; bloccata da lentezza WebGL in registrazione).
+
+## Video dimostrativo Event Planner in homepage (2026-11-14) — ANTEPRIMA, NON PUBBLICATO
+- Video reale 38 s registrato dall'interfaccia vera di Event Planner (anteprima, mappa MapTiler stradale, Milano Parco Sempione): /app/frontend/public/media/event-planner-demo.mp4 (4,5 MB, H.264) + .webm (3,8 MB, VP9) + event-planner-poster.jpg.
+- Produzione: scripts/planner_video/render_frames.py (Playwright, fotogramma per fotogramma, organizzazione TEST_ temporanea poi cancellata) + encode.sh (ffmpeg). Hook di registrazione in PlannerMap: window.__PLANNER_RECORDING (nessun effetto per gli utenti).
+- Homepage: components/landing/PlannerDemoSection.jsx ora mostra il video (autoplay muto, loop, playsInline, caricamento solo quando visibile, pausa fuori schermo) e un solo pulsante "Registrati a CRMEvent". Demo interattiva rimossa dalla homepage; endpoint pubblico non espone più la chiave MapTiler. Admin /piattaforma/event-planner-demo: solo on/off + statistiche.
+- In attesa: Event Map (nuovo applicativo video GPX) — pacchetti Marketplace, assegnazioni, campagne: da confermare l'avvio.
