@@ -1000,3 +1000,8 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Progetto di montaggio: backend/promo_reels.py (timeline in db.promo_reels, versioni in db.promo_reel_versions), renderer backend/promo_reels_render.py (PIL + ffmpeg), elementi originali in backend/promo_reels/assets (schermate reali org Demo, clip, logo, font); musica eventmap_assets/music. Rigenera = nuova versione su storage, le precedenti restano.
 - v1 statiche in frontend/public/media/reels (23 MB) + backend/promo_reels/v1_manifest.json; script scripts/promo_video/capture_reels.py e render_reels_v1.py.
 - Test: testing agent (backend 18/19 → corretti 500 su durata non numerica, rigenerazioni bloccate dopo riavvio; fix progress callback e tab). Aperti: dialog progetto poco leggibile su mobile, guard 409 non atomico.
+
+## Event Planner contatore planimetrie + rinomina menu (2026-11-15)
+- AddonHub (Event Planner): riquadro «Planimetrie · Create X · Progetti Y» al posto di «Evento aggiuntivo» (X = planimetrie non archiviate dell'org, Y = eventi con almeno una planimetria; da /api/addons/planner campi planimetrie/planner_events, ricalcolati a ogni apertura).
+- Menu e titolo «Email & Brevo» → «Marketing» (URL /marketing/brevo, permessi e schede invariati).
+

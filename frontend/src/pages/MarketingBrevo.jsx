@@ -19,7 +19,7 @@ export default function MarketingBrevo() {
     <div className="max-w-6xl space-y-6" data-testid="marketing-brevo-page">
       <div>
         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 bg-tiffany rounded-full px-2.5 py-1 mb-1" data-testid="platform-scope-badge">Marketing CRMEvent — Piattaforma</span>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><MailCheck className="w-6 h-6 text-tiffany-active" />Email &amp; Brevo</h1>
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><MailCheck className="w-6 h-6 text-tiffany-active" />Marketing</h1>
         <p className="text-slate-500 text-sm mt-1">Automazioni email, liste e contatti · gestione centralizzata riservata al Super Admin.</p>
       </div>
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>

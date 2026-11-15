@@ -177,6 +177,10 @@ def build(db, deps: dict):
                "grant_free": sum(max(0, g["events_total"] - used_by.get(g["id"], 0)) for g in valid),
                "activations": rows, "grants": grants,
                "promos": [g for g in valid if g["source"] == "promo"]}
+        if product == "planner":
+            q = {"org_id": org_id, "archiviato": {"$ne": True}}
+            out["planimetrie"] = await db.planner_projects.count_documents(q)
+            out["planner_events"] = len(await db.planner_projects.distinct("evento_id", q))
         if product == "eventmap":
             u = await db.addon_usage.find_one({"org_id": org_id, "product": product}, {"_id": 0}) or {}
             out["videos_total"] = _included_videos(cfg) * out["included_used"] + sum(int(g.get("videos_total") or 0) for g in valid)
