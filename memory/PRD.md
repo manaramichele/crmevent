@@ -993,3 +993,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - I 3 nuovi materiali sono in BOZZA: il Super Admin li approva con «Approva e pubblica».
 - Test: iteration_165 (backend 25/25; fix anteprima email immagini).
 
+
+
+## Campagna Reels verticali (2026-11-15) — NON pubblicato
+- Email & Brevo → tab «Video promozionali»: «CAMPAGNA CRMEVENT – PRESENTAZIONE PIATTAFORMA» con 7 video 1080×1920 H.264 (presentazione-45 ≈44s + eventi/staff/sponsor/planner/map/organizzazione-15 ≈15s), ciascuno con MP4 con musica, MP4 senza musica, copertina JPG, descrizione e hashtag Instagram, stato/data pubblicazione, link Instagram/Facebook/YouTube.
+- Progetto di montaggio: backend/promo_reels.py (timeline in db.promo_reels, versioni in db.promo_reel_versions), renderer backend/promo_reels_render.py (PIL + ffmpeg), elementi originali in backend/promo_reels/assets (schermate reali org Demo, clip, logo, font); musica eventmap_assets/music. Rigenera = nuova versione su storage, le precedenti restano.
+- v1 statiche in frontend/public/media/reels (23 MB) + backend/promo_reels/v1_manifest.json; script scripts/promo_video/capture_reels.py e render_reels_v1.py.
+- Test: testing agent (backend 18/19 → corretti 500 su durata non numerica, rigenerazioni bloccate dopo riavvio; fix progress callback e tab). Aperti: dialog progetto poco leggibile su mobile, guard 409 non atomico.
