@@ -151,6 +151,7 @@ def build(db, deps):
                                                                                                    "duration": m["duration"], "size": m.get("size"), "timeline": r["timeline"],
                                                                                                    "created_at": m.get("created_at") or _now(), "created_by": "sistema"}}, upsert=True)
                 await db.promo_reels.update_one({"slug": r["slug"], "current_version_id": None}, {"$set": {"current_version_id": f"{r['slug']}-v1"}})
+        await db.promo_reel_versions.update_many({"status": {"$in": ["queued", "processing"]}}, {"$set": {"status": "error", "error": "Rigenerazione interrotta dal riavvio del server: riprova"}})
 
     def _url(vid, slug, kind, f):
         return f["static"] if f.get("static") else f"/api/promo-reels/{slug}/versions/{vid}/file/{kind}"
@@ -195,7 +196,11 @@ def build(db, deps):
         if tl.get("music") and not os.path.exists(os.path.join(MUSIC, f"{tl['music']}.mp3")):
             raise HTTPException(status_code=422, detail="Musica non disponibile")
         for part in ("hook", "outro"):
-            if not str(tl[part].get("text", "")).strip() or not (0.5 <= float(tl[part].get("dur", 0)) <= 10):
+            try:
+                dur = float(tl[part].get("dur", 0))
+            except (TypeError, ValueError):
+                dur = -1
+            if not str(tl[part].get("text", "")).strip() or not (0.5 <= dur <= 10):
                 raise HTTPException(status_code=422, detail=f"Testo o durata non validi per {part}")
         await db.promo_reels.update_one({"slug": slug}, {"$set": {"timeline": tl, "updated_at": _now(), "updated_by": user.get("email")}})
         return await _reel(slug)
@@ -207,8 +212,11 @@ def build(db, deps):
             loop = asyncio.get_running_loop()
             try:
                 with tempfile.TemporaryDirectory() as tmp:
+                    async def _set_progress(n):
+                        await db.promo_reel_versions.update_one({"id": vid}, {"$set": {"progress": n}})
+
                     def prog(n):
-                        asyncio.run_coroutine_threadsafe(db.promo_reel_versions.update_one({"id": vid}, {"$set": {"progress": n}}), loop)
+                        asyncio.run_coroutine_threadsafe(_set_progress(n), loop)
                     out = await asyncio.to_thread(RR.render, v["timeline"], ASSETS, tmp, MUSIC, prog)
                     files, size = {}, 0
                     for k, (fn, ct) in KINDS.items():

@@ -19,6 +19,7 @@ export function useFileUrl(url) {
   const [src, setSrc] = useState(isApi(url) ? null : url);
   useEffect(() => {
     if (!isApi(url)) { setSrc(url); return undefined; }
+    setSrc(null);
     let obj;
     api.get(url.replace(/^\/api/, ""), { responseType: "blob" }).then((r) => { obj = URL.createObjectURL(r.data); setSrc(obj); }).catch(() => setSrc(null));
     return () => { if (obj) URL.revokeObjectURL(obj); };

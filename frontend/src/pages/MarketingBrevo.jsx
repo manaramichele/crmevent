@@ -10,7 +10,7 @@ import { PromoReelsPanel } from "@/components/promo/PromoReelsPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MailCheck } from "lucide-react";
 
-const TABS = ["funnel", "staff", "liste", "abbonamenti", "tracker", "materiali"];
+const TABS = ["funnel", "staff", "liste", "abbonamenti", "tracker", "materiali", "video"];
 
 export default function MarketingBrevo() {
   const [params, setParams] = useSearchParams();
