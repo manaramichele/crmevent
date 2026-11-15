@@ -12,7 +12,7 @@ export function PromoVersionsDialog({ m, onClose, onRestored }) {
   useEffect(() => { api.get(`/promo-materials/${m.slug}/versions`).then((r) => setRows(r.data)); }, [m.slug]);
   const restore = async (v) => {
     if (!window.confirm(`Ripristinare la versione v${v.version}? Lo stato attuale verrà conservato nello storico.`)) return;
-    await api.post(`/promo-materials/${m.slug}/versions/${v.id}/restore`);
+    try { await api.post(`/promo-materials/${m.slug}/versions/${v.id}/restore`); } catch { toast.error("Ripristino non riuscito"); return; }
     toast.success("Versione ripristinata");
     onRestored(); onClose();
   };
@@ -20,6 +20,7 @@ export function PromoVersionsDialog({ m, onClose, onRestored }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-xl" data-testid={`promo-versions-dialog-${m.slug}`}>
         <DialogHeader><DialogTitle>Versioni · {m.name}</DialogTitle></DialogHeader>
+        <p className="text-xs text-slate-500">Il ripristino recupera testi e HTML della versione scelta; lo stato di pubblicazione resta invariato.</p>
         {rows === null ? <div className="text-sm text-slate-400">Caricamento…</div> : rows.length === 0 ? <div className="text-sm text-slate-500" data-testid="promo-versions-empty">Nessuna versione precedente.</div> : (
           <div className="max-h-[60vh] divide-y overflow-y-auto">
             {rows.map((v) => (

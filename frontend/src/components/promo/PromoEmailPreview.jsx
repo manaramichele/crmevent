@@ -23,7 +23,7 @@ export function PromoEmailPreview({ m, onClose }) {
           <Button size="sm" variant={mobile ? "default" : "outline"} onClick={() => setMobile(true)} data-testid="promo-email-mobile"><Smartphone className="h-4 w-4 mr-1" />Smartphone</Button>
         </div>
         <div className="flex justify-center rounded-lg border border-slate-200 bg-slate-100 p-2">
-          <iframe title="Anteprima email" srcDoc={html} sandbox="allow-popups allow-popups-to-escape-sandbox" className="h-[60vh] rounded bg-white transition-[width] duration-300" style={{ width: mobile ? 375 : "100%" }} data-testid="promo-email-iframe" />
+          <iframe title="Anteprima email" srcDoc={html} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" className="h-[60vh] rounded bg-white transition-[width] duration-300" style={{ width: mobile ? 375 : "100%" }} data-testid="promo-email-iframe" />
         </div>
         <p className="text-xs text-slate-500">L'anteprima usa le immagini di questo ambiente; il codice copiato o scaricato usa gli indirizzi pubblici di crmevent.it.</p>
       </DialogContent>

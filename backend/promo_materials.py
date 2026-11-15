@@ -172,6 +172,8 @@ def build(db, deps):
         data = body.model_dump()
         data["benefits"] = [b.strip() for b in data["benefits"] if b.strip()]
         data["html_override"] = (data.get("html_override") or "").strip() or None
+        if data["html_override"] and re.search(r"<script|javascript:|\son\w+\s*=", data["html_override"], re.I):
+            raise HTTPException(status_code=422, detail="L'HTML della newsletter non può contenere JavaScript")
         await db.promo_materials.update_one({"slug": slug}, {"$set": {**data, "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
         return await _get(slug)
 

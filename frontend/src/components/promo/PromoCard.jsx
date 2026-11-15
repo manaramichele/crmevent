@@ -40,7 +40,7 @@ export function PromoCard({ m, onChange }) {
     a.click();
   };
   const setStatus = async (st) => {
-    await api.post(`/promo-materials/${s}/status?status=${st}`);
+    try { await api.post(`/promo-materials/${s}/status?status=${st}`); } catch { toast.error("Operazione non riuscita"); return; }
     toast.success(st === "pubblicato" ? "Materiale pubblicato: la pagina video è ora pubblica" : "Materiale riportato in bozza");
     onChange();
   };
