@@ -985,3 +985,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 
 
+
+## Materiali promozionali: Eventi, Staff e Volontari, Sponsor e Partner (2026-11-15) — NON pubblicato
+- Video reali 1920×1080 con musica originale (sportiva/elettronica/emozionale), registrati sull'org Demo ufficiale (dati di fantasia): /media/eventi-demo.mp4 (45.9s), staff-volontari-demo.mp4 (36.8s), sponsor-partner-demo.mp4 (43.5s) + poster; anteprime Brevo /media/brevo/{slug}-anteprima.jpg. Script: scripts/promo_video (recorder.py, rec_eventi/rec_staff/rec_sponsor.py; dati creati durante la registrazione rimossi).
+- backend/promo_materials.py: collezioni promo_materials (5 raccolte, seed idempotente) e promo_material_versions; API SA /api/promo-materials (list, html?base, PUT con snapshot, status bozza|pubblicato, versions, restore senza cambiare stato); pubbliche /api/public/promo[/slug] solo pubblicati (SA vede bozze). Newsletter HTML generata (tabelle, CSS inline, 600px, VML Outlook, {{ unsubscribe }} Brevo, nessun prezzo); html_override senza JS.
+- UI: Email & Brevo → Materiali promozionali (components/promo/*); /video/:slug dinamico con link a ricaricamento completo verso tutti i video pubblicati.
+- I 3 nuovi materiali sono in BOZZA: il Super Admin li approva con «Approva e pubblica».
+- Test: iteration_165 (backend 25/25; fix anteprima email immagini).
+

@@ -12,7 +12,10 @@ FONTS = os.path.join(ROOT, "backend", "eventmap_assets", "fonts")
 W, H = 1200, 675
 TEAL = (10, 186, 181)
 ITEMS = [("event-planner", "event-planner-demo.mp4", 20, "EVENT PLANNER", "Progetta il tuo evento"),
-         ("event-map", "event-map-demo-gvt.mp4", 15, "EVENT MAP", "Il tuo percorso prende vita")]
+         ("event-map", "event-map-demo-gvt.mp4", 15, "EVENT MAP", "Il tuo percorso prende vita"),
+         ("eventi", "eventi-demo.mp4", 33, "EVENTI", "Gestisci tutti i tuoi eventi"),
+         ("staff-volontari", "staff-volontari-demo.mp4", 10.4, "STAFF E VOLONTARI", "Organizza staff e volontari"),
+         ("sponsor-partner", "sponsor-partner-demo.mp4", 12, "SPONSOR E PARTNER", "Gestisci sponsor e partner")]
 
 
 def font(size, bold=True):

@@ -1,0 +1,37 @@
+{
+  "summary": "Tested end to end: promo materials (Marketing → Email & Brevo → Materiali promozionali), the public /video/{slug} pages and the media files. Backend pytest: 25/25 passed. This covered the public list showing only published items, drafts returning 404 to anonymous users and 200 to the SA, SA list/html/?base, PUT with version snapshot, versions/restore, status publish/unpublish, 422/404 validation, 401/403 for anonymous users and 403 for a TEST_ org admin, the HTML structure checks and media content-types. UI as SA: all 5 cards with status badges and every action button. Checked: email preview dialog with desktop/mobile toggle (828 to 375px), Scarica HTML download, Copia HTML/link video/link immagine (clipboard holds crmevent.it absolute URLs), the edit dialog (all 11 promo-field-* fields; save shows on the card and on the SA draft page with the banner), version restore and Approva e pubblica / Riporta in bozza. Public pages: after publishing the 3 new items, 12 back-to-back promo-other-link navigations each did a full reload (window marker cleared). The video always had the correct currentSrc and played. Mobile 390px has no horizontal overflow. Afterwards the 3 items went back to bozza and edited texts were restored. All 11 content fields plus status match the pre-test snapshot. Version counters went up as a side effect (eventi v11, staff-volontari v7, sponsor-partner v3). Anonymous users get 'Video non trovato' on draft pages and only the published links. Media: the 3 new MP4s are 1920x1080 h264 High + AAC 44.1k stereo, 37-46s, with faststart (moov before mdat). The 5 JPG previews are 1200x675 and the posters are 1920x1080. Sampled video frames show the real UI with fictional data and captions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/promo-materials/{slug}/versions/{vid}/restore", "issue": "Restore copies only FIELDS, not 'status'. This looks intentional, but the dialog doesn't say so. Restoring a snapshot taken under reason 'stato' changes nothing visible."},
+      {"endpoint": "PUT /api/promo-materials/{slug}", "issue": "html_override is stored and served verbatim with no check for <script>. It is SA-only, so risk is low, but the 'no JS' rule for newsletters isn't enforced for custom HTML."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PromoEmailPreview iframe", "issue": "In the email preview, the logo and the preview JPG show as broken images (naturalWidth 0, alt text displayed). RCA: the iframe uses sandbox='allow-popups allow-popups-to-escape-sandbox' without allow-same-origin, so its origin is opaque. The dev server (craco.config.js line 32) sends 'Cross-Origin-Resource-Policy: same-origin' on every static file, which makes the browser block images requested from an opaque origin. Fix: add 'allow-same-origin' to the sandbox (safe because allow-scripts is not granted), or serve /media and /logo-crmevent-dark.png with CORP cross-origin. Also check the production host: if crmevent.it sends CORP same-origin on /media, webmail clients that load images directly (no proxy) will show the newsletter images broken.", "selector": "[data-testid=promo-email-iframe]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Panel initial load", "issue": "Each card fetches /promo-materials/{slug}/html on its own (5+ requests, doubled in StrictMode). Until its request returns, the card's Scarica HTML/Copia HTML/Copia link buttons are disabled and its URL fields show '—'. This was seen briefly on the Event Planner card and is not a functional bug. It could be avoided by building the URLs from a site value returned by the list endpoint.", "affected_selectors": ["promo-dl-html-event-planner", "promo-url-page-event-planner-value"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_promo_materials.py", "/app/test_reports/pytest/promo_materials.xml"],
+  "action_items": [
+    "HIGH: Fix broken images in the email preview iframe: add allow-same-origin to the sandbox in PromoEmailPreview.jsx, or relax CORP for /media and the logo. Also check the CORP header on the production host so newsletter images load in webmail clients.",
+    "Optional: setStatus in PromoCard and restore in PromoVersionsDialog have no try/catch, so an API failure triggers an unhandled rejection with no toast.",
+    "Optional: say in the versions dialog that restore doesn't change the publication status."
+  ],
+  "critical_code_review_comments": [
+    "PromoCard.setStatus and PromoVersionsDialog.restore don't handle errors (no try/catch or toast.error).",
+    "PromoEmailPreview doesn't catch a failed HTML fetch, so the iframe stays blank with no message.",
+    "The new MP4s use pix_fmt yuvj420p (full range). Browsers play them fine, but yuv420p (tv range) is more widely compatible with social platforms, QuickTime and Windows players. Consider re-encoding.",
+    "_site() regex only accepts lowercase hostnames, which is acceptable."
+  ],
+  "updated_files": ["/app/backend/tests/test_promo_materials.py"],
+  "success_rate": {"backend": "100% (25/25)", "frontend": "95% (the email preview images are the only issue)"},
+  "seed_data_creation": "A TEST_Promo_* org and test_promo_*@example.com admin are created and deleted on each pytest run (org first, then user). One leftover from the first run was cleaned up by hand. Promo materials were restored: eventi, staff-volontari and sponsor-partner are back in bozza and their content fields match the original values.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... pytest tests/test_promo_materials.py -n 0. The test publishes staff-volontari and puts it back in bozza in a finally block. The eventi edit test restores through versions. Version numbers grow with each run. Leave eventi, staff-volontari and sponsor-partner in bozza for the user to approve."
+}

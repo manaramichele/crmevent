@@ -48,6 +48,7 @@ import planner
 import addons
 import eventmap
 import planner_demo
+import promo_materials
 import referenti_integrazione
 import gcal_availability
 import privacy_consent
@@ -14008,6 +14009,9 @@ app.add_event_handler("startup", PLANNER_DEMO["ensure"])
 app.include_router(referenti_integrazione.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit})["router"])
 CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "app_url": APP_URL})
 app.include_router(CAL_ITALIA["router"])
+PROMO_MAT = promo_materials.build(db, {"require_superadmin": require_superadmin, "get_current_user": get_current_user, "site": PUBLIC_SITE_URL})
+app.include_router(PROMO_MAT["router"])
+app.add_event_handler("startup", PROMO_MAT["ensure"])
 app.include_router(CAL_ITALIA["public_router"])
 app.add_event_handler("startup", CAL_ITALIA["ensure_indexes"])
 app.include_router(PRESS["router"])
