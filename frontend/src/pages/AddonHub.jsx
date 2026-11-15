@@ -85,7 +85,7 @@ export default function AddonHub({ slug }) {
             <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs text-slate-400 uppercase font-semibold">Attivazioni extra disponibili</div><div className="text-xl font-bold" data-testid="addon-grant-free">{s.grant_free}</div></div>
             {info.product === "eventmap"
               ? <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs text-slate-400 uppercase font-semibold">Video</div><div className="text-sm text-slate-700 mt-1" data-testid="addon-videos">{s.unrestricted ? "Illimitati" : <>Disponibili <b className="text-lg">{s.videos_available}</b> · generati <b>{s.videos_used}</b> · in elaborazione <b>{s.videos_in_progress || 0}</b></>}</div></div>
-              : <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs text-slate-400 uppercase font-semibold">Evento aggiuntivo</div><div className="text-xl font-bold"><PriceLine info={info} s={s} /></div></div>}
+              : <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs text-slate-400 uppercase font-semibold">Planimetrie</div><div className="text-sm text-slate-700 mt-1" data-testid="addon-planimetrie">Create <b className="text-lg">{s.planimetrie ?? 0}</b> · Progetti <b>{s.planner_events ?? 0}</b></div></div>}
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4" data-testid="addon-events">
             {!s.events.length ? <p className="py-6 text-sm text-slate-500">Crea prima un evento dalla sezione <Link to="/eventi" className="font-semibold text-[#088F8A]">Eventi</Link>.</p>
