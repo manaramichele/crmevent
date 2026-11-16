@@ -1005,3 +1005,8 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - AddonHub (Event Planner): riquadro «Planimetrie · Create X · Progetti Y» al posto di «Evento aggiuntivo» (X = planimetrie non archiviate dell'org, Y = eventi con almeno una planimetria; da /api/addons/planner campi planimetrie/planner_events, ricalcolati a ogni apertura).
 - Menu e titolo «Email & Brevo» → «Marketing» (URL /marketing/brevo, permessi e schede invariati).
 
+
+## Schermata di caricamento pulita (2026-11-16)
+- Causa del testo visibile al caricamento: il blocco SEO dentro <div id="root"> di public/index.html (reso senza stile dopo la rimozione dello stile inline) restava visibile finché React non montava.
+- Fix: #root contiene solo #boot (sfondo bianco, logo centrato, spinner; compare dopo 150 ms, sparisce al primo render React); il testo SEO è in <noscript> (letto dai motori di ricerca, mai mostrato con JS attivo). Unico file: frontend/public/index.html.
+
