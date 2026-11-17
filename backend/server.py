@@ -48,6 +48,7 @@ import planner
 import addons
 import eventmap
 import planner_demo
+import event_duplicate
 import homepage
 import promo_materials
 import promo_reels
@@ -6638,6 +6639,7 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
 AUDIT_ACTION_LABELS = {
+    "event_duplicated": "Evento duplicato",
     "homepage_settings": "Impostazioni homepage",
     "homepage_logo": "Logo evento in homepage",
     "module_enabled": "Modulo riattivato",
@@ -14034,6 +14036,7 @@ app.include_router(PLANNER["router"])
 app.add_event_handler("startup", PLANNER["ensure"])
 PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})
 app.include_router(PLANNER_DEMO["router"])
+app.include_router(event_duplicate.build(db, {"require_admin": require_admin, "check_limit": lambda o, k: SAAS["check_limit"](o, k), "ev_ids": _ev_ids, "record_audit": record_audit})["router"])
 app.include_router(homepage.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "read_file_rec": _read_file_rec})["router"])
 app.add_event_handler("startup", PLANNER_DEMO["ensure"])
 app.include_router(referenti_integrazione.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit})["router"])
