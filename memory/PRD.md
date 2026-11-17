@@ -1031,3 +1031,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 - Test: iteration_166 (backend 10/10, frontend ok; corretti tab AI, spinner, scroll-to-top, revoca consenso, dedup visite).
 
+
+## Control Room — Fase 2 (2026-11-17) — NON pubblicato
+- backend/controlroom_ops.py (agganciato da controlroom.build): API /api/controlroom/events/{event_id}/ops (stato completo, /rev, /route, /settings, /staff, CRUD generico sectors|posts|resources|interventions, posts/{id}/position + duplicate, resources/from-staff, resources/{id}/presence|status). Collezioni cr_settings/cr_sectors/cr_posts/cr_resources/cr_interventions/cr_log (in cascade org). Acquisto attivo obbligatorio (402), isolamento org/evento, view = eventi|staff view, modifica = staff edit, telefoni solo con staff|anagrafiche view; version per concorrenza (409); cr_log autore/data; GPS solo modello (device, stato, ultima posizione mai simulata); PUT con merge.
+- permissions.py: ROUTE_RULES "/controlroom/events/{event_id}/ops" = "*" (controlli nel modulo, nessun gating piano). Endpoint Fase 1 ora usano require_org_member (X-Org-Id).
+- Frontend components/controlroom/*: TopBar (evento, data, orologio, stato, responsabile, NUOVO INTERVENTO, 8 KPI), OpsMap (MapLibre MapTiler con ripiego OSM, GPX, partenza/arrivo, km, settori evidenziabili, postazioni trascinabili, mezzi, interventi), filtri a chip, SidePanel richiudibile (Risorse/Postazioni/Settori/Interventi/Avvisi), schede dettaglio, import da Staff/Volontari, impostazioni con categorie personalizzabili, polling 5 s + banner connessione persa, schermo intero via portal.
+- Categorie postazioni: 12 iniziali + Vigili del Fuoco e Chiusura stradale (richieste dalla mappa).
+- Test: iteration_168 (15+14 backend, UI) → 6 correzioni → iteration_169 39/39, UI ok. Dati test TEST_CR rimossi; ricrearli con backend/scripts/seed_cr_test.py.
+- Prossime fasi: 3 interventi completi/assegnazioni/notifiche/accesso mobile e check-in operatori; 4 GPS reale/diario/report PDF-Excel; 5 test completi.
+

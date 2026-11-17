@@ -34,12 +34,14 @@ def ctx():
     staff_uid = "user_test_" + uuid.uuid4().hex[:10]
     mdb.users.insert_one({"user_id": staff_uid, "email": staff_email, "name": "TEST Staff", "role": "staff", "auth_provider": "password",
                           "org_id": a["org_id"], "active": True, "password_hash": bcrypt.hashpw(b"TestCr2026!", bcrypt.gensalt()).decode()})
+    mdb.memberships.insert_one({"id": uuid.uuid4().hex, "user_id": staff_uid, "org_id": a["org_id"], "role": "staff", "active": True, "permissions": {}})
     st = requests.Session()
     st.post(f"{API}/auth/login", json={"email": staff_email, "password": "TestCr2026!"})
     yield {"a": a, "b": b, "staff": st}
     # cleanup by ids
     mdb.controlroom_purchases.delete_many({"org_id": {"$in": [a["org_id"], b["org_id"]]}})
     mdb.users.delete_one({"user_id": staff_uid})
+    mdb.memberships.delete_many({"user_id": staff_uid})
     sa = requests.Session(); sa.post(f"{API}/auth/login", json={"email": SA[0], "password": SA[1]})
     for o in (a, b):
         n = (mdb.organizations.find_one({"id": o["org_id"]}) or {}).get("nome")
