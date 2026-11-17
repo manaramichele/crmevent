@@ -69,7 +69,7 @@ import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
 import AddonHub from "@/pages/AddonHub";
 import ControlRoom from "@/pages/ControlRoom";
-import AddonAdmin from "@/pages/AddonAdmin";
+import ModulesAdmin from "@/pages/ModulesAdmin";
 import EventMapStudio from "@/pages/EventMapStudio";
 import Tickets from "@/pages/Tickets";
 import PlatformTickets from "@/pages/PlatformTickets";
@@ -182,7 +182,8 @@ function Shell() {
         <Route path="/event-map" element={<Protected><AddonHub key="em" slug="event-map" /></Protected>} />
         <Route path="/control-room" element={<Protected><ControlRoom /></Protected>} />
         <Route path="/event-map/:id" element={<Protected><EventMapStudio /></Protected>} />
-        <Route path="/piattaforma/event-planner-map" element={<Protected><SuperAdminOnly><AddonAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/moduli" element={<Protected><SuperAdminOnly><ModulesAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/event-planner-map" element={<Navigate to="/piattaforma/moduli?tab=config" replace />} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/calendario-eventi-italia" element={<Protected><SuperAdminOnly><CalendarioItalia /></SuperAdminOnly></Protected>} />

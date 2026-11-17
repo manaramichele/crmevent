@@ -112,6 +112,16 @@ def build(db, deps):
     async def org_access(user: dict = Depends(member)):
         return {m["key"]: m["active"] for m in await _modules(user["org_id"])}
 
+    @r.get("/platform/modules/orgs")
+    async def sa_all(_: dict = Depends(sa)):
+        orgs = await db.organizations.find({"id": {"$ne": "__platform__"}}, {"_id": 0, "id": 1, "nome": 1, "type": 1}).sort("nome", 1).to_list(2000)
+        out = []
+        for o in orgs:
+            mods = await _modules(o["id"])
+            out.append({"id": o["id"], "nome": o.get("nome"), "type": o.get("type") or "cliente", "plan": mods[0].get("plan"),
+                        "modules": {m["key"]: {k: m.get(k) for k in ("active", "disabled", "mode_labels", "limits", "expires_at")} for m in mods}})
+        return out
+
     @r.get("/platform/orgs/{org_id}/modules")
     async def sa_modules(org_id: str, _: dict = Depends(sa)):
         hist = await db.audit_logs.find({"org_id": org_id, "action": {"$regex": "^(addon_|controlroom_|module_)"}}, {"_id": 0}).sort("created_at", -1).to_list(200)

@@ -75,11 +75,11 @@ const navFor = (u, items, access) => items.flatMap((n) => {
   if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...m, locked: true }];
   return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [m] : [];
 });
-const orgGroups = (u, access, iscrittiOn) => [
+const orgGroups = (u, access, iscrittiOn, isSuper = false) => [
   { items: withIscritti(navFor(u, ORG_NAV, access), iscrittiOn) },
   { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access) },
   { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access) },
-  { title: "Organizzazione", id: "organizzazione", items: navFor(u, ORGANIZATION_NAV, access) },
+  { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access) },
   { title: "Account", id: "account", items: ACCOUNT_NAV },
 ].filter((g) => g.items.length);
 
@@ -93,12 +93,13 @@ const withIscritti = (items, on) => {
 
 // Extra platform-administration group, only for Super Admin.
 const PLATFORM_NAV = [
-  { to: "/piattaforma", label: "Dashboard piattaforma", icon: ShieldCheck, id: "piattaforma", end: true },
+  { to: "/piattaforma", label: "Dashboard", icon: ShieldCheck, id: "piattaforma", end: true, activeIf: (l) => l.pathname === "/piattaforma" && new URLSearchParams(l.search).get("sezione") !== "organizzazioni" },
+  { to: "/piattaforma?sezione=organizzazioni", label: "Organizzazioni", icon: Building2, id: "piattaforma-organizzazioni", activeIf: (l) => (l.pathname === "/piattaforma" && new URLSearchParams(l.search).get("sezione") === "organizzazioni") || l.pathname.startsWith("/piattaforma/org/") },
+  { to: "/piattaforma/moduli", label: "Moduli e Attivazioni", icon: Boxes, id: "piattaforma-moduli" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video", badge: "assistenza" },
   { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo", badge: "demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
   { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
-  { to: "/piattaforma/event-planner-map", label: "Moduli e Attivazioni", icon: Boxes, id: "piattaforma-addons" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },
@@ -380,7 +381,7 @@ export default function Layout({ children }) {
   }, [mobileOpen]);
 
   const navGroups = isSuper
-    ? [...orgGroups(user, access, false), { title: "Amministrazione piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
+    ? [...orgGroups(user, access, false, true), { title: "Dashboard piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
     : orgGroups(user, access, iscrittiOn);
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
@@ -389,16 +390,16 @@ export default function Layout({ children }) {
 
   const renderLink = (n, onClick) => (
     <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`} title={n.locked ? (n.lockTitle || "Non incluso nel tuo piano") : undefined}
-      className={({ isActive }) =>
+      className={({ isActive: a }) => { const isActive = n.activeIf ? n.activeIf(location) : a; return (
         `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
           isActive ? "bg-tiffany-light text-tiffany-fg" : n.locked ? "text-slate-400 hover:bg-slate-50" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-        }`}>
-      {({ isActive }) => (<>
+        }`); }}>
+      {({ isActive: a }) => { const isActive = n.activeIf ? n.activeIf(location) : a; return (<>
         <n.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-tiffany-active" : ""}`} />
         {!(collapsed && !onClick) && <span className="truncate flex-1">{n.label}</span>}
         {n.locked && !(collapsed && !onClick) && <Lock className="w-3.5 h-3.5 shrink-0" data-testid={`sidebar-lock-${n.id}`} />}
         {n.badge && counts[n.badge] > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0 ${n.badge === "ticketsUnread" ? "bg-red-500 text-white" : "bg-tiffany text-slate-900"}`} aria-label={n.badge === "ticketsUnread" ? `${counts[n.badge]} aggiornamenti da leggere` : n.badge === "tickets" ? `${counts[n.badge]} richieste non chiuse` : `${counts[n.badge]} prenotazioni future`} data-testid={`sidebar-badge-${n.id}`}>{counts[n.badge]}</span>}
-      </>)}
+      </>); }}
     </NavLink>
   );
 

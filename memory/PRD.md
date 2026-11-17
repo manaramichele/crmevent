@@ -1065,6 +1065,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Moduli e Attivazioni centralizzato in Dashboard piattaforma (2026-11-17)
+- Gruppo SA rinominato "Dashboard piattaforma": Dashboard, Organizzazioni (/piattaforma?sezione=organizzazioni), Moduli e Attivazioni (/piattaforma/moduli), poi le voci esistenti. Voce rimossa dal gruppo Organizzazione per il SA; l'Admin Organizzazione mantiene la consultazione in /organizzazione/moduli.
+- Nuova pagina ModulesAdmin.jsx: tabella di tutte le organizzazioni (GET /api/platform/modules/orgs, solo SA) con ricerca e filtro per modulo/disattivati; "Gestisci" apre OrgModulesAdmin (stesso componente della scheda organizzazione, nessuna logica duplicata); tab "Configurazione globale" (ConfigCard). /piattaforma/event-planner-map → redirect a ?tab=config. Rimossi il vecchio dialog e la tabella di AddonAdmin.
+- Verifica: curl (17 org, 401 senza login) + screenshot desktop/mobile (voci attive corrette).
+
+
 ## Menu: Marketing & Admin in fondo (2026-11-17)
 - Layout.jsx: per il Super Admin il gruppo Marketing & Admin è ora l'ultimo, dopo Amministrazione piattaforma. Voci interne, URL e permessi invariati. Ordine verificato nella pagina su desktop e smartphone.
 
