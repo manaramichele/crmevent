@@ -1065,6 +1065,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Menu: Marketing & Admin in fondo (2026-11-17)
+- Layout.jsx: per il Super Admin il gruppo Marketing & Admin è ora l'ultimo, dopo Amministrazione piattaforma. Voci interne, URL e permessi invariati. Ordine verificato nella pagina su desktop e smartphone.
+
+
 ## Riorganizzazione menu · Moduli e Attivazioni (2026-11-17)
 - Scelte utente: abbonamento/fatturazione restano in Account; moduli non attivi visibili con lucchetto (Event Planner, Event Map, Control Room); Marketing & Admin solo Super Admin.
 - Menu: principale (Dashboard, Azioni rapide, Eventi, Staff/Volontari, Sponsor & Partner, Aziende, Ospitalità, Iscritti, Marketplace) → gruppo Event Planner & Event Map → gruppo Control Room → Organizzazione (Moduli e Attivazioni, Utenti e Permessi, Impostazioni; solo admin) → Account → [SA] Marketing & Admin (+ Fatturazione e integrazioni /marketing/admin) → [SA] Amministrazione piattaforma (voce "Moduli e Attivazioni" = config globale /piattaforma/event-planner-map).

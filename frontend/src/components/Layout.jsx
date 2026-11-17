@@ -380,7 +380,7 @@ export default function Layout({ children }) {
   }, [mobileOpen]);
 
   const navGroups = isSuper
-    ? [...orgGroups(user, access, false), { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }, { title: "Amministrazione piattaforma", id: "platform", items: PLATFORM_NAV }]
+    ? [...orgGroups(user, access, false), { title: "Amministrazione piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
     : orgGroups(user, access, iscrittiOn);
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
