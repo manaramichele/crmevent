@@ -12,7 +12,8 @@ import TeamSelect from "@/components/TeamSelect";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import { calcAge } from "@/components/crm";
 import SettingSelect from "@/components/SettingSelect";
-import { ADD_OPTION, promptAdd } from "@/lib/optionLists";
+import { ADD_OPTION } from "@/lib/optionLists";
+import InlineAddOption from "@/components/InlineAddOption";
 
 export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", non_determinata: "Non determinata" };
 const CATS = [["staff", "Staff"], ["volontario", "Volontario"]];
@@ -50,6 +51,7 @@ function Section({ title, children, testid }) {
 
 function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
   const set = (k, v) => onChange({ ...r, [k]: v, ...(k === "evento_id" ? { team_id: "" } : {}) });
+  const [addM, setAddM] = useState(false);
   const prefOpts = [...new Set([...ruoli, ...(r.preferenza ? [r.preferenza] : [])])];
   return (
     <div className="rounded-lg border border-slate-200 p-3 space-y-2" data-testid={`mask-assign-${i}`}>
@@ -62,7 +64,7 @@ function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
         <label className="text-xs text-slate-500">Preferenza
           <select className={sel} value={r.preferenza || ""} onChange={(e) => set("preferenza", e.target.value)} data-testid={`mask-assign-pref-${i}`}><option value="">{availPref ? `Dal link: ${availPref}` : "— Nessuna —"}</option>{prefOpts.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
         <div className="text-xs text-slate-500">Team<TeamSelect value={r.team_id || ""} eventoId={r.evento_id} onChange={(v) => set("team_id", v)} testid={`mask-assign-team-${i}`} /></div>
-        <label className="text-xs text-slate-500">Mansione<select className={sel} value={r.ruolo || ""} onChange={async (e) => { if (e.target.value === ADD_OPTION) { const v = await promptAdd("ruoli_staff"); if (v) set("ruolo", v); } else set("ruolo", e.target.value); }} data-testid={`mask-assign-mansione-${i}`}><option value="">— Nessuna —</option>{[...new Set([...ruoli, ...(r.ruolo ? [r.ruolo] : [])])].map((x) => <option key={x} value={x}>{x}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select></label>
+        <label className="text-xs text-slate-500">Mansione<select className={sel} value={r.ruolo || ""} onChange={(e) => { if (e.target.value === ADD_OPTION) setAddM(true); else set("ruolo", e.target.value); }} data-testid={`mask-assign-mansione-${i}`}><option value="">— Nessuna —</option>{[...new Set([...ruoli, ...(r.ruolo ? [r.ruolo] : [])])].map((x) => <option key={x} value={x}>{x}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select>{addM && <InlineAddOption listKey="ruoli_staff" small testid={`mask-assign-mansione-add-${i}`} onDone={(v) => { setAddM(false); if (v) set("ruolo", v); }} />}</label>
       </div>
     </div>
   );

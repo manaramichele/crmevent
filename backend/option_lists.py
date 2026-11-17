@@ -8,22 +8,25 @@ from pydantic import BaseModel, Field
 
 PLATFORM_DEFAULTS_ID = "__platform_defaults__"
 
-# key -> (gruppo, etichetta, [(collection, campo, is_array)], sezione permesso per aggiungere dalle maschere)
+# key -> (gruppo, etichetta, [(collection, campo, is_array, filtro_extra)], sezione permesso per aggiungere dalle maschere)
+NO_STATION = {"planner_station_id": {"$in": [None, ""]}}
 LISTS = {
-    "tipologie_evento": ("Eventi", "Tipologie evento", [("events", "tipologia", False)], "eventi"),
-    "taglie": ("Staff e Volontari", "Taglie", [("persons", "taglia", False)], "staff"),
-    "ruoli_staff": ("Staff e Volontari", "Mansioni / Attività", [("staff", "ruolo", False), ("shifts", "ruolo", False)], "staff"),
-    "aree_operative": ("Staff e Volontari", "Aree operative", [("teams", "area", False), ("shifts", "area", False), ("staff", "area", False)], "staff"),
-    "settori": ("Aziende, Sponsor e Partner", "Settori aziende", [("companies", "settore", False)], "aziende"),
-    "tipi_azienda": ("Aziende, Sponsor e Partner", "Tipi di azienda", [("companies", "tipo", False)], "aziende"),
-    "livelli_sponsorship": ("Aziende, Sponsor e Partner", "Livelli sponsorship", [("deals", "livello", False)], "sponsor"),
-    "esigenze_alimentari": ("Ospitalità e Pasti", "Esigenze alimentari", [("lodgings", "esigenze_alimentari", True), ("meals", "esigenze_alimentari", True)], "ospitalita"),
-    "tipi_postazione": ("Event Planner", "Tipologie postazione", [("shifts", "area", False)], "*"),
-    "tipi_risorsa_persona": ("Control Room", "Tipologie risorsa persona", [("cr_resources", "tipologia", False)], "eventi"),
+    "tipologie_evento": ("Eventi", "Tipologie evento", [("events", "tipologia", False, None)], "eventi"),
+    "taglie": ("Staff e Volontari", "Taglie", [("persons", "taglia", False, None)], "staff"),
+    "ruoli_staff": ("Staff e Volontari", "Mansioni / Attività", [("staff", "ruolo", False, None), ("shifts", "ruolo", False, None)], "staff"),
+    "aree_operative": ("Staff e Volontari", "Aree operative", [("teams", "area", False, None), ("shifts", "area", False, NO_STATION), ("staff", "area", False, None)], "staff"),
+    "settori": ("Aziende, Sponsor e Partner", "Settori aziende", [("companies", "settore", False, None)], "aziende"),
+    "tipi_azienda": ("Aziende, Sponsor e Partner", "Tipi di azienda", [("companies", "tipo", False, None)], "aziende"),
+    "livelli_sponsorship": ("Aziende, Sponsor e Partner", "Livelli sponsorship", [("deals", "livello", False, None)], "sponsor"),
+    "esigenze_alimentari": ("Ospitalità e Pasti", "Esigenze alimentari", [("persons", "esigenze_alimentari", True, None), ("staff", "esigenze_alimentari", True, None)], "ospitalita"),
+    "tipologie_struttura": ("Ospitalità e Pasti", "Tipologie struttura", [("structures", "tipologia", False, None)], "ospitalita"),
+    "tipi_postazione": ("Event Planner", "Tipologie postazione", [("shifts", "area", False, {"planner_station_id": {"$nin": [None, ""]}})], "*"),
+    "tipi_risorsa_persona": ("Control Room", "Tipologie risorsa persona", [("cr_resources", "tipologia", False, {"kind": "persona"})], "eventi"),
 }
 DEFAULTS = {
     "taglie": ["XS", "S", "M", "L", "XL", "XXL", "XXXL"],
     "esigenze_alimentari": ["Vegetariano", "Vegano", "Senza glutine", "Senza lattosio", "Allergie", "Intolleranze", "Altro"],
+    "tipologie_struttura": ["Hotel", "B&B", "Residence", "Agriturismo", "Ristorante", "Pizzeria", "Bar", "Catering", "Mensa", "Altro"],
     "tipi_postazione": ["Ristoro", "Incrocio", "Partenza", "Arrivo", "Deposito borse", "Expo", "Area sponsor", "Sicurezza percorso", "Altro"],
     "tipi_risorsa_persona": ["Volontario", "Staff", "Sanitario", "Forze dell'ordine", "Altro"],
 }
@@ -75,15 +78,17 @@ def build(db, deps: dict):
 
     async def _doc(user):
         if user.get("platform_scope"):
-            return await db.settings.find_one({"id": PLATFORM_DEFAULTS_ID}, {"_id": 0}) or {}
+            doc = await db.settings.find_one({"id": PLATFORM_DEFAULTS_ID}, {"_id": 0}) or {}
+            base = deps["default_settings"]()
+            return {**{k: list(DEFAULTS.get(k) or base.get(k) or []) for k in LISTS}, **{k: v for k, v in doc.items() if v}}
         return await get_settings(user)
 
     async def usage(user, key, value) -> int:
         if user.get("platform_scope"):
             return 0
         n = 0
-        for coll, field, _ in LISTS[key][2]:
-            n += await db[coll].count_documents({"org_id": user["org_id"], field: value})
+        for coll, field, _, extra in LISTS[key][2]:
+            n += await db[coll].count_documents({"org_id": user["org_id"], field: value, **(extra or {})})
         return n
 
     async def _save(user, key, items, dis):
@@ -158,8 +163,8 @@ def build(db, deps: dict):
         await _save(user, key, items, dis)
         n = 0
         if not user.get("platform_scope"):
-            for coll, field, arr in LISTS[key][2]:
-                q = {"org_id": user["org_id"], field: body.old}
+            for coll, field, arr, extra in LISTS[key][2]:
+                q = {"org_id": user["org_id"], field: body.old, **(extra or {})}
                 res = await (db[coll].update_many(q, {"$set": {f"{field}.$": new}}) if arr else db[coll].update_many(q, {"$set": {field: new}}))
                 n += res.modified_count
         return {"ok": True, "records_updated": n}

@@ -3,22 +3,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ADD_OPTION, promptAdd } from "@/lib/optionLists";
+import { ADD_OPTION } from "@/lib/optionLists";
+import InlineAddOption from "@/components/InlineAddOption";
 
 const NUM = new Set(["number"]);
 
 function Field({ f, v, set, all }) {
+  const [adding, setAdding] = useState(false);
   const id = `crf-${f.k}`;
   const common = { id, "data-testid": id, disabled: f.disabled?.(all), className: "h-10" };
   if (f.type === "select") {
-    return (
-      <select {...common} value={v ?? ""} onChange={async (e) => { if (f.addKey && e.target.value === ADD_OPTION) { const nv = await promptAdd(f.addKey); if (nv) set(nv); } else set(e.target.value || null); }} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+    return (<>
+      <select {...common} value={v ?? ""} onChange={(e) => { if (f.addKey && e.target.value === ADD_OPTION) setAdding(true); else set(e.target.value || null); }} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
         {!f.required && <option value="">—</option>}
         {(typeof f.options === "function" ? f.options(all) : f.options).map(([val, l]) => <option key={val} value={val}>{l}</option>)}
         {f.addKey && v && !(typeof f.options === "function" ? f.options(all) : f.options).some(([val]) => val === v) && <option value={v}>{v}</option>}
         {f.addKey && <option value={ADD_OPTION}>+ Aggiungi</option>}
       </select>
-    );
+      {adding && <InlineAddOption listKey={f.addKey} testid={`${id}-add`} onDone={(nv) => { setAdding(false); if (nv) set(nv); }} />}
+    </>);
   }
   if (f.type === "checkbox") return <label className="flex h-10 items-center gap-2 text-sm"><input type="checkbox" {...common} className="h-4 w-4 accent-[#0ABAB5]" checked={!!v} onChange={(e) => set(e.target.checked)} />{f.hint}</label>;
   if (f.type === "textarea") return <Textarea {...common} className="min-h-[72px]" value={v ?? ""} onChange={(e) => set(e.target.value)} />;

@@ -23,7 +23,7 @@ export default function SettingSelect({ settingKey, value, onChange, options = [
     return out;
   }, [options]);
   // include il valore corrente anche se non ancora nella lista configurata (stale o appena aggiunto)
-  const allOpts = value && !opts.some((o) => norm(o) === norm(value)) ? [...opts, value] : opts;
+  const allOpts = useMemo(() => (value && !opts.some((o) => norm(o) === norm(value)) ? [...opts, value] : opts), [opts, value]);
   const sorted = useMemo(() => (keepOrder ? allOpts : [...allOpts].sort((a, b) => {
     const al = norm(a), bl = norm(b);
     if (al === "altro" && bl !== "altro") return 1;

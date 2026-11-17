@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader, StatusBadge, useCollection, useSettings, formatDateRange } from "@/components/crm";
 import SettingSelect from "@/components/SettingSelect";
-import { promptAdd } from "@/lib/optionLists";
+import InlineAddOption from "@/components/InlineAddOption";
 import StructureSelect from "@/components/StructureSelect";
 import MapsLink from "@/components/MapsLink";
 import { useAuth } from "@/context/AuthContext";
@@ -67,7 +67,8 @@ function EsigenzeEditor({ value, onChange, testid }) {
   const settings = useSettings();
   const list = [...new Set([...((settings && settings.esigenze_alimentari) || ESIGENZE), ...(value || [])])];
   const toggle = (e) => { const n = new Set(set); n.has(e) ? n.delete(e) : n.add(e); onChange(Array.from(n)); };
-  const add = async () => { const v = await promptAdd("esigenze_alimentari"); if (v && !set.has(v)) onChange([...set, v]); };
+  const [adding, setAdding] = useState(false);
+  const added = (v) => { setAdding(false); if (v && !set.has(v)) onChange([...set, v]); };
   return (
     <div className="flex flex-wrap gap-1.5" data-testid={testid}>
       {list.map((e) => (
@@ -76,7 +77,8 @@ function EsigenzeEditor({ value, onChange, testid }) {
           {e}
         </button>
       ))}
-      <button type="button" onClick={add} className="px-2.5 py-1 rounded-full text-xs font-semibold text-tiffany-active ring-1 ring-inset ring-dashed ring-tiffany-border hover:bg-tiffany-light" data-testid={`${testid}-add`}>+ Aggiungi</button>
+      <button type="button" onClick={() => setAdding(true)} className="px-2.5 py-1 rounded-full text-xs font-semibold text-tiffany-active ring-1 ring-inset ring-dashed ring-tiffany-border hover:bg-tiffany-light" data-testid={`${testid}-add`}>+ Aggiungi</button>
+      {adding && <div className="w-full"><InlineAddOption listKey="esigenze_alimentari" small testid={`${testid}-add-row`} onDone={added} /></div>}
     </div>
   );
 }

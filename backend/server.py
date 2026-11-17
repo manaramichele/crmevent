@@ -11129,6 +11129,11 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     submitted = {"nome": TN.person_name(body.nome.strip()), "cognome": TN.person_name(body.cognome.strip()), "email": email,
                  "cellulare": cell, "data_nascita": birth, "codice_fiscale": cf_norm or None,
                  "taglia": (body.taglia or "").strip() or None}
+    if submitted["taglia"]:
+        st = await db.settings.find_one({"id": link["org_id"]}, {"_id": 0, "taglie": 1, "disattivati": 1}) or {}
+        off_t = set((st.get("disattivati") or {}).get("taglie") or [])
+        if submitted["taglia"] not in [t for t in (st.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]:
+            raise HTTPException(status_code=400, detail="Taglia non valida")
     person = await db.persons.find_one({"org_id": org_id, "email": email}, {"_id": 0}) if email else None
     if not person and cell:
         person = await db.persons.find_one({"org_id": org_id, "cellulare": cell}, {"_id": 0})
@@ -14049,7 +14054,7 @@ AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin
 app.include_router(AVP["router"])
 ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label, "cf_valid": _cf_valid})
 app.include_router(ANA["router"])
-OPT = option_lists.build(db, {"require_admin": require_admin, "get_settings": _org_settings, "allows": P.allows})
+OPT = option_lists.build(db, {"require_admin": require_admin, "get_settings": _org_settings, "allows": P.allows, "default_settings": default_settings})
 app.include_router(OPT["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,

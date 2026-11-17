@@ -19,5 +19,3 @@ export async function addOption(key, value) {
     return data.value;
   } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); return null; }
 }
-
-export const promptAdd = (key) => addOption(key, window.prompt("Nuova voce"));
