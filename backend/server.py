@@ -50,6 +50,7 @@ import eventmap
 import planner_demo
 import promo_materials
 import promo_reels
+import ai_traffic
 import referenti_integrazione
 import gcal_availability
 import privacy_consent
@@ -745,6 +746,7 @@ class OrgRegisterIn(BaseModel):
     telefono: Optional[str] = None
     accept_terms: bool = False
     ref: Optional[dict] = None
+    attribution: Optional[dict] = None
 
 
 class CompleteOrgIn(BaseModel):
@@ -755,6 +757,7 @@ class CompleteOrgIn(BaseModel):
     cognome: Optional[str] = None
     marketing_consent: bool = False
     ref: Optional[dict] = None
+    attribution: Optional[dict] = None
 
 
 TERMS_VERSION = "2026-10"
@@ -796,6 +799,8 @@ async def register_organization(body: OrgRegisterIn, response: Response):
                                "self_registered": True, "welcome_demo": "pending"})
     await _ensure_membership(uid, org["id"], "admin_org", uid)
     await PARTNER["attach_referral"](org["id"], org.get("nome"), {"email": email, "telefono": phone}, body.ref)
+    if ai_traffic.clean_attr(body.attribution):
+        await db.organizations.update_one({"id": org["id"]}, {"$set": {"attribution": ai_traffic.clean_attr(body.attribution)}})
     # Lead continuity: if this email already requested a demo, link that lead to the new account
     # (no duplicate contact) and advance the funnel — preserving the lead → demo → trial history.
     lead = await db.leads.find_one({"email": email})
@@ -854,6 +859,8 @@ async def complete_organization(body: CompleteOrgIn, user: dict = Depends(get_cu
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd, "$unset": {"org_onboarding_lock": ""}})
     await _ensure_membership(user["user_id"], org["id"], "admin_org", user["user_id"])
     await PARTNER["attach_referral"](org["id"], org.get("nome"), {"email": user.get("email"), "telefono": phone}, body.ref)
+    if ai_traffic.clean_attr(body.attribution):
+        await db.organizations.update_one({"id": org["id"]}, {"$set": {"attribution": ai_traffic.clean_attr(body.attribution)}})
     try:
         await sync_registered_user(user["user_id"], org["id"], nome=nome or None, cognome=cognome or None, source="registration")
     except Exception as e:
@@ -14016,6 +14023,7 @@ app.add_event_handler("startup", PROMO_MAT["ensure"])
 PROMO_REELS = promo_reels.build(db, {"require_superadmin": require_superadmin})
 app.include_router(PROMO_REELS["router"])
 app.add_event_handler("startup", PROMO_REELS["ensure"])
+app.include_router(ai_traffic.build(db, {"require_superadmin": require_superadmin})["router"])
 app.include_router(CAL_ITALIA["public_router"])
 app.add_event_handler("startup", CAL_ITALIA["ensure_indexes"])
 app.include_router(PRESS["router"])

@@ -12,6 +12,12 @@ export default function Footer() {
           <div className="text-white font-semibold mb-3 text-sm">Prodotto</div>
           <ul className="space-y-2 text-sm">
             <li><a href="/#funzionalita" className="hover:text-white">Funzionalità</a></li>
+            <li><Link to="/funzionalita/eventi" className="hover:text-white">Eventi</Link></li>
+            <li><Link to="/funzionalita/staff-volontari" className="hover:text-white">Staff e Volontari</Link></li>
+            <li><Link to="/funzionalita/sponsor-partner" className="hover:text-white">Sponsor e Partner</Link></li>
+            <li><Link to="/funzionalita/event-planner" className="hover:text-white">Event Planner</Link></li>
+            <li><Link to="/funzionalita/event-map" className="hover:text-white">Event Map</Link></li>
+            <li><Link to="/faq" data-testid="footer-faq-link" className="hover:text-white">FAQ</Link></li>
             <li><a href="/#come-funziona" className="hover:text-white">Come funziona</a></li>
             <li><a href="/#prezzi" data-testid="footer-credits-link" className="hover:text-white">Prezzi</a></li>
             <li><a href="/#demo" className="hover:text-white">Demo</a></li>
@@ -22,6 +28,10 @@ export default function Footer() {
           <div className="text-white font-semibold mb-3 text-sm">CRMEvent</div>
           <ul className="space-y-2 text-sm">
             <li><Link to="/registrati" className="hover:text-white">14 giorni di prova gratuita</Link></li>
+            <li><Link to="/organizzatori/gare-podistiche-maratone" className="hover:text-white">Gare podistiche e maratone</Link></li>
+            <li><Link to="/organizzatori/trail-corse-montagna" className="hover:text-white">Trail e corse in montagna</Link></li>
+            <li><Link to="/organizzatori/triathlon" className="hover:text-white">Triathlon</Link></li>
+            <li><Link to="/organizzatori/ciclismo-granfondo" className="hover:text-white">Ciclismo e granfondo</Link></li>
             <li><a href="/#demo" className="hover:text-white">Contatti</a></li>
             <li><a href="https://partner.crmevent.it" target="_blank" rel="noopener noreferrer" data-testid="footer-partner-link" className="hover:text-white">Diventa Partner</a></li>
           </ul>

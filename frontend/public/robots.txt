@@ -4,4 +4,13 @@ Disallow: /app
 Disallow: /login
 Disallow: /demo
 Disallow: /registrati
+Disallow: /partecipa/
+Disallow: /api/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /app
+Disallow: /partecipa/
+Disallow: /api/
+
 Sitemap: https://crmevent.it/sitemap.xml

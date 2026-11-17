@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useHead } from "@/seo/head";
 import { Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
@@ -180,7 +181,7 @@ const H2 = ({ children }) => <h2 className="font-display text-3xl md:text-4xl fo
 
 export default function LandingPage() {
   const [open, setOpen] = useState(false);
-  useEffect(() => { document.title = "CRMEvent | Il CRM per organizzare eventi"; }, []);
+  useHead({ title: "CRMEvent | Il CRM per organizzare eventi", description: "Gestisci eventi, sponsor, staff, volontari, team, turni e attività con CRMEvent. Tutto in un'unica piattaforma.", path: "/" });
   useEffect(() => {
     const go = () => { const id = decodeURIComponent(window.location.hash.slice(1)); if (id) setTimeout(() => scrollTo(id, "auto"), 300); };
     go();
