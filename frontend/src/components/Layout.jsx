@@ -61,6 +61,9 @@ const PLANNER_NAV = [
 const CR_NAV = [{ to: "/control-room", label: "Control Room", icon: RadioTower, id: "control-room", perm: "eventi", module: "controlroom" }];
 const ORGANIZATION_NAV = [
   { to: "/organizzazione/moduli", label: "Moduli e Attivazioni", icon: Boxes, id: "org-moduli", perm: "admin" },
+];
+// Gestione organizzazione: nel menu profilo in alto a destra (non nella sidebar).
+const PROFILE_ORG_NAV = [
   { to: "/organizzazione/utenti", label: "Utenti e Permessi", icon: Users, id: "org-utenti", perm: "admin" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
 ];
@@ -478,9 +481,20 @@ export default function Layout({ children }) {
                   <div className="text-sm font-semibold text-slate-800 truncate">{user?.name}</div>
                   <div className="text-xs text-slate-400 truncate">{user?.email}</div>
                 </div>
-                <button onClick={() => { setMenuOpen(false); navigate("/profilo"); }} data-testid="profilo-link" className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-                  <CircleUserRound className="w-4 h-4" />Profilo & Account
+                <div className="px-4 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Profilo personale</div>
+                <button onClick={() => { setMenuOpen(false); navigate("/profilo"); }} data-testid="profilo-link" className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                  <CircleUserRound className="w-4 h-4" />Il mio profilo
                 </button>
+                <button onClick={() => { setMenuOpen(false); navigate("/profilo?tab=account#sicurezza"); }} data-testid="account-security-link" className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                  <ShieldCheck className="w-4 h-4" />Account e sicurezza
+                </button>
+                {(isSuper ? validActing : true) && navFor(user, PROFILE_ORG_NAV, null).length > 0 && (<>
+                  <div className="px-4 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t border-slate-100">Gestione organizzazione</div>
+                  {navFor(user, PROFILE_ORG_NAV, null).map((n) => (
+                    <button key={n.id} onClick={() => { setMenuOpen(false); navigate(n.to); }} data-testid={`profile-menu-${n.id}`} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                      <n.icon className="w-4 h-4" />{n.label}
+                    </button>))}
+                </>)}
                 {!isSuper && <button onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event("tutorial:open-index")); }} data-testid="tutorial-menu-link" className="sm:hidden w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100">
                   <HelpCircle className="w-4 h-4" />Tutorial
                 </button>}

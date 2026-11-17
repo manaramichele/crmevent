@@ -1150,3 +1150,13 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: iteration_179 (backend 8/8, frontend ok; corretto doppio confirm, CF check-char, aggiornamento preferenza su link da classificare).
 - Nota: le email di conferma Brevo erano attivate dalla vecchia scheda; ora non c'è più un pulsante di conferma dedicato.
 
+
+## Staff/Volontari Taglia+Note, menu a tendina centralizzati, menu profilo (2026-11-17)
+- Maschera unica (PersonMask) da riga, matita, Aggiungi Staff/Volontario; niente Qualifica/LinkedIn/Foto; Taglia (lista "taglie", + Aggiungi) e Note interne; colonne Cognome…Taglia…Azioni (matita → cestino ultimo, conferma con nome; DELETE persona con storico = archiviazione `archiviato`, esclusa da /persons, persons-enriched, /staff, ospitalità); filtro taglia.
+- backend/option_lists.py: GET /api/settings/lists, POST /{key}/items (membri con permesso sezione), PUT /{key} (ordine/disattivati, 409 se si rimuove voce usata), POST /{key}/rename (aggiorna anche i record, arrayFilters). Settings doc org = unica fonte; `disattivati` per lista; Super Admin ?scope=platform su doc `__platform_defaults__` (default per nuove org). Liste: tipologie_evento, taglie, ruoli_staff, aree_operative, settori, tipi_azienda, livelli_sponsorship, esigenze_alimentari, tipologie_struttura, tipi_postazione (Event Planner), tipi_risorsa_persona (Control Room).
+- Frontend: SettingSelect usa POST items; InlineAddOption per select nativi (mansione, postazione planner, risorsa CR, esigenze); useSettings filtra disattivati e si ricarica su evento `option-lists:changed`; Impostazioni → Gestione menu a tendina (OptionListsManager).
+- Utenti e Permessi + Impostazioni spostati dal menu laterale al menu profilo (Profilo personale / Gestione organizzazione).
+- Modulo pubblico: Taglia facoltativa (solo attive, validata), nessuna Nota.
+- Test: iteration_180, 181 (backend 15/15, frontend 100%; Event Planner/Control Room verificati solo da codice perché bloccati per org di prova).
+- Aperto: tipi_postazione conta/rinomina solo i turni creati dalle postazioni, non la tipologia salvata nelle postazioni senza persone.
+

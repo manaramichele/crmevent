@@ -96,7 +96,15 @@ export const sortOptions = (opts, keepOrder = false) => {
 
 export function useSettings() {
   const [settings, setSettings] = useState(null);
-  useEffect(() => { api.get("/settings").then(({ data }) => setSettings(data)).catch(() => setSettings(false)); }, []);
+  useEffect(() => {
+    const load = () => api.get("/settings").then(({ data }) => {
+      const off = data.disattivati || {};
+      setSettings({ ...data, ...Object.fromEntries(Object.entries(off).filter(([k]) => Array.isArray(data[k])).map(([k, vals]) => [k, data[k].filter((v) => !vals.includes(v))])) });
+    }).catch(() => setSettings(false));
+    load();
+    window.addEventListener("option-lists:changed", load);
+    return () => window.removeEventListener("option-lists:changed", load);
+  }, []);
   return settings;
 }
 
@@ -302,7 +310,7 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
   if (field.type === "select" && field.settingKey) {
     return <SettingSelect settingKey={field.settingKey} value={value} onChange={(v) => onChange(field.name, v)}
       options={options?.[field.source] || field.options || []} placeholder={field.placeholder}
-      addLabel={field.addLabel || "Aggiungi nuovo"} testid={`field-${field.name}`} />;
+      addLabel={field.addLabel || "Aggiungi"} keepOrder={!!field.keepOrder} testid={`field-${field.name}`} />;
   }
   if (field.type === "select") {
     const baseOpts = field.dynamicOptions ? field.dynamicOptions(form) : (field.options || options?.[field.source] || []);

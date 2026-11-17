@@ -1,0 +1,66 @@
+{
+  "summary": "Tested the dropdown-management API (/api/settings/lists), Person taglia/note, archive-on-delete and the public form's taglia, plus the UI for Staff/Volontari table + PersonMask, Impostazioni > Gestione menu a tendina, the profile menu (desktop and 390px), the public /partecipa form and + Aggiungi in Eventi, Aziende, Sponsor and Strutture. Backend: 9/9 new pytest pass. Most features work. Found 1 HIGH regression (adding a Strutture tipologia fails with 404 'Elenco non trovato'), Super Admin platform-defaults bugs, wrong usage/rename mappings for esigenze_alimentari and tipi_postazione, Eventi tipologia ignoring deleted/disabled values, and no validation of taglia in the public form.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/settings/lists/tipologie_struttura/items", "issue": "Returns 404 'Elenco non trovato' because tipologie_struttura is missing from option_lists.LISTS. StructureSelect.jsx and Hospitality.jsx:573 (Strutture manager) use SettingSelect settingKey='tipologie_struttura', so '+ Aggiungi' on Tipologia struttura is broken. Reproduced in the UI: toast 'Elenco non trovato' and the add row stays open.", "priority": "HIGH"},
+      {"endpoint": "GET/POST /api/settings/lists?scope=platform (Super Admin)", "issue": "No __platform_defaults__ settings doc exists, so the Super Admin sees all 10 lists with items: [] instead of the defaults. If the Super Admin adds one value (e.g. taglie 'X'), the platform doc becomes taglie=['X'] and merge_defaults() gives every NEW org only ['X'] instead of XS..XXXL. Fix: when the platform doc is missing, seed _doc() from default_settings()+DEFAULTS.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "option_lists.LISTS['esigenze_alimentari']", "issue": "Usage and rename look at lodgings/meals, but esigenze are saved on persons.esigenze_alimentari (and staff.esigenze_alimentari). Verified: a person with ['Vegano'] shows usage 0, and renaming Vegano->Vegan gives records_updated 0 and the person keeps 'Vegano'. A value that is in use can therefore be deleted, and renames do not reach records."},
+      {"endpoint": "option_lists.LISTS['tipi_postazione']", "issue": "Mapped to ('shifts','area'), which is the aree_operative field. Usage counts and renames for station types will hit operational areas with the same name ('Ristoro', 'Expo', 'Logistica'...), and they will not hit the real station tipologia (Event Planner feature/station data)."},
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "taglia is not validated against the org's active taglie. Any string up to 20 characters is saved (tested: 'HACKED_VALUE'), including disabled values."},
+      {"endpoint": "DELETE /api/persons/{id} (archive)", "issue": "Archived persons are hidden from /persons and /persons-enriched, but their staff links still come back from /api/staff?evento_id and the person still appears in /api/events/{id}/hospitality (verified). Decide whether operational lists (Ospitalità, Team, Turni, counters) should exclude archived persons."},
+      {"endpoint": "POST /api/public/availability/{code} (new person)", "issue": "New persons get note='Inserito automaticamente dalla raccolta disponibilità pubblica'. Note is now a user-facing internal field in PersonMask, so this system text fills it. Consider storing it only in provenienza."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Strutture manager / StructureSelect (Ospitalità)", "issue": "Adding a new Tipologia shows the error toast 'Elenco non trovato' and nothing is added (backend list key missing).", "selector": "[data-testid='struct-mgr-tipologia-add-confirm']", "priority": "HIGH"},
+      {"component": "Events.jsx tipologia field", "issue": "options = mergeStd(STD_TIPOLOGIE, settings.tipologie_evento), so the hardcoded standard list is always merged in. After deleting 'Gala' in Impostazioni, 'Gala' is still offered in the event form. 'Mountain Bike' appears even though it is not in the managed list. Disabled, deleted and renamed values come back, which breaks the 'one source per list' rule.", "selector": "[data-testid='field-tipologia']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PersonMask / Event Planner station / Control Room resource / Ospitalità esigenze", "issues": ["'+ Aggiungi' on native selects (Mansione mask-assign-mansione-*, station-tipologia, CR tipologia, person-esigenze-add) uses window.prompt('Nuova voce') instead of an inline input. It works and auto-selects the new value, but it is inconsistent with the inline SettingSelect UX the requirement asks for."]},
+      {"screen": "PersonMask", "issues": ["Data di nascita uses the browser's native date picker (mm/dd/yyyy shown) instead of the shadcn calendar / Italian format.", "Note sits at the end of section A (Dati anagrafici), before sections B and C, not at the very end of the mask. Acceptable if that is the intent."]}
+    ]
+  },
+  "passed_checks": [
+    "GET /settings/lists: 10 lists, 6 groups, items {value,active,usage}, technical notes, can_manage=true, platform=false",
+    "Add item: trims, case-insensitive dedupe, re-activates disabled values; unknown key returns 404; org B does not see org A values",
+    "PUT reorder/disable works; removing a used value returns 409; deleting an unused value is OK; rename updates persons.taglia (records_updated=1); rename to an existing value returns 409",
+    "Person taglia/note saved via POST/PUT; DELETE hard-deletes without history (then 404) and archives (archiviato=true) with a staff link; archived persons are hidden from /persons and /persons-enriched",
+    "Public GET returns taglie_options with active values only and no note; POST fills taglia only when missing; repeat submission makes no duplicate, the link is da_classificare, and an archived person is un-archived",
+    "UI table columns: ['', Cognome, Nome, Cellulare, Ruolo, Preferenza, Taglia, Team, Mansione, Evento, Azioni]; actions invite, edit, delete (trash last)",
+    "Row click and pencil open the same person-mask (single dialog); Aggiungi Staff and Aggiungi Volontario open the same mask ('Nuovo Staff' / 'Nuovo Volontario')",
+    "Trash opens a confirm 'Eliminare Mario Rossi?' and does not open the mask; Annulla keeps the row",
+    "Mask: no Qualifica, LinkedIn or Foto; Taglia SettingSelect '+ Aggiungi' adds TEST_5XL inline and selects it; multiline Note is saved and reloaded; CF RSSMRA80A01H501U gives Roma (RM); age is computed; Mansione '+ Aggiungi' works (via prompt)",
+    "Impostazioni: groups and cards optlist-<key>; add, reorder, delete-unused (with confirm), disable-used ('Disattivata'), rename with records toast all work; a disabled taglia is hidden for new persons but kept and shown on the existing record; the public form omits the disabled value",
+    "Sidebar has no Utenti e Permessi or Impostazioni; profile menu shows PROFILO PERSONALE (Il mio profilo, Account e sicurezza) and GESTIONE ORGANIZZAZIONE (Utenti e Permessi, Impostazioni); works at 390px and navigates",
+    "+ Aggiungi works inline and auto-selects in Eventi tipologia, Aziende settore, Sponsor livello",
+    "Public form: pf-taglia optional select with active sizes only; no note field"
+  ],
+  "test_report_links": ["/app/backend/tests/test_option_lists_taglia.py", "/app/test_reports/pytest/pytest_option_lists.xml"],
+  "action_items": [
+    "Add 'tipologie_struttura' to option_lists.LISTS (group Ospitalità e Pasti, usage on the structures collection/tipologia field) and to DEFAULTS, or switch StructureSelect/Hospitality to a supported key. '+ Aggiungi' in Strutture is currently broken.",
+    "Super Admin platform scope: when the __platform_defaults__ doc is missing, start from default_settings()+DEFAULTS so adding a value does not wipe the defaults for new orgs.",
+    "Fix LISTS mappings: esigenze_alimentari -> persons.esigenze_alimentari (array) + staff.esigenze_alimentari (array) (+ lodgings/meals if used); tipi_postazione -> the real station tipologia storage, not shifts.area.",
+    "Events.jsx: remove mergeStd(STD_TIPOLOGIE, ...) and use only settings.tipologie_evento (active values) + the current value.",
+    "Validate the public availability taglia against the active taglie (ignore or reject other values).",
+    "Decide and implement whether archived persons must be excluded from /api/staff, hospitality and other operational lists.",
+    "Optional UX: replace window.prompt in promptAdd with an inline input for native selects."
+  ],
+  "critical_code_review_comments": [
+    "option_lists.LISTS is the single source for usage/rename, but several mappings do not match where data is stored (esigenze, tipi_postazione), and one key used by the UI (tipologie_struttura) is missing.",
+    "USAGE_MAP + /api/settings/usage in server.py duplicates option_lists usage logic (DRY) and covers only one collection per list. Consider removing it or delegating.",
+    "update_settings PUT /api/settings accepts a raw dict with no validation and can overwrite lists/disattivati, bypassing the 409 'in use' protection.",
+    "lists_overview runs one count_documents per item per collection (N*M queries). It is fine for now but can be slow for large lists. An aggregate per list would be better.",
+    "rename for array fields uses '$set field.$', which updates only the first matching element per document (fine unless there are duplicates)."
+  ],
+  "updated_files": ["/app/backend/tests/test_option_lists_taglia.py"],
+  "success_rate": {"backend": "100% of new pytest (9/9); 4 additional backend data-mapping/validation defects found via ad-hoc checks", "frontend": "~88% (core flows pass; Strutture add broken; Eventi tipologia ignores list management)"},
+  "seed_data_creation": "Created TEST_OL_a/TEST_OL_b orgs (pytest fixture, auto-cleaned) and TEST_UI_OL_<ts> org for UI tests (deleted with all org_id docs, org and user). The main agent's /tmp/e3 org was not touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/test_option_lists_taglia.py -n 0 (it creates and cleans its own TEST_ orgs). The public availability POST needs data_nascita or a CF, plus preferenza_attivita. The Super Admin must pass ?scope=platform for /settings/lists. Event Planner and Control Room are locked for new orgs, so their + Aggiungi was code-reviewed only (native select + promptAdd). After the fixes, retest Strutture tipologia add, Eventi tipologia after deleting a value, esigenze usage/rename, and Super Admin platform lists.",
+  "rca of the issue": "Strutture add 404: SettingSelect -> addOption() -> POST /settings/lists/{key}/items; _key() rejects keys not in LISTS, and 'tipologie_struttura' was never registered. Platform defaults: _doc() returns {} when the platform doc is missing; add_item appends to [] and saves; merge_defaults then overrides DEFAULTS with this partial list for every new org."
+}

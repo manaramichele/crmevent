@@ -20,10 +20,10 @@ export const postFields = (d) => [
   { k: "attiva", label: "Stato", type: "checkbox", hint: "Postazione attiva" }, { k: "note", label: "Note", type: "textarea" },
 ];
 
-export const resourceFields = (d, shifts = []) => [
+export const resourceFields = (d, shifts = [], personTypes = PERSON_TYPES) => [
   { k: "kind", label: "Tipo risorsa", type: "select", required: true, options: KINDS, disabled: (v) => !!v.id },
   { k: "tipologia", label: "Categoria mezzo", type: "select", required: true, options: d.vehicles.map((x) => [x.key, x.label]), show: (v) => v.kind === "mezzo" },
-  { k: "tipologia", label: "Tipologia", type: "select", options: PERSON_TYPES.map((x) => [x, x]), show: (v) => v.kind === "persona" },
+  { k: "tipologia", label: "Tipologia", type: "select", options: personTypes.map((x) => [x, x]), addKey: "tipi_risorsa_persona", show: (v) => v.kind === "persona" },
   { k: "codice", label: "Identificativo" }, { k: "nome", label: "Nome", disabled: (v) => !!v.persona_id },
   { k: "targa", label: "Targa", show: (v) => v.kind === "mezzo" }, { k: "equipaggio", label: "Equipaggio", show: (v) => v.kind !== "persona" },
   { k: "responsabile", label: "Responsabile" }, { ...phone(d), disabled: (v) => !d.perms.contacts || !!v.persona_id },

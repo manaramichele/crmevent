@@ -42,6 +42,7 @@ const T = {
     phaseSetup: "Allestimento", phaseTeardown: "Disallestimento", phaseEvent: "Evento",
     from: "Dalle", to: "Alle",
     prefLabel: "Che attività preferiresti svolgere?", prefPlaceholder: "Seleziona un'attività",
+    taglia: "Taglia", tagliaPlaceholder: "Seleziona la taglia (facoltativo)",
     errEventDay: "Seleziona almeno un giorno dell'evento.",
     errPref: "Seleziona almeno un'attività che preferiresti svolgere.", errPrefAltro: "Descrivi brevemente l'attività che preferiresti svolgere.",
     prefNone: "Nessuna preferenza", prefOther: "Altro", prefOtherPlaceholder: "Descrivi brevemente",
@@ -79,6 +80,7 @@ const T = {
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
     from: "From", to: "To",
     prefLabel: "What activity would you prefer to do?", prefPlaceholder: "Select an activity",
+    taglia: "Size", tagliaPlaceholder: "Select your size (optional)",
     errEventDay: "Please select at least one event day.",
     errPref: "Please select at least one activity you would prefer to do.", errPrefAltro: "Please briefly describe the activity you would prefer to do.",
     prefNone: "No preference", prefOther: "Other", prefOtherPlaceholder: "Briefly describe",
@@ -181,6 +183,7 @@ export default function Partecipa() {
         days: selDays,
         preferenza_attivita: pref,
         preferenza_altro: pref === ALTRO ? prefAltro : null,
+        taglia: form.taglia || null,
         privacy: true,
         marketing_consent: marketing,
         lang,
@@ -255,6 +258,7 @@ export default function Partecipa() {
           <Checkbox checked={noCf} onCheckedChange={(v) => setNoCf(!!v)} data-testid="pf-no-cf" />
           <span className="text-sm text-slate-600">{t("noCf")}</span>
         </label>
+        {(info.taglie_options || []).length > 0 && <div className="sm:w-1/2 sm:pr-1.5"><F label={t("taglia")}><select value={form.taglia || ""} onChange={(e) => ch("taglia", e.target.value)} className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm bg-white h-10" data-testid="pf-taglia"><option value="">{t("tagliaPlaceholder")}</option>{info.taglie_options.map((x) => <option key={x} value={x}>{x}</option>)}</select></F></div>}
 
         <div ref={daysRef} className={`pt-2 scroll-mt-24 rounded-xl transition-colors ${dayErr ? "ring-2 ring-red-400 bg-red-50/40 p-3 -mx-1" : ""}`} data-testid="pf-days-section" aria-invalid={dayErr || undefined}>
           <h2 className="text-base font-semibold text-slate-800">{t("whenTitle")} <span className="text-red-500">*</span></h2>
