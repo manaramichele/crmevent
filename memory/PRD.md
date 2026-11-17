@@ -1065,6 +1065,37 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Attivazione gratuita Marketplace: Control Room aggiunto, Planimetrie & Mappe ritirato (2026-11-17)
+- Finestra esistente "Attivazione gratuita" (Piattaforma → Marketplace → Acquisti): Control Room dopo Event Map; scelto Control Room compare il campo Evento (singolo o "Tutti gli eventi attuali"). Backend marketplace admin_grant → modules_hub.grant_cr (controlroom_purchases source superadmin, 0 €, audit), errore se già attiva.
+- Planimetrie & Mappe: seed rimosso, servizio marcato retired/visible=False (migrazione retire_maps_v1), escluso da catalogo admin/org e dalla concessione; nessun dato cancellato.
+- Verifica: curl (accesso solo all'org scelta, altre org invariate, doppia concessione bloccata) + screenshot del dialogo. Concessioni di prova rimosse.
+
+
+## Duplica evento (2026-11-17)
+- Non era mai stato implementato (era in coda). Ora: Eventi → Azioni (Altre su desktop / Azioni su mobile) → "Duplica evento".
+- backend/event_duplicate.py: POST /api/events/{id}/duplicate {nome, edizione, data_inizio, copy_maps, copy_teams, copy_activities, copy_planner}. Copia configurazione evento (date spostate dello stesso intervallo, stato pianificato, senza entitlement/homepage_logo), percorsi/mappe, team senza responsabile, attività "da fare" senza persone, opzionalmente progetti Event Planner + distinta materiali. Mai: staff/turni, iscritti, sponsor, ospitalità, pagamenti, video/tracce Event Map, crediti/attivazioni, pipeline. Rollback in caso di errore; org attiva, permessi e limiti piano rispettati; audit event_duplicated.
+- Frontend: DuplicateEventDialog.jsx; lista ricaricata dopo la duplicazione. Nessuna pagina dettaglio evento esiste nell'app.
+- Test: iteration_175 (backend 7/8 + UI desktop/mobile) + fix data non valida (400) e copia distinta materiali.
+
+
+## Marketing → Home Page e carosello loghi eventi (2026-11-17)
+- Scelte utente: la pubblicazione la decide il Super Admin (non l'organizzatore); in pubblico solo il logo (nome evento come alt/title).
+- Voce "Event Planner in homepage" rimossa; nuova /marketing/home-page (solo SA) con tab "Sezioni homepage" (PlannerDemoAdmin: visibilità video + statistiche invariate) e "Carosello loghi eventi". Vecchio URL → redirect.
+- backend/homepage.py: GET /public/home-carousel, GET /public/home-logos/{id}.webp (miniatura webp ottimizzata, cache Mongo homepage_logo_cache per file, immutable + ?v=hash del file), GET/PUT /homepage/settings (titolo, mostra/nascondi, auto_new = pubblica automaticamente i nuovi eventi creati dopo l'attivazione), GET /homepage/logos, GET /homepage/logos/{id}/thumb.webp (SA), POST /homepage/logos/{id} {approved|excluded|null}. Stato salvato in events.homepage_logo; approvazione legata al file: se il logo cambia l'evento torna "Non pubblicato". Solo loghi caricati su CRMEvent (png/jpg/webp/gif); esterni/SVG/corrotti non pubblicabili. Ordinamento casefold + id.
+- Frontend: EventLogosCarousel.jsx (scorrimento automatico, pausa su interazione, swipe, frecce desktop, riduzione movimento, nessuna duplicazione se pochi loghi) tra PlannerDemoSection ed EventMapSection; HomePageAdmin.jsx con anteprima desktop/smartphone, tabella con ricerca/filtri, Pubblica/Escludi.
+- Test: iteration_174 + correzioni (500 su immagini non leggibili → 404, anteprima protetta SA, riapprovazione al cambio logo) verificate via curl.
+
+
+## Moduli e Attivazioni centralizzato in Dashboard piattaforma (2026-11-17)
+- Gruppo SA rinominato "Dashboard piattaforma": Dashboard, Organizzazioni (/piattaforma?sezione=organizzazioni), Moduli e Attivazioni (/piattaforma/moduli), poi le voci esistenti. Voce rimossa dal gruppo Organizzazione per il SA; l'Admin Organizzazione mantiene la consultazione in /organizzazione/moduli.
+- Nuova pagina ModulesAdmin.jsx: tabella di tutte le organizzazioni (GET /api/platform/modules/orgs, solo SA) con ricerca e filtro per modulo/disattivati; "Gestisci" apre OrgModulesAdmin (stesso componente della scheda organizzazione, nessuna logica duplicata); tab "Configurazione globale" (ConfigCard). /piattaforma/event-planner-map → redirect a ?tab=config. Rimossi il vecchio dialog e la tabella di AddonAdmin.
+- Verifica: curl (17 org, 401 senza login) + screenshot desktop/mobile (voci attive corrette).
+
+
+## Menu: Marketing & Admin in fondo (2026-11-17)
+- Layout.jsx: per il Super Admin il gruppo Marketing & Admin è ora l'ultimo, dopo Amministrazione piattaforma. Voci interne, URL e permessi invariati. Ordine verificato nella pagina su desktop e smartphone.
+
+
 ## Riorganizzazione menu · Moduli e Attivazioni (2026-11-17)
 - Scelte utente: abbonamento/fatturazione restano in Account; moduli non attivi visibili con lucchetto (Event Planner, Event Map, Control Room); Marketing & Admin solo Super Admin.
 - Menu: principale (Dashboard, Azioni rapide, Eventi, Staff/Volontari, Sponsor & Partner, Aziende, Ospitalità, Iscritti, Marketplace) → gruppo Event Planner & Event Map → gruppo Control Room → Organizzazione (Moduli e Attivazioni, Utenti e Permessi, Impostazioni; solo admin) → Account → [SA] Marketing & Admin (+ Fatturazione e integrazioni /marketing/admin) → [SA] Amministrazione piattaforma (voce "Moduli e Attivazioni" = config globale /piattaforma/event-planner-map).

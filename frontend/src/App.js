@@ -38,6 +38,7 @@ import PrivacyCookieAdmin from "@/pages/PrivacyCookieAdmin";
 import CalendarioItalia from "@/pages/CalendarioItalia";
 import PreferenzeVolontari from "@/pages/PreferenzeVolontari";
 import PlannerDemoAdmin from "@/pages/PlannerDemoAdmin";
+import HomePageAdmin from "@/pages/HomePageAdmin";
 import PlatformReferenti from "@/pages/PlatformReferenti";
 import Iscritti from "@/pages/Iscritti";
 import AuditLog from "@/pages/AuditLog";
@@ -69,7 +70,7 @@ import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
 import AddonHub from "@/pages/AddonHub";
 import ControlRoom from "@/pages/ControlRoom";
-import AddonAdmin from "@/pages/AddonAdmin";
+import ModulesAdmin from "@/pages/ModulesAdmin";
 import EventMapStudio from "@/pages/EventMapStudio";
 import Tickets from "@/pages/Tickets";
 import PlatformTickets from "@/pages/PlatformTickets";
@@ -182,12 +183,14 @@ function Shell() {
         <Route path="/event-map" element={<Protected><AddonHub key="em" slug="event-map" /></Protected>} />
         <Route path="/control-room" element={<Protected><ControlRoom /></Protected>} />
         <Route path="/event-map/:id" element={<Protected><EventMapStudio /></Protected>} />
-        <Route path="/piattaforma/event-planner-map" element={<Protected><SuperAdminOnly><AddonAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/moduli" element={<Protected><SuperAdminOnly><ModulesAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/event-planner-map" element={<Navigate to="/piattaforma/moduli?tab=config" replace />} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/calendario-eventi-italia" element={<Protected><SuperAdminOnly><CalendarioItalia /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/integrazione-referenti" element={<Protected><SuperAdminOnly><PlatformReferenti /></SuperAdminOnly></Protected>} />
-        <Route path="/piattaforma/event-planner-demo" element={<Protected><SuperAdminOnly><PlannerDemoAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/event-planner-demo" element={<Navigate to="/marketing/home-page?tab=sezioni" replace />} />
+        <Route path="/marketing/home-page" element={<Protected><SuperAdminOnly><HomePageAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/preferenze-volontari" element={<Protected><SuperAdminOnly><PreferenzeVolontari /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
         <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />

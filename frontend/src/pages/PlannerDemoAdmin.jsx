@@ -36,7 +36,7 @@ function Stats() {
   );
 }
 
-export default function PlannerDemoAdmin() {
+export default function PlannerDemoAdmin({ embedded = false }) {
   const [f, setF] = useState(null);
   const [busy, setBusy] = useState(false);
   const load = useCallback(() => api.get("/planner-demo/settings").then(({ data }) => setF(data)), []);
@@ -50,7 +50,7 @@ export default function PlannerDemoAdmin() {
   };
   return (
     <div className="max-w-5xl space-y-8" data-testid="pdemo-admin">
-      <div><h1 className="font-display text-2xl font-bold">Event Planner in homepage</h1>
+      <div>{embedded ? <h2 className="font-display text-lg font-bold">Sezione video Event Planner</h2> : <h1 className="font-display text-2xl font-bold">Event Planner in homepage</h1>}
         <p className="text-sm text-slate-500">Sezione con il video dimostrativo di Event Planner su crmevent.it. Puoi mostrarla o nasconderla senza toccare il codice.</p></div>
       <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
         <label className="flex items-center gap-3 text-sm font-medium"><Switch checked={f.abilitata} onCheckedChange={(v) => setF({ ...f, abilitata: v })} data-testid="pdemo-enabled" />

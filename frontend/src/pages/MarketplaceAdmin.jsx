@@ -231,15 +231,25 @@ const SOURCE = { stripe: "Stripe", free: "Gratuito", manual: "Manuale (Super Adm
 function GrantDialog({ onClose, onDone }) {
   const [orgs, setOrgs] = useState([]);
   const [svcs, setSvcs] = useState([]);
-  const [f, setF] = useState({ org_id: "", service_id: "", note: "" });
+  const [f, setF] = useState({ org_id: "", service_id: "", event_id: "", note: "" });
+  const [events, setEvents] = useState([]);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     api.get("/platform/marketplace/orgs").then(({ data }) => setOrgs(data)).catch(err);
-    api.get("/platform/marketplace/services").then(({ data }) => setSvcs(data.services.filter((s) => s.scope === "org"))).catch(err);
+    api.get("/platform/marketplace/services").then(({ data }) => setSvcs(data.services.filter((s) => s.scope === "org" || s.key === "control-room"))).catch(err);
   }, []);
+  const isCR = svcs.find((s) => s.id === f.service_id)?.key === "control-room";
+  useEffect(() => {
+    setEvents([]);
+    if (!isCR || !f.org_id) return;
+    api.get(`/platform/addons/orgs/${f.org_id}`).then(({ data }) => setEvents(data.planner?.events || [])).catch(err);
+  }, [isCR, f.org_id]);
   const save = async () => {
     setBusy(true);
-    try { await api.post(`/platform/marketplace/services/${f.service_id}/grant`, { org_id: f.org_id, note: f.note }); toast.success("Servizio attivato gratuitamente"); onDone(); }
+    try {
+      const { data } = await api.post(`/platform/marketplace/services/${f.service_id}/grant`, { org_id: f.org_id, note: f.note, event_id: isCR ? f.event_id : null });
+      toast.success(isCR ? `Control Room concessa gratuitamente su ${data.created} ${data.created === 1 ? "evento" : "eventi"}` : "Servizio attivato gratuitamente"); onDone();
+    }
     catch (e) { err(e); setBusy(false); }
   };
   return (
@@ -248,9 +258,10 @@ function GrantDialog({ onClose, onDone }) {
         <DialogTitle>Attivazione gratuita</DialogTitle>
         <label className="text-xs">Organizzazione<Sel value={f.org_id} onChange={(v) => setF({ ...f, org_id: v })} opts={{ "": "Seleziona…", ...Object.fromEntries(orgs.map((o) => [o.id, o.nome])) }} testid="mkt-admin-grant-org" /></label>
         <label className="text-xs">Servizio<Sel value={f.service_id} onChange={(v) => setF({ ...f, service_id: v })} opts={{ "": "Seleziona…", ...Object.fromEntries(svcs.map((s) => [s.id, s.name])) }} testid="mkt-admin-grant-service" /></label>
+        {isCR && <label className="text-xs">Evento<Sel value={f.event_id} onChange={(v) => setF({ ...f, event_id: v })} opts={{ "": f.org_id ? (events.length ? "Seleziona…" : "Nessun evento nell'organizzazione") : "Seleziona prima l'organizzazione", ...(events.length ? { all: "Tutti gli eventi attuali" } : {}), ...Object.fromEntries(events.map((e) => [e.id, e.nome])) }} testid="mkt-admin-grant-event" /></label>}
         <label className="text-xs">Nota (opzionale)<Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} data-testid="mkt-admin-grant-note" /></label>
         <p className="text-xs text-slate-500">Nessun addebito Stripe. Il servizio resta attivo finché non lo sospendi.</p>
-        <Button disabled={busy || !f.org_id || !f.service_id} onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-grant-save">Attiva gratuitamente</Button>
+        <Button disabled={busy || !f.org_id || !f.service_id || (isCR && !f.event_id)} onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-grant-save">Attiva gratuitamente</Button>
       </DialogContent>
     </Dialog>
   );

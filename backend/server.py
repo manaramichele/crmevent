@@ -48,6 +48,8 @@ import planner
 import addons
 import eventmap
 import planner_demo
+import event_duplicate
+import homepage
 import promo_materials
 import promo_reels
 import ai_traffic
@@ -6637,6 +6639,9 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
 AUDIT_ACTION_LABELS = {
+    "event_duplicated": "Evento duplicato",
+    "homepage_settings": "Impostazioni homepage",
+    "homepage_logo": "Logo evento in homepage",
     "module_enabled": "Modulo riattivato",
     "module_disabled": "Modulo disattivato",
     "controlroom_granted": "Control Room concessa gratuitamente",
@@ -13996,8 +14001,9 @@ CONTROL_ROOM = controlroom.build(db, {"require_admin": require_admin, "require_s
                                      "resolve_attachment": lambda u, o: _route_file_rec(u, o), "read_file_rec": _read_file_rec})
 app.include_router(CONTROL_ROOM["router"])
 app.add_event_handler("startup", CONTROL_ROOM["ensure"])
-app.include_router(modules_hub.build(db, {"require_member": require_org_member, "require_superadmin": require_superadmin,
-                                         "record_audit": record_audit, "addon_summary": ADDONS["summary"]})["router"])
+MODULES_HUB = modules_hub.build(db, {"require_member": require_org_member, "require_superadmin": require_superadmin,
+                                    "record_audit": record_audit, "addon_summary": ADDONS["summary"]})
+app.include_router(MODULES_HUB["router"])
 async def _route_file_rec(url: str, org_id: str) -> Optional[dict]:
     """Record completo del file CRMEvent (id, storage_path, original_filename...) per Percorsi Eventi; None se esterno/non dell'org."""
     if not url:
@@ -14031,6 +14037,8 @@ app.include_router(PLANNER["router"])
 app.add_event_handler("startup", PLANNER["ensure"])
 PLANNER_DEMO = planner_demo.build(db, {"require_superadmin": require_superadmin, "client_ip": _client_ip, "record_audit": record_audit})
 app.include_router(PLANNER_DEMO["router"])
+app.include_router(event_duplicate.build(db, {"require_admin": require_admin, "check_limit": lambda o, k: SAAS["check_limit"](o, k), "ev_ids": _ev_ids, "record_audit": record_audit})["router"])
+app.include_router(homepage.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "read_file_rec": _read_file_rec})["router"])
 app.add_event_handler("startup", PLANNER_DEMO["ensure"])
 app.include_router(referenti_integrazione.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit})["router"])
 CAL_ITALIA = calendario_italia.build(db, {"require_superadmin": require_superadmin, "record_audit": record_audit, "app_url": APP_URL})
@@ -14092,7 +14100,7 @@ app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
     "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing, "record_invoice": _record_invoice,
-    "emit_invoice": _emit_saas_invoice, "stripe_mode": STRIPE_MODE}))
+    "emit_invoice": _emit_saas_invoice, "stripe_mode": STRIPE_MODE, "controlroom_grant": lambda *a: MODULES_HUB["grant_cr"](*a)}))
 app.include_router(MKT["router"])
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {

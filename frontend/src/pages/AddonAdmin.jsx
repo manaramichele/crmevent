@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
-import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { SOURCE_LABEL, eur } from "@/components/addons/addonInfo";
 
 const PLANS = ["bronze", "silver", "gold"];
 const STATUS_IT = { active: "Attivo", revoked: "Revocato", expired: "Scaduto", pending: "In attesa di pagamento" };
-const MODE_IT = { trial: "In prova", expired: "Scaduto", canceled: "Disdetto", suspended: "Sospeso" };
 const num = (v) => (v === "" || v == null ? null : Number(v));
 
 function IncludedRow({ label, value, onChange, prefix }) {
@@ -40,7 +37,7 @@ function PackageRow({ p, onChange, onDel, i }) {
   );
 }
 
-function ConfigCard({ onSaved }) {
+export function ConfigCard({ onSaved }) {
   const [c, setC] = useState(null);
   useEffect(() => { api.get("/platform/addons/config").then(({ data }) => setC(data)); }, []);
   if (!c) return null;
@@ -123,51 +120,3 @@ export function ProductPanel({ org, product, d, packages, reload }) {
   );
 }
 
-function OrgDialog({ org, onClose, onChanged }) {
-  const [d, setD] = useState(null);
-  const [pk, setPk] = useState([]);
-  const load = () => api.get(`/platform/addons/orgs/${org.id}`).then(({ data }) => setD(data));
-  useEffect(() => { load(); api.get("/platform/addons/config").then(({ data }) => setPk(data.eventmap.packages || [])); }, [org.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const reload = () => { load(); onChanged(); };
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto" data-testid="sa-addon-org-dialog">
-        <DialogTitle>{org.nome} · {org.plan_label || org.mode || "—"}</DialogTitle>
-        {!d ? <p className="text-sm text-slate-400">Caricamento...</p> : <div className="grid md:grid-cols-2 gap-6">
-          <ProductPanel org={org} product="planner" d={d.planner} packages={pk} reload={reload} />
-          <ProductPanel org={org} product="eventmap" d={d.eventmap} packages={pk} reload={reload} />
-        </div>}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export default function AddonAdmin() {
-  const [rows, setRows] = useState(null);
-  const [open, setOpen] = useState(null);
-  const [q, setQ] = useState("");
-  const load = () => api.get("/platform/addons/orgs").then(({ data }) => setRows(data));
-  useEffect(() => { load(); }, []);
-  const list = (rows || []).filter((r) => !q || (r.nome || "").toLowerCase().includes(q.toLowerCase()));
-  return (
-    <div className="animate-fade-up space-y-6" data-testid="addon-admin-page">
-      <PageHeader title="Moduli e Attivazioni · Event Planner & Event Map" subtitle="Configurazione globale: eventi inclusi nei piani, prezzi, offerte video, omaggi e promozioni. La gestione per singola organizzazione è in Organizzazioni → Moduli e Attivazioni." />
-      <ConfigCard onSaved={load} />
-      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca organizzazione" className="max-w-sm" data-testid="addon-admin-search" />
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm" data-testid="addon-admin-table">
-          <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr><th className="px-3 py-2">Organizzazione</th><th className="px-3 py-2">Piano</th><th className="px-3 py-2">Event Planner (incl./usati · acquist. · omaggi)</th><th className="px-3 py-2">Event Map (incl./usati · acquist. · omaggi)</th><th className="px-3 py-2">Video (generati/totali)</th><th className="px-3 py-2">Promo</th><th /></tr></thead>
-          <tbody>{list.map((r) => (
-            <tr key={r.id} className="border-t border-slate-100" data-testid={`addon-admin-row-${r.id}`}>
-              <td className="px-3 py-2 font-medium">{r.nome}</td><td className="px-3 py-2">{r.unrestricted ? "Interna" : r.plan_label || MODE_IT[r.mode] || r.mode}</td>
-              <td className="px-3 py-2">{r.planner.included_used}/{r.planner.included} · {r.planner.purchased} · {r.planner.granted}</td>
-              <td className="px-3 py-2">{r.eventmap.included_used}/{r.eventmap.included} · {r.eventmap.purchased} · {r.eventmap.granted}</td>
-              <td className="px-3 py-2">{r.eventmap.videos_used}/{r.eventmap.videos_total}</td><td className="px-3 py-2">{r.promos}</td>
-              <td className="px-3 py-2"><Button size="sm" variant="outline" onClick={() => setOpen(r)} data-testid={`addon-admin-manage-${r.id}`}>Gestisci</Button></td>
-            </tr>))}</tbody>
-        </table>
-      </div>
-      {open && <OrgDialog org={open} onClose={() => setOpen(null)} onChanged={load} />}
-    </div>
-  );
-}
