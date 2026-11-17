@@ -1,0 +1,42 @@
+{
+  "summary": "Tested Staff/Volontari unification end-to-end in TEST org. Backend 8/8 pytest pass: CF lookup (Roma H501, Z404 Stati Uniti estero, invalid, omocodia L->0, historical Abano vs Abano Terme), auth 401 on anagrafica endpoints, places status enabled:false + 503 for autocomplete/detail, public availability submit (no auth) creates person with luogo_nascita from CF + ONE da_classificare staff link + provenienza link_disponibilita + preferenze/days; resubmits don't duplicate person/link; PUT /staff categoria staff -> is_da_classificare false, provenienza unchanged; resubmit after classification does not recreate da_classificare. Frontend: Da classificare tab badge count, orange badge for Mario Rossi, PersonMask (no LinkedIn/Foto, luogo_nascita, read-only computed Età updating on DOB change, CF hint + autofill + confirm-before-overwrite, invalid CF hint, Google fallback message, manual address editable, provenienza read-only, prefs with days, Da classificare option), classify -> Staff moves row to Staff tab; Aggiungi Staff / Aggiungi Volontario create persons via same mask with correct default category; Events 'Disponibilità' dialog shows only public link, no tabs, avail-go-staff navigates; mobile 390px list + mask usable (no horizontal overflow, sticky Save). One real bug: overwrite confirm fires twice.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "When a person resubmits with a different preference, availability.preferenza_attivita is updated (preferenze shows 'Tecnico') but the existing staff link keeps old preferenza ('Hostess') because ensure_link returns early if link exists. Staff list Preferenza column then shows stale value."},
+      {"endpoint": "GET /api/anagrafica/cf-lookup", "issue": "Only structural regex validation; check character (16th) is not validated (e.g. RSSMRA80A01Z404U accepted as valid). Public submit does validate via _cf_valid, so the mask can accept a CF that the public form would reject."},
+      {"endpoint": "DELETE /api/persons/{id}", "issue": "No cascade: staff links and availabilities for the deleted person remain orphaned (pre-existing generic CRUD behaviour)."},
+      {"endpoint": "anagrafica.ensure_link", "issue": "Idempotency is check-then-insert with no unique index on (org_id, persona_id, evento_id); concurrent submissions could create duplicates."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PersonMask lookupCf", "issue": "window.confirm('Il luogo di nascita attuale è ... Vuoi sostituirlo?') is shown TWICE per CF entry. Root cause: confirm() is called inside the setData updater function; React.StrictMode (index.js) double-invokes updaters. Fix: read current data.luogo_nascita outside the updater (e.g. use a ref/current data), decide with confirm once, then setData with plain object.", "selector": "[data-testid='mask-field-codice_fiscale']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Staff/Volontari mobile 390px", "issues": ["Tabs wrap: 'Turni' drops to a second line inside the tab bar", "Ruolo select option text 'Da classificare — scegli Staff o Volontario' truncated in mask on mobile"]},
+      {"screen": "PersonMask", "issues": ["Data di nascita uses native browser date input instead of shadcn calendar/date picker"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_anagrafica_staff_unify.py", "/app/test_reports/pytest/anagrafica_unify.xml"],
+  "action_items": [
+    "Fix double confirm in PersonMask.lookupCf (move window.confirm out of setData updater)",
+    "In ensure_link (or pub_avail_submit) update existing link's preferenza when it is still da_classificare / when submitted preference changes",
+    "Optionally validate CF check char in /anagrafica/cf-lookup (reuse _cf_valid)",
+    "Mobile: prevent tab wrap on Staff/Volontari (horizontal scroll) and shorten Da classificare option label"
+  ],
+  "critical_code_review_comments": [
+    "PersonMask: side effect (window.confirm) inside state updater - anti-pattern, causes duplicate prompts",
+    "Persons.jsx daClassificare count also includes persons with no staff/volunteer/referente links (rows.filter(r => r.is_da_classificare || !(...))) - confirm this is intended",
+    "server.py is 14k lines - continue extracting modules (anagrafica.py extraction is good)",
+    "ensure_link has no unique index guard for race conditions"
+  ],
+  "updated_files": ["/app/backend/tests/test_anagrafica_staff_unify.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "test_credentials": "Org admin test_anag_1794951730@example.com / TestPass123! (from review request; not in /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created TEST_Giulia TEST_Verdi via public link (pytest; deleted with its staff link/availability by id) and TEST_StaffUI / TEST_VolUI via UI (deleted). Mario Rossi link was classified to staff during UI test and reverted to da_classificare via PUT /api/staff/9d52c0a6-2047-4892-915a-51483fb114b0.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Promo 'Scopri CRMEvent con una demo' modal + cookie banner appear on load: click 'Non ora' and 'Accept all'. Events page action buttons have duplicate testids (desktop+mobile) - use ':visible'. Public availability submit rate limit 6/min per IP. Event d28cd58693b948a09e663491d47de837, link code ki6OX1_tjPGC8s4ryVgx_xSCP2xe2uXA. Seed person Mario Rossi 268ab145c42a4a61bdea01e5035c4d52 must remain da_classificare."
+}

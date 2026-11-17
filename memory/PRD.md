@@ -1139,3 +1139,14 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 ## In coda
 - Duplica evento (richiesta utente, da avviare).
+
+## Staff/Volontari: anagrafica unica, Da classificare, luogo di nascita, età, indirizzo Google (2026-11-17)
+- Rimossa la scheda "Disponibilità ricevute" (AvailabilityDialog ora solo link pubblico + rimando a Staff/Volontari → Da classificare). Dati availabilities conservati.
+- backend/anagrafica.py: ensure_link → link staff categoria "da_classificare" (origine link_disponibilita, preferenza, availability_id) per persona+evento, idempotente; migrazione una tantum all'avvio (schema_meta avail_to_staff_v1, 5 link creati in preview).
+- Luogo di nascita: archivio codici catastali (backend/data/catastali.json da python-codicefiscale: comuni storici/soppressi + stati esteri), GET /api/anagrafica/cf-lookup (scelta storica in base alla data di nascita); compilato anche dal modulo pubblico.
+- Età calcolata (calcAge) in maschera e dettaglio, mai salvata.
+- Indirizzo: rimandata l'integrazione Google Maps per scelta dell'utente; campo di ricerca rimosso dalla maschera, indirizzo/CAP/località/provincia/regione/nazione solo manuali. Endpoint backend /api/anagrafica/places/* restano inattivi senza GOOGLE_MAPS_API_KEY. MapTiler (Event Planner/Event Map) invariato.
+- PersonMask: niente LinkedIn/Foto (dati storici intatti), opzione Ruolo "Da classificare", disponibilità giorni/orari per evento; tab Da classificare con contatore.
+- Test: iteration_179 (backend 8/8, frontend ok; corretto doppio confirm, CF check-char, aggiornamento preferenza su link da classificare).
+- Nota: le email di conferma Brevo erano attivate dalla vecchia scheda; ora non c'è più un pulsante di conferma dedicato.
+

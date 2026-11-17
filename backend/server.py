@@ -14021,7 +14021,7 @@ app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
 app.include_router(AVP["router"])
-ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label})
+ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label, "cf_valid": _cf_valid})
 app.include_router(ANA["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,

@@ -71,10 +71,11 @@ def build(db, deps: dict):
     r = APIRouter(prefix="/api")
     require_admin = deps["require_admin"]
     pref_label = deps["pref_label"]
+    cf_valid = deps["cf_valid"]
 
     @r.get("/anagrafica/cf-lookup")
     async def cf_lookup(cf: str, data_nascita: Optional[str] = None, _: dict = Depends(require_admin)):
-        code = catastale_of(cf)
+        code = catastale_of(cf) if cf_valid(cf) else None
         if not code:
             return {"valid": False, "detail": "Codice fiscale non valido"}
         hit = lookup(code, (data_nascita or "")[:10] or None)
@@ -124,7 +125,10 @@ def build(db, deps: dict):
 
     async def ensure_link(org_id: str, person_id: str, evento_id: str, av: dict) -> None:
         """Inserisce la persona nell'elenco Staff/Volontari dell'evento come Da classificare (idempotente)."""
-        if await db.staff.find_one({"org_id": org_id, "persona_id": person_id, "evento_id": evento_id}, {"_id": 1}):
+        cur = await db.staff.find_one({"org_id": org_id, "persona_id": person_id, "evento_id": evento_id}, {"_id": 0, "id": 1, "categoria": 1})
+        if cur:
+            if cur.get("categoria") == "da_classificare":
+                await db.staff.update_one({"org_id": org_id, "id": cur["id"]}, {"$set": {"preferenza": pref_label(av) or "", "updated_at": _now()}})
             return
         cat = av.get("ruolo_evento") if av.get("ruolo_evento") in ("staff", "volontario") else "da_classificare"
         await db.staff.insert_one({"id": str(uuid.uuid4()), "org_id": org_id, "persona_id": person_id, "evento_id": evento_id,

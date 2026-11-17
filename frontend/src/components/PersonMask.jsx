@@ -56,7 +56,7 @@ function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
         <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500" onClick={onRemove} title="Rimuovi associazione" data-testid={`mask-assign-remove-${i}`}><Trash2 className="h-4 w-4" /></Button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <label className="text-xs text-slate-500">Ruolo<select className={`${sel} ${r.categoria === "da_classificare" ? "border-amber-300 bg-amber-50" : ""}`} value={r.categoria} onChange={(e) => set("categoria", e.target.value)} data-testid={`mask-assign-cat-${i}`}>{r.categoria === "da_classificare" && <option value="da_classificare">Da classificare — scegli Staff o Volontario</option>}{CATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        <label className="text-xs text-slate-500">Ruolo<select className={`${sel} ${r.categoria === "da_classificare" ? "border-amber-300 bg-amber-50" : ""}`} value={r.categoria} onChange={(e) => set("categoria", e.target.value)} data-testid={`mask-assign-cat-${i}`}>{r.categoria === "da_classificare" && <option value="da_classificare">Da classificare</option>}{CATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
         <label className="text-xs text-slate-500">Preferenza
           <select className={sel} value={r.preferenza || ""} onChange={(e) => set("preferenza", e.target.value)} data-testid={`mask-assign-pref-${i}`}><option value="">{availPref ? `Dal link: ${availPref}` : "— Nessuna —"}</option>{prefOpts.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
         <div className="text-xs text-slate-500">Team<TeamSelect value={r.team_id || ""} eventoId={r.evento_id} onChange={(v) => set("team_id", v)} testid={`mask-assign-team-${i}`} /></div>
@@ -95,10 +95,9 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
       if (!r.found) return setCfHint({ bad: true, text: `Codice catastale ${r.codice} non riconosciuto: inserisci il luogo di nascita manualmente.` });
       const extra = r.estero ? " · Stato estero" : r.soppresso ? " · Comune soppresso" : r.nome_attuale ? ` · oggi ${r.nome_attuale}` : "";
       setCfHint({ text: `Codice catastale ${r.codice} → ${r.luogo}${extra}` });
-      setData((d) => {
-        if (d.luogo_nascita && d.luogo_nascita !== r.luogo && !window.confirm(`Il luogo di nascita attuale è "${d.luogo_nascita}". Dal codice fiscale risulta "${r.luogo}". Vuoi sostituirlo?`)) return d;
-        return { ...d, luogo_nascita: r.luogo };
-      });
+      const cur = data.luogo_nascita;
+      if (cur && cur !== r.luogo && !window.confirm(`Il luogo di nascita attuale è "${cur}". Dal codice fiscale risulta "${r.luogo}". Vuoi sostituirlo?`)) return;
+      setData((d) => ({ ...d, luogo_nascita: r.luogo }));
     } catch (e) { setCfHint({ bad: true, text: formatApiError(e.response?.data?.detail) }); }
   };
   const fillAddress = (a) => setData((d) => ({ ...d, ...Object.fromEntries(ADDR.filter((k) => a[k]).map((k) => [k, a[k]])) }));

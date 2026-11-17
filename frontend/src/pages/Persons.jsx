@@ -336,7 +336,6 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "telefono", label: "Telefono", type: "tel" }, { name: "ruolo", label: "Qualifica" },
     { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "eta", label: "Età", type: "age", virtual: true },
     { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" },
-    { name: "cerca_indirizzo", type: "address_search", virtual: true },
     { name: "indirizzo", label: "Indirizzo e numero civico", full: true }, { name: "cap", label: "CAP" }, { name: "citta", label: "Località / Comune" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "note", label: "Note", type: "textarea", full: true },
