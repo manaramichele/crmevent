@@ -13,7 +13,14 @@ export const ADDONS = {
     video: { mp4: "/media/event-map-demo.mp4", webm: "/media/event-map-demo.webm", poster: "/media/event-map-demo-poster.jpg", vertical: true },
     benefits: ["Dalla traccia GPX a un video animato del percorso", "Logo e nome della manifestazione in evidenza", "Distanza, partenza e arrivo mostrati automaticamente", "Formato pronto per Instagram, Facebook, TikTok e YouTube"],
   },
+  "control-room": {
+    product: "controlroom", name: "Control Room", slug: "control-room",
+    tagline: "Il tuo evento sotto controllo, in tempo reale.",
+    description: "Coordina il personale sul territorio, monitora le attività e gestisci le operazioni del tuo evento da un'unica centrale di controllo.",
+    video: { mp4: "/media/control-room-demo.mp4", webm: null, poster: "/media/control-room-demo-poster.jpg", vertical: false },
+    benefits: ["Mappa operativa dell'evento con percorso, settori e chilometri", "Posizioni GPS dei dispositivi collegati · disponibile prossimamente", "Gestione di staff, volontari, squadre e mezzi", "Postazioni e aree operative sulla mappa", "Coordinamento delle attività durante l'evento, con comunicazioni interne", "Segnalazioni e interventi con priorità, stati, diario operativo e report finale"],
+  },
 };
-export const BY_PRODUCT = { planner: ADDONS["event-planner"], eventmap: ADDONS["event-map"] };
+export const BY_PRODUCT = { planner: ADDONS["event-planner"], eventmap: ADDONS["event-map"], controlroom: ADDONS["control-room"] };
 export const SOURCE_LABEL = { included: "Incluso nel piano", purchase: "Acquistato", superadmin: "Omaggio CRMEvent", promo: "Promozione", unrestricted: "Incluso" };
 export const eur = (n) => Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
