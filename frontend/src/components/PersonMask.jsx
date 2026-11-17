@@ -11,6 +11,8 @@ import { ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import TeamSelect from "@/components/TeamSelect";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import { calcAge } from "@/components/crm";
+import SettingSelect from "@/components/SettingSelect";
+import { ADD_OPTION, promptAdd } from "@/lib/optionLists";
 
 export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", non_determinata: "Non determinata" };
 const CATS = [["staff", "Staff"], ["volontario", "Volontario"]];
@@ -60,7 +62,7 @@ function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
         <label className="text-xs text-slate-500">Preferenza
           <select className={sel} value={r.preferenza || ""} onChange={(e) => set("preferenza", e.target.value)} data-testid={`mask-assign-pref-${i}`}><option value="">{availPref ? `Dal link: ${availPref}` : "— Nessuna —"}</option>{prefOpts.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
         <div className="text-xs text-slate-500">Team<TeamSelect value={r.team_id || ""} eventoId={r.evento_id} onChange={(v) => set("team_id", v)} testid={`mask-assign-team-${i}`} /></div>
-        <label className="text-xs text-slate-500">Mansione<select className={sel} value={r.ruolo || ""} onChange={(e) => set("ruolo", e.target.value)} data-testid={`mask-assign-mansione-${i}`}><option value="">— Nessuna —</option>{[...new Set([...ruoli, ...(r.ruolo ? [r.ruolo] : [])])].map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
+        <label className="text-xs text-slate-500">Mansione<select className={sel} value={r.ruolo || ""} onChange={async (e) => { if (e.target.value === ADD_OPTION) { const v = await promptAdd("ruoli_staff"); if (v) set("ruolo", v); } else set("ruolo", e.target.value); }} data-testid={`mask-assign-mansione-${i}`}><option value="">— Nessuna —</option>{[...new Set([...ruoli, ...(r.ruolo ? [r.ruolo] : [])])].map((x) => <option key={x} value={x}>{x}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select></label>
       </div>
     </div>
   );
@@ -106,6 +108,7 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
     const on = (v) => setData({ ...data, [f.name]: v });
     if (f.type === "textarea") return <Textarea value={val} onChange={(e) => on(e.target.value)} className="mt-1 text-sm text-slate-900" data-testid={`mask-field-${f.name}`} />;
     if (f.type === "select") return <select className={`${sel} mt-1`} value={val} onChange={(e) => on(e.target.value)} data-testid={`mask-field-${f.name}`}><option value="">—</option>{(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
+    if (f.type === "setting") return <div className="mt-1"><SettingSelect settingKey={f.settingKey} value={val} onChange={on} options={f.options || []} keepOrder placeholder="—" specials={val ? [{ value: "__none__", label: "— Nessuna —" }] : []} testid={`mask-field-${f.name}`} /></div>;
     if (f.type === "age") { const a = calcAge(data.data_nascita); return <div className="mt-1 h-10 flex items-center rounded-md border border-slate-100 bg-slate-50 px-3 text-sm text-slate-800" title="Calcolata automaticamente dalla data di nascita" data-testid="mask-field-eta">{a != null ? `${a} anni` : "—"}</div>; }
     if (f.name === "codice_fiscale") return (<>
       <Input value={val} maxLength={16} onChange={(e) => { const v = e.target.value.toUpperCase(); on(v); if (v.replace(/[^A-Z0-9]/g, "").length === 16) lookupCf(v, data.data_nascita); else setCfHint(null); }} className="mt-1 text-sm text-slate-900 font-mono uppercase" data-testid="mask-field-codice_fiscale" />

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader, StatusBadge, useCollection, useSettings, formatDateRange } from "@/components/crm";
 import SettingSelect from "@/components/SettingSelect";
+import { promptAdd } from "@/lib/optionLists";
 import StructureSelect from "@/components/StructureSelect";
 import MapsLink from "@/components/MapsLink";
 import { useAuth } from "@/context/AuthContext";
@@ -63,15 +64,19 @@ function SelectField({ label, value, onChange, options, placeholder, testid, ful
 
 function EsigenzeEditor({ value, onChange, testid }) {
   const set = new Set(value || []);
+  const settings = useSettings();
+  const list = [...new Set([...((settings && settings.esigenze_alimentari) || ESIGENZE), ...(value || [])])];
   const toggle = (e) => { const n = new Set(set); n.has(e) ? n.delete(e) : n.add(e); onChange(Array.from(n)); };
+  const add = async () => { const v = await promptAdd("esigenze_alimentari"); if (v && !set.has(v)) onChange([...set, v]); };
   return (
     <div className="flex flex-wrap gap-1.5" data-testid={testid}>
-      {ESIGENZE.map((e) => (
+      {list.map((e) => (
         <button key={e} type="button" onClick={() => toggle(e)} data-testid={`esig-${e.toLowerCase().replace(/[^a-z]/g, "-")}`}
           className={`px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset transition-colors ${set.has(e) ? "bg-tiffany-light text-tiffany-fg ring-tiffany-border" : "bg-white text-slate-500 ring-slate-200 hover:bg-slate-50"}`}>
           {e}
         </button>
       ))}
+      <button type="button" onClick={add} className="px-2.5 py-1 rounded-full text-xs font-semibold text-tiffany-active ring-1 ring-inset ring-dashed ring-tiffany-border hover:bg-tiffany-light" data-testid={`${testid}-add`}>+ Aggiungi</button>
     </div>
   );
 }
@@ -609,6 +614,8 @@ export default function Hospitality() {
   const canCosts = user?.role === "admin";
   const { items: events } = useCollection("/events");
   const { items: teams } = useCollection("/teams");
+  const hSettings = useSettings();
+  const esigList = (hSettings && hSettings.esigenze_alimentari) || ESIGENZE;
   const [eventId, setEventId] = useState("");
   const [sp] = useSearchParams();
   const [data, setData] = useState(null);
@@ -707,7 +714,7 @@ export default function Hospitality() {
                 <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input className="pl-9" placeholder="Cerca persona..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="hosp-search" /></div>
                 <Select value={fRuolo || "all"} onValueChange={(v) => setFRuolo(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-ruolo"><SelectValue placeholder="Ruolo" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti i ruoli</SelectItem>{Object.entries(CAT_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
                 <Select value={fStato || "all"} onValueChange={(v) => setFStato(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-stato"><SelectValue placeholder="Stato" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti gli stati</SelectItem>{Object.entries(STATO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
-                <Select value={fEsig || "all"} onValueChange={(v) => setFEsig(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-esig"><SelectValue placeholder="Esigenze" /></SelectTrigger><SelectContent><SelectItem value="all">Tutte le esigenze</SelectItem>{ESIGENZE.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent></Select>
+                <Select value={fEsig || "all"} onValueChange={(v) => setFEsig(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-esig"><SelectValue placeholder="Esigenze" /></SelectTrigger><SelectContent><SelectItem value="all">Tutte le esigenze</SelectItem>{esigList.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent></Select>
               </div>
               <div className="md:hidden space-y-2" data-testid="hosp-mobile-list">
                 {filteredPersons.length === 0 ? <p className="py-8 text-center text-slate-400 text-sm">Nessuna persona.</p> :

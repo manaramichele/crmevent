@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ADD_OPTION, promptAdd } from "@/lib/optionLists";
 
 const NUM = new Set(["number"]);
 
@@ -11,9 +12,11 @@ function Field({ f, v, set, all }) {
   const common = { id, "data-testid": id, disabled: f.disabled?.(all), className: "h-10" };
   if (f.type === "select") {
     return (
-      <select {...common} value={v ?? ""} onChange={(e) => set(e.target.value || null)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+      <select {...common} value={v ?? ""} onChange={async (e) => { if (f.addKey && e.target.value === ADD_OPTION) { const nv = await promptAdd(f.addKey); if (nv) set(nv); } else set(e.target.value || null); }} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
         {!f.required && <option value="">—</option>}
         {(typeof f.options === "function" ? f.options(all) : f.options).map(([val, l]) => <option key={val} value={val}>{l}</option>)}
+        {f.addKey && v && !(typeof f.options === "function" ? f.options(all) : f.options).some(([val]) => val === v) && <option value={v}>{v}</option>}
+        {f.addKey && <option value={ADD_OPTION}>+ Aggiungi</option>}
       </select>
     );
   }

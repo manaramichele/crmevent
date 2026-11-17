@@ -45,6 +45,7 @@ import iscritti
 import calendario_italia
 import avail_prefs
 import anagrafica
+import option_lists
 import planner
 import addons
 import eventmap
@@ -1143,6 +1144,7 @@ class Person(BaseModel):
     data_nascita: Optional[str] = None
     codice_fiscale: Optional[str] = None
     luogo_nascita: Optional[str] = None
+    taglia: Optional[str] = None
     indirizzo: Optional[str] = None
     cap: Optional[str] = None
     citta: Optional[str] = None
@@ -1472,6 +1474,14 @@ def _opt(model):
     return M
 
 
+async def _person_has_history(org_id: str, pid: str) -> bool:
+    for coll, field in (("staff", "persona_id"), ("availabilities", "persona_id"), ("shifts", "persona_id"), ("person_companies", "person_id"),
+                        ("deals", "referente_id"), ("activities", "persona_id"), ("followups", "persona_id"), ("memberships", "persona_id")):
+        if await db[coll].find_one({"org_id": org_id, field: pid}, {"_id": 1}):
+            return True
+    return False
+
+
 def crud_routes(path, coll, model, org_scoped=True):
     upd_model = _opt(model)
 
@@ -1508,6 +1518,7 @@ def crud_routes(path, coll, model, org_scoped=True):
             strict = (user.get("perm") or {}).get("via_tl")
             q["id" if coll == "teams" else "team_id"] = {"$in": _team_ids(user) + ([None, ""] if coll == "staff" and not strict else [])}
         if coll == "persons":
+            q["archiviato"] = {"$ne": True}
             scope = await _person_scope(user)
             if scope is not None:
                 q["id"] = {"$in": list(scope)}
@@ -1605,6 +1616,9 @@ def crud_routes(path, coll, model, org_scoped=True):
     @api.delete(f"/{path}/{{item_id}}", name=f"delete_{path}")
     async def _d(item_id: str, user: dict = Depends(require_admin)):
         await _assert_org_operational(user["org_id"])
+        if coll == "persons" and await _person_has_history(user["org_id"], item_id):
+            await db.persons.update_one(oq(user, id=item_id), {"$set": {"archiviato": True, "archiviato_at": now_iso(), "archiviato_by": user.get("email")}})
+            return {"ok": True, "archived": True}
         await db[coll].delete_one(oq(user, id=item_id))
         if coll == "teams":
             # Cascade: nessun riferimento orfano al Team eliminato (scoped all'org).
@@ -1959,7 +1973,7 @@ async def _company_contacts(company_id: str, org_id: str):
 
 @api.get("/persons-enriched")
 async def persons_enriched(admin: dict = Depends(require_admin)):
-    persons = await _list("persons", oq(admin))
+    persons = await _list("persons", oq(admin, archiviato={"$ne": True}))
     scope = await _person_scope(admin)
     if scope is not None:
         persons = [p for p in persons if p["id"] in scope]
@@ -2812,23 +2826,28 @@ def default_settings(org_id="global"):
             "aree_operative": ["Expo", "Palco", "Ingresso", "Ristoro", "Logistica", "Parcheggi", "Percorso"],
             "livelli_sponsorship": ["Main Sponsor", "Gold", "Silver", "Bronze", "Technical Partner"],
             "fasi_pipeline": ["prospect", "contattato", "proposta_inviata", "in_trattativa", "confermato", "perso"],
+            **{k: list(v) for k, v in option_lists.DEFAULTS.items()}, "disattivati": {},
             "demo_disabled": False}
 
 
-@api.get("/settings")
-async def get_settings(admin: dict = Depends(require_admin)):
+async def _org_settings(admin: dict) -> dict:
     sid = admin["org_id"]
     doc = await db.settings.find_one({"id": sid}, {"_id": 0})
+    platform = await db.settings.find_one({"id": option_lists.PLATFORM_DEFAULTS_ID}, {"_id": 0})
+    defaults = option_lists.merge_defaults(default_settings(sid), platform)
     if not doc:
-        doc = default_settings(sid)
-        await db.settings.insert_one(dict(doc))
-        return doc
-    defaults = default_settings(sid)
+        await db.settings.insert_one(dict(defaults))
+        return defaults
     missing = {k: v for k, v in defaults.items() if k not in doc}
     if missing:
         await db.settings.update_one({"id": sid}, {"$set": missing})
         doc.update(missing)
     return doc
+
+
+@api.get("/settings")
+async def get_settings(admin: dict = Depends(require_admin)):
+    return await _org_settings(admin)
 
 
 @api.put("/settings")
@@ -2842,7 +2861,7 @@ async def update_settings(body: dict, admin: dict = Depends(require_admin)):
 USAGE_MAP = {"tipologie_evento": ("events", "tipologia"), "settori": ("companies", "settore"),
              "tipi_azienda": ("companies", "tipo"),
              "ruoli_staff": ("staff", "ruolo"), "aree_operative": ("staff", "area"),
-             "livelli_sponsorship": ("deals", "livello")}
+             "livelli_sponsorship": ("deals", "livello"), "taglie": ("persons", "taglia")}
 
 
 @api.get("/settings/usage")
@@ -11017,7 +11036,9 @@ async def pub_avail_info(code: str):
         return {"active": False, "event": base}
     settings = await db.settings.find_one({"id": link["org_id"]}, {"_id": 0}) or {}
     attivita = settings.get("ruoli_staff") or default_settings()["ruoli_staff"]
-    return {"active": True, "event": base, "days": _avail_days(event),
+    off_t = set((settings.get("disattivati") or {}).get("taglie") or [])
+    taglie = [t for t in (settings.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]
+    return {"active": True, "event": base, "days": _avail_days(event), "taglie_options": taglie,
             "has_allestimento": bool(event.get("data_inizio_allestimento")),
             "has_disallestimento": bool(event.get("data_fine_disallestimento")),
             "attivita_options": attivita}
@@ -11049,6 +11070,7 @@ class PubAvailIn(BaseModel):
     days: List[dict] = []
     preferenza_attivita: Optional[str] = None
     preferenza_altro: Optional[str] = None
+    taglia: Optional[str] = Field(default=None, max_length=20)
     privacy: bool = False
     marketing_consent: bool = False
     lang: Optional[str] = None
@@ -11105,7 +11127,8 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     raw_cell = (body.cellulare or "").strip()
     cell = _norm_phone(raw_cell) or raw_cell
     submitted = {"nome": TN.person_name(body.nome.strip()), "cognome": TN.person_name(body.cognome.strip()), "email": email,
-                 "cellulare": cell, "data_nascita": birth, "codice_fiscale": cf_norm or None}
+                 "cellulare": cell, "data_nascita": birth, "codice_fiscale": cf_norm or None,
+                 "taglia": (body.taglia or "").strip() or None}
     person = await db.persons.find_one({"org_id": org_id, "email": email}, {"_id": 0}) if email else None
     if not person and cell:
         person = await db.persons.find_one({"org_id": org_id, "cellulare": cell}, {"_id": 0})
@@ -11117,7 +11140,9 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         fill = {}
         if cf_norm and not person.get("luogo_nascita") and ANA["birth_place_from_cf"](cf_norm, birth):
             await db.persons.update_one({"id": person["id"], "org_id": org_id}, {"$set": {"luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth)}})
-        for k in ("email", "cellulare", "data_nascita", "cognome", "codice_fiscale"):
+        if person.get("archiviato"):
+            fill["archiviato"] = False
+        for k in ("email", "cellulare", "data_nascita", "cognome", "codice_fiscale", "taglia"):
             cur, new = person.get(k), submitted.get(k)
             if new and not cur:
                 fill[k] = new
@@ -11131,6 +11156,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                                          "email": email or None, "cellulare": cell or None,
                                          "data_nascita": submitted["data_nascita"], "codice_fiscale": cf_norm or None,
                                          "luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth) if cf_norm else None,
+                                         "taglia": submitted["taglia"],
                                          "tag": ["disponibilita"],
                                          "provenienza": {"tipo": "link_disponibilita", "at": now_iso(), "evento_id": link["evento_id"], "link_code": code},
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
@@ -14023,6 +14049,8 @@ AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin
 app.include_router(AVP["router"])
 ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label, "cf_valid": _cf_valid})
 app.include_router(ANA["router"])
+OPT = option_lists.build(db, {"require_admin": require_admin, "get_settings": _org_settings, "allows": P.allows})
+app.include_router(OPT["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})

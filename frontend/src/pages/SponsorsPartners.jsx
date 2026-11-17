@@ -42,7 +42,7 @@ export default function SponsorsPartners() {
     { name: "fase", label: "Fase pipeline", keepOrder: true, type: "select", options: FASI.map((v) => ({ value: v, label: FASE_LABEL[v] })) },
     { name: "valore", label: "Valore (€)", type: "number" },
     { name: "valore_confermato", label: "Valore confermato (€)", type: "number" },
-    { name: "livello", label: "Livello sponsorship", keepOrder: true, type: "select", options: toOptions(settings?.livelli_sponsorship) },
+    { name: "livello", label: "Livello sponsorship", keepOrder: true, type: "select", settingKey: "livelli_sponsorship", addLabel: "Aggiungi", options: settings?.livelli_sponsorship || [] },
     { name: "referente_id", label: "Referente", type: "select", options: personOptions(persons) },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];

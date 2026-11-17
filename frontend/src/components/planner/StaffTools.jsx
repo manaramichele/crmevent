@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { FileSpreadsheet, FileText, Users, User, MapPin } from "lucide-react";
+import { useSettings } from "@/components/crm";
+import { ADD_OPTION, promptAdd } from "@/lib/optionLists";
 
 export const KIND = { team: ["Team", "#0F766E"], staff: ["Staff", "#2563EB"], volontario: ["Volontario", "#16A34A"], generica: ["Senza assegnazione", "#94A3B8"] };
 const TIPI = ["Ristoro", "Incrocio", "Partenza", "Arrivo", "Deposito borse", "Expo", "Area sponsor", "Sicurezza percorso", "Altro"];
@@ -34,6 +36,7 @@ export function StationDialog({ open, feature, eid, pid, onClose, onSaved }) {
   const [f, setF] = useState({});
   const [sel, setSel] = useState([]);
   const [conf, setConf] = useState(null);
+  const settings = useSettings();
   useEffect(() => {
     if (!open || !feature) return;
     const st = feature.properties.station || {};
@@ -58,6 +61,7 @@ export function StationDialog({ open, feature, eid, pid, onClose, onSaved }) {
     }
   };
   const set = (p) => setF({ ...f, ...p });
+  const tipi = (settings && settings.tipi_postazione) || TIPI;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-h-[92dvh] overflow-y-auto" data-testid="station-dialog">
@@ -65,7 +69,7 @@ export function StationDialog({ open, feature, eid, pid, onClose, onSaved }) {
         <div className="flex flex-wrap gap-1">{Object.entries(KIND).map(([k, [l, c]]) => <button key={k} type="button" onClick={() => { set({ kind: k }); setSel([]); }} className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${f.kind === k ? "text-white" : "text-slate-700"}`} style={f.kind === k ? { background: c, borderColor: c } : {}} data-testid={`station-kind-${k}`}>{k === "generica" ? "Postazione generica" : l}</button>)}</div>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className={lbl}>Nome postazione<Input value={f.nome} onChange={(e) => set({ nome: e.target.value })} className="h-8 text-sm" data-testid="station-nome" /></label>
-          <label className={lbl}>Tipologia<select value={f.tipologia || ""} onChange={(e) => set({ tipologia: e.target.value })} className="h-8 w-full rounded-md border border-slate-200 px-2 text-sm" data-testid="station-tipologia"><option value="">–</option>{TIPI.map((t) => <option key={t}>{t}</option>)}</select></label>
+          <label className={lbl}>Tipologia<select value={f.tipologia || ""} onChange={async (e) => { if (e.target.value === ADD_OPTION) { const v = await promptAdd("tipi_postazione"); if (v) set({ tipologia: v }); } else set({ tipologia: e.target.value }); }} className="h-8 w-full rounded-md border border-slate-200 px-2 text-sm" data-testid="station-tipologia"><option value="">–</option>{[...new Set([...tipi, ...(f.tipologia ? [f.tipologia] : [])])].map((t) => <option key={t}>{t}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select></label>
           <label className={lbl}>Ruolo operativo<Input value={f.ruolo || ""} onChange={(e) => set({ ruolo: e.target.value })} className="h-8 text-sm" data-testid="station-ruolo" /></label>
           <label className={lbl}>Data<Input type="date" value={f.data || ""} onChange={(e) => set({ data: e.target.value })} className="h-8 text-sm" data-testid="station-data" /></label>
           <label className={lbl}>Inizio<Input type="time" value={f.ora_inizio || ""} onChange={(e) => set({ ora_inizio: e.target.value })} className="h-8 text-sm" data-testid="station-inizio" /></label>

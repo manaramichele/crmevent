@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSettings } from "@/components/crm";
 import { createPortal } from "react-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -81,6 +82,7 @@ export default function Ops({ eventId }) {
   const [itvId, setItvId] = useState(null);
   const [newItv, setNewItv] = useState(null);
   const [form, setForm] = useState(null);
+  const settings = useSettings();
   const [placing, setPlacing] = useState(null);
   const [panel, setPanel] = useState(true);
   const [full, setFull] = useState(false);
@@ -112,7 +114,7 @@ export default function Ops({ eventId }) {
     }
     seen.current = new Set([...(seen.current || []), ...ids]);
   }, [critical, d, sound]);
-  const fields = useMemo(() => d && form && { sectors: sectorFields(d), posts: postFields(d), resources: resourceFields(d, shifts) }[form.kind], [d, form, shifts]);
+  const fields = useMemo(() => d && form && { sectors: sectorFields(d), posts: postFields(d), resources: resourceFields(d, shifts, (settings && settings.tipi_risorsa_persona) || undefined) }[form.kind], [d, form, shifts, settings]);
   if (error) return <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" data-testid="cr-ops-error">{error}</div>;
   if (!d) return <div className="text-sm text-slate-400" data-testid="cr-ops-loading">Caricamento Control Room…</div>;
 

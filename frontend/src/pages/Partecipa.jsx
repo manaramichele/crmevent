@@ -42,6 +42,7 @@ const T = {
     phaseSetup: "Allestimento", phaseTeardown: "Disallestimento", phaseEvent: "Evento",
     from: "Dalle", to: "Alle",
     prefLabel: "Che attività preferiresti svolgere?", prefPlaceholder: "Seleziona un'attività",
+    taglia: "Taglia", tagliaPlaceholder: "Seleziona la taglia (facoltativo)",
     errEventDay: "Seleziona almeno un giorno dell'evento.",
     errPref: "Seleziona almeno un'attività che preferiresti svolgere.", errPrefAltro: "Descrivi brevemente l'attività che preferiresti svolgere.",
     prefNone: "Nessuna preferenza", prefOther: "Altro", prefOtherPlaceholder: "Descrivi brevemente",
@@ -79,6 +80,7 @@ const T = {
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
     from: "From", to: "To",
     prefLabel: "What activity would you prefer to do?", prefPlaceholder: "Select an activity",
+    taglia: "Size", tagliaPlaceholder: "Select your size (optional)",
     errEventDay: "Please select at least one event day.",
     errPref: "Please select at least one activity you would prefer to do.", errPrefAltro: "Please briefly describe the activity you would prefer to do.",
     prefNone: "No preference", prefOther: "Other", prefOtherPlaceholder: "Briefly describe",
@@ -181,6 +183,7 @@ export default function Partecipa() {
         days: selDays,
         preferenza_attivita: pref,
         preferenza_altro: pref === ALTRO ? prefAltro : null,
+        taglia: form.taglia || null,
         privacy: true,
         marketing_consent: marketing,
         lang,
@@ -250,6 +253,7 @@ export default function Partecipa() {
           {!noCf
             ? <div className="sm:col-span-2"><F label={t("cf")} req><Input value={form.codice_fiscale} onChange={(e) => ch("codice_fiscale", e.target.value.toUpperCase())} maxLength={16} className="font-mono uppercase" placeholder={t("cfPlaceholder")} data-testid="pf-codice-fiscale" /></F></div>
             : <F label={t("dataNascita")} req><Input type="date" value={form.data_nascita} onChange={(e) => ch("data_nascita", e.target.value)} data-testid="pf-data-nascita" /></F>}
+          {(info.taglie_options || []).length > 0 && <F label={t("taglia")}><select value={form.taglia || ""} onChange={(e) => ch("taglia", e.target.value)} className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm bg-white h-10" data-testid="pf-taglia"><option value="">{t("tagliaPlaceholder")}</option>{info.taglie_options.map((x) => <option key={x} value={x}>{x}</option>)}</select></F>}
         </div>
         <label className="flex items-center gap-2.5 cursor-pointer -mt-1">
           <Checkbox checked={noCf} onCheckedChange={(v) => setNoCf(!!v)} data-testid="pf-no-cf" />

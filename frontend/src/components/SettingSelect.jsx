@@ -1,10 +1,9 @@
 import { useState, useMemo } from "react";
-import api, { formatApiError } from "@/lib/api";
+import { addOption } from "@/lib/optionLists";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-
 const ADD = "__add_new__";
 const norm = (s) => (s || "").trim().toLowerCase();
 
@@ -12,7 +11,7 @@ const norm = (s) => (s || "").trim().toLowerCase();
 // isolamento multi-tenant). Caratteristiche: ordinamento A→Z (case-insensitive, "altro" in fondo),
 // ricerca per elenchi lunghi (ricerca fissa in alto), "+ Aggiungi nuova voce" fisso in basso,
 // deduplica case-insensitive, selezione automatica della nuova voce, form mantenuto aperto.
-export default function SettingSelect({ settingKey, value, onChange, options = [], onAdded, placeholder = "Seleziona...", addLabel = "Aggiungi nuovo", testid = "field", specials = [] }) {
+export default function SettingSelect({ settingKey, value, onChange, options = [], onAdded, placeholder = "Seleziona...", addLabel = "Aggiungi", testid = "field", specials = [], keepOrder = false }) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -25,12 +24,12 @@ export default function SettingSelect({ settingKey, value, onChange, options = [
   }, [options]);
   // include il valore corrente anche se non ancora nella lista configurata (stale o appena aggiunto)
   const allOpts = value && !opts.some((o) => norm(o) === norm(value)) ? [...opts, value] : opts;
-  const sorted = useMemo(() => [...allOpts].sort((a, b) => {
+  const sorted = useMemo(() => (keepOrder ? allOpts : [...allOpts].sort((a, b) => {
     const al = norm(a), bl = norm(b);
     if (al === "altro" && bl !== "altro") return 1;
     if (bl === "altro" && al !== "altro") return -1;
     return String(a).localeCompare(String(b), "it", { sensitivity: "base" });
-  }), [allOpts]);
+  })), [allOpts, keepOrder]);
   const filtered = q.trim() ? sorted.filter((o) => norm(o).includes(norm(q))) : sorted;
   const showSearch = sorted.length >= 8;
 
@@ -40,21 +39,9 @@ export default function SettingSelect({ settingKey, value, onChange, options = [
     const existing = opts.find((o) => norm(o) === norm(name));
     if (existing) { onChange(existing); setAdding(false); setText(""); toast.info("Voce già presente: selezionata."); return; }
     setSaving(true);
-    try {
-      const { data: current } = await api.get("/settings");
-      const list = Array.isArray(current[settingKey]) ? current[settingKey] : [];
-      const dup = list.find((o) => norm(o) === norm(name));
-      if (dup) { onChange(dup); }
-      else {
-        const updated = [...list, name];
-        await api.put("/settings", { ...current, [settingKey]: updated });
-        onChange(name);
-        onAdded && onAdded(updated);
-        toast.success("Voce aggiunta");
-      }
-      setAdding(false); setText("");
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-    finally { setSaving(false); }
+    const v = await addOption(settingKey, name);
+    setSaving(false);
+    if (v) { onChange(v); onAdded && onAdded([...opts, v]); setAdding(false); setText(""); }
   };
 
   if (adding) {
@@ -69,7 +56,7 @@ export default function SettingSelect({ settingKey, value, onChange, options = [
     );
   }
   return (
-    <Select value={value || ""} onValueChange={(v) => { if (v === ADD) { setAdding(true); setText(q.trim()); } else onChange(v); }} onOpenChange={(o) => { if (!o) setQ(""); }}>
+    <Select value={value || ""} onValueChange={(v) => { if (v === ADD) { setAdding(true); setText(q.trim()); } else onChange(v === "__none__" ? "" : v); }} onOpenChange={(o) => { if (!o) setQ(""); }}>
       <SelectTrigger data-testid={testid}><SelectValue placeholder={placeholder} /></SelectTrigger>
       <SelectContent>
         {showSearch && (

@@ -32,8 +32,9 @@ const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaborat
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
 const STATO_COLOR = { confermato: "green", disponibile: "green", da_riconfermare: "orange", disponibilita_richiesta: "blue", da_contattare: "gray", non_disponibile: "red", rinunciato: "red" };
 
-function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited }) {
+function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited, canDelete = true }) {
   const [q, setQ] = useState("");
+  const [tagliaFilter, setTagliaFilter] = useState("all");
   const [evFilter, setEvFilter] = useState("all");
   const [prefFilter, setPrefFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -62,7 +63,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     return <span className="text-slate-700" data-testid={`${testid}-${r.id}`}>{vals.join(", ")}</span>;
   };
   const mansioniOf = (r) => (r.mansioni || []).filter((m) => evFilter === "all" || m.evento_id === evFilter);
-  const mansioneText = (r) => { const ms = mansioniOf(r).map((m) => m.ruolo).filter(Boolean); return ms.length ? [...new Set(ms)].join(", ") : (r.ruolo || ""); };
+  const mansioneText = (r) => { const ms = mansioniOf(r).map((m) => m.ruolo).filter(Boolean); return ms.length ? [...new Set(ms)].join(", ") : (isStaffTab ? "" : r.ruolo || ""); };
   const flip = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const filtered = rows.filter((r) => {
     if (tab === "referenti_aziende" && !r.is_referente) return false;
@@ -74,6 +75,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (teamFilter !== "all" && !asg(r).some((a) => (teamFilter === "none" ? !a.team_id : a.team_id === teamFilter))) return false;
     if (mansFilter !== "all" && !asg(r).some((a) => (mansFilter === "none" ? !a.ruolo : a.ruolo === mansFilter))) return false;
     if (provFilter !== "all" && (r.provenienza_tipo || "non_determinata") !== provFilter) return false;
+    if (tagliaFilter !== "all" && (tagliaFilter === "none" ? !!r.taglia : r.taglia !== tagliaFilter)) return false;
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
@@ -85,6 +87,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     nome: (r) => `${r.nome || ""} ${r.cognome || ""}`.trim(),
     cellulare: (r) => r.cellulare || "",
     preferenza: (r) => prefText(r),
+    taglia: (r) => r.taglia || "",
     ruolo_evento: (r) => (r.is_staff ? "Staff" : r.is_volontario ? "Volontario" : r.is_referente ? "Referente" : ""),
     team: (r) => multi(r, (a) => teamName(a.team_id)).join(", "),
     evento: (r) => (r.eventi_nomi || []).join(", "),
@@ -153,15 +156,19 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
       </div>
     );
   };
+  const fullName = (r) => `${r.nome || ""} ${r.cognome || ""}`.trim();
+  const delDialog = (r, trigger, testid) => (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+      <AlertDialogContent onClick={(e) => e.stopPropagation()}><AlertDialogHeader><AlertDialogTitle>Eliminare {fullName(r)}?</AlertDialogTitle><AlertDialogDescription>Se la persona ha assegnazioni o dati storici, viene tolta dagli elenchi ma lo storico resta conservato.</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogFooter><AlertDialogCancel data-testid={`cancel-delete-person-${r.id}`}>Annulla</AlertDialogCancel><AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(r)} data-testid={testid}>Elimina</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+    </AlertDialog>
+  );
   const actionsCell = (r) => (
-    <div className="flex items-center justify-end gap-1">
+    <div className="flex items-center justify-end gap-0.5">
       {onInvite && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title={r.last_invite_at ? "Reinvia invito" : "Invita"} onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>}
-      <AlertDialog>
-        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" title="Elimina" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle><AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Annulla</AlertDialogCancel><AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(r)} data-testid={`confirm-delete-person-${r.id}`}>Elimina</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Modifica anagrafica, ruolo, eventi, team e mansione" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Modifica" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
+      {canDelete && delDialog(r, <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" title="Elimina" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button>, `confirm-delete-person-${r.id}`)}
     </div>
   );
   const teamsCell = (r) => (isStaffTab ? multiCell(r, (a) => teamName(a.team_id), "team") : ((r.teams_nomi && r.teams_nomi.length)
@@ -170,6 +177,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const mansCell = (r) => multiCell(r, (a) => a.ruolo, "mansione");
   const teamOpts = [...new Map(rows.flatMap((r) => (r.assegnazioni || []).filter((a) => a.team_id && (evFilter === "all" || a.evento_id === evFilter)).map((a) => [a.team_id, teamName(a.team_id)])).filter(([, n]) => n)).entries()].sort((a, b) => a[1].localeCompare(b[1], "it"));
   const mansOpts = [...new Set(rows.flatMap((r) => (r.assegnazioni || []).map((a) => a.ruolo).filter(Boolean)))].sort((a, b) => a.localeCompare(b, "it"));
+  const tagliaOpts = [...new Set(rows.map((r) => r.taglia).filter(Boolean))];
   const fsel = "h-10 w-full sm:w-48 rounded-md border border-slate-200 bg-white px-2 text-sm";
   return (
     <div>
@@ -197,6 +205,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         {isStaffTab && <select className={fsel} value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} data-testid="people-team-filter"><option value="all">Tutti i team</option><option value="none">Senza team</option>{teamOpts.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>}
         {isStaffTab && <select className={fsel} value={mansFilter} onChange={(e) => setMansFilter(e.target.value)} data-testid="people-mansione-filter"><option value="all">Tutte le mansioni</option><option value="none">Senza mansione</option>{mansOpts.map((m) => <option key={m} value={m}>{m}</option>)}</select>}
         {isStaffTab && <select className={fsel} value={provFilter} onChange={(e) => setProvFilter(e.target.value)} data-testid="people-provenienza-filter"><option value="all">Tutte le provenienze</option>{Object.entries(PROVENIENZA).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
+        {isStaffTab && <select className="h-10 w-full sm:w-36 rounded-md border border-slate-200 bg-white px-2 text-sm" value={tagliaFilter} onChange={(e) => setTagliaFilter(e.target.value)} data-testid="people-taglia-filter"><option value="all">Tutte le taglie</option><option value="none">Senza taglia</option>{tagliaOpts.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
       </div>
       {isStaffTab && selectedRows.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-tiffany/40 bg-tiffany-light/40 px-3 py-2 text-sm" data-testid="bulk-mansione-bar">
@@ -212,14 +221,15 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
           : displayRows.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">Nessuna persona trovata.</div>
           : displayRows.map((r) => (
-            <div key={r.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" data-testid={`person-card-${r.id}`}>
-              <div className="flex items-start gap-2">{pick(r)}<div className="font-semibold text-slate-900 break-words">{r.cognome} {r.nome}</div></div>
+            <div key={r.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" onClick={() => isStaffTab && onOpen(r)} data-testid={`person-card-${r.id}`}>
+              <div className="flex items-start gap-2" onClick={(e) => e.stopPropagation()}>{pick(r)}<div className="font-semibold text-slate-900 break-words">{r.cognome} {r.nome}</div></div>
               <LastInvite person={r} className="mt-0.5" />
               {!isStaffTab && r.ruolo && <div className="text-sm text-slate-500">{r.ruolo}</div>}
               <div className="mt-2 space-y-1.5 text-sm text-slate-700">
                 {r.cellulare && <a href={`tel:${r.cellulare}`} className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{r.cellulare}</a>}
                 <div>{roleBadges(r)}</div>
                 {isStaffTab && <div className="flex items-start gap-2" data-testid={`m-pref-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-1.5">Preferenza</span>{prefCell(r)}</div>}
+                {isStaffTab && <div className="flex items-start gap-2" data-testid={`m-taglia-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400">Taglia</span><span>{r.taglia || "—"}</span></div>}
                 {isStaffTab ? (<>
                   <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Team</span>{teamsCell(r)}</div>
                   <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span>{mansCell(r)}</div>
@@ -230,11 +240,11 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
                 </>)}
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <TextAction icon={Eye} onClick={() => onOpen(r)} data-testid={`m-open-person-${r.id}`}>Apri</TextAction>
+              <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                {!isStaffTab && <TextAction icon={Eye} onClick={() => onOpen(r)} data-testid={`m-open-person-${r.id}`}>Apri</TextAction>}
                 {onInvite && <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>{r.last_invite_at ? "Reinvia" : "Invita"}</TextAction>}
-                <DeleteConfirm onConfirm={() => onDelete(r)} testid={`m-confirm-delete-person-${r.id}`}><TextAction icon={Trash2} danger data-testid={`m-delete-person-${r.id}`}>Elimina</TextAction></DeleteConfirm>
                 <TextAction icon={Pencil} onClick={() => onEdit(r)} data-testid={`m-edit-person-${r.id}`}>Modifica</TextAction>
+                {canDelete && delDialog(r, <TextAction icon={Trash2} danger data-testid={`m-delete-person-${r.id}`}>Elimina</TextAction>, `m-confirm-delete-person-${r.id}`)}
               </div>
             </div>
           ))}
@@ -250,6 +260,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 <Th k="cellulare" label="Cellulare" />
                 <Th k="ruolo_evento" label="Ruolo" />
                 <Th k="preferenza" label="Preferenza" />
+                <Th k="taglia" label="Taglia" />
                 <Th k="team" label="Team" />
                 <Th k="qualifica" label="Mansione" />
                 <Th k="evento" label="Evento" />
@@ -264,8 +275,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
               </>)}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-                : displayRows.length === 0 ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
+              {loading ? <tr><td colSpan={11} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
+                : displayRows.length === 0 ? <tr><td colSpan={11} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
                     {(onInvite || isStaffTab) && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
@@ -276,6 +287,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
                         <td className="px-4 py-3">{roleBadges(r)}</td>
                         <td className="px-4 py-3">{prefCell(r)}</td>
+                        <td className="px-3 py-3 text-slate-700 whitespace-nowrap" data-testid={`taglia-${r.id}`}>{r.taglia || "—"}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
                         <td className="px-4 py-3">{mansCell(r)}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
@@ -333,9 +345,10 @@ export default function Persons({ mode = "anagrafiche" }) {
   const personFields = mode === "staff" ? [
     { name: "nome", label: "Nome", required: true }, { name: "cognome", label: "Cognome" },
     { name: "email", label: "Email", type: "email" }, { name: "cellulare", label: "Cellulare", type: "tel" },
-    { name: "telefono", label: "Telefono", type: "tel" }, { name: "ruolo", label: "Qualifica" },
+    { name: "telefono", label: "Telefono", type: "tel" },
     { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "eta", label: "Età", type: "age", virtual: true },
     { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" },
+    { name: "taglia", label: "Taglia", type: "setting", settingKey: "taglie", options: settings?.taglie || [] },
     { name: "indirizzo", label: "Indirizzo e numero civico", full: true }, { name: "cap", label: "CAP" }, { name: "citta", label: "Località / Comune" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "note", label: "Note", type: "textarea", full: true },
@@ -355,7 +368,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     else { await api.post("/persons", form); toast.success("Persona creata"); }
     await reload();
   };
-  const delPerson = async (r) => { try { await api.delete(`/persons/${r.id}`); await reload(); toast.success("Persona eliminata"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  const delPerson = async (r) => { try { const { data } = await api.delete(`/persons/${r.id}`); await reload(); toast.success(data?.archived ? "Persona eliminata dall'elenco (storico conservato)" : "Persona eliminata"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
 
   // team & shift configs
   const personOpts = personOptions(rows);
@@ -442,7 +455,7 @@ export default function Persons({ mode = "anagrafiche" }) {
   const isStaff = mode === "staff";
   const canInvite = canSendInvites(user);
   const peopleProps = {
-    rows, loading, onOpen: (r) => setDetailId(r.id),
+    rows, loading, onOpen: (r) => (isStaff ? setMask({ person: r }) : setDetailId(r.id)), canDelete: can(user, isStaff ? "staff" : "anagrafiche", "delete"),
     onEdit: (r) => (isStaff ? setMask({ person: r }) : (setEditing(r), setFormOpen(true))), onInvite: canInvite ? (r) => setInvite(r) : null,
     onDelete: delPerson, onInvited: reload,
   };
@@ -481,7 +494,7 @@ export default function Persons({ mode = "anagrafiche" }) {
               renderDetail={(team, { close, edit, update }) => (
                 <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
                   onReloadStaff={reload} onEdit={edit} canEdit={canEditMembers} onSaveNote={saveNote(update, team.id)}
-                  onOpenPerson={(pid) => { close(); setDetailId(pid); }} />)} />
+                  onOpenPerson={(pid) => { close(); const p = rows.find((x) => x.id === pid); if (p) setMask({ person: p }); else setDetailId(pid); }} />)} />
           </TabsContent>
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
