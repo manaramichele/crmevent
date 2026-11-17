@@ -138,11 +138,10 @@ def build(db, deps):
                     detail=f"{name} · {'riattivato' if body.enabled else 'disattivato (dati conservati)'}", meta={"module": key})
         return {"ok": True}
 
-    @r.post("/platform/orgs/{org_id}/modules/controlroom/grant")
-    async def sa_cr_grant(org_id: str, body: CrGrantIn, admin: dict = Depends(sa)):
+    async def grant_cr(org_id: str, event_ids: list, note: Optional[str], admin: dict) -> dict:
         org = await _org(org_id)
-        evs = await db.events.find({"org_id": org_id, "id": {"$in": body.event_ids}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)
-        if len(evs) != len(set(body.event_ids)):
+        evs = await db.events.find({"org_id": org_id, "id": {"$in": event_ids}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)
+        if not evs or len(evs) != len(set(event_ids)):
             raise HTTPException(status_code=404, detail="Evento non trovato in questa organizzazione")
         created = 0
         for ev in evs:
@@ -150,11 +149,15 @@ def build(db, deps):
                 continue
             now = _now()
             await db.controlroom_purchases.insert_one({"id": uuid.uuid4().hex, "org_id": org_id, "event_id": ev["id"], "event_name": ev["nome"], "status": "active",
-                                                       "source": "superadmin", "amount_net": 0, "note": body.note, "created_by": admin.get("email"),
+                                                       "source": "superadmin", "amount_net": 0, "note": note, "created_by": admin.get("email"),
                                                        "created_at": now, "activated_at": now})
             created += 1
-            await audit(admin, "controlroom_granted", org_id=org_id, org_name=org.get("nome"), detail=f"{ev['nome']} · concessione gratuita{' · ' + body.note if body.note else ''}")
+            await audit(admin, "controlroom_granted", org_id=org_id, org_name=org.get("nome"), detail=f"{ev['nome']} · concessione gratuita{' · ' + note if note else ''}")
         return {"created": created}
+
+    @r.post("/platform/orgs/{org_id}/modules/controlroom/grant")
+    async def sa_cr_grant(org_id: str, body: CrGrantIn, admin: dict = Depends(sa)):
+        return await grant_cr(org_id, body.event_ids, body.note, admin)
 
     @r.post("/platform/orgs/{org_id}/modules/controlroom/{pid}/revoke")
     async def sa_cr_revoke(org_id: str, pid: str, admin: dict = Depends(sa)):
@@ -168,4 +171,4 @@ def build(db, deps):
         await audit(admin, "controlroom_grant_revoked", org_id=org_id, org_name=org.get("nome"), detail=f"{p.get('event_name')} · dati conservati")
         return {"ok": True}
 
-    return {"router": r}
+    return {"router": r, "grant_cr": grant_cr}

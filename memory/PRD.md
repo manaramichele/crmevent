@@ -1065,6 +1065,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Attivazione gratuita Marketplace: Control Room aggiunto, Planimetrie & Mappe ritirato (2026-11-17)
+- Finestra esistente "Attivazione gratuita" (Piattaforma → Marketplace → Acquisti): Control Room dopo Event Map; scelto Control Room compare il campo Evento (singolo o "Tutti gli eventi attuali"). Backend marketplace admin_grant → modules_hub.grant_cr (controlroom_purchases source superadmin, 0 €, audit), errore se già attiva.
+- Planimetrie & Mappe: seed rimosso, servizio marcato retired/visible=False (migrazione retire_maps_v1), escluso da catalogo admin/org e dalla concessione; nessun dato cancellato.
+- Verifica: curl (accesso solo all'org scelta, altre org invariate, doppia concessione bloccata) + screenshot del dialogo. Concessioni di prova rimosse.
+
+
 ## Duplica evento (2026-11-17)
 - Non era mai stato implementato (era in coda). Ora: Eventi → Azioni (Altre su desktop / Azioni su mobile) → "Duplica evento".
 - backend/event_duplicate.py: POST /api/events/{id}/duplicate {nome, edizione, data_inizio, copy_maps, copy_teams, copy_activities, copy_planner}. Copia configurazione evento (date spostate dello stesso intervallo, stato pianificato, senza entitlement/homepage_logo), percorsi/mappe, team senza responsabile, attività "da fare" senza persone, opzionalmente progetti Event Planner + distinta materiali. Mai: staff/turni, iscritti, sponsor, ospitalità, pagamenti, video/tracce Event Map, crediti/attivazioni, pipeline. Rollback in caso di errore; org attiva, permessi e limiti piano rispettati; audit event_duplicated.

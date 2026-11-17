@@ -188,15 +188,10 @@ def build(db, deps: dict):
                 "status": "available", "visible": True, "purchasable": False, "tech_ready": True, "activation": "superadmin",
                 "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 65, "created_at": _now()}}, upsert=True)
             await db.marketplace_meta.insert_one({"id": "press_v1", "applied_at": _now()})
-        if not await db.marketplace_meta.find_one({"id": "maps_v1"}):
-            await db.marketplace_services.update_one({"key": "planimetrie-mappe"}, {"$setOnInsert": {
-                "id": uuid.uuid4().hex, "key": "planimetrie-mappe", "name": "Planimetrie & Mappe", "icon": "Map", "image": None,
-                "description": "Progetta e gestisci gli spazi del tuo evento con planimetrie interattive e mappe geografiche. Organizza Expo Village, segreteria, partenza, arrivo, percorsi e tutte le aree operative.",
-                "category": "Logistica", "price": None, "price_type": "monthly", "usage_unit": None, "usage_limits": None,
-                "terms": "Caricamento di planimetrie PDF, JPG e PNG · disegno di aree e posizionamento di elementi · mappe geografiche interattive tipo OpenRunner · importazione e gestione di percorsi GPX · marker e punti operativi · collegamento con staff, volontari, team e attività · esportazione e condivisione delle planimetrie.",
-                "status": "coming_soon", "visible": True, "purchasable": False, "tech_ready": False, "brevo_attribute": "INTERESSE_PLANIMETRIE_MAPPE",
-                "billing_method": "stripe", "credit_service_key": None, "scope": "org", "sort": 100, "created_at": _now()}}, upsert=True)
-            await db.marketplace_meta.insert_one({"id": "maps_v1", "applied_at": _now()})
+        if not await db.marketplace_meta.find_one({"id": "retire_maps_v1"}):
+            # Planimetrie & Mappe sostituito da Event Planner: nascosto dal catalogo, dati storici conservati
+            await db.marketplace_services.update_one({"key": "planimetrie-mappe"}, {"$set": {"retired": True, "visible": False, "retired_at": _now()}})
+            await db.marketplace_meta.insert_one({"id": "retire_maps_v1", "applied_at": _now()})
         if not await db.marketplace_meta.find_one({"id": "contracts_staff_v1"}):
             await db.marketplace_services.update_one({"key": "contratti-firme-digitali"}, {"$setOnInsert": {
                 "id": uuid.uuid4().hex, "key": "contratti-firme-digitali", "service_code": "contratti_firme_digitali",
@@ -244,7 +239,7 @@ def build(db, deps: dict):
     @r.get("/marketplace/services")
     async def services(user: dict = Depends(deps["require_admin"])):
         await _seed()
-        rows = await db.marketplace_services.find({"visible": True}, {"_id": 0}).sort("sort", 1).to_list(200)
+        rows = await db.marketplace_services.find({"visible": True, "retired": {"$ne": True}}, {"_id": 0}).sort("sort", 1).to_list(200)
         pur = await _org_purchases(user["org_id"])
         ids = {i["service_id"] for i in await db.marketplace_interests.find(
             {"org_id": user["org_id"], "notified_at": None}, {"_id": 0, "service_id": 1}).to_list(500)}
@@ -677,7 +672,7 @@ def build(db, deps: dict):
     @r.get("/platform/marketplace/services")
     async def admin_list(admin: dict = Depends(deps["require_superadmin"])):
         await _seed()
-        rows = await db.marketplace_services.find({}, {"_id": 0}).sort("sort", 1).to_list(500)
+        rows = await db.marketplace_services.find({"retired": {"$ne": True}}, {"_id": 0}).sort("sort", 1).to_list(500)
         counts = {c["_id"]: c["n"] for c in await db.marketplace_purchases.aggregate([{"$match": {"status": {"$in": list(ACTIVE)}}}, {"$group": {"_id": "$service_id", "n": {"$sum": 1}}}]).to_list(500)}
         intr = {c["_id"]: len(c["orgs"]) for c in await db.marketplace_interests.aggregate([{"$group": {"_id": "$service_id", "orgs": {"$addToSet": "$org_id"}}}]).to_list(500)}
         mode = deps["stripe_mode"]
@@ -788,6 +783,19 @@ def build(db, deps: dict):
         org = await db.organizations.find_one({"id": body.org_id}, {"_id": 0, "id": 1, "nome": 1})
         if not svc or not org:
             raise HTTPException(status_code=404, detail="Servizio o organizzazione non trovati")
+        if svc.get("retired"):
+            raise HTTPException(status_code=400, detail="Servizio non più disponibile")
+        if svc.get("key") == "control-room":
+            if body.event_id == "all":
+                ids = [e["id"] for e in await db.events.find({"org_id": org["id"]}, {"_id": 0, "id": 1}).to_list(1000)]
+            else:
+                ids = [body.event_id] if body.event_id else []
+            if not ids:
+                raise HTTPException(status_code=400, detail="Seleziona l'evento dell'organizzazione")
+            res = await deps["controlroom_grant"](org["id"], ids, (body.note or "").strip()[:300] or None, admin)
+            if not res["created"]:
+                raise HTTPException(status_code=400, detail="Control Room è già attiva sugli eventi selezionati")
+            return {"ok": True, "service": "control-room", **res}
         ev = None
         if svc.get("scope") == "event":
             ev = await db.events.find_one({"id": body.event_id or "", "org_id": org["id"]}, {"_id": 0, "id": 1})

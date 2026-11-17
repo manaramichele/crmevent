@@ -14001,8 +14001,9 @@ CONTROL_ROOM = controlroom.build(db, {"require_admin": require_admin, "require_s
                                      "resolve_attachment": lambda u, o: _route_file_rec(u, o), "read_file_rec": _read_file_rec})
 app.include_router(CONTROL_ROOM["router"])
 app.add_event_handler("startup", CONTROL_ROOM["ensure"])
-app.include_router(modules_hub.build(db, {"require_member": require_org_member, "require_superadmin": require_superadmin,
-                                         "record_audit": record_audit, "addon_summary": ADDONS["summary"]})["router"])
+MODULES_HUB = modules_hub.build(db, {"require_member": require_org_member, "require_superadmin": require_superadmin,
+                                    "record_audit": record_audit, "addon_summary": ADDONS["summary"]})
+app.include_router(MODULES_HUB["router"])
 async def _route_file_rec(url: str, org_id: str) -> Optional[dict]:
     """Record completo del file CRMEvent (id, storage_path, original_filename...) per Percorsi Eventi; None se esterno/non dell'org."""
     if not url:
@@ -14099,7 +14100,7 @@ app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
     "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing, "record_invoice": _record_invoice,
-    "emit_invoice": _emit_saas_invoice, "stripe_mode": STRIPE_MODE}))
+    "emit_invoice": _emit_saas_invoice, "stripe_mode": STRIPE_MODE, "controlroom_grant": lambda *a: MODULES_HUB["grant_cr"](*a)}))
 app.include_router(MKT["router"])
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {

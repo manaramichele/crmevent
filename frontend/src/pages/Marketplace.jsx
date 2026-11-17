@@ -78,7 +78,7 @@ function NotifyButton({ s, onToggle, full }) {
   return on ? (
     <span data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`} onClick={(e) => e.stopPropagation()}
       className={`inline-flex items-center justify-center gap-1.5 rounded-full border border-[#0ABAB5] bg-[#0ABAB5]/15 text-[#088F8A] text-xs font-semibold ${full ? "w-full h-11 text-sm" : "h-8 px-3"}`}>
-      <BellRing className="w-3.5 h-3.5" />{s.notified_label || (s.key === "planimetrie-mappe" ? "Avviso attivato" : "Ti avviseremo")}
+      <BellRing className="w-3.5 h-3.5" />{s.notified_label || "Ti avviseremo"}
     </span>
   ) : (
     <button type="button" disabled={busy || on} onClick={click} onKeyDown={(e) => e.stopPropagation()} data-testid={`mkt-notify-${s.key}${full ? "-detail" : ""}`}
