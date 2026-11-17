@@ -68,12 +68,12 @@
     {
       "path": "/funzionalita/control-room", "group": "Funzionalità", "name": "Control Room",
       "title": "Control Room: centrale operativa per eventi sportivi | CRMEvent",
-      "description": "Control Room di CRMEvent: centrale operativa digitale per coordinare volontari, postazioni, mezzi di soccorso e interventi durante la manifestazione. 119 € per evento.",
+      "description": "Control Room di CRMEvent: centrale operativa digitale per coordinare volontari, postazioni, mezzi di soccorso e interventi durante la manifestazione.",
       "h1": "Control Room — tutto l'evento sotto controllo",
       "intro": "Gestisci volontari, postazioni, mezzi di soccorso e interventi durante la manifestazione. Una centrale operativa digitale per coordinare il personale, monitorare il percorso e affrontare rapidamente ogni situazione.",
       "sections": [
         {"h2": "Cosa comprende", "items": ["Mappa operativa con tracciato di gara, partenza e arrivo, postazioni, ristori, punti critici e chiusure stradali, riutilizzando i percorsi già presenti in CRMEvent.", "Gestione delle risorse: staff, volontari, coordinatori, ambulanze, personale sanitario, mezzi di soccorso, auto e moto organizzative e, quando autorizzate, forze dell'ordine, Protezione Civile e Vigili del Fuoco.", "Interventi con numero progressivo, priorità, posizione, risorse assegnate e stati fino alla chiusura.", "Accesso mobile per gli operatori: postazione, conferma presenza, segnalazioni con foto e condivisione volontaria della posizione.", "Predisposizione per tracker GPS dedicati tramite gateway come Traccar.", "Diario operativo cronologico ed export del report finale in PDF ed Excel."]},
-        {"h2": "Prezzo", "p": "119 € + IVA per evento, uguale per tutti gli organizzatori. Control Room non è inclusa in alcun abbonamento CRMEvent ed è indipendente da Event Map ed Event Planner. Ogni acquisto abilita un solo evento, senza limiti di operatori. Dispositivi GPS, SIM, SMS e servizi esterni sono esclusi. L'attivazione avviene dal Marketplace dopo la conferma del pagamento."},
+        {"h2": "Come si attiva", "p": "Control Room si attiva per il singolo evento dal Marketplace di CRMEvent, indipendentemente da Event Map ed Event Planner e senza limiti di operatori. Dispositivi GPS, SIM, SMS e servizi esterni sono esclusi. Condizioni e prezzo sono indicati nel Marketplace."},
         {"h2": "Importante", "p": "Control Room supporta il coordinamento con i responsabili sanitari e i servizi di emergenza, ma non sostituisce le procedure ufficiali di soccorso."},
         {"h2": "Disponibilità delle funzioni", "p": "L'attivazione per evento è già disponibile; dashboard operativa, mappa, interventi, accesso mobile e report vengono rilasciati progressivamente e diventano disponibili senza ulteriori acquisti."}
       ],

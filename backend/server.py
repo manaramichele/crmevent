@@ -4532,7 +4532,7 @@ async def remove_org_member(org_id: str, target_id: str, user: dict = Depends(ge
 
 # ---------------- platform: account & org management (superadmin) ----------------
 # Collections whose documents belong EXCLUSIVELY to a single organization (org_id scoped).
-ORG_CASCADE_COLLECTIONS = ["events", "companies", "persons", "deals", "staff", "teams", "shifts",
+ORG_CASCADE_COLLECTIONS = ["controlroom_purchases", "events", "companies", "persons", "deals", "staff", "teams", "shifts",
                            "event_maps", "activities", "followups", "calendar_event_links", "files",
                            "person_companies", "lodgings", "meals", "briefing_versions", "invoices",
                            "structures", "fic_settings", "org_invites", "leads", "memberships",

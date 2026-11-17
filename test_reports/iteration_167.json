@@ -1,0 +1,46 @@
+{
+  "summary": "Control Room Phase 1 tested end-to-end (backend pytest 14 tests + Playwright UI on desktop/mobile). CRITICAL bug found and FIXED by tester: Stripe Checkout creation failed for every purchase (Stripe 400 'product tax code is missing ... Managed Payments') -> API returned 502 (shown to the browser as a Cloudflare HTML page). I added tax_code 'txcd_10103001' + managed_payments={'enabled': False} to controlroom.py, matching the credits checkout in server.py. After the fix: checkout works (line 'CONTROL ROOM — 119,00 € / EVENTO', description 'Evento: <nome>', unit_amount 11900, IVA 22% -> 145,18 €, mode payment). When you check out again, earlier pending purchases become expired. Admin-only works (staff gets 403). A cross-org event returns 404. Missing billing data returns 400. An unpaid confirmation stays pending. A cross-org session_id returns 403. An unsigned webhook returns 400. Activation logic checked by calling controlroom.build handlers directly with motor: unpaid stays pending, tampered metadata is ignored, a paid session activates once (audit runs once), a second paid purchase becomes duplicate_paid, a partial refund is ignored, a full refund sets refunded, and an unrelated charge falls through to PARTNER. An active purchase gives status active and a new checkout returns 409. 13/14 pass; the remaining failure: an invalid session_id gives 500. UI: the sidebar shows Control Room directly below Staff / Volontari. Marketplace card and dialog show the right price and mode, the not-included-in-subscription text, and the CTA to /control-room. Event Map 29 €/anno and Event Planner 'Da 29 €/mese' unchanged. /control-room: event selector, ATTIVA CONTROL ROOM redirects to Stripe, staff sees the admin-only message, demo admin with no events sees the Eventi link, and the active state shows the placeholder card. The homepage section and the public /funzionalita/control-room page are correct. No horizontal overflow at 390px.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/controlroom/events/{eid}/checkout", "issue": "FIXED BY TESTER: Stripe rejected the session because tax_code was missing (Managed Payments is on by default on this account), so every purchase returned 502. Added product_data.tax_code='txcd_10103001' and managed_payments={'enabled': False} (same pattern as credits checkout). Please review and keep.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/controlroom/confirmation?session_id=invalid", "issue": "Unhandled stripe InvalidRequestError -> 500. Wrap Session.retrieve in try/except StripeError -> 404/400."},
+      {"endpoint": "POST /api/controlroom/events/{eid}/checkout", "issue": "No invoice_creation (addons checkout uses invoice_creation enabled). A paid 119 € + IVA purchase creates no Stripe invoice/fattura record. Check whether the invoices/FIC flow needs it."},
+      {"endpoint": "DELETE /api/platform/organizations/{id}", "issue": "controlroom_purchases is not in ORG_CASCADE_COLLECTIONS, so purchases are left orphaned when an org is deleted."},
+      {"endpoint": "GET /api/controlroom/events and /status", "issue": "These use user['org_id'] directly, while checkout uses require_admin (which resolves the active org via _resolve_active_org). Multi-org/membership users may see a different org than the one they buy for."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ControlRoom.jsx Intro", "issue": "The button is disabled while ev.pending is true. If the user cancels or abandons Stripe Checkout (cancel_url ?canceled=1), the purchase stays 'pending' until Stripe expires the session (~24h). The ATTIVA button stays disabled, so the user cannot retry, even though the backend supports re-checkout (it expires the earlier pending purchases). Fix: keep the button enabled when pending, or expire the pending purchase on cancel.", "selector": "[data-testid='cr-activate-btn']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Cancel return", "issue": "The 'Pagamento annullato' toast appears twice (useEffect runs twice / StrictMode).", "affected_selectors": ["[data-sonner-toast]"]}
+    ],
+    "design_issues": [
+      {"screen": "Stripe Checkout", "issues": ["Adaptive Pricing makes USD the default currency (165,97 USD) instead of EUR. This is a Stripe account setting and may also affect other checkouts."]},
+      {"screen": "/control-room", "issues": ["If GET /controlroom/events fails, the catch sets events=[], so the page wrongly shows 'Crea prima un evento' instead of an error state."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_controlroom_phase1.py", "/app/backend/tests/ui_controlroom_setup.py", "/app/test_reports/pytest/controlroom_phase1.xml"],
+  "action_items": [
+    "Keep/review tester fix in controlroom.py checkout (tax_code + managed_payments disabled)",
+    "Do not disable ATTIVA CONTROL ROOM when pending (or expire pending on canceled=1) so users can retry after cancelling",
+    "Handle StripeError in /controlroom/confirmation (avoid 500)",
+    "Add controlroom_purchases to ORG_CASCADE_COLLECTIONS",
+    "Consider invoice_creation for the Control Room payment (fattura)",
+    "Use the resolved active org consistently in /controlroom/events and /status"
+  ],
+  "critical_code_review_comments": [
+    "_activate correctly requires status=complete and payment_status=paid, checks metadata org/event against the stored purchase, and is idempotent via conditional update_one.",
+    "In stripe_webhook, charge.refunded runs CONTROL_ROOM.on_refund before PARTNER.on_refund. on_refund ignores partial refunds (refunded=false). Fine for Phase 1, but partial refunds keep the purchase active.",
+    "require_active is exported but not used yet (expected for Phase 2)."
+  ],
+  "updated_files": ["/app/backend/controlroom.py", "/app/backend/tests/test_controlroom_phase1.py", "/app/backend/tests/ui_controlroom_setup.py"],
+  "success_rate": {"backend": "93% (13/14) after tester fix; 0% of checkouts worked before fix", "frontend": "95%"},
+  "seed_data_creation": "None persisted. TEST_CR / TEST_CRUI orgs, events, staff users and all controlroom_purchases were deleted by id. One pytest run left 2 detached admin users (test_cr_a_/b_) despite the teardown; I deleted them by exact email. Stripe test customers/sessions remain in the Stripe sandbox.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_controlroom_phase1.py -n0 (module-scoped fixture, needs serial). UI setup: python tests/ui_controlroom_setup.py, then 'cleanup' (writes /tmp/ui_cr.json). Staff users inserted directly need telefono + accepted_terms_at, or they are redirected to /completa-profilo. Dismiss the cookie banner ('Reject non-essential') and the demo modal ('Non ora') before clicking. Retest the pending-button retry and the confirmation 500."
+}

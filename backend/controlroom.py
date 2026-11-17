@@ -80,9 +80,10 @@ def build(db, deps):
         try:
             sess = stripe_sdk.checkout.Session.create(
                 mode="payment", customer=await deps["ensure_customer"](org, user), locale="it", client_reference_id=org["id"], metadata=md,
-                payment_intent_data={"metadata": md},
+                payment_intent_data={"metadata": md}, managed_payments={"enabled": False},
+                invoice_creation={"enabled": True, "invoice_data": {"metadata": md}}, adaptive_pricing={"enabled": False},
                 line_items=[{"price_data": {"currency": "eur", "unit_amount": int(PRICE_NET * 100), "tax_behavior": "exclusive",
-                                            "product_data": {"name": LINE_NAME, "description": f"Evento: {ev['nome']}"[:300]}},
+                                            "product_data": {"name": LINE_NAME, "tax_code": "txcd_10103001", "description": f"Evento: {ev['nome']}"[:300]}},
                              "quantity": 1, "tax_rates": [deps["tax_rate_id"]()]}],
                 success_url=f"{origin}/control-room?event={eid}&session_id={{CHECKOUT_SESSION_ID}}", cancel_url=f"{origin}/control-room?event={eid}&canceled=1")
         except stripe_sdk.error.StripeError as e:
@@ -113,7 +114,10 @@ def build(db, deps):
 
     @r.get("/controlroom/confirmation")
     async def confirmation(session_id: str, user: dict = Depends(member)):
-        sess = stripe_sdk.checkout.Session.retrieve(session_id)
+        try:
+            sess = stripe_sdk.checkout.Session.retrieve(session_id)
+        except stripe_sdk.error.StripeError:
+            raise HTTPException(status_code=404, detail="Sessione di pagamento non trovata")
         if (sess.get("metadata") or {}).get("org_id") != user.get("org_id"):
             raise HTTPException(status_code=403, detail="Sessione non associata all'organizzazione")
         return {"status": (await _activate(sess) or {}).get("status")}

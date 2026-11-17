@@ -1022,5 +1022,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - eventmap_render.py: fascia iniziale compatta semitrasparente in alto (area sicura: 5,5% altezza nei verticali, 32U negli altri) con logo evento a sinistra, titolo adattivo (56→34U, max 2 righe) e sottotitolo · data; la fascia scompare dopo l'apertura, il logo resta fisso nella stessa posizione fino alla fine; rimossa la scheda finale con titolo. Logo più contenuto (LOGO_BOX ridotto). Solo nuove generazioni/rigenerazioni; video esistenti invariati.
 - Script di verifica: scripts/promo_video/em_layout_check.py.
 
+
+## Control Room — Fase 1 (2026-11-17) — NON pubblicato
+- backend/controlroom.py: servizio Marketplace «control-room» (119 € + IVA per evento, price_type per_event, nessuna inclusione nei piani); db.controlroom_purchases (pending/active/expired/failed/duplicate_paid/refunded); POST /api/controlroom/events/{eid}/checkout (solo admin, dati fatturazione, Stripe payment, riga «CONTROL ROOM — 119,00 € / EVENTO», descrizione evento, tax rate, fattura Stripe, adaptive pricing off); attivazione solo con sessione complete+paid (webhook o /confirmation), idempotente; rimborso via charge.refunded; require_active(org, evento) per le fasi successive; /api/platform/controlroom/purchases (SA); cascade eliminazione org.
+- Frontend: voce menu «Control Room» sotto Staff / Volontari; /control-room (selezione evento, presentazione + ATTIVA CONTROL ROOM, stato attivo con segnaposto dashboard); card Marketplace; scheda nella griglia funzionalità della home (senza prezzo) → /funzionalita/control-room (pagina pubblica SEO senza prezzo).
+- Test: iteration_167 (14 test backend + UI; corretto dal tester tax_code/managed_payments; poi corretti pulsante dopo annullamento, errore 500 su sessione non valida, cascade, fattura).
+- Prossime fasi: 2 dashboard/mappa/risorse/postazioni, 3 interventi/assegnazioni/comunicazioni/mobile, 4 GPS/diario/report, 5 test completi.
+
 - Test: iteration_166 (backend 10/10, frontend ok; corretti tab AI, spinner, scroll-to-top, revoca consenso, dedup visite).
 

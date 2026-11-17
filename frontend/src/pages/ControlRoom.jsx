@@ -20,10 +20,10 @@ function Intro({ ev, info, onBuy, busy }) {
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <div><div className="text-3xl font-bold" data-testid="cr-price">119 € <span className="text-base font-medium text-slate-300">per evento + IVA</span></div><div className="text-xs text-slate-400">Non incluso negli abbonamenti · operatori illimitati</div></div>
           {ev && (info.can_purchase
-            ? <Button onClick={onBuy} disabled={busy || ev.pending} className="h-11 rounded-full bg-[#0ABAB5] px-6 font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="cr-activate-btn">{busy ? "Apertura pagamento…" : "ATTIVA CONTROL ROOM"}</Button>
+            ? <Button onClick={onBuy} disabled={busy} className="h-11 rounded-full bg-[#0ABAB5] px-6 font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="cr-activate-btn">{busy ? "Apertura pagamento…" : "ATTIVA CONTROL ROOM"}</Button>
             : <div className="text-sm text-slate-300" data-testid="cr-admin-only">Solo un amministratore dell'organizzazione può attivare Control Room.</div>)}
         </div>
-        {ev?.pending && <div className="mt-3 text-xs text-amber-300" data-testid="cr-pending">Pagamento in attesa di conferma: Control Room si attiverà appena Stripe lo conferma.</div>}
+        {ev?.pending && <div className="mt-3 text-xs text-amber-300" data-testid="cr-pending">Pagamento avviato ma non ancora confermato. Se l'hai annullato puoi riprovare: Control Room si attiva solo dopo la conferma di Stripe.</div>}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{FEATURES.map(([I, t, d]) => <div key={t} className="rounded-xl border border-slate-200 bg-white p-4"><I className="h-5 w-5 text-[#088F8A]" /><div className="mt-2 text-sm font-semibold">{t}</div><div className="mt-1 text-xs text-slate-500">{d}</div></div>)}</div>
       <p className="flex items-start gap-2 text-xs text-slate-500"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />Control Room supporta il coordinamento con i responsabili sanitari e i servizi di emergenza ma non sostituisce le procedure ufficiali di soccorso. Dispositivi GPS, SIM, SMS e servizi esterni esclusi dal prezzo.</p>
