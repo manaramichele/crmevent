@@ -1,0 +1,34 @@
+{
+  "summary": "Full retest of the CRMEvent dropdown-management, Taglia/Note and PersonMask work plus the fixes made since iteration_180. Backend: the new tests/test_iter181_option_lists_fixes.py passes 5/5, and the existing test_option_lists_taglia.py and test_anagrafica_staff_unify.py pass (10 passed, 7 skipped). All iteration_180 fixes are confirmed: tipologie_struttura add/usage/rename/409; platform scope shows defaults when no doc exists, adding keeps the other defaults, new orgs inherit them, non-superadmin gets 403; esigenze_alimentari usage and rename cover persons+staff arrays with arrayFilters (3 records); tipi_postazione usage counts only station shifts; public taglia rejected with 400 'Taglia non valida' for unknown or disabled values; /settings/usage matches /settings/lists. UI on desktop and 390px also passes: profile menu sections and links, sidebar/drawer without Utenti e Permessi and Impostazioni, table columns, mask via Aggiungi Staff/Volontario/row click/pencil (no Qualifica/LinkedIn/Foto; Taglia+Note saved and reloaded; age; CF -> Roma (RM)), the inline '+ Aggiungi' fields checked (Taglia, mansione, Strutture tipologia, Ospitalità esigenze, sponsor livello), trash last with name+surname confirm (Annulla keeps the person, confirm archives it), taglia filter, all Impostazioni list actions, Events tipologia showing only managed values, and /partecipa taglia with active values only and no Note. Event Planner and Control Room are locked for trial orgs, so I only code-reviewed their inline add.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/staff, Ospitalità lists", "issue": "An archived person (archiviato=true) is still returned by /api/staff and still shows in Ospitalità & Pasti (seen in the UI after deleting TEST_Rossi181). They are only hidden from /persons and persons-enriched. Still open from iteration_180."},
+      {"endpoint": "/api/settings/lists tipi_postazione", "issue": "Usage and rename only cover shifts.area with planner_station_id. Station tipologia saved in Event Planner project features (properties.tipologia) is not counted or renamed. A tipologia used only by stations with no staff can be deleted, and a rename leaves stations on the old value."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/partecipa public form", "issues": ["The Taglia select sits between the Codice Fiscale input and its 'Non ho un Codice Fiscale italiano' checkbox, which splits the CF block. Move Taglia below the CF checkbox."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter181_option_lists_fixes.py", "/app/backend/tests/test_option_lists_taglia.py", "/app/backend/tests/test_anagrafica_staff_unify.py", "/app/test_reports/pytest/pytest_iter181.xml"],
+  "action_items": [
+    "Decide and apply exclusion of archived persons (persons.archiviato) from /api/staff and the Ospitalità/hospitality lists (or show them as archived).",
+    "tipi_postazione: include planner project station features (properties.tipologia) in usage and rename.",
+    "Partecipa.jsx: move the Taglia field after the 'Non ho un Codice Fiscale italiano' checkbox."
+  ],
+  "critical_code_review_comments": [
+    "PUT /api/settings (update_settings) still accepts any body from an org admin and can overwrite list keys and 'disattivati' directly, bypassing the 409 checks in /settings/lists. Consider stripping LISTS keys there.",
+    "PersonMask CF lookup fills luogo_nascita but not data_nascita or age from the CF; the age stays blank until the date is entered by hand. This may be intended.",
+    "tests/test_option_lists_taglia.py cleanup left the TEST_OL_a_1794955550861 organization doc behind in one run (its users were removed). Cleanup should be made more robust, e.g. purge the org by id even if the per-collection deletes fail."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter181_option_lists_fixes.py"],
+  "success_rate": {"backend": "100% (15/15 executed passed, 7 skipped in existing suite)", "frontend": "100% of tested flows (Event Planner/Control Room inline add verified by code review only)"},
+  "seed_data_creation": "Used the /tmp/e3 test org (TEST_Opt Org): created TEST_Mario TEST_Rossi181 (then archived), structure TEST_Struttura181/TEST_Glamping, list values TEST_4XL / TEST_Mansione181 / TEST_Halal / TEST_Platinum181. Cleanup done: the /tmp/oid3 org fd34c442... was fully deleted (29 org docs, settings, org, user), the leftover TEST_OL_a_1794955550861 org was deleted, and pytest-created TEST_I181 orgs were purged by the fixture. The __platform_defaults__ doc did not exist before and does not exist now. I left the older TEST_EventMap Org (4343e774..., created 2026-11-14 by another run) untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login has a 'Prenota demo' popup ('Non ora') and a cookie banner ('Accept all') to dismiss. Event Planner and Control Room are locked on trial orgs. The mask save needs an event selected in each association row (Aggiungi Staff pre-adds one). The OptionListsManager delete uses window.confirm. Run pytest with -n 0 for a single file."
+}

@@ -1524,6 +1524,10 @@ def crud_routes(path, coll, model, org_scoped=True):
                 q["id"] = {"$in": list(scope)}
         if evento_id:
             q["evento_id"] = evento_id
+        if coll == "staff":
+            archived = await db.persons.distinct("id", {"org_id": user["org_id"], "archiviato": True})
+            if archived:
+                q["persona_id"] = {"$nin": archived}
         return await _list(coll, q)
 
     @api.post(f"/{path}", name=f"create_{path}")
@@ -1803,6 +1807,8 @@ async def event_hospitality(event_id: str, admin: dict = Depends(require_admin))
         raise HTTPException(status_code=404, detail="Evento non trovato")
     can_costs = admin.get("role") == "admin"
     links = await db.staff.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(5000)
+    archived = set(await db.persons.distinct("id", oq(admin, archiviato=True)))
+    links = [x for x in links if x.get("persona_id") not in archived]
     lodgings = await db.lodgings.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(5000)
     meals = await db.meals.find(oq(admin, evento_id=event_id), {"_id": 0}).to_list(20000)
     _normalize_meals(meals)

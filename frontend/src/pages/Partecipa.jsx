@@ -253,12 +253,12 @@ export default function Partecipa() {
           {!noCf
             ? <div className="sm:col-span-2"><F label={t("cf")} req><Input value={form.codice_fiscale} onChange={(e) => ch("codice_fiscale", e.target.value.toUpperCase())} maxLength={16} className="font-mono uppercase" placeholder={t("cfPlaceholder")} data-testid="pf-codice-fiscale" /></F></div>
             : <F label={t("dataNascita")} req><Input type="date" value={form.data_nascita} onChange={(e) => ch("data_nascita", e.target.value)} data-testid="pf-data-nascita" /></F>}
-          {(info.taglie_options || []).length > 0 && <F label={t("taglia")}><select value={form.taglia || ""} onChange={(e) => ch("taglia", e.target.value)} className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm bg-white h-10" data-testid="pf-taglia"><option value="">{t("tagliaPlaceholder")}</option>{info.taglie_options.map((x) => <option key={x} value={x}>{x}</option>)}</select></F>}
         </div>
         <label className="flex items-center gap-2.5 cursor-pointer -mt-1">
           <Checkbox checked={noCf} onCheckedChange={(v) => setNoCf(!!v)} data-testid="pf-no-cf" />
           <span className="text-sm text-slate-600">{t("noCf")}</span>
         </label>
+        {(info.taglie_options || []).length > 0 && <div className="sm:w-1/2 sm:pr-1.5"><F label={t("taglia")}><select value={form.taglia || ""} onChange={(e) => ch("taglia", e.target.value)} className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm bg-white h-10" data-testid="pf-taglia"><option value="">{t("tagliaPlaceholder")}</option>{info.taglie_options.map((x) => <option key={x} value={x}>{x}</option>)}</select></F></div>}
 
         <div ref={daysRef} className={`pt-2 scroll-mt-24 rounded-xl transition-colors ${dayErr ? "ring-2 ring-red-400 bg-red-50/40 p-3 -mx-1" : ""}`} data-testid="pf-days-section" aria-invalid={dayErr || undefined}>
           <h2 className="text-base font-semibold text-slate-800">{t("whenTitle")} <span className="text-red-500">*</span></h2>
