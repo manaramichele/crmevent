@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useHead } from "@/seo/head";
+import { ControlRoomPromo } from "@/components/landing/ControlRoomPromo";
 import { Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
@@ -252,6 +253,8 @@ export default function LandingPage() {
             </div>))}
         </div>
       </Section>
+
+      <ControlRoomPromo />
 
       {/* Staff & Volontari */}
       <Section id="staff" className="py-20 bg-slate-900 rounded-none">

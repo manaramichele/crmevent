@@ -68,6 +68,7 @@ import QuickActions from "@/pages/QuickActions";
 import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
 import AddonHub from "@/pages/AddonHub";
+import ControlRoom from "@/pages/ControlRoom";
 import AddonAdmin from "@/pages/AddonAdmin";
 import EventMapStudio from "@/pages/EventMapStudio";
 import Tickets from "@/pages/Tickets";
@@ -175,6 +176,7 @@ function Shell() {
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
         <Route path="/event-planner" element={<Protected><AddonHub key="ep" slug="event-planner" /></Protected>} />
         <Route path="/event-map" element={<Protected><AddonHub key="em" slug="event-map" /></Protected>} />
+        <Route path="/control-room" element={<Protected><ControlRoom /></Protected>} />
         <Route path="/event-map/:id" element={<Protected><EventMapStudio /></Protected>} />
         <Route path="/piattaforma/event-planner-map" element={<Protected><SuperAdminOnly><AddonAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />
