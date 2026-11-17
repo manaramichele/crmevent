@@ -23,7 +23,11 @@ function detect() {
 }
 
 function persist() {
-  if (!current || !hasConsent("analytics")) return;
+  if (!hasConsent("analytics")) {
+    try { localStorage.removeItem(KEY); localStorage.removeItem(VID); } catch { /* ignore */ }
+    return;
+  }
+  if (!current) return;
   try {
     if (!localStorage.getItem(KEY)) localStorage.setItem(KEY, JSON.stringify(current));
     let vid = localStorage.getItem(VID);
@@ -43,6 +47,7 @@ export function captureAttribution() {
 }
 
 export function getAttribution() {
+  if (!hasConsent("analytics")) return null;
   try { const v = JSON.parse(localStorage.getItem(KEY)); if (v) return v; } catch { /* ignore */ }
-  return hasConsent("analytics") ? current : null;
+  return current;
 }

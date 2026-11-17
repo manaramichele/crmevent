@@ -11,7 +11,7 @@ import { AiTrafficPanel } from "@/components/marketing/AiTrafficPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MailCheck } from "lucide-react";
 
-const TABS = ["funnel", "staff", "liste", "abbonamenti", "tracker", "materiali", "video"];
+const TABS = ["funnel", "staff", "liste", "abbonamenti", "tracker", "materiali", "video", "ai"];
 
 export default function MarketingBrevo() {
   const [params, setParams] = useSearchParams();

@@ -16,7 +16,7 @@ def clean_attr(a: Optional[dict]) -> Optional[dict]:
     out = {k: str(a.get(k) or "")[:120] for k in ("source", "ai", "referrer_host", "landing", "utm_source", "utm_medium", "utm_campaign", "at")}
     if out["ai"] not in AI:
         out["ai"] = ""
-    return out
+    return out if any(v for k, v in out.items() if k != "at") else None
 
 
 class VisitIn(BaseModel):
@@ -38,8 +38,12 @@ def build(db, deps):
     async def visit(body: VisitIn):
         if not re.fullmatch(r"[A-Za-z0-9-]+", body.visitor_id):
             return {"ok": False}
+        day = datetime.now(timezone.utc).isoformat()[:10]
+        if await db.web_visits.find_one({"visitor_id": body.visitor_id, "day": day}, {"_id": 1}):
+            return {"ok": True}
         d = body.model_dump()
         d["ai"] = d["ai"] if d["ai"] in AI else ""
+        d["day"] = day
         d.update({"id": uuid.uuid4().hex, "created_at": datetime.now(timezone.utc).isoformat()})
         await db.web_visits.insert_one(d)
         return {"ok": True}

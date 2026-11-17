@@ -1010,3 +1010,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Causa del testo visibile al caricamento: il blocco SEO dentro <div id="root"> di public/index.html (reso senza stile dopo la rimozione dello stile inline) restava visibile finché React non montava.
 - Fix: #root contiene solo #boot (sfondo bianco, logo centrato, spinner; compare dopo 150 ms, sparisce al primo render React); il testo SEO è in <noscript> (letto dai motori di ricerca, mai mostrato con JS attivo). Unico file: frontend/public/index.html.
 
+
+## Ottimizzazione per motori di ricerca AI (2026-11-17) — NON pubblicato
+- Audit: robots ok e nessun blocco bot (OAI-SearchBot, GPTBot, Googlebot, Bingbot, Perplexity, Claude = 200); canonical unico verso home su tutte le pagine; sitemap con 4 URL; www senza redirect; contenuti solo via JS.
+- Fatto: 10 pagine SEO (frontend/src/seo/seoPages.json → pages/SeoPage.jsx): /funzionalita/{eventi,staff-volontari,sponsor-partner,event-planner,event-map}, /organizzatori/{gare-podistiche-maratone,trail-corse-montagna,triathlon,ciclismo-granfondo}, /faq (12 domande). useHead (seo/head.js): title/description/canonical/og + JSON-LD Organization, SoftwareApplication, BreadcrumbList, FAQPage. Footer con link interni.
+- postbuild.js: HTML statico per ogni pagina pubblica (contenuto leggibile senza JS dietro overlay #boot) + sitemap 17 URL + .gz. robots.txt aggiornato.
+- Attribuzione: lib/attribution.js (referrer/utm, AI = chatgpt/perplexity/gemini/copilot/claude, solo con consenso analitico, una visita per visitatore al giorno) → POST /api/public/visit (db.web_visits); organizations.attribution alla registrazione; evento GA4 ai_assistant_visit. Report SA: GET /api/platform/ai-traffic, tab Marketing «Assistenti AI».
+- Da fare su Aruba: memory/seo_nginx_ga4.md (redirect www, try_files $uri/index.html, gzip; gruppo canali GA4).
+- Test: iteration_166 (backend 10/10, frontend ok; corretti tab AI, spinner, scroll-to-top, revoca consenso, dedup visite).
+

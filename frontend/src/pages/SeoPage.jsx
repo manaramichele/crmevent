@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { PublicShell, pageByPath } from "@/components/seo/PublicShell";
 import { useHead, baseGraph, breadcrumb, faqSchema } from "@/seo/head";
@@ -5,6 +6,7 @@ import { useHead, baseGraph, breadcrumb, faqSchema } from "@/seo/head";
 export default function SeoPage() {
   const { pathname } = useLocation();
   const p = pageByPath(pathname.replace(/\/$/, ""));
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   const isFaq = p && !p.sections;
   const crumbs = p ? [["Home", "/"], ...(p.group ? [[p.group, p.path]] : []), [p.name, p.path]].filter((c, i, a) => i === a.length - 1 || c[1] !== p.path) : [];
   useHead(p ? { title: p.title, description: p.description, path: p.path, schema: baseGraph([breadcrumb(crumbs), ...(isFaq ? [faqSchema(p.items)] : [])]) } : { title: "CRMEvent", description: "", path: "/" });
