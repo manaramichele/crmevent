@@ -117,7 +117,8 @@ export default function OpsMap({ apiKey, route, data, hidden, highlight, placing
       if (r.gps?.last_lat != null) add([r.gps.last_lng, r.gps.last_lat], el("#0f172a", svg("MapPin", 12), `${nameOf(r)} · posizione GPS rilevata ${r.gps.last_at || ""}`));
     });
     if (!hidden.has("interventions")) {
-      const PCOL = { bassa: "#94A3B8", media: "#EAB308", alta: "#F97316", critica: "#DC2626" };
+      const PCOL = { bassa: "#16A34A", media: "#EAB308", alta: "#DC2626", critica: "#DC2626" };
+      const stack = {};
       const types = Object.fromEntries((data.itv_types || []).map((t) => [t.key, t.label]));
       data.interventions.filter((i) => !["chiuso", "annullato"].includes(i.stato)).forEach((i) => {
         if (i.lng == null) return;
@@ -131,7 +132,8 @@ export default function OpsMap({ apiKey, route, data, hidden, highlight, placing
         node.insertAdjacentHTML("beforeend", `<span style="color:#fff;font:700 10px sans-serif">${i.codice}</span>`);
         node.dataset.testid = `cr-map-itv-${i.codice}`;
         node.addEventListener("click", (e) => { e.stopPropagation(); cb.current.onOpen("interventions", i.id); });
-        add(ll, node, { offset: i.post_id ? [-26, -26] : [0, 0] });
+        const key = `${ll[0].toFixed(5)},${ll[1].toFixed(5)}`, n = (stack[key] = (stack[key] ?? -1) + 1);
+        add(ll, node, { offset: i.post_id ? [-26, -26 - n * 26] : [0, -n * 26] });
       });
     }
   }, [data, route, hidden, canEdit]);

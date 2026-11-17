@@ -99,7 +99,7 @@ export default function Ops({ eventId }) {
     api.get(`${base}/route`, { params: { map_id: d.settings.route_map_id || undefined } }).then((r) => setRoute(r.data.route)).catch(() => setRoute(null));
   }, [routeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (d?.perms.edit) api.get(`${base}/staff`).then((r) => setShifts(r.data.shifts)).catch(() => {}); }, [base, d?.perms.edit]);
-  const critical = useMemo(() => (d ? d.interventions.filter((i) => ["alta", "critica"].includes(i.priorita) && !CLOSED.includes(i.stato)) : []), [d]);
+  const critical = useMemo(() => (d ? d.interventions.filter((i) => ["alta", "critica"].includes(i.priorita) && !CLOSED.includes(i.stato) && i.stato !== "risolto") : []), [d]);
   useEffect(() => {
     if (!d) return;
     const ids = critical.map((i) => i.id);

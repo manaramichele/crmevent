@@ -157,6 +157,7 @@ def _clean(d):
 
 
 ENSURE = []
+ACT_IT = {"create": "creata", "update": "modificata", "delete": "eliminata", "move": "spostata", "presence": "presenza", "status": "cambio stato"}
 
 
 def attach(r, db, deps, require_active):
@@ -202,7 +203,7 @@ def attach(r, db, deps, require_active):
                                     "action": action, "entity": entity, "entity_id": eid_obj, "label": label})
         if entity in ("postazione", "risorsa", "settore") or action == "presence":
             await db.cr_diary.insert_one({"id": uuid.uuid4().hex, "org_id": u["org_id"], "event_id": eid, "at": _now(), "by": u.get("email"), "by_name": u.get("name") or u.get("email"),
-                                          "type": "postazione" if entity == "postazione" else "risorsa" if entity == "risorsa" else "settore", "text": f"{entity} · {action} · {label}"[:300]})
+                                          "type": "postazione" if entity == "postazione" else "risorsa" if entity == "risorsa" else "settore", "text": f"{entity.capitalize()} {ACT_IT.get(action, action)} · {label}"[:300]})
 
     def conflict():
         return HTTPException(status_code=409, detail="Dato modificato nel frattempo da un altro operatore: ricarico la versione più recente")

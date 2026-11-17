@@ -22,6 +22,13 @@ def _mins(a, b):
     return round((datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds() / 60, 1) if a and b else None
 
 
+def _d(v):
+    try:
+        return datetime.fromisoformat(v[:10]).strftime("%d/%m/%Y")
+    except Exception:
+        return v or "—"
+
+
 def _avg(v):
     v = [x for x in v if x is not None]
     return round(sum(v) / len(v), 1) if v else None
@@ -87,7 +94,7 @@ def attach(r, db, deps, H):
             t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E6F7F6")), ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CBD5E1")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
             return t
         st = []
-        title = [Paragraph(f"<b>Report Control Room</b><br/>{d['ev']['nome']}", ss["Title"]), Paragraph(f"Data evento: {d['ev'].get('data_inizio') or '—'} · Generato il {datetime.now(ROME).strftime('%d/%m/%Y %H:%M')}", ss["BodyText"])]
+        title = [Paragraph(f"<b>Report Control Room</b><br/>{d['ev']['nome']}", ss["Title"]), Paragraph(f"Data evento: {_d(d['ev'].get('data_inizio'))} · Generato il {datetime.now(ROME).strftime('%d/%m/%Y %H:%M')}", ss["BodyText"])]
         if d["logo"]:
             try:
                 st.append(Table([[Image(io.BytesIO(d["logo"]), width=28 * mm, height=28 * mm, kind="proportional"), title]], colWidths=[32 * mm, W - 32 * mm], style=[("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
@@ -103,7 +110,7 @@ def attach(r, db, deps, H):
                Paragraph("Segnalazioni per categoria", h2), tbl(["Categoria", "Numero"], sorted(d["by_type"].items(), key=lambda x: -x[1]), [0.7, 0.3]),
                Paragraph("Postazioni", h2), tbl(["Postazione", "Codice", "Settore", "Km", "Previsti", "Responsabile"], [[p["nome"], p.get("codice"), d["sectors"].get(p.get("sector_id")), p.get("km"), p.get("previsti"), p.get("responsabile")] for p in d["posts"]], [0.28, 0.12, 0.2, 0.08, 0.1, 0.22]),
                Paragraph("Personale e mezzi", h2), tbl(["Nome", "Tipo", "Postazione", "Presente"], [[x.get("nome") or x.get("codice"), x.get("tipologia") or x["kind"], next((p["nome"] for p in d["posts"] if p["id"] == x.get("post_id")), None), "sì" if x.get("presente") else "no"] for x in d["res"]], [0.35, 0.2, 0.3, 0.15]),
-               Paragraph("Criticità principali", h2), tbl(["Codice", "Ora", "Tipologia", "Priorità", "Descrizione"], [[x["codice"], x["apertura"], x["tipologia"], f"{x['priorita']} ({x['semaforo']})", x["descrizione"]] for x in d["critical"]], [0.1, 0.12, 0.18, 0.15, 0.45]),
+               Paragraph("Criticità principali", h2), tbl(["Codice", "Ora", "Tipologia", "Priorità", "Descrizione"], [[x["codice"], x["apertura"], x["tipologia"], x["semaforo"], x["descrizione"]] for x in d["critical"]], [0.1, 0.12, 0.18, 0.15, 0.45]),
                Paragraph("Interventi effettuati", h2), tbl(["Codice", "Apertura", "Tipologia", "Priorità", "Stato", "Squadre", "Presa (min)", "Risol. (min)"], [[x["codice"], x["apertura"], x["tipologia"], x["semaforo"], x["stato"], x["squadre"], x["presa_min"], x["risoluzione_min"]] for x in d["rows"]], [0.09, 0.11, 0.17, 0.09, 0.13, 0.21, 0.1, 0.1]),
                Paragraph("Interventi rimasti aperti", h2), tbl(["Codice", "Apertura", "Tipologia", "Stato", "Descrizione"], [[x["codice"], x["apertura"], x["tipologia"], x["stato"], x["descrizione"]] for x in d["open"]], [0.1, 0.12, 0.2, 0.15, 0.43]),
                Paragraph("Cronologia delle attività", h2), tbl(["Data e ora", "Tipo", "Intervento", "Operatore", "Descrizione"], [[_t(x["at"], "%d/%m %H:%M:%S"), x["type"], x.get("codice"), x.get("by_name"), x["text"]] for x in d["diary"]], [0.14, 0.12, 0.1, 0.16, 0.48])]
@@ -116,7 +123,7 @@ def attach(r, db, deps, H):
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill
         wb = Workbook()
-        sheets = {"Riepilogo": (["Voce", "Valore"], [["Evento", d["ev"]["nome"]], ["Data", d["ev"].get("data_inizio")], ["Postazioni", len(d["posts"])], ["Personale", sum(1 for x in d["res"] if x["kind"] == "persona")],
+        sheets = {"Riepilogo": (["Voce", "Valore"], [["Evento", d["ev"]["nome"]], ["Data", _d(d["ev"].get("data_inizio"))], ["Postazioni", len(d["posts"])], ["Personale", sum(1 for x in d["res"] if x["kind"] == "persona")],
                                                     ["Interventi", len(d["itv"])], ["Aperti", len(d["open"])], ["Criticità rosse", len(d["critical"])], ["Media presa in carico (min)", d["avg_presa"]], ["Media risoluzione (min)", d["avg_ris"]]]
                                 + [[f"Categoria: {k}", v] for k, v in d["by_type"].items()]),
                   "Postazioni": (["Postazione", "Codice", "Settore", "Km", "Previsti", "Responsabile"], [[p["nome"], p.get("codice"), d["sectors"].get(p.get("sector_id")), p.get("km"), p.get("previsti"), p.get("responsabile")] for p in d["posts"]]),

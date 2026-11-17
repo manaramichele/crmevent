@@ -3,7 +3,7 @@ import os, requests
 from dotenv import load_dotenv
 load_dotenv("/app/frontend/.env")
 API = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") + "/api"
-OPS = f"{API}/controlroom/events/2ffc1b48b9f34bf9901da7aa1eb7f0b7/ops"
+OPS = f"{API}/controlroom/events/08e8a867893f4e2b835e2d43dd4fe65d/ops"
 s = requests.Session()
 s.post(f"{API}/auth/login", json={"email": "test_cr_a@crmevent-test.it", "password": "TestCR2026!"})
 s.headers["Authorization"] = f"Bearer {s.cookies.get('access_token')}"

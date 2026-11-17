@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 load_dotenv("/app/frontend/.env")
 API = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/") + "/api"
 PWD = "TestCR2026!"
-ORG_A = "e89bef6de0d643b5a03b85fa26e9e3ae"
-EV_A = "2ffc1b48b9f34bf9901da7aa1eb7f0b7"
+ORG_A = "e2356cc12b95447eb15b53d5aad01d32"
+EV_A = "08e8a867893f4e2b835e2d43dd4fe65d"
 OPS = f"{API}/controlroom/events/{EV_A}/ops"
 
 

@@ -4,7 +4,7 @@ import axios from "axios";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Phone, Siren, ClipboardList, CheckCircle2, MessageSquare, ArrowLeft, WifiOff, MapPin, Camera, Locate } from "lucide-react";
-import { ITV_STATES, PRIORITY, ASG, fmtTime, Pill } from "@/components/controlroom/meta";
+import { ITV_STATES, PRIORITY, ASG, LIGHT, fmtTime, Pill } from "@/components/controlroom/meta";
 import { TypeGrid, PriorityPicker } from "@/components/controlroom/ItvNew";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api/cr-mobile`;
@@ -127,7 +127,7 @@ function Msgs({ d, token, reload, back }) {
 function OpMap({ d, back }) {
   const box = useRef(null);
   useEffect(() => {
-    const pts = [d.post?.lng != null && [[d.post.lng, d.post.lat], "#0ABAB5", d.post.nome], ...d.interventions.filter((i) => i.lng != null && !["chiuso", "annullato"].includes(i.stato)).map((i) => [[i.lng, i.lat], PRIORITY[i.priorita][1], i.codice])].filter(Boolean);
+    const pts = [d.post?.lng != null && [[d.post.lng, d.post.lat], "#0ABAB5", d.post.nome], ...d.interventions.filter((i) => i.lng != null && !["chiuso", "annullato"].includes(i.stato)).map((i) => [[i.lng, i.lat], LIGHT[i.priorita][1], i.codice])].filter(Boolean);
     const m = new maplibregl.Map({ container: box.current, style: OSM, center: pts[0]?.[0] || [12.5, 42], zoom: pts.length ? 15 : 5 });
     pts.forEach(([c, col, t]) => new maplibregl.Marker({ color: col }).setLngLat(c).setPopup(new maplibregl.Popup().setText(t)).addTo(m));
     if (pts.length > 1) m.fitBounds(pts.reduce((b, [c]) => b.extend(c), new maplibregl.LngLatBounds(pts[0][0], pts[0][0])), { padding: 50, maxZoom: 17 });

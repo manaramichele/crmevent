@@ -1049,3 +1049,20 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Frontend: viste Operativa/Interventi (tabella/schede, filtri, ordinamento)/Comunicazioni/Diario; banner + flash critici; campanella; "Intervento qui" sulla mappa; ItvDetail; Ruoli e accessi con QR; pagina operatore /cr/op/:token.
 - Test: iteration_170 (21/21 + UI) → correzioni → iteration_171 (fix verificati) → ultimo fix 409 su intervento chiuso verificato con pytest. Dati TEST_CR rimossi (seed: backend/scripts/seed_cr_test.py).
 - Prossime fasi: 4 GPS reale, report PDF/Excel, statistiche; 5 test completi.
+
+
+## Event Planner — verifica qualità Satellite (2026-11-17)
+- Diagnosi: lo stile MapTiler "hybrid" usa satellite-v2 (tiles.json maxzoom 22, tile 512 px) → configurazione corretta. A Milano centro oltre z19 i tile MapTiler sono riscalati (dettaglio reale assente); Esri World Imagery z19 molto più nitido.
+- Scelta utente: restare solo su MapTiler → nessuna modifica al codice.
+
+## Control Room — Fase 4 (2026-11-17) — NON pubblicato
+- Scelte utente: 4 priorità mantenute + semaforo (bassa=Verde, media=Giallo, alta/critica=Rosso); voce menu sempre visibile.
+- 12 KPI dashboard; banner rosso alta+critica non risolte; anello stato postazioni sulla mappa; marker interventi colori semaforo e impilati.
+- Diario: righe anche per postazioni/risorse/settori, filtri data/ora, categoria, priorità, operatore; più recente in alto; non cancellabile.
+- backend/controlroom_report.py: /ops/report.pdf e /ops/report.xlsx (solo responsabile; logo evento se presente).
+- Mobile operatore: MAPPA e contatti responsabili.
+- Test: iteration_172 (16/16 + 74/74 regressione, UI ok) → correzioni minori verificate. Dati TEST_CR rimossi.
+- Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
+
+## In coda
+- Duplica evento (richiesta utente, da avviare).
