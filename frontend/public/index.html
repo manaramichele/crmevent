@@ -23,11 +23,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
 <title>CRMEvent | Il CRM per organizzare eventi</title>
-<style>#boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:#fff;opacity:0;animation:bf .2s ease .15s forwards}#boot img{width:190px;height:auto}#boot i{width:22px;height:22px;border:2px solid #e2e8f0;border-top-color:#0ABAB5;border-radius:50%;animation:bs .8s linear infinite}@keyframes bf{to{opacity:1}}@keyframes bs{to{transform:rotate(360deg)}}</style>
+<style>#boot{position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:#fff}#boot img,#boot i{opacity:0;animation:bf .2s ease .15s forwards}#boot img{width:190px;height:auto}#boot i{width:22px;height:22px;border:2px solid #e2e8f0;border-top-color:#0ABAB5;border-radius:50%;animation:bf .2s ease .15s forwards,bs .8s linear infinite}@keyframes bf{to{opacity:1}}@keyframes bs{to{transform:rotate(360deg)}}</style>
 </head>
 <body>
-<div id="root"><div id="boot" role="status" aria-label="Caricamento CRMEvent"><img src="%PUBLIC_URL%/logo-crmevent-header.png" alt="CRMEvent" /><i></i></div></div>
-<noscript>
+<div id="root"><div id="boot" role="status" aria-label="Caricamento CRMEvent"><img src="%PUBLIC_URL%/logo-crmevent-header.png" alt="CRMEvent" /><i></i></div>
 <main>
 <h1>CRMEvent: organizza il tuo evento. Tutto in un'unica piattaforma.</h1>
 <p>Gestisci eventi, staff, volontari, sponsor, turni e tutte le informazioni operative del tuo evento con CRMEvent, il CRM pensato per chi organizza eventi sportivi, culturali e manifestazioni. Prova gratuita di 14 giorni, senza carta di credito.</p>
@@ -51,8 +50,8 @@
 <li>Silver, per gestire le attività operative in modo più completo: 49 € al mese, fino a 5 eventi, fino a 50 Staff e Volontari. Event Planner ed Event Map inclusi per 1 evento.</li>
 <li>Gold, per avere tutti gli strumenti di gestione dell'evento: 79 € al mese, eventi e Staff e Volontari illimitati. Event Planner ed Event Map inclusi per 3 eventi.</li>
 </ul>
-<p>Con l'abbonamento annuale il prezzo mensile si riduce. Eventi aggiuntivi per Event Planner ed Event Map e pacchetti di video si attivano dal Marketplace. Confronta tutte le funzionalità nella pagina <a href="/prezzi">Prezzi</a> oppure <a href="/registrati">registrati gratis</a>.</p>
+<p>Con l'abbonamento annuale il prezzo mensile si riduce. Event Planner ed Event Map si attivano dal Marketplace. Confronta tutte le funzionalità nella pagina <a href="/prezzi">Prezzi</a> oppure <a href="/registrati">registrati gratis</a>.</p>
 </main>
-</noscript>
+</div>
 </body>
 </html>

@@ -14,6 +14,7 @@ import { Sparkles, ShieldCheck, Gift } from "lucide-react";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { getReferral, clearReferral } from "@/lib/referral";
+import { getAttribution } from "@/lib/attribution";
 import { loadDemoProject, trackDemo } from "@/lib/plannerDemo";
 
 export default function Register() {
@@ -36,7 +37,7 @@ export default function Register() {
     if (!form.telefono || !isValidPhoneNumber(form.telefono)) { toast.error("Inserisci un numero di cellulare valido."); return; }
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/register-organization", { ...form, accept_terms: accept, ref: getReferral() });
+      const { data } = await api.post("/auth/register-organization", { ...form, accept_terms: accept, ref: getReferral(), attribution: getAttribution() });
       setUser(data);
       trackEvent("sign_up", { method: "email" });
       try { localStorage.removeItem("crmevent_lead"); clearReferral(); } catch {}

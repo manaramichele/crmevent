@@ -75,8 +75,11 @@ import PlatformTickets from "@/pages/PlatformTickets";
 import PressReleases from "@/pages/PressReleases";
 import PlatformPartners from "@/pages/PlatformPartners";
 import { captureReferral } from "@/lib/referral";
+import { captureAttribution } from "@/lib/attribution";
+import SeoPage from "@/pages/SeoPage";
 
 captureReferral();
+captureAttribution();
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
 const isSuper = (u) => u && u.role === "superadmin";
@@ -146,6 +149,9 @@ function Shell() {
         <Route path="/video/:slug" element={<PromoVideo />} />
         <Route path="/partecipa/:code" element={<Partecipa />} />
         <Route path="/prezzi" element={<Pricing />} />
+        <Route path="/funzionalita/:slug" element={<SeoPage />} />
+        <Route path="/organizzatori/:slug" element={<SeoPage />} />
+        <Route path="/faq" element={<SeoPage />} />
         <Route path="/registrati" element={<Register />} />
         <Route path="/completa-organizzazione" element={<CompleteOrg />} />
         <Route path="/completa-profilo" element={<CompleteProfile />} />

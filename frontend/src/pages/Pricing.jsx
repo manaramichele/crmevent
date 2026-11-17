@@ -4,9 +4,13 @@ import Footer from "@/components/Footer";
 import PlansSection from "@/components/PlansSection";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/context/AuthContext";
+import { useHead, baseGraph, breadcrumb } from "@/seo/head";
+
+const PRICING_LD = baseGraph([breadcrumb([["Home", "/"], ["Prezzi", "/prezzi"]])]);
 import { Menu, X } from "lucide-react";
 
 export default function Pricing() {
+  useHead({ title: "Prezzi e piani CRMEvent | Bronze, Silver e Gold", description: "Confronta i piani Bronze, Silver e Gold di CRMEvent con abbonamento semestrale o annuale. 14 giorni di prova gratuita senza carta di credito.", path: "/prezzi", schema: PRICING_LD });
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
   const authed = !!(user && user.org_id);

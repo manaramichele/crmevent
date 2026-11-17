@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the AI-search optimization feature (SEO pages, head/schema, FAQ, footer links, #boot overlay, first-party AI attribution, ai-traffic report, Marketing 'Assistenti AI' tab) plus regressions. Backend: 10/10 pytest pass. Frontend: all 10 SEO pages render without login with correct h1, breadcrumb, related links, CTA, title, description, canonical (https://crmevent.it+path, one per page) and JSON-LD (Org+SoftwareApplication+BreadcrumbList, plus FAQPage on /faq). /faq has 12 items. An unknown slug redirects to /. / and /prezzi have correct canonicals. All footer links navigate. Attribution: nothing is stored or sent without consent; after Accept all, crmevent_attr is stored with ai=chatgpt and exactly one /public/visit is sent per session. The 'Assistenti AI' Marketing tab was BROKEN: 'ai' was missing from the TABS whitelist, so clicking it fell back to Funnel. I fixed it (one word) and verified it. Found 3 more issues (consent revoke, spinner invisible, no scroll-to-top).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/public/visit", "issue": "Public, no rate limit or dedup: anyone can inflate AI visit counts in the report. Consider a per-IP/visitor_id rate limit or one visit per visitor_id per day."},
+      {"endpoint": "register-organization / complete-organization", "issue": "clean_attr() always returns a non-empty dict for any dict input. An attribution object with all-empty values is still stored (harmless, only noise)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MarketingBrevo.jsx TABS", "issue": "'ai' missing from the TABS array, so ?tab=ai resolved to 'funnel' and the Assistenti AI tab could never open. FIXED by testing agent.", "selector": "[data-testid=brevo-tab-ai]", "priority": "HIGH (fixed)"},
+      {"component": "public/index.html #boot spinner", "issue": "The spinner is never visible. The rule '#boot img,#boot i{opacity:0;animation:bf ...}' is overridden by '#boot i{...animation:bs ...}', so the fade-in animation never runs on <i> and its opacity stays 0. The slowed-load screenshot shows the logo only, no spinner. Fix: '#boot i{animation:bf .2s ease .15s forwards, bs .8s linear infinite}'.", "selector": "#boot i", "priority": "MEDIUM"},
+      {"component": "SEO pages / PublicShell navigation", "issue": "There is no scroll-to-top on route change. Clicking footer or related links keeps the old scroll position (scrollY 220-609 after navigating), so the user lands mid-page with the h1 out of view. Add window.scrollTo(0,0) on pathname change in SeoPage/PublicShell (or a global ScrollToTop).", "selector": "[data-testid=site-footer] a", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Attribution consent revoke (GDPR)", "issue": "Revoking analytics in Preferenze cookie (reject all) does NOT remove crmevent_attr or crmevent_vid from localStorage. STORAGE_PREFIX.analytics in consent.js only covers ph_ and crmevent_ref. getAttribution() also returns the stored value without checking consent, so the attribution is still sent at registration after consent was withdrawn. Fix: add /^crmevent_attr$/ and /^crmevent_vid$/ to STORAGE_PREFIX.analytics, and gate getAttribution() with hasConsent('analytics').", "affected_selectors": ["[data-testid=footer-cookie-prefs]", "[data-testid=cookie-prefs-reject-all]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_ai_traffic.py", "/app/test_reports/pytest/pytest_ai_traffic.xml"],
+  "action_items": [
+    "Purge crmevent_attr/crmevent_vid on analytics revoke and gate getAttribution() with hasConsent('analytics') (lib/consent.js, lib/attribution.js)",
+    "Fix #boot spinner CSS so <i> gets both animations (index.html)",
+    "Add scroll-to-top on route change for public SEO pages",
+    "Optional: rate limit or dedup POST /api/public/visit"
+  ],
+  "critical_code_review_comments": [
+    "MarketingBrevo TABS whitelist must include every TabsTrigger value (fixed for 'ai')",
+    "ai_traffic report counts every cliente org without attribution.ai as 'other' registrations, which is expected; registrations, trials and subscriptions use the org's current subscription status, not historical status",
+    "visit endpoint stores the raw request body. Fine, since Pydantic limits field lengths"
+  ],
+  "updated_files": ["/app/frontend/src/pages/MarketingBrevo.jsx", "/app/backend/tests/test_ai_traffic.py"],
+  "success_rate": {"backend": "100%", "frontend": "~85% (1 blocker fixed; 3 open issues)"},
+  "seed_data_creation": "None persisted. The test orgs TEST_AiOrg* and their users were deleted by id/org_id in the test teardown. web_visits with TEST visitor_ids and the one browser visitor_id I created (2f65b03f-...) were deleted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest tests/test_ai_traffic.py (pytest.ini uses xdist). Phone must be E.164 (+39...) for register-organization. Super Admin lands on /app; /marketing/brevo?tab=ai shows AiTrafficPanel. Demo org admin is redirected from /marketing/brevo to /app (correct). Retest the consent revoke purge, the boot spinner (route-delay static/js to see #boot) and scroll-to-top."
+}
