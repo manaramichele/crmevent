@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { WifiOff, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Layers } from "lucide-react";
@@ -28,7 +29,7 @@ function Filters({ d, hidden, toggle }) {
   const vehicles = [...new Set(d.resources.filter((r) => r.kind === "mezzo").map((r) => r.tipologia))];
   const chips = [["route", "Percorso"], ["km", "Chilometri"], ["sectors", "Settori"], ["interventions", "Interventi"], ["squadre", "Squadre"],
     ...d.settings.categories.filter((c) => d.posts.some((p) => p.categoria === c.key)).map((c) => [`post:${c.key}`, c.label, c.color]),
-    ...vehicles.map((k) => [`veh:${k}`, d.vehicles.find((v) => v.key === k)?.label || k])];
+    ...vehicles.map((k) => [`veh:${k}`, `Mezzo: ${d.vehicles.find((v) => v.key === k)?.label || k}`])];
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-1" data-testid="cr-filters">
       <Layers className="mt-1.5 h-4 w-4 shrink-0 text-slate-400" />
@@ -38,6 +39,12 @@ function Filters({ d, hidden, toggle }) {
         </button>))}
     </div>
   );
+}
+
+// Schermo intero tramite portal: nessun antenato con transform limita il riquadro
+function MapShell({ full, children }) {
+  const box = <div className={full ? "fixed inset-0 z-[60] bg-white" : "relative h-[55vh] min-h-[360px] flex-1 overflow-hidden rounded-2xl border border-slate-200 lg:h-[calc(100vh-330px)] lg:min-h-[520px]"} data-testid="cr-map-wrap">{children}</div>;
+  return full ? createPortal(box, document.body) : box;
 }
 
 export default function Ops({ eventId }) {
@@ -99,7 +106,7 @@ export default function Ops({ eventId }) {
       {!route && <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="cr-no-route">Nessun percorso GPX collegato all'evento in Percorsi Eventi: la mappa resta utilizzabile per posizionare le risorse.</div>}
       <Filters d={d} hidden={hidden} toggle={toggle} />
       <div className="flex flex-col gap-3 lg:flex-row">
-        <div className={full ? "fixed inset-0 z-50 bg-white" : "relative h-[55vh] min-h-[360px] flex-1 overflow-hidden rounded-2xl border border-slate-200 lg:h-[calc(100vh-330px)] lg:min-h-[520px]"} data-testid="cr-map-wrap">
+        <MapShell full={full}>
           <OpsMap apiKey={cfg?.maptiler_key} route={route} data={d} hidden={hidden} highlight={hl} placing={placing} onPlace={place} onOpen={open} flyTo={fly} canEdit={d.perms.edit}
             onMove={(p, c) => call("patch", `/posts/${p.id}/position`, { lng: c[0], lat: c[1], version: p.version }, "Posizione salvata")} />
           <div className="absolute right-2 top-2 flex gap-1.5">
@@ -107,7 +114,7 @@ export default function Ops({ eventId }) {
             <Button size="icon" variant="secondary" className="hidden h-10 w-10 rounded-full bg-white shadow lg:inline-flex" onClick={() => setPanel(!panel)} title="Pannello operativo" data-testid="cr-panel-toggle">{panel ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}</Button>
           </div>
           {placing && <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-amber-500 px-4 py-2 text-xs font-bold text-slate-900 shadow" data-testid="cr-placing-hint">Clicca sulla mappa per creare la postazione</div>}
-        </div>
+        </MapShell>
         {panel && <div className="h-[60vh] overflow-hidden rounded-2xl border border-slate-200 bg-white lg:h-[calc(100vh-330px)] lg:min-h-[520px] lg:w-[380px]">
           <SidePanel {...panelProps} /></div>}
         {!panel && <div className="lg:hidden"><SidePanel {...panelProps} /></div>}

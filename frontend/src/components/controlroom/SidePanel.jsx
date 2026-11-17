@@ -17,7 +17,7 @@ function Resources({ d, q, open, onAdd, onImport }) {
     && (!f.post || r.post_id === f.post) && (!q || [r.nome, r.codice, r.telefono, r.targa].some((x) => x && x.toLowerCase().includes(q))));
   return (
     <>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5">
         <Sel value={f.kind} onChange={set("kind")} testid="cr-filter-kind"><option value="">Tutti i tipi</option>{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Sel>
         <Sel value={f.stato} onChange={set("stato")} testid="cr-filter-stato"><option value="">Tutti gli stati</option>{RES_STATES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Sel>
         <Sel value={f.sector} onChange={set("sector")} testid="cr-filter-sector"><option value="">Tutti i settori</option>{d.sectors.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</Sel>
@@ -113,8 +113,8 @@ export function SidePanel(props) {
   const P = { resources: Resources, posts: Posts, sectors: Sectors, interventions: Interventions, alerts: Alerts }[tab];
   return (
     <div className="flex h-full flex-col" data-testid="cr-side-panel">
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-100 p-2">
-        {TABS.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${tab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`} data-testid={`cr-tab-${k}`}>
+      <div className="flex flex-wrap gap-1 border-b border-slate-100 p-2">
+        {TABS.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`shrink-0 rounded-full px-2.5 py-1.5 text-xs font-semibold transition-colors ${tab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`} data-testid={`cr-tab-${k}`}>
           {l}{k === "alerts" && d.alerts.length > 0 && <span className="ml-1 rounded-full bg-red-600 px-1.5 text-[10px] text-white">{d.alerts.length}</span>}</button>)}
       </div>
       {(tab === "resources" || tab === "posts") && <div className="relative px-2 pt-2"><Search className="absolute left-4 top-1/2 mt-1 h-4 w-4 -translate-y-1/2 text-slate-400" />

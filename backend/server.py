@@ -13983,7 +13983,7 @@ ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin":
                            "stripe_mode": STRIPE_MODE})
 app.include_router(ADDONS["router"])
 app.add_event_handler("startup", ADDONS["ensure"])
-CONTROL_ROOM = controlroom.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "get_current_user": get_current_user,
+CONTROL_ROOM = controlroom.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "get_current_user": require_org_member,
                                      "audit": record_audit, "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                                      "tax_rate_id": _get_tax_rate_id, "stripe_mode": STRIPE_MODE, "logger": logger,
                                      "resolve_attachment": lambda u, o: _route_file_rec(u, o), "read_file_rec": _read_file_rec})

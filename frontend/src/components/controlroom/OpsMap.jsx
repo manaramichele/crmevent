@@ -111,9 +111,8 @@ export default function OpsMap({ apiKey, route, data, hidden, highlight, placing
       const [icon, color] = r.kind === "mezzo" ? VEHICLE_STYLE[r.tipologia] || VEHICLE_STYLE.altro : ["Users", "#7C3AED"];
       const node = el(color, svg(icon, 14), `${nameOf(r)} (posizione assegnata)`, "cr-res");
       node.style.borderRadius = "8px";
-      node.style.transform = "translate(14px,-14px)";
       node.addEventListener("click", (e) => { e.stopPropagation(); cb.current.onOpen("resources", r.id); });
-      add(ll, node);
+      add(ll, node, { offset: [22, -22] });
       if (r.gps?.last_lat != null) add([r.gps.last_lng, r.gps.last_lat], el("#0f172a", svg("MapPin", 12), `${nameOf(r)} · posizione GPS rilevata ${r.gps.last_at || ""}`));
     });
     if (!hidden.has("interventions")) {
@@ -123,7 +122,7 @@ export default function OpsMap({ apiKey, route, data, hidden, highlight, placing
         if (!ll) return;
         const node = el(i.priorita === "urgente" ? "#DC2626" : "#F97316", svg("Siren", 14), i.titolo, "cr-itv animate-pulse");
         node.addEventListener("click", (e) => { e.stopPropagation(); cb.current.onOpen("interventions", i.id); });
-        add(ll, node);
+        add(ll, node, { offset: i.lng != null ? [0, 0] : [-22, -22] });
       });
     }
   }, [data, route, hidden, canEdit]);

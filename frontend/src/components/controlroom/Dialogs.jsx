@@ -52,7 +52,7 @@ export function StaffImport({ open, onOpenChange, d, base, onSubmit }) {
 // Responsabile, percorso e categorie personalizzabili delle postazioni.
 export function SettingsDialog({ open, onOpenChange, d, onSubmit }) {
   const [v, setV] = useState({});
-  useEffect(() => { if (open) setV({ responsabile: d.settings.responsabile || "", responsabile_tel: d.settings.responsabile_tel || "", route_map_id: d.settings.route_map_id || "", categories: d.settings.categories }); }, [open, d.settings]);
+  useEffect(() => { if (open) setV({ responsabile: d.settings.responsabile || "", responsabile_tel: d.settings.responsabile_tel || "", route_map_id: d.settings.route_map_id || "", categories: d.settings.categories }); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const cats = v.categories || [];
   const setCat = (i, k, x) => setV({ ...v, categories: cats.map((c, j) => (j === i ? { ...c, [k]: x } : c)) });
   const used = new Set(d.posts.map((p) => p.categoria));

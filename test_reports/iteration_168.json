@@ -1,0 +1,46 @@
+{
+  "summary": "Control Room FASE 2 tested end-to-end. Backend: 15/15 new pytest pass (access 402/404/403, sectors, posts CRUD+duplicate+position 409, resources incl. GPS non_collegato + external-vehicle authorization, staff import no-duplicates, presence/presidio, status KPIs/alerts, interventions open/close, settings+categories, rev polling) + Phase-1 regression 14/14 pass. UI (admin A, desktop 1920): dashboard/topbar/live clock/8 KPIs, GPX route with start/finish + km markers, sector create+highlight+summary, place post on map (lat/lng prefilled) + marker, drag post (coords saved, version++), edit/duplicate/delete, polizia without authorization -> error toast then OK, status buttons -> KPIs + Avvisi, staff import with caposquadra (imported people disappear from list), presence -> PARZIALMENTE PRESIDIATA -> PRESIDIATA + KPI, NUOVO INTERVENTO + close, all filters/search/chips, event status select, settings (responsabile, add/rename category), realtime via API visible in ~3.5s, offline banner shows/hides. Found 3 bugs: (1) collaboratore in non-primary org sees no events on /control-room (Phase-1 list ignores X-Org-Id), (2) map fullscreen not real fullscreen (ancestor transform), (3) vehicle/team markers fully cover post markers.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/controlroom/events (and /controlroom/events/{eid}/status, /confirmation)", "issue": "Uses deps['get_current_user'] which does NOT resolve the X-Org-Id membership context (only require_admin does). Collaboratore C with X-Org-Id=org A gets {events: [], can_purchase: true} (events/role of their primary org C) while GET /api/events and /ops correctly return org A data. Result: in UI, C switched to 'TEST_CR Org a' sees 'Crea prima un evento in Eventi.' and can never reach the read-only dashboard; can_purchase is also computed on the wrong org role. Fix: use the same org-resolving dependency as /ops (require_admin + ROUTE_RULES entry allowing members, or a member dependency that applies X-Org-Id).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/controlroom/events/{id}/ops/{kind}/{oid}", "issue": "Full-replace semantics: any field not sent is reset to default/None (e.g. sending a post without 'codice' wipes codice). Frontend sends full object so OK today, but API consumers can lose data; consider PATCH semantics or document."},
+      {"endpoint": "POST /ops/resources/{oid}/presence", "issue": "No check that resource kind == persona and no optimistic version check (other writes use version)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Ops.jsx map fullscreen", "issue": "'fixed inset-0 z-50' is contained by ancestor [data-testid=control-room-page] which has class animate-fade-up (computed transform matrix(1,0,0,1,0,0) creates a containing block). Desktop: sidebar+header remain, map height 1112px > viewport so bottom controls off-screen. Mobile 390: wrap at y=-212 (relative to scrolled page), exit-fullscreen button off-screen. Fix: render fullscreen wrapper with createPortal(document.body) or remove transform/animation-fill on the page ancestor.", "selector": "[data-testid=cr-map-fullscreen], [data-testid=cr-map-wrap]", "priority": "HIGH"},
+      {"component": "OpsMap.jsx resource markers", "issue": "node.style.transform='translate(14px,-14px)' is overwritten by maplibre's own marker transform, so vehicle/team markers sit exactly on top of their post marker (identical bounding boxes measured) -> post icon hidden and unclickable (e.g. AMB1 hides 'Ristoro km 2', TEST polizia hid its post). Fix: pass offset:[14,-14] to new maplibregl.Marker({element, offset}) instead of setting style.transform. Same overlap for intervention markers placed on a post.", "selector": ".cr-res, .cr-post", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Collaboratore read-only view", "issue": "Blocked by backend /controlroom/events org-context bug above. With that list mocked via route interception, the read-only UI is correct: status badge cr-status shown, no status select/settings/NUOVO INTERVENTO/import/add/place/edit/duplicate/delete buttons, presence buttons disabled, markers not draggable.", "affected_selectors": ["[data-testid=cr-no-events]", "[data-testid=cr-ops]"]}
+    ],
+    "design_issues": [
+      {"screen": "Control Room side panel (desktop 1920)", "issues": ["Tabs row overflows: 'Avvisi' + red badge clipped at right edge (cr-tab-alerts exceeds panel width also on mobile)", "Resource filter selects truncated to 'Tutti i tip', 'Tutti gli s', 'Tutti i sel', 'Tutte le p' - use 2x2 grid"]},
+      {"screen": "Filter chips", "issues": ["Post category 'Ambulanza' and vehicle 'Ambulanza' produce two identical-looking chips; prefix vehicle chips (e.g. 'Mezzo: Ambulanza') or group them"]},
+      {"screen": "SettingsDialog", "issues": ["useEffect depends on d.settings, so any live reload (5s polling, other operator change) resets unsaved edits in the open settings dialog"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_controlroom_phase2_ops.py", "/app/backend/tests/test_controlroom_phase1.py", "/app/test_reports/pytest/cr_phase2.xml"],
+  "action_items": [
+    "Make /api/controlroom/events, /status, /confirmation resolve the active org from X-Org-Id (same dependency as /ops) so multi-org collaboratori see the org's events; compute can_purchase on the resolved role",
+    "Fix map fullscreen: portal to document.body (or remove transform on control-room-page ancestor) so exit button is always on screen (mobile + desktop)",
+    "Use maplibregl.Marker offset option for resource/intervention markers so post markers stay visible/clickable",
+    "Minor: tabs/filters overflow in side panel; duplicate 'Ambulanza' chips; settings dialog reset on live reload"
+  ],
+  "critical_code_review_comments": [
+    "controlroom.py Phase-1 endpoints use get_current_user (primary org) while controlroom_ops uses require_admin (acting org) -> inconsistent tenant context between list and ops",
+    "OpsMap re-creates all DOM markers on every data refresh (each rev change); acceptable now but costly with hundreds of posts/resources",
+    "PUT generic update replaces whole document fields; presence endpoint lacks version check",
+    "Phones correctly masked server-side when perms.contacts false (code path reviewed; no test account without contacts permission available - collaboratore C has contacts=true)"
+  ],
+  "updated_files": ["/app/backend/tests/test_controlroom_phase2_ops.py"],
+  "success_rate": {"backend": "100% (15/15 phase2 + 14/14 phase1 regression); 1 org-context bug found by UI testing in Phase-1 list endpoint", "frontend": "~85% (all admin flows work; fullscreen broken, marker overlap, collaboratore cannot reach dashboard)"},
+  "seed_data_creation": "None persistent. All TEST_/TEST_UI records (sectors, posts, resources incl. 2 staff imports Mario/Paolo, interventions) deleted by id; event settings restored (status preparazione, responsabile null, Ristoro label). Original data intact: Settore 1, Ristoro km 2, AMB1, Lucia/Giulia, Malore km 3.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login via page.request.post('/api/auth/login') then goto /control-room?event=09e1b85e1b774b79956a31fd139a60c8. For collaboratore C set localStorage acting_org_id=9bb535b289f74a2395a6114ff0e2f0b5 (org switcher testid org-switcher-select). Run pytest with -n 0 (module fixtures share state). Retest: C sees event list in org A, fullscreen map covers viewport with visible exit button at 390px, post markers not hidden by .cr-res markers (compare bounding boxes).",
+  "rca of the issue": "1) controlroom.build passes deps['get_current_user'] as 'member' for list/status; get_current_user returns primary org_id, X-Org-Id membership switching is applied only in require_admin. 2) position:fixed inside an element with a non-none transform (animate-fade-up keeps transform after animation) is positioned relative to that element, not the viewport. 3) maplibre Marker writes element.style.transform on every render/position update, discarding the custom translate."
+}

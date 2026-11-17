@@ -55,7 +55,7 @@ def build(db, deps):
             raise HTTPException(status_code=403, detail="Nessuna organizzazione attiva")
         evs = await db.events.find({"org_id": org}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1, "citta": 1}).sort("data_inizio", -1).to_list(500)
         act = {p["event_id"]: p for p in await db.controlroom_purchases.find({"org_id": org, "status": {"$in": ["active", "pending"]}}, {"_id": 0}).to_list(1000)}
-        return {"price_net": PRICE_NET, "can_purchase": user.get("role") in ("admin", "superadmin"),
+        return {"price_net": PRICE_NET, "can_purchase": user.get("org_role") in ("admin_org", "superadmin"),
                 "events": [{**e, "active": (act.get(e["id"]) or {}).get("status") == "active", "pending": (act.get(e["id"]) or {}).get("status") == "pending"} for e in evs]}
 
     @r.get("/controlroom/events/{eid}/status")

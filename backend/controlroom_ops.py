@@ -136,6 +136,11 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def toform(cur):
+    g = cur.get("gps") or {}
+    return {**cur, "gps_device_id": g.get("device_id"), "gps_device_type": g.get("device_type")}
+
+
 def _clean(d):
     return {k: v for k, v in d.items() if k not in ("_id", "org_id")}
 
@@ -373,7 +378,7 @@ def attach(r, db, deps, require_active):
     @r.post(base + "/resources/{oid}/presence")
     async def presence(event_id: str, oid: str, body: PresenceIn, u: dict = Depends(ops_dep)):
         await ctx(u, event_id, write=True)
-        res = await db.cr_resources.update_one(q(u, event_id, id=oid), {"$set": {"presente": body.presente, "presente_at": _now() if body.presente else None, "presente_by": u.get("email")},
+        res = await db.cr_resources.update_one(q(u, event_id, id=oid, kind="persona"), {"$set": {"presente": body.presente, "presente_at": _now() if body.presente else None, "presente_by": u.get("email")},
                                                                          "$inc": {"version": 1}})
         if not res.matched_count:
             raise HTTPException(status_code=404, detail="Risorsa non trovata")
@@ -446,7 +451,7 @@ def attach(r, db, deps, require_active):
         if not cur:
             raise HTTPException(status_code=404, detail="Elemento non trovato")
         version = body.get("version")
-        data = parse(model, {k: v for k, v in body.items() if k in model.model_fields})
+        data = parse(model, {k: v for k, v in {**toform(cur), **body}.items() if k in model.model_fields})
         if not pm["contacts"]:
             for f in PHONE_FIELDS:
                 if f in data and not data[f]:
