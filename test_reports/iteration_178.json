@@ -1,0 +1,52 @@
+{
+  "summary": "Tested the Control Room promo page (iteration 178), backend and frontend, as Super Admin acting in the Demo org. Backend: 5 of 5 pytest cases pass (tests/test_cr_promo_page.py). Covered: the promo state from /controlroom/events (price_net 119, module_disabled); ops returns 402 while inactive, with no data in the response; grant without X-Org-Id, then ops 200 with the 6 demo posts intact; disable gives module_disabled=true and 402; enable brings back the same post count; revoke gives 402 again; the public promo endpoint and the MP4/JPG files; the /video/control-room page; media RBAC (anonymous 401/403, a new TEST org admin 403, SA 200) and 400 on invalid values. Frontend: /control-room in the Demo org shows addon-info-page. The video is playable (currentSrc /media/control-room-demo.mp4, 56.76s, 1920 wide, poster set; play() advances), with the title 'Il tuo evento sotto controllo, in tempo reale.', price '119,00 € + IVA per evento', six benefits (GPS marked 'disponibile prossimamente') and the GPS simulated caption. addon-info-marketplace goes to /marketplace?servizio=control-room and opens the Control Room card modal. After a grant, cr-dashboard renders; after disable, the promo page shows the disabled message; after revoke, the promo page is back. In the Materiali promozionali tab, promo-card-control-room has Scarica MP4/JPG and the replace video and replace miniatura buttons. /video/control-room works logged out. Mobile 390px has no horizontal overflow. The Event Planner and Event Map InfoPages still render, checked with a new TEST org because the Demo org is unrestricted. No critical issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/promo-materials/{slug}/media", "issue": "Validation only checks the URL shape. It returned 200 for {mp4:'/media/control-room-demo-poster.jpg'} (a JPG accepted as the video), {poster:'/media/../api/x.jpg'} (path traversal segment), {mp4:'https://evil.example.com/x.mp4'} (any external host) and {poster:'/media/does-not-exist.jpg'} (file does not exist). The endpoint is SA-only, so the risk is low. Suggestion: require .mp4/.jpg/.jpeg extensions per field, reject '..', and optionally check that the file exists or allow only known upload paths."},
+      {"endpoint": "POST /api/promo-materials/{slug}/media", "issue": "A poster update always overwrites 'preview' with the raw poster, so the branded email preview (/media/brevo/...-anteprima.jpg) is lost and cannot be restored from the UI or API. _snapshot also stores only FIELDS + status, not mp4/poster/preview, so 'Versioni → ripristina' cannot undo a media replacement."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Control Room promo (module disabled by SA)", "issues": ["The page shows 'disattivata… i dati restano conservati', but the plan line still says 'si attiva per singolo evento' and the 'Attiva dal Marketplace' CTA is still shown. An org disabled by SA cannot self-activate (can_purchase=false), so the CTA should be hidden or replaced with 'contatta l'assistenza', as AddonHub does for addon-module-disabled."]},
+      {"screen": "Marketing → Materiali promozionali → Control Room card", "issues": ["The Control Room preview /media/brevo/control-room-anteprima.jpg is a plain screenshot of the UI. The other materials (for example Sponsor e Partner) use a branded preview with the title band, CRMEvent logo and play button 'Guarda il video dimostrativo'. This is inconsistent in the email preview."]},
+      {"screen": "Promo video content", "issues": ["The 'Dimostrazione · dati fittizi' badge in the top-right of the video covers the user name and part of the 'Supporto dedicato' button. This is cosmetic.", "The demo map in the video and on the dashboard is zoomed out to all of Italy (no GPX route on demo_evt_bcr), so markers are tiny. A route or a closer zoom would make a better promo."]}
+    ]
+  },
+  "passed_checks": [
+    "With no active Control Room, /control-room shows addon-info-page and not cr-dashboard.",
+    "addon-info-video plays the MP4 with the poster (readyState 4, currentTime advances).",
+    "The price comes from the backend price_net (119,00 € + IVA per evento) and the marketplace service status is 'available'.",
+    "addon-info-marketplace goes to /marketplace?servizio=control-room and the card modal 'Scegli l'evento e attiva Control Room' opens.",
+    "Grant without X-Org-Id shows cr-dashboard (subtitle 'Centrale operativa dell'evento', sidebar lock gone).",
+    "Disable shows the disabled message; enable and revoke bring the promo page back; ops returns 402 with no data leak.",
+    "cr_posts for demo_evt_bcr are kept through revoke and disable (6 before and after).",
+    "promo-card-control-room has dl-video/dl-image links and the replace-video/replace-poster buttons.",
+    "The public /video/control-room page loads the MP4 logged out.",
+    "Media POST: SA 200, non-SA org admin 403, anonymous 401/403; javascript:, ftp:, an empty body and /etc/passwd each return 400.",
+    "Mobile 390px: scrollWidth 390, video 356x200, CTA visible after scroll.",
+    "The Event Planner and Event Map InfoPages render for an org without rights, with video, price, plan and marketplace link."
+  ],
+  "test_report_links": ["/app/backend/tests/test_cr_promo_page.py", "/app/backend/tests/ui_cr178_setup.py", "/app/test_reports/pytest/iter178.xml"],
+  "action_items": [
+    "Optional: when module_disabled, hide 'Attiva dal Marketplace' on the Control Room InfoPage and drop the 'si attiva per singolo evento' wording.",
+    "Optional: tighten MediaIn validation (extension per field, no '..', restrict hosts or paths) and keep a separate branded preview instead of overwriting it with the poster; include the media fields in the version snapshot.",
+    "Optional: make the Control Room email preview image branded like the other materials."
+  ],
+  "critical_code_review_comments": [
+    "ControlRoom.jsx Intro still hardcodes '119 €' (cr-price). It only appears when another event is active but the selected one is not; it should use info.price_net.",
+    "DemoVideo always renders <source type='video/webm'>, even when webm is null (no src). Browsers skip it, but a conditional render would be cleaner.",
+    "If /api/public/promo/control-room is unpublished (bozza), the page silently falls back to the static addonInfo video. This works, but the SA replacement would then not be reflected.",
+    "promoMode treats an org with zero events the same as an inactive one (promo page), so cr-no-events is now unreachable in promo mode. This is acceptable but worth knowing."
+  ],
+  "updated_files": ["/app/backend/tests/test_cr_promo_page.py", "/app/backend/tests/ui_cr178_setup.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Created and then revoked 3 SA free grants for demo_evt_bcr (2 pytest runs and 1 UI run); revoked purchase rows remain, as by design. Created 3 TEST_CR178 orgs and users and deleted them by id (0 remain). The Demo org ends with 0 active Control Room purchases and modules_disabled []. Before testing the field was absent; $pull left an empty array, which is harmless. Promo media for control-room was restored to mp4 /media/control-room-demo.mp4, poster /media/control-room-demo-poster.jpg, preview /media/brevo/control-room-anteprima.jpg and webm null, via the DB because the API cannot set preview. Its version counter went from 1 to 7, with matching promo_material_versions 'media' snapshots.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "SA from /app/memory/test_credentials.md works. test_cr_a@crmevent-test.it / TestCR2026! no longer exists (401). Use register-organization for non-SA users (see ui_cr178_setup.py).",
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_cr_promo_page.py. It grants, disables, enables and revokes Control Room on the Demo org and restores the promo media itself. UI: page.request.post /api/auth/login (SA), set localStorage acting_org_id=b7f40862230441b9a0bedabefe8dab49, go to /control-room. The Demo org is unrestricted for Planner and Map, so check their InfoPages with a new TEST org (python tests/ui_cr178_setup.py setup|cleanup). New trial orgs get a 'Scopri CRMEvent con una demo gratuita' modal and the cookie banner on first load."
+}

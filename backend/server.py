@@ -44,6 +44,7 @@ import brevo_tracker
 import iscritti
 import calendario_italia
 import avail_prefs
+import anagrafica
 import planner
 import addons
 import eventmap
@@ -606,6 +607,13 @@ async def _create(coll, data):
     return doc
 
 
+async def _assert_refs_in_org(org_id: str, data: dict):
+    for key, coll, label in (("evento_id", "events", "Evento"), ("persona_id", "persons", "Persona"), ("team_id", "teams", "Team")):
+        v = data.get(key)
+        if v and not await db[coll].find_one({"org_id": org_id, "id": v}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail=f"{label} non trovato in questa organizzazione")
+
+
 async def _list(coll, query=None):
     return await db[coll].find(query or {}, {"_id": 0}).sort("created_at", -1).to_list(5000)
 
@@ -1134,6 +1142,7 @@ class Person(BaseModel):
     azienda_id: Optional[str] = None
     data_nascita: Optional[str] = None
     codice_fiscale: Optional[str] = None
+    luogo_nascita: Optional[str] = None
     indirizzo: Optional[str] = None
     cap: Optional[str] = None
     citta: Optional[str] = None
@@ -1176,6 +1185,7 @@ class Presence(BaseModel):  # collection: staff (Persona <-> Evento)
     data_partenza: Optional[str] = None
     ora_partenza: Optional[str] = None
     stato: Optional[str] = "da_contattare"
+    preferenza: Optional[str] = None
     note_operative: Optional[str] = None
     servizio_ospitalita: Optional[str] = None
     esigenze_alimentari: Optional[List[str]] = None
@@ -1513,6 +1523,8 @@ def crud_routes(path, coll, model, org_scoped=True):
             raise HTTPException(status_code=403, detail="Puoi operare solo sugli eventi assegnati: non puoi creare nuovi eventi")
         if coll != "events":
             _assert_ev_allowed(user, data.get("evento_id"))
+        if coll == "persons":
+            data["provenienza"] = {"tipo": "manuale", "at": now_iso(), "by": user.get("email")}
         if _team_ids(user) is not None and coll in ("teams", "staff", "shifts"):
             if coll == "teams":
                 raise HTTPException(status_code=403, detail="Puoi operare solo sui Team assegnati: non puoi creare nuovi Team")
@@ -1526,6 +1538,9 @@ def crud_routes(path, coll, model, org_scoped=True):
                 await _assert_event_operational(user["org_id"], data["evento_id"])
             if coll == "staff":
                 await SAAS["check_people"](user["org_id"], data.get("persona_id"))
+                if await db.staff.find_one({"org_id": user["org_id"], "persona_id": data.get("persona_id"), "evento_id": data.get("evento_id"), "categoria": data.get("categoria") or "staff"}, {"_id": 1}):
+                    raise HTTPException(status_code=409, detail="La persona è già associata a questo evento con lo stesso ruolo")
+            await _assert_refs_in_org(user["org_id"], data)
         doc = await _create(coll, data)
         try:
             await BRT["on_created"](user, coll, user["org_id"])
@@ -1550,6 +1565,12 @@ def crud_routes(path, coll, model, org_scoped=True):
         clean["updated_at"] = now_iso()
         await _assert_org_operational(user["org_id"])
         _assert_ev_allowed(user, clean.get("evento_id"))
+        await _assert_refs_in_org(user["org_id"], clean)
+        if coll == "staff" and clean.get("categoria"):
+            cur = await db.staff.find_one({"org_id": user["org_id"], "id": item_id}, {"_id": 0, "persona_id": 1, "evento_id": 1}) or {}
+            if await db.staff.find_one({"org_id": user["org_id"], "id": {"$ne": item_id}, "persona_id": clean.get("persona_id") or cur.get("persona_id"),
+                                        "evento_id": clean.get("evento_id") or cur.get("evento_id"), "categoria": clean["categoria"]}, {"_id": 1}):
+                raise HTTPException(status_code=409, detail="La persona è già associata a questo evento con lo stesso ruolo")
         if coll in ("staff", "shifts"):
             _assert_team_allowed(user, clean.get("team_id"))
         if coll == "staff" and "team_id" in clean and not (user.get("perm") or {"admin": True}).get("admin"):
@@ -1981,12 +2002,15 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "is_staff": bool(cats & {"staff", "collaboratore"}),
                     "is_volontario": "volontario" in cats,
                     "is_team": "team" in cats,
+                    "is_da_classificare": "da_classificare" in cats,
                     "aziende_nomi": aziende,
                     "teams_nomi": teams_nomi,
                     "eventi_nomi": eventi_nomi,
                     "eventi_ids": list({x["evento_id"] for x in prs}),
                     "eventi_count": len({x["evento_id"] for x in prs}),
                     "preferenze": prefs.get(pid, []),
+                    "provenienza_tipo": (p.get("provenienza") or {}).get("tipo") or "non_determinata",
+                    "assegnazioni": [{k: x.get(k) for k in ("id", "evento_id", "categoria", "team_id", "ruolo", "preferenza", "stato")} for x in prs],
                     "mansioni": [{"evento_id": x["evento_id"], "ruolo": x.get("ruolo")} for x in prs]})
     return out
 
@@ -2032,7 +2056,8 @@ async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_a
         person = existing
     await SAAS["check_people"](admin["org_id"], (person or {}).get("id"))
     if not person:
-        person = TN.normalize_fields("persons", {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()})
+        person = TN.normalize_fields("persons", {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso(),
+                                                 "provenienza": {"tipo": "manuale", "at": now_iso(), "by": admin.get("email"), "evento_id": body.evento_id}})
         await db.persons.insert_one({**person})
     categoria = body.categoria if body.categoria in ("staff", "volontario") else "staff"
     link = await db.staff.find_one({**oq(admin), "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
@@ -5749,7 +5774,7 @@ async def add_staff_candidate(org_id: str, body: StaffCandidateIn, user: dict = 
     await SAAS["check_people"](org_id, (person or {}).get("id"))
     if not person:
         person = TN.normalize_fields("persons", {"id": new_id(), "org_id": org_id, "nome": body.nome.strip(), "cognome": body.cognome.strip(),
-                  "email": email, "cellulare": tel, "created_at": now_iso()})
+                  "email": email, "cellulare": tel, "created_at": now_iso(), "provenienza": {"tipo": "manuale", "at": now_iso(), "by": user.get("email"), "evento_id": body.evento_id}})
         await db.persons.insert_one({**person})
     link = await db.staff.find_one({"org_id": org_id, "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
     if not link:
@@ -10150,6 +10175,7 @@ async def migrate_memberships():
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
+    logger.info(f"availability -> staff migration: {await ANA['migrate']()}")
     if not await db.schema_meta.find_one({"id": "fic_manual_backlog_v1"}):
         # pagamenti gi\u00e0 registrati prima della fatturazione in bozza: solo generazione manuale dal pulsante (mai automatica)
         await db.invoices.update_many({"kind": {"$in": ["saas_subscription", "marketplace"]}, "fic_document_id": None, "fic_auto": {"$exists": False}},
@@ -11089,6 +11115,8 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     mismatch = {}
     if person:
         fill = {}
+        if cf_norm and not person.get("luogo_nascita") and ANA["birth_place_from_cf"](cf_norm, birth):
+            await db.persons.update_one({"id": person["id"], "org_id": org_id}, {"$set": {"luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth)}})
         for k in ("email", "cellulare", "data_nascita", "cognome", "codice_fiscale"):
             cur, new = person.get(k), submitted.get(k)
             if new and not cur:
@@ -11102,7 +11130,9 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         pdoc = await _create("persons", {"org_id": org_id, "nome": submitted["nome"], "cognome": submitted["cognome"],
                                          "email": email or None, "cellulare": cell or None,
                                          "data_nascita": submitted["data_nascita"], "codice_fiscale": cf_norm or None,
+                                         "luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth) if cf_norm else None,
                                          "tag": ["disponibilita"],
+                                         "provenienza": {"tipo": "link_disponibilita", "at": now_iso(), "evento_id": link["evento_id"], "link_code": code},
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
         pid = pdoc["id"]
     now = now_iso()
@@ -11138,6 +11168,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
             "compilation_lang": lang,
             "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
+    await ANA["ensure_link"](org_id, pid, event["id"], await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0}))
     # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
     try:
         org = await db.organizations.find_one({"id": org_id}, {"_id": 0}) or {}
@@ -13990,6 +14021,8 @@ app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
 app.include_router(AVP["router"])
+ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label, "cf_valid": _cf_valid})
+app.include_router(ANA["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})

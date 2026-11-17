@@ -1065,6 +1065,34 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Control Room: pagina di presentazione + video dimostrativo (2026-11-17)
+- Scelta utente: GPS mostrato nel video come simulazione etichettata ("Simulazione dimostrativa GPS"); nella pagina la voce GPS è "disponibile prossimamente".
+- ControlRoom.jsx: se nessun evento attivo o modulo disattivato → InfoPage di AddonHub (stesso componente di Event Planner) con video, testi, prezzo da backend (price_net), stato marketplace, CTA /marketplace?servizio=control-room (nascosta se disattivato). Con almeno un evento attivo → dashboard operativa invariata.
+- Video: scripts/cr_video/seed.py (dati demo su Demo org/demo_evt_bcr: 3 settori, 6 postazioni, risorse, 1 intervento simulato) + record.py (Playwright, UI reale, badge "Dimostrazione · dati fittizi", schermata finale logo + www.crmevent.it) → /media/control-room-demo.mp4 (56s 1920x1080), poster, /media/brevo/control-room-anteprima.jpg. Concessione demo revocata (dati demo conservati).
+- Marketing: promo material "control-room" (pubblicato, pagina /video/control-room); POST /api/promo-materials/{slug}/media (SA) + pulsanti "Sostituisci video/miniatura" in PromoCard; validazione estensioni/percorsi; versioni includono mp4/poster.
+- Test: iteration_178 (tutto ok) + correzioni minori (validazione media, CTA nascosta se disattivato, anteprima email brandizzata).
+
+
+## Staff e Volontari: maschera unica e provenienza (2026-11-17)
+- Scelta utente: Ruolo Staff/Volontario per ogni evento (come prima).
+- PersonMask.jsx: stessa maschera per matita, "Aggiungi Staff", "Aggiungi Volontario" (A anagrafica completa, B provenienza + preferenze dai link, C eventi con evento ricercabile, ruolo, preferenza, team, mansione; Aggiungi evento/rimuovi; conferma modifiche non salvate; retry senza doppioni).
+- Persons.jsx: colonne Cognome, Nome, Cellulare, Ruolo, Preferenza, Team, Mansione, Evento, Azioni (matita ultima); rimossi dialog ruoli dalla cella e pulsanti inline preferenza/mansione; "N associazioni" senza filtro evento; filtri team, mansione, provenienza; assegnazioni filtrate per scheda.
+- Backend: persons.provenienza {tipo manuale|link_disponibilita, at, by/evento_id/link_code} impostata solo dal sistema (crud, quick-add, staff-candidates, link pubblico); storici = non_determinata; Presence.preferenza; persons-enriched espone assegnazioni + provenienza_tipo; _assert_refs_in_org su crud (evento/persona/team della stessa org); 409 duplicato persona+evento+ruolo su POST e PUT.
+- Test: iteration_176/177 (tutti i flussi ok).
+
+
+## Menu: rimossa voce laterale Profilo & Account (2026-11-17)
+- Gruppo "Account" eliminato dal menu laterale; /profilo resta raggiungibile dal menu utente in alto a destra (desktop e mobile). Utenti e Permessi invariato.
+
+
+## Moduli e Attivazioni come 4ª scheda di Piattaforma CRMEvent (2026-11-17)
+- Platform.jsx: SEZIONI + "moduli" → <ModulesAdmin embedded /> (stesso componente; parametri org/tab mantengono sezione=moduli). Voce laterale rimossa; /piattaforma/moduli e /piattaforma/event-planner-map reindirizzano alla scheda.
+
+
+## Menu: "Organizzatori" → "Lead organizzatori" (2026-11-17)
+- La voce di Marketing & Admin era la ricerca lead (LeadFinder), non un duplicato di Organizzazioni: su richiesta utente solo rinominata. URL /marketing/organizzatori invariato.
+
+
 ## Attivazione gratuita Marketplace: Control Room aggiunto, Planimetrie & Mappe ritirato (2026-11-17)
 - Finestra esistente "Attivazione gratuita" (Piattaforma → Marketplace → Acquisti): Control Room dopo Event Map; scelto Control Room compare il campo Evento (singolo o "Tutti gli eventi attuali"). Backend marketplace admin_grant → modules_hub.grant_cr (controlroom_purchases source superadmin, 0 €, audit), errore se già attiva.
 - Planimetrie & Mappe: seed rimosso, servizio marcato retired/visible=False (migrazione retire_maps_v1), escluso da catalogo admin/org e dalla concessione; nessun dato cancellato.
@@ -1111,3 +1139,14 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 ## In coda
 - Duplica evento (richiesta utente, da avviare).
+
+## Staff/Volontari: anagrafica unica, Da classificare, luogo di nascita, età, indirizzo Google (2026-11-17)
+- Rimossa la scheda "Disponibilità ricevute" (AvailabilityDialog ora solo link pubblico + rimando a Staff/Volontari → Da classificare). Dati availabilities conservati.
+- backend/anagrafica.py: ensure_link → link staff categoria "da_classificare" (origine link_disponibilita, preferenza, availability_id) per persona+evento, idempotente; migrazione una tantum all'avvio (schema_meta avail_to_staff_v1, 5 link creati in preview).
+- Luogo di nascita: archivio codici catastali (backend/data/catastali.json da python-codicefiscale: comuni storici/soppressi + stati esteri), GET /api/anagrafica/cf-lookup (scelta storica in base alla data di nascita); compilato anche dal modulo pubblico.
+- Età calcolata (calcAge) in maschera e dettaglio, mai salvata.
+- Indirizzo: rimandata l'integrazione Google Maps per scelta dell'utente; campo di ricerca rimosso dalla maschera, indirizzo/CAP/località/provincia/regione/nazione solo manuali. Endpoint backend /api/anagrafica/places/* restano inattivi senza GOOGLE_MAPS_API_KEY. MapTiler (Event Planner/Event Map) invariato.
+- PersonMask: niente LinkedIn/Foto (dati storici intatti), opzione Ruolo "Da classificare", disponibilità giorni/orari per evento; tab Da classificare con contatore.
+- Test: iteration_179 (backend 8/8, frontend ok; corretto doppio confirm, CF check-char, aggiornamento preferenza su link da classificare).
+- Nota: le email di conferma Brevo erano attivate dalla vecchia scheda; ora non c'è più un pulsante di conferma dedicato.
+

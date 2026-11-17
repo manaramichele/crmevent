@@ -9,28 +9,34 @@ import { DemoVideo } from "@/components/landing/PlannerDemoSection";
 import { ADDONS, SOURCE_LABEL, eur } from "@/components/addons/addonInfo";
 
 function PriceLine({ info, s }) {
+  if (info.product === "controlroom") {
+    if (s.module_disabled) return <span data-testid="addon-info-price">Control Room è stata disattivata per la tua organizzazione: i dati restano conservati.</span>;
+    if (!s.purchasable) return <span data-testid="addon-info-price">Attivazione dal Marketplace non ancora disponibile: contatta l'assistenza CRMEvent.</span>;
+    return <span data-testid="addon-info-price">{s.price_net != null ? `${eur(s.price_net)} € + IVA per evento` : "Prezzo in definizione"}</span>;
+  }
   if (info.product === "planner") return <span data-testid="addon-info-price">{s.monthly_price != null ? `Da ${eur(s.monthly_price)} €/mese · pagamento semestrale o annuale · per organizzazione` : "Prezzo in definizione"}</span>;
   if (!s.packages?.length) return <span data-testid="addon-info-price">Pacchetti in definizione</span>;
   const min = Math.min(...s.packages.filter((p) => p.price != null).map((p) => p.price));
   return <span data-testid="addon-info-price">{Number.isFinite(min) ? `Pacchetti da ${eur(min)} €` : "Prezzo in definizione"}</span>;
 }
 
-function InfoPage({ info, s }) {
+export function InfoPage({ info, s }) {
   const v = info.video;
   return (
     <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr] items-start" data-testid="addon-info-page">
       <div className={v.vertical ? "mx-auto w-full max-w-[280px]" : ""}>
-        <DemoVideo mp4={v.mp4} webm={v.webm} poster={v.poster} label={`Video dimostrativo di ${info.name}`} testid="addon-info-video" className={v.vertical ? "aspect-[9/16]" : "aspect-video"} />
+        <DemoVideo mp4={s.video?.mp4 || v.mp4} webm={s.video ? s.video.webm : v.webm} poster={s.video?.poster || v.poster} label={`Video dimostrativo di ${info.name}`} testid="addon-info-video" className={v.vertical ? "aspect-[9/16]" : "aspect-video"} />
         {info.product === "eventmap" && <p className="mt-2 text-center text-xs text-slate-400">Video generato da Event Map con una traccia GPX reale</p>}
+        {info.product === "controlroom" && <p className="mt-2 text-center text-xs text-slate-400">Interfaccia reale su evento dimostrativo · posizioni GPS simulate</p>}
       </div>
       <div className="space-y-5">
         <div><h2 className="font-display text-2xl font-bold text-slate-900">{info.tagline}</h2><p className="mt-2 text-slate-600">{info.description}</p></div>
         <ul className="space-y-2" data-testid="addon-info-benefits">{info.benefits.map((b) => <li key={b} className="flex gap-2 text-sm text-slate-700"><CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-[#0ABAB5]" />{b}</li>)}</ul>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-1">
           <div className="font-semibold text-slate-900"><PriceLine info={info} s={s} /></div>
-          <div className="text-slate-500">{s.included > 0 ? `Il tuo piano include ${info.name} su ${s.included} ${s.included === 1 ? "evento" : "eventi"}: già tutti assegnati.` : `Il tuo piano attuale non include eventi ${info.name}.`}</div>
+          <div className="text-slate-500" data-testid="addon-info-plan">{info.product === "controlroom" ? `Stato: ${s.module_disabled ? "disattivata" : "non attiva"} per la tua organizzazione · non inclusa negli abbonamenti, si attiva per singolo evento.` : s.included > 0 ? `Il tuo piano include ${info.name} su ${s.included} ${s.included === 1 ? "evento" : "eventi"}: già tutti assegnati.` : `Il tuo piano attuale non include eventi ${info.name}.`}</div>
         </div>
-        <Link to={`/marketplace?servizio=${info.slug}`} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#0ABAB5] px-6 font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="addon-info-marketplace"><Store className="w-4 h-4" />Attiva dal Marketplace</Link>
+        {!s.module_disabled && <Link to={`/marketplace?servizio=${info.slug}`} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#0ABAB5] px-6 font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="addon-info-marketplace"><Store className="w-4 h-4" />Attiva dal Marketplace</Link>}
       </div>
     </div>
   );

@@ -26,93 +26,41 @@ import TeamSelect from "@/components/TeamSelect";
 import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 import { usePeople } from "@/lib/peopleStore";
 import { PERSON_RULES } from "@/lib/textCase";
+import PersonMask, { PROVENIENZA } from "@/components/PersonMask";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
 const STATO_COLOR = { confermato: "green", disponibile: "green", da_riconfermare: "orange", disponibilita_richiesta: "blue", da_contattare: "gray", non_disponibile: "red", rinunciato: "red" };
 
-function EventRolesDialog({ person, events, settings, open, onOpenChange, onDone }) {
-  const [links, setLinks] = useState([]);
-  const [nf, setNf] = useState({ categoria: "staff" });
-  const load = useCallback(async () => {
-    if (!person?.id) return;
-    try { const { data } = await api.get(`/persons/${person.id}/detail`); setLinks(data.events || []); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  }, [person?.id]);
-  useEffect(() => { if (open) load(); }, [open, load]);
-
-  const clean = (pres, patch) => {
-    const base = { evento_id: pres.evento_id, persona_id: person.id, categoria: pres.categoria, ruolo: pres.ruolo, team_id: pres.team_id, area: pres.area, stato: pres.stato };
-    return { ...base, ...patch };
-  };
-  const save = async (pres, patch) => {
-    try { await api.put(`/staff/${pres.id}`, clean(pres, patch)); toast.success("Ruolo aggiornato"); await load(); onDone && onDone(); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
-  const del = async (id) => {
-    try { await api.delete(`/staff/${id}`); toast.success("Ruolo rimosso"); await load(); onDone && onDone(); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
-  const add = async () => {
-    if (!nf.evento_id) return toast.error("Seleziona un evento");
-    try {
-      await api.post("/staff", { persona_id: person.id, evento_id: nf.evento_id, categoria: nf.categoria || "staff", ruolo: nf.ruolo, team_id: nf.team_id, stato: "da_contattare" });
-      toast.success("Persona collegata all'evento"); setNf({ categoria: "staff" }); await load(); onDone && onDone();
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="event-roles-dialog">
-        <DialogHeader><DialogTitle className="font-display">Ruoli evento — {person?.cognome} {person?.nome}</DialogTitle>
-          <DialogDescription>Assegna, modifica o rimuovi il ruolo di questa persona per ciascun evento. Una persona può avere ruoli diversi in eventi diversi.</DialogDescription></DialogHeader>
-
-        <div className="space-y-2 py-2">
-          {links.length === 0 && <p className="text-sm text-slate-400">Nessun evento collegato.</p>}
-          {links.map((x) => {
-            const p = x.presence;
-            return (
-              <div key={p.id} className="border border-slate-200 rounded-lg px-3 py-3" data-testid={`role-link-${p.id}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-slate-800 text-sm">{x.event?.nome || "—"}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => del(p.id)} data-testid={`role-del-${p.id}`}><Trash2 className="w-4 h-4" /></Button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Select value={["staff", "volontario"].includes(p.categoria) ? p.categoria : ""} onValueChange={(v) => (v === "none" ? del(p.id) : save(p, { categoria: v }))}>
-                    <SelectTrigger data-testid={`role-cat-${p.id}`}><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
-                    <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem><SelectItem value="none">Nessun ruolo (rimuovi)</SelectItem></SelectContent></Select>
-                  <TeamSelect value={p.team_id || ""} eventoId={p.evento_id} onChange={(v) => save(p, { team_id: v })} testid={`role-team-${p.id}`} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="border-t border-slate-100 pt-3">
-          <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Collega a un nuovo evento (o aggiungi un altro ruolo nello stesso evento)</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <Select value={nf.evento_id || ""} onValueChange={(v) => setNf((f) => ({ ...f, evento_id: v }))}>
-              <SelectTrigger data-testid="new-role-event"><SelectValue placeholder="Evento" /></SelectTrigger>
-              <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
-            <Select value={nf.categoria} onValueChange={(v) => setNf((f) => ({ ...f, categoria: v }))}>
-              <SelectTrigger data-testid="new-role-cat"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent></Select>
-            <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" onClick={add} data-testid="new-role-add">Assegna ruolo</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onRoleClick, onInvited }) {
+function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited }) {
   const [q, setQ] = useState("");
   const [evFilter, setEvFilter] = useState("all");
   const [prefFilter, setPrefFilter] = useState("all");
+  const [teamFilter, setTeamFilter] = useState("all");
+  const [mansFilter, setMansFilter] = useState("all");
+  const [provFilter, setProvFilter] = useState("all");
+  const TAB_CATS = { staff: ["staff", "collaboratore"], volontari: ["volontario"] }[tab];
+  const asg = (r) => (r.assegnazioni || []).filter((a) => (evFilter === "all" || a.evento_id === evFilter) && (!TAB_CATS || TAB_CATS.includes(a.categoria)));
+  const evName = (id) => events.find((e) => e.id === id)?.nome || "—";
+  const teamName = (id) => teams.find((t) => t.id === id)?.nome;
   const [bulkRole, setBulkRole] = useState("");
   const [sel, setSel] = useState(() => new Set());
-  const prefsOf = (r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter);
+  const prefsOf = (r) => {
+    const own = asg(r).filter((a) => a.preferenza).map((a) => ({ evento_id: a.evento_id, preferenza: a.preferenza }));
+    const ownEv = new Set(own.map((p) => p.evento_id));
+    return [...own, ...(r.preferenze || []).filter((p) => (evFilter === "all" || p.evento_id === evFilter) && !ownEv.has(p.evento_id))];
+  };
   const prefText = (r) => { const ps = prefsOf(r); if (!ps.length) return ""; return [...new Set(ps.map((p) => p.preferenza || "Non indicata"))].join(", "); };
+  const multi = (r, f) => [...new Set(asg(r).map(f).filter(Boolean))];
+  const multiCell = (r, f, testid) => {
+    const vals = multi(r, f);
+    if (!vals.length) return <span className="text-slate-400">—</span>;
+    if (vals.length > 1 && evFilter === "all") {
+      const detail = asg(r).map((a) => `${evName(a.evento_id)}: ${f(a) || "—"}`).join("\n");
+      return <span title={detail} className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 whitespace-nowrap" data-testid={`${testid}-multi-${r.id}`}>{vals.length} associazioni</span>;
+    }
+    return <span className="text-slate-700" data-testid={`${testid}-${r.id}`}>{vals.join(", ")}</span>;
+  };
   const mansioniOf = (r) => (r.mansioni || []).filter((m) => evFilter === "all" || m.evento_id === evFilter);
   const mansioneText = (r) => { const ms = mansioniOf(r).map((m) => m.ruolo).filter(Boolean); return ms.length ? [...new Set(ms)].join(", ") : (r.ruolo || ""); };
   const flip = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -120,21 +68,25 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (tab === "referenti_aziende" && !r.is_referente) return false;
     if (tab === "staff" && !r.is_staff) return false;
     if (tab === "volontari" && !r.is_volontario) return false;
-    if (tab === "da_classificare" && (r.is_referente || r.is_staff || r.is_volontario)) return false;
+    if (tab === "da_classificare" && !r.is_da_classificare && (r.is_referente || r.is_staff || r.is_volontario)) return false;
     if (evFilter !== "all" && !(r.eventi_ids || []).includes(evFilter) && !(r.preferenze || []).some((p) => p.evento_id === evFilter)) return false;
     if (prefFilter !== "all" && !prefsOf(r).some((p) => (p.preferenza || "Non indicata") === prefFilter)) return false;
+    if (teamFilter !== "all" && !asg(r).some((a) => (teamFilter === "none" ? !a.team_id : a.team_id === teamFilter))) return false;
+    if (mansFilter !== "all" && !asg(r).some((a) => (mansFilter === "none" ? !a.ruolo : a.ruolo === mansFilter))) return false;
+    if (provFilter !== "all" && (r.provenienza_tipo || "non_determinata") !== provFilter) return false;
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
-  const { sort, toggle } = useSort({ key: "nome", dir: "asc" });
+  const { sort, toggle } = useSort({ key: "cognome", dir: "asc" });
   const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare";
   const leaderIds = new Set(teams.filter((t) => t.responsabile_id && (evFilter === "all" || t.evento_id === evFilter)).map((t) => t.responsabile_id));
   const ACC = {
-    nome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
+    cognome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
+    nome: (r) => `${r.nome || ""} ${r.cognome || ""}`.trim(),
     cellulare: (r) => r.cellulare || "",
     preferenza: (r) => prefText(r),
     ruolo_evento: (r) => (r.is_staff ? "Staff" : r.is_volontario ? "Volontario" : r.is_referente ? "Referente" : ""),
-    team: (r) => (r.teams_nomi || []).join(", "),
+    team: (r) => multi(r, (a) => teamName(a.team_id)).join(", "),
     evento: (r) => (r.eventi_nomi || []).join(", "),
     qualifica: (r) => mansioneText(r),
     aziende: (r) => (r.aziende_nomi || []).join(", "),
@@ -146,7 +98,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const allSel = displayRows.length > 0 && selectedRows.length === displayRows.length;
   const toggleAll = () => setSel(allSel ? new Set() : new Set(displayRows.map((r) => r.id)));
   const pick = (r) => (onInvite || isStaffTab) && <input type="checkbox" className="accent-tiffany w-4 h-4" checked={sel.has(r.id)} onChange={() => flip(r.id)} onClick={(e) => e.stopPropagation()} aria-label="Seleziona" data-testid={`select-invite-${r.id}`} />;
-  const prefOptions = [...new Set(rows.flatMap((r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter).map((p) => p.preferenza || "Non indicata")))].sort((a, b) => a.localeCompare(b, "it"));
+  const prefOptions = [...new Set(rows.flatMap((r) => prefsOf(r).map((p) => p.preferenza || "Non indicata")))].sort((a, b) => a.localeCompare(b, "it"));
   const eventFor = (r) => {
     if (evFilter !== "all") return evFilter;
     const ps = prefsOf(r);
@@ -180,51 +132,48 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   };
   const prefCell = (r) => {
     const t = prefText(r);
-    if (!t) return <span className="text-slate-400">—</span>;
-    const ps = prefsOf(r).map((p) => p.preferenza);
-    const match = ps.length === 1 && ruoli.includes(ps[0]);
-    const done = match && (() => { const ev = eventFor(r); const ms = (r.mansioni || []).filter((m) => m.evento_id === ev); return ms.length ? ms.every((m) => m.ruolo === ps[0]) : r.ruolo === ps[0]; })();
-    return (
-      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        <span className="text-slate-700" data-testid={`pref-${r.id}`}>{t}</span>
-        {match && !done && <button type="button" onClick={() => assign([r], ps[0])} title={`Assegna la mansione ${ps[0]}`} className="inline-flex h-8 w-8 md:h-7 md:w-7 items-center justify-center rounded-full border border-tiffany text-tiffany-active hover:bg-tiffany-light" data-testid={`pref-confirm-${r.id}`}><Check className="w-4 h-4" /></button>}
-        {done && <Check className="w-4 h-4 text-green-600" data-testid={`pref-done-${r.id}`} />}
-        {!match && ruoli.length > 0 && <select className="h-8 max-w-[9rem] rounded-md border border-slate-200 bg-white px-1 text-xs" value="" onChange={(e) => e.target.value && assign([r], e.target.value)} data-testid={`pref-pick-${r.id}`}><option value="">Scegli mansione…</option>{ruoli.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
-      </div>
-    );
+    return t ? <span className="text-slate-700" data-testid={`pref-${r.id}`}>{t}</span> : <span className="text-slate-400">—</span>;
   };
   const Th = ({ k, label, right }) => (
     <th onClick={() => toggle(k)} data-testid={`sort-${k}`} className={`font-semibold text-slate-600 px-4 py-3 whitespace-nowrap cursor-pointer select-none group ${right ? "text-right" : "text-left"}`}>
       <span className="inline-flex items-center gap-1">{label}<SortIcon active={sort.key === k} dir={sort.dir} /></span>
     </th>
   );
-  const roleBadges = (r) => (
-    <button type="button" onClick={() => onRoleClick(r)} title="Gestisci ruoli evento" data-testid={`role-cell-${r.id}`}
-      className="flex flex-wrap items-center gap-1 rounded-md px-1.5 py-1 -ml-1.5 hover:bg-tiffany-light/60 transition-colors group">
-      {leaderIds.has(r.id) && <Crown className="w-3.5 h-3.5 text-[#D4AF37]" aria-label="Team Leader" data-testid={`leader-crown-${r.id}`} />}
-      {r.is_staff && <StatusBadge color="blue">Staff</StatusBadge>}{r.is_volontario && <StatusBadge color="green">Volontario</StatusBadge>}
-      {r.is_referente && <StatusBadge color="tiffany">Referente</StatusBadge>}
-      {!r.is_staff && !r.is_volontario && !r.is_referente && <span className="text-slate-400">—</span>}
-      <Pencil className="w-3 h-3 text-slate-300 group-hover:text-tiffany-active" />
-    </button>
-  );
+  const roleBadges = (r) => {
+    const cats = isStaffTab ? new Set(asg(r).map((a) => a.categoria)) : null;
+    const st = cats ? cats.has("staff") || cats.has("collaboratore") : r.is_staff;
+    const vo = cats ? cats.has("volontario") : r.is_volontario;
+    return (
+      <div className="flex flex-wrap items-center gap-1" data-testid={`role-cell-${r.id}`}>
+        {leaderIds.has(r.id) && <Crown className="w-3.5 h-3.5 text-[#D4AF37]" aria-label="Team Leader" data-testid={`leader-crown-${r.id}`} />}
+        {st && <StatusBadge color="blue">Staff</StatusBadge>}{vo && <StatusBadge color="green">Volontario</StatusBadge>}
+        {r.is_referente && !isStaffTab && <StatusBadge color="tiffany">Referente</StatusBadge>}
+        {(isStaffTab ? asg(r).some((a) => a.categoria === "da_classificare") : r.is_da_classificare) && <StatusBadge color="orange">Da classificare</StatusBadge>}
+        {!st && !vo && !(r.is_referente && !isStaffTab) && !r.is_da_classificare && <span className="text-slate-400">—</span>}
+      </div>
+    );
+  };
   const actionsCell = (r) => (
     <div className="flex items-center justify-end gap-1">
       {onInvite && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title={r.last_invite_at ? "Reinvia invito" : "Invita"} onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>}
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
       <AlertDialog>
-        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" title="Elimina" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confermi l'eliminazione?</AlertDialogTitle><AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel>Annulla</AlertDialogCancel><AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(r)} data-testid={`confirm-delete-person-${r.id}`}>Elimina</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Modifica anagrafica, ruolo, eventi, team e mansione" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
     </div>
   );
-  const teamsCell = (r) => ((r.teams_nomi && r.teams_nomi.length)
+  const teamsCell = (r) => (isStaffTab ? multiCell(r, (a) => teamName(a.team_id), "team") : ((r.teams_nomi && r.teams_nomi.length)
     ? <div className="flex flex-wrap gap-1">{r.teams_nomi.map((t, i) => <span key={i} className="inline-flex items-center rounded-full bg-tiffany-light text-tiffany-fg px-2 py-0.5 text-xs font-medium whitespace-nowrap">{t}</span>)}</div>
-    : <span className="text-slate-400">—</span>);
+    : <span className="text-slate-400">—</span>));
+  const mansCell = (r) => multiCell(r, (a) => a.ruolo, "mansione");
+  const teamOpts = [...new Map(rows.flatMap((r) => (r.assegnazioni || []).filter((a) => a.team_id && (evFilter === "all" || a.evento_id === evFilter)).map((a) => [a.team_id, teamName(a.team_id)])).filter(([, n]) => n)).entries()].sort((a, b) => a[1].localeCompare(b[1], "it"));
+  const mansOpts = [...new Set(rows.flatMap((r) => (r.assegnazioni || []).map((a) => a.ruolo).filter(Boolean)))].sort((a, b) => a.localeCompare(b, "it"));
+  const fsel = "h-10 w-full sm:w-48 rounded-md border border-slate-200 bg-white px-2 text-sm";
   return (
     <div>
-      <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="mb-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input className="pl-9" placeholder="Cerca persone..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-person-input" />
@@ -245,6 +194,9 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
             <option value="all">Tutte le preferenze</option>{prefOptions.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         )}
+        {isStaffTab && <select className={fsel} value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} data-testid="people-team-filter"><option value="all">Tutti i team</option><option value="none">Senza team</option>{teamOpts.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>}
+        {isStaffTab && <select className={fsel} value={mansFilter} onChange={(e) => setMansFilter(e.target.value)} data-testid="people-mansione-filter"><option value="all">Tutte le mansioni</option><option value="none">Senza mansione</option>{mansOpts.map((m) => <option key={m} value={m}>{m}</option>)}</select>}
+        {isStaffTab && <select className={fsel} value={provFilter} onChange={(e) => setProvFilter(e.target.value)} data-testid="people-provenienza-filter"><option value="all">Tutte le provenienze</option>{Object.entries(PROVENIENZA).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
       </div>
       {isStaffTab && selectedRows.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-tiffany/40 bg-tiffany-light/40 px-3 py-2 text-sm" data-testid="bulk-mansione-bar">
@@ -270,7 +222,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 {isStaffTab && <div className="flex items-start gap-2" data-testid={`m-pref-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-1.5">Preferenza</span>{prefCell(r)}</div>}
                 {isStaffTab ? (<>
                   <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Team</span>{teamsCell(r)}</div>
-                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span><span className="break-words">{mansioneText(r) || "—"}</span></div>
+                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span>{mansCell(r)}</div>
                   {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
                 </>) : (<>
@@ -280,9 +232,9 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <TextAction icon={Eye} onClick={() => onOpen(r)} data-testid={`m-open-person-${r.id}`}>Apri</TextAction>
-                <TextAction icon={Pencil} onClick={() => onEdit(r)} data-testid={`m-edit-person-${r.id}`}>Modifica</TextAction>
                 {onInvite && <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>{r.last_invite_at ? "Reinvia" : "Invita"}</TextAction>}
                 <DeleteConfirm onConfirm={() => onDelete(r)} testid={`m-confirm-delete-person-${r.id}`}><TextAction icon={Trash2} danger data-testid={`m-delete-person-${r.id}`}>Elimina</TextAction></DeleteConfirm>
+                <TextAction icon={Pencil} onClick={() => onEdit(r)} data-testid={`m-edit-person-${r.id}`}>Modifica</TextAction>
               </div>
             </div>
           ))}
@@ -293,17 +245,17 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
               {(onInvite || isStaffTab) && <th className="pl-4 py-3 w-8"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={allSel} onChange={toggleAll} aria-label="Seleziona tutti" data-testid={`select-invite-all-${tab}`} /></th>}
               {isStaffTab ? (<>
-                <Th k="nome" label="Cognome e Nome" />
+                <Th k="cognome" label="Cognome" />
+                <Th k="nome" label="Nome" />
                 <Th k="cellulare" label="Cellulare" />
+                <Th k="ruolo_evento" label="Ruolo" />
                 <Th k="preferenza" label="Preferenza" />
-                <Th k="ruolo_evento" label="Ruolo evento" />
                 <Th k="team" label="Team" />
                 <Th k="qualifica" label="Mansione" />
                 <Th k="evento" label="Evento" />
-                <Th k="accesso" label="Invito" />
                 <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
               </>) : (<>
-                <Th k="nome" label="Cognome e Nome" />
+                <Th k="cognome" label="Cognome e Nome" />
                 <Th k="qualifica" label="Qualifica" />
                 <Th k="aziende" label="Aziende" />
                 <Th k="ruolo_evento" label="Ruolo eventi" />
@@ -317,22 +269,23 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
                     {(onInvite || isStaffTab) && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
-                    <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.cognome} {r.nome}</span><LastInvite person={r} /></td>
                     {isStaffTab ? (
                       <>
+                        <td className="px-4 py-3"><span className="font-medium text-slate-800" data-testid={`cognome-${r.id}`}>{r.cognome || "—"}</span><LastInvite person={r} /></td>
+                        <td className="px-4 py-3 text-slate-800" data-testid={`nome-${r.id}`}>{r.nome}</td>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
+                        <td className="px-4 py-3">{roleBadges(r)}</td>
                         <td className="px-4 py-3">{prefCell(r)}</td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
-                        <td className="px-4 py-3 text-slate-700" data-testid={`mansione-${r.id}`}>{mansioneText(r) || "—"}</td>
+                        <td className="px-4 py-3">{mansCell(r)}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
-                        <td className="px-4 py-3" data-testid={`invite-status-${r.id}`}><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
                       </>
                     ) : (
                       <>
+                        <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.cognome} {r.nome}</span><LastInvite person={r} /></td>
                         <td className="px-4 py-3 text-slate-700">{r.ruolo || "—"}</td>
                         <td className="px-4 py-3 text-slate-700">{(r.aziende_nomi && r.aziende_nomi.length) ? r.aziende_nomi.join(", ") : "—"}</td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{roleBadges(r)}</td>
+                        <td className="px-4 py-3">{roleBadges(r)}</td>
                         <td className="px-4 py-3"><StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge></td>
                       </>
                     )}
@@ -374,19 +327,29 @@ export default function Persons({ mode = "anagrafiche" }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [invite, setInvite] = useState(null);
-  const [rolesFor, setRolesFor] = useState(null);
+  const [mask, setMask] = useState(null);
 
   const companyOpts = companies.map((c) => ({ value: c.id, label: c.nome }));
-  const personFields = [
+  const personFields = mode === "staff" ? [
+    { name: "nome", label: "Nome", required: true }, { name: "cognome", label: "Cognome" },
+    { name: "email", label: "Email", type: "email" }, { name: "cellulare", label: "Cellulare", type: "tel" },
+    { name: "telefono", label: "Telefono", type: "tel" }, { name: "ruolo", label: "Qualifica" },
+    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "eta", label: "Età", type: "age", virtual: true },
+    { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" },
+    { name: "indirizzo", label: "Indirizzo e numero civico", full: true }, { name: "cap", label: "CAP" }, { name: "citta", label: "Località / Comune" },
+    { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
+    { name: "note", label: "Note", type: "textarea", full: true },
+  ] : [
     { name: "nome", label: "Nome", required: true }, { name: "cognome", label: "Cognome" },
     { name: "ruolo", label: "Qualifica" }, { name: "email", label: "Email", type: "email" },
     { name: "email_secondaria", label: "Email secondaria", type: "email" }, { name: "cellulare", label: "Cellulare", type: "tel" },
     { name: "telefono", label: "Telefono", type: "tel" }, { name: "azienda_id", label: "Azienda principale", type: "select", options: companyOpts },
-    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "linkedin", label: "LinkedIn" },
+    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" }, { name: "linkedin", label: "LinkedIn" },
     { name: "indirizzo", label: "Indirizzo" }, { name: "cap", label: "CAP" }, { name: "citta", label: "Città" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "foto_url", label: "Foto (URL)" }, { name: "note", label: "Note", type: "textarea", full: true },
-  ].filter((f) => mode !== "staff" || !["email_secondaria", "azienda_id"].includes(f.name));
+  ];
+  const daClassificare = rows.filter((r) => r.is_da_classificare || !(r.is_referente || r.is_staff || r.is_volontario)).length;
   const submitPerson = async (form) => {
     if (editing) { await api.put(`/persons/${editing.id}`, form); toast.success("Persona aggiornata"); }
     else { await api.post("/persons", form); toast.success("Persona creata"); }
@@ -480,8 +443,8 @@ export default function Persons({ mode = "anagrafiche" }) {
   const canInvite = canSendInvites(user);
   const peopleProps = {
     rows, loading, onOpen: (r) => setDetailId(r.id),
-    onEdit: (r) => { setEditing(r); setFormOpen(true); }, onInvite: canInvite ? (r) => setInvite(r) : null,
-    onDelete: delPerson, onRoleClick: (r) => setRolesFor(r), onInvited: reload,
+    onEdit: (r) => (isStaff ? setMask({ person: r }) : (setEditing(r), setFormOpen(true))), onInvite: canInvite ? (r) => setInvite(r) : null,
+    onDelete: delPerson, onInvited: reload,
   };
 
   return (
@@ -489,13 +452,18 @@ export default function Persons({ mode = "anagrafiche" }) {
       <PageHeader
         title={isStaff ? "Staff / Volontari" : "Anagrafiche"}
         subtitle={isStaff ? "Staff e Volontari degli eventi: ruoli, team e turni" : "Referenti e contatti delle aziende"}
-        action={can(user, isStaff ? "staff" : "anagrafiche", "create") ? <PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />{isStaff ? "Aggiungi Staff / Volontario" : "Aggiungi persona"}</PrimaryButton> : null} />
+        action={!can(user, isStaff ? "staff" : "anagrafiche", "create") ? null : isStaff ? (
+          <div className="flex flex-wrap gap-2">
+            <PrimaryButton onClick={() => setMask({ person: null, cat: "staff" })} data-testid="add-staff-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi Staff</PrimaryButton>
+            <PrimaryButton onClick={() => setMask({ person: null, cat: "volontario" })} data-testid="add-volunteer-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi Volontario</PrimaryButton>
+          </div>
+        ) : <PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi persona</PrimaryButton>} />
       {isStaff ? (
         <Tabs defaultValue="staff">
           <TabsList className="mb-4 flex-wrap h-auto">
             <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
             <TabsTrigger value="volontari" data-testid="tab-volontari">Volontari</TabsTrigger>
-            <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare</TabsTrigger>
+            <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare{daClassificare > 0 && <span className="ml-1.5 rounded-full bg-amber-100 text-amber-800 px-1.5 text-[11px] font-bold" data-testid="da-classificare-count">{daClassificare}</span>}</TabsTrigger>
             <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
             <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
           </TabsList>
@@ -529,9 +497,10 @@ export default function Persons({ mode = "anagrafiche" }) {
         fields={personFields} initial={editing} onSubmit={submitPerson} testid="person" caseRules={PERSON_RULES} />
       {detailId && <PersonDetailDialog personId={detailId} open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}
         events={events} settings={settings} onChanged={reload}
-        onEdit={(p) => { setDetailId(null); setEditing(p); setFormOpen(true); }} onInvite={canInvite ? (p) => { setDetailId(null); setInvite(p); } : null} />}
+        onEdit={(p) => { setDetailId(null); if (isStaff) setMask({ person: rows.find((x) => x.id === p.id) || p }); else { setEditing(p); setFormOpen(true); } }} onInvite={canInvite ? (p) => { setDetailId(null); setInvite(p); } : null} />}
       {invite && <PersonInviteDialog person={invite} open={!!invite} onOpenChange={(o) => !o && setInvite(null)} onDone={reload} />}
-      {rolesFor && <EventRolesDialog person={rolesFor} events={events} settings={settings} open={!!rolesFor} onOpenChange={(o) => !o && setRolesFor(null)} onDone={reload} />}
+      {mask && <PersonMask person={mask.person ? rows.find((p) => p.id === mask.person.id) || mask.person : null} defaultCategoria={mask.person ? (mask.person.is_volontario && !mask.person.is_staff ? "volontario" : "staff") : mask.cat}
+        fields={personFields} events={events} ruoli={settings?.ruoli_staff || []} onClose={() => setMask(null)} onSaved={async () => { setMask(null); await reload(); invalidateTeams(); }} />}
     </div>
   );
 }

@@ -64,7 +64,6 @@ const ORGANIZATION_NAV = [
   { to: "/organizzazione/utenti", label: "Utenti e Permessi", icon: Users, id: "org-utenti", perm: "admin" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
 ];
-const ACCOUNT_NAV = [{ to: "/profilo", label: "Profilo & Account", icon: CircleUserRound, id: "account", perm: "*" }];
 // Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
 const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", badge: "ticketsUnread" }];
 
@@ -80,7 +79,6 @@ const orgGroups = (u, access, iscrittiOn, isSuper = false) => [
   { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access) },
   { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access) },
   { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access) },
-  { title: "Account", id: "account", items: ACCOUNT_NAV },
 ].filter((g) => g.items.length);
 
 // Moduli Marketplace attivi: voce di menu dopo "Aziende".
@@ -95,7 +93,6 @@ const withIscritti = (items, on) => {
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard", icon: ShieldCheck, id: "piattaforma", end: true, activeIf: (l) => l.pathname === "/piattaforma" && new URLSearchParams(l.search).get("sezione") !== "organizzazioni" },
   { to: "/piattaforma?sezione=organizzazioni", label: "Organizzazioni", icon: Building2, id: "piattaforma-organizzazioni", activeIf: (l) => (l.pathname === "/piattaforma" && new URLSearchParams(l.search).get("sezione") === "organizzazioni") || l.pathname.startsWith("/piattaforma/org/") },
-  { to: "/piattaforma/moduli", label: "Moduli e Attivazioni", icon: Boxes, id: "piattaforma-moduli" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video", badge: "assistenza" },
   { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo", badge: "demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
@@ -116,7 +113,7 @@ const PLATFORM_NAV = [
 const PLATFORM_PATHS = ["/piattaforma", "/supporto", "/audit"];
 
 const MARKETING_NAV = [
-  { to: "/marketing/organizzatori", label: "Organizzatori", icon: Building2, id: "organizzatori" },
+  { to: "/marketing/organizzatori", label: "Lead organizzatori", icon: Building2, id: "organizzatori" },
   { to: "/marketing/brevo", label: "Marketing", icon: MailCheck, id: "marketing-brevo" },
   { to: "/marketing/home-page", label: "Home Page", icon: Home, id: "marketing-home-page" },
   { to: "/marketing/social", label: "Social", icon: Megaphone, id: "social" },

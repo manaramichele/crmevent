@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import Ops from "@/components/controlroom/Ops";
+import { InfoPage } from "@/pages/AddonHub";
+import { ADDONS } from "@/components/addons/addonInfo";
 import { RadioTower, MapPinned, Siren, Users, Smartphone, ClipboardList, ShieldAlert } from "lucide-react";
 
 const FEATURES = [[MapPinned, "Mappa operativa", "Percorso, postazioni, ristori, punti critici e mezzi su un'unica mappa."], [Users, "Risorse e postazioni", "Staff, volontari, ambulanze, mezzi e forze dell'ordine autorizzate."],
@@ -36,8 +38,15 @@ export default function ControlRoom() {
   const [params, setParams] = useSearchParams();
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [promo, setPromo] = useState(null);
   const eid = params.get("event");
-  const load = () => api.get("/controlroom/events").then((r) => setInfo(r.data)).catch(() => setInfo({ events: [] }));
+  const load = () => {
+    api.get("/controlroom/events").then((r) => setInfo(r.data)).catch(() => setInfo({ events: [] }));
+    Promise.all([api.get("/marketplace/services").catch(() => null), api.get("/public/promo/control-room").catch(() => null)]).then(([m, v]) => {
+      const svc = (m?.data?.services || []).find((x) => x.key === "control-room");
+      setPromo({ purchasable: !!svc && svc.status !== "coming_soon" && svc.purchasable !== false, video: v?.data?.mp4 ? v.data : null });
+    });
+  };
   useEffect(() => {
     const sid = params.get("session_id");
     if (sid) {
@@ -48,7 +57,8 @@ export default function ControlRoom() {
     } else load();
     if (params.get("canceled")) toast.info("Pagamento annullato: nessun addebito");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const ev = info?.events.find((e) => e.id === eid) || info?.events[0];
+  const ev = info?.events.find((e) => e.id === eid) || info?.events.find((e) => e.active) || info?.events[0];
+  const promoMode = info && (info.module_disabled || !info.events.some((e) => e.active));
   const buy = async () => {
     setBusy(true);
     try { const { data } = await api.post(`/controlroom/events/${ev.id}/checkout`, { origin_url: window.location.origin }); window.location.href = data.checkout_url; }
@@ -56,8 +66,10 @@ export default function ControlRoom() {
   };
   return (
     <div className="animate-fade-up space-y-5" data-testid="control-room-page">
-      <PageHeader title="Control Room" subtitle="Centrale operativa dell'evento" />
-      {!info ? <div className="text-sm text-slate-400">Caricamento…</div> : info.events.length === 0 ? <div className="text-sm text-slate-500" data-testid="cr-no-events">Crea prima un evento in <Link to="/eventi" className="font-semibold text-[#088F8A]">Eventi</Link>.</div> : (
+      <PageHeader title="Control Room" subtitle={promoMode ? "Il centro di controllo del tuo evento, in tempo reale." : "Centrale operativa dell'evento"} />
+      {!info || (promoMode && !promo) ? <div className="text-sm text-slate-400">Caricamento…</div> : promoMode ? (
+        <InfoPage info={ADDONS["control-room"]} s={{ price_net: info.price_net, purchasable: promo.purchasable, module_disabled: info.module_disabled, video: promo.video }} />
+      ) : info.events.length === 0 ? <div className="text-sm text-slate-500" data-testid="cr-no-events">Crea prima un evento in <Link to="/eventi" className="font-semibold text-[#088F8A]">Eventi</Link>.</div> : (
         <>
           <select value={ev.id} onChange={(e) => setParams({ event: e.target.value })} className="h-10 w-full max-w-md rounded-md border border-slate-200 bg-white px-3 text-sm" data-testid="cr-event-select">
             {info.events.map((e) => <option key={e.id} value={e.id}>{e.nome}{e.active ? " · attiva" : ""}</option>)}

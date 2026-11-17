@@ -46,6 +46,13 @@ DEFAULTS = [
      "body": "Gli sponsor e i partner contribuiscono alla crescita di ogni evento sportivo.\n\nCon CRMEvent puoi organizzare i contatti, seguire le attività commerciali e gestire le informazioni relative alle collaborazioni in un unico ambiente.\n\nScopri come funziona guardando il video dimostrativo.",
      "benefits": ["Anagrafica unica di aziende, sponsor e partner con referenti", "Pipeline commerciale per fasi, con valore e importo confermato", "Ogni trattativa collegata al suo evento"],
      "mp4": "/media/sponsor-partner-demo.mp4", "webm": None, "poster": "/media/sponsor-partner-demo-poster.jpg", "preview": "/media/brevo/sponsor-partner-anteprima.jpg"},
+    {"slug": "control-room", "order": 6, "status": "pubblicato", "name": "Control Room", "title": "CONTROL ROOM", "subtitle": "Il centro di controllo del tuo evento, in tempo reale",
+     "description": "Coordina il personale sul territorio, monitora le attività e gestisci le operazioni del tuo evento da un'unica centrale di controllo.",
+     "subject": "Control Room: il tuo evento sotto controllo", "preheader": "Mappa operativa, postazioni, risorse e interventi in un'unica centrale.",
+     "headline": "Il tuo evento sotto controllo, in tempo reale",
+     "body": "Durante la manifestazione ogni minuto conta.\n\nCon Control Room coordini staff, volontari, postazioni e mezzi da un'unica centrale operativa, con mappa, interventi e diario sempre aggiornati.\n\nGuarda il video dimostrativo.",
+     "benefits": ["Mappa operativa con postazioni e settori del percorso", "Staff, volontari, squadre e mezzi in un unico pannello", "Interventi con priorità, stati e diario operativo"],
+     "mp4": "/media/control-room-demo.mp4", "webm": None, "poster": "/media/control-room-demo-poster.jpg", "preview": "/media/brevo/control-room-anteprima.jpg"},
 ]
 
 
@@ -65,6 +72,11 @@ class PromoIn(BaseModel):
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
+
+class MediaIn(BaseModel):
+    mp4: Optional[str] = Field(None, max_length=300)
+    poster: Optional[str] = Field(None, max_length=300)
 
 
 def _pub(m):
@@ -162,7 +174,7 @@ def build(db, deps):
 
     async def _snapshot(m, user, reason):
         await db.promo_material_versions.insert_one({"id": uuid.uuid4().hex, "slug": m["slug"], "version": m.get("version", 1), "reason": reason,
-                                                     "data": {k: m.get(k) for k in FIELDS + ["status"]}, "created_at": _now(),
+                                                     "data": {k: m.get(k) for k in FIELDS + ["status", "mp4", "webm", "poster"]}, "created_at": _now(),
                                                      "created_by": user.get("email")})
 
     @router.put("/promo-materials/{slug}")
@@ -175,6 +187,24 @@ def build(db, deps):
         if data["html_override"] and re.search(r"<script|javascript:|\son\w+\s*=", data["html_override"], re.I):
             raise HTTPException(status_code=422, detail="L'HTML della newsletter non può contenere JavaScript")
         await db.promo_materials.update_one({"slug": slug}, {"$set": {**data, "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
+        return await _get(slug)
+
+    @router.post("/promo-materials/{slug}/media")
+    async def admin_media(slug: str, body: MediaIn, user: dict = Depends(sa_dep)):
+        m = await _get(slug)
+        upd = {k: v for k, v in body.model_dump().items() if v}
+        ext = {"mp4": (".mp4",), "poster": (".jpg", ".jpeg", ".png")}
+        site = _site(None)
+        def ok(k, v):
+            if ".." in v or not re.fullmatch(r"(https://[^\s\"'<>]+|/(api|media)/[A-Za-z0-9._/\-]+)", v):
+                return False
+            if v.startswith("https://") and not v.startswith(site + "/api/"):
+                return False
+            return not v.startswith("/media/") or v.lower().endswith(ext[k])
+        if not upd or any(not ok(k, v) for k, v in upd.items()):
+            raise HTTPException(status_code=400, detail="File non valido: carica un MP4 per il video e un JPG o PNG per la miniatura")
+        await _snapshot(m, user, "media")
+        await db.promo_materials.update_one({"slug": slug}, {"$set": {**upd, "webm": None if "mp4" in upd else m.get("webm"), "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
         return await _get(slug)
 
     @router.post("/promo-materials/{slug}/status")
@@ -197,7 +227,7 @@ def build(db, deps):
         if not v:
             raise HTTPException(status_code=404, detail="Versione non trovata")
         await _snapshot(m, user, "ripristino")
-        await db.promo_materials.update_one({"slug": slug}, {"$set": {**{k: v["data"].get(k) for k in FIELDS}, "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
+        await db.promo_materials.update_one({"slug": slug}, {"$set": {**{k: v["data"].get(k) for k in FIELDS}, **{k: v["data"][k] for k in ("mp4", "webm", "poster") if v["data"].get(k)}, "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
         return await _get(slug)
 
     return {"router": router, "ensure": ensure}

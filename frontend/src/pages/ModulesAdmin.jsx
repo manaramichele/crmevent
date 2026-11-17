@@ -55,21 +55,21 @@ function OrgTable({ rows, onOpen }) {
   );
 }
 
-export default function ModulesAdmin() {
+export default function ModulesAdmin({ embedded = false }) {
   const [rows, setRows] = useState(null);
   const [params, setParams] = useSearchParams();
   const orgId = params.get("org");
   const tab = params.get("tab") === "config" ? "config" : "orgs";
   const load = useCallback(() => api.get("/platform/modules/orgs").then(({ data }) => setRows(data)).catch((e) => toast.error(formatApiError(e.response?.data?.detail))), []);
   useEffect(() => { load(); }, [load]);
-  const go = (p) => setParams(p, { replace: false });
+  const go = (p) => setParams(embedded ? { sezione: "moduli", ...p } : p, { replace: false });
   const org = rows?.find((r) => r.id === orgId);
   return (
-    <div className="animate-fade-up space-y-6" data-testid="modules-admin-page">
-      <div>
+    <div className={`${embedded ? "" : "animate-fade-up "}space-y-6`} data-testid="modules-admin-page">
+      {!embedded && <div>
         <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1" data-testid="modules-admin-breadcrumb">Dashboard piattaforma · Moduli e Attivazioni{org ? ` · ${org.nome}` : ""}</div>
         <PageHeader title="Moduli e Attivazioni" subtitle="Moduli attivi di tutte le organizzazioni, concessioni gratuite, limiti, scadenze e storico. Nessuna modifica crea pagamenti Stripe." />
-      </div>
+      </div>}
       {orgId ? (
         <div className="space-y-4" data-testid="modules-admin-org">
           <div className="flex items-center gap-3 flex-wrap">

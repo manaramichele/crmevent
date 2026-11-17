@@ -3,7 +3,7 @@ import api from "@/lib/api";
 import { fmtDate } from "@/lib/promoMaterials";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Copy, Download, ExternalLink, Mail, Pencil, History, Eye, Rocket, Undo2 } from "lucide-react";
+import { Copy, Download, ExternalLink, Mail, Pencil, History, Eye, Rocket, Undo2, Upload } from "lucide-react";
 import { PromoEditDialog } from "@/components/promo/PromoEditDialog";
 import { PromoVersionsDialog } from "@/components/promo/PromoVersionsDialog";
 import { PromoEmailPreview } from "@/components/promo/PromoEmailPreview";
@@ -33,6 +33,21 @@ export function PromoCard({ m, onChange }) {
   const site = prod?.site || "";
   const pageUrl = `${site}/video/${s}`;
   const published = m.status === "pubblicato";
+  const replace = (kind) => {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = kind === "mp4" ? "video/mp4" : "image/jpeg,image/png";
+    inp.onchange = async () => {
+      const f = inp.files?.[0]; if (!f) return;
+      const fd = new FormData(); fd.append("file", f);
+      try {
+        toast.info("Caricamento in corso…");
+        const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+        await api.post(`/promo-materials/${s}/media`, { [kind]: data.url });
+        toast.success(kind === "mp4" ? "Video sostituito" : "Miniatura sostituita"); onChange();
+      } catch (e) { toast.error(e.response?.data?.detail || "Caricamento non riuscito"); }
+    };
+    inp.click();
+  };
   const downloadHtml = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([prod.html], { type: "text/html" }));
@@ -64,6 +79,8 @@ export function PromoCard({ m, onChange }) {
         <Act icon={Copy} onClick={() => copyText(pageUrl, "Link video")} disabled={!prod} data-testid={`promo-copy-page-${s}`}>Copia link video</Act>
         <Act icon={Copy} onClick={() => copyText(`${site}${m.preview}`, "Link immagine")} disabled={!prod} data-testid={`promo-copy-image-${s}`}>Copia link immagine</Act>
         <Act icon={Pencil} onClick={() => setDlg("edit")} data-testid={`promo-edit-${s}`}>Modifica</Act>
+        <Act icon={Upload} onClick={() => replace("mp4")} data-testid={`promo-replace-video-${s}`}>Sostituisci video</Act>
+        <Act icon={Upload} onClick={() => replace("poster")} data-testid={`promo-replace-poster-${s}`}>Sostituisci miniatura</Act>
         <Act icon={History} onClick={() => setDlg("versions")} data-testid={`promo-versions-${s}`}>Versioni</Act>
       </div>
       <div className="space-y-1.5 border-t border-slate-100 pt-3">

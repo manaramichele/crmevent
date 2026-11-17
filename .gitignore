@@ -111,3 +111,9 @@ credentials.json
 *.key
 .credentials
 frontend/node_modules/.cache/default-development/20.pack
+frontend/node_modules/.cache/default-development/22.pack
+frontend/node_modules/.cache/default-development/23.pack
+frontend/node_modules/.cache/default-development/24.pack
+frontend/node_modules/.cache/default-development/25.pack
+frontend/node_modules/.cache/default-development/27.pack
+frontend/node_modules/.cache/default-development/14.pack_

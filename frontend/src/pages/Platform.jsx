@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Plus, X, Trash2, Power, ShieldAlert } from "lucide-react";
 import PlatformUsers from "@/pages/PlatformUsers";
 import SaasAdmin from "@/pages/SaasAdmin";
+import ModulesAdmin from "@/pages/ModulesAdmin";
 import NormalizePreview from "@/components/NormalizePreview";
 
-const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"]];
+const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"], ["moduli", "Moduli e Attivazioni"]];
 
 function SectionSwitch({ value, onChange }) {
   return (
-    <div role="tablist" className="inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-1 gap-1 mb-6" data-testid="platform-section-switch">
+    <div role="tablist" className="grid grid-cols-2 sm:inline-flex max-w-full rounded-lg bg-slate-100 p-1 gap-1 mb-6" data-testid="platform-section-switch">
       {SEZIONI.map(([k, l]) => (
         <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)} data-testid={`platform-section-${k}`}
           className={`h-8 px-3.5 shrink-0 rounded-md text-sm font-medium transition-[background-color,color,box-shadow] ${value === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{l}</button>
@@ -44,7 +45,7 @@ export default function Platform() {
   const [subs, setSubs] = useState([]);
   const [params, setParams] = useSearchParams();
   const sez = SEZIONI.some(([k]) => k === params.get("sezione")) ? params.get("sezione") : (sessionStorage.getItem("platform_section") || "organizzazioni");
-  const setSez = (k) => { sessionStorage.setItem("platform_section", k); const p = new URLSearchParams(params); p.set("sezione", k); setParams(p, { replace: true }); };
+  const setSez = (k) => { sessionStorage.setItem("platform_section", k); setParams({ sezione: k }, { replace: true }); };
   const [showCreate, setShowCreate] = useState(false);
   const [nf, setNf] = useState({ nome: "", type: "cliente", status: "active" });
   const [creating, setCreating] = useState(false);
@@ -104,6 +105,7 @@ export default function Platform() {
       <SectionSwitch value={sez} onChange={setSez} />
 
       {sez === "abbonamenti" && <SaasAdmin embedded />}
+      {sez === "moduli" && <ModulesAdmin embedded />}
       {sez === "organizzazioni" && <>
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-8">

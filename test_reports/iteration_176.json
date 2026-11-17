@@ -1,0 +1,57 @@
+{
+  "summary": "Tested the Staff e Volontari reorganisation (PersonMask, tables, filters, provenienza, mobile) as Super Admin acting in the Demo org. Backend: 6 of 9 pytest cases pass. The 3 failures: POST /api/staff accepts an event from another org and a person from another org (cross-tenant hole), and the backend accepts a duplicate persona+evento+categoria link (only the client blocks it). Frontend: one CRITICAL blocker, now fixed by the tester. The EventPicker popover in the mask rendered behind the Dialog (z-50 vs z-[100]), so no event could be selected and the 'Aggiungi evento' flow could not be used. After a one-class fix (z-[200]) every requested flow passed except the preference filter. That filter does not list preferences set in the mask.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/staff", "issue": "Org isolation broken. A staff link in the Demo org is created (200) with evento_id = an event of org_qa_eventi (cbee6996...) and also with persona_id = a person of another org. The crud _c handler only pins org_id on the new document and never checks that evento_id, persona_id or team_id belong to user.org_id. _assert_event_operational returns early ('return' on its first line), so it does no lookup either. PUT /api/staff/{id} has the same gap for evento_id and team_id.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/staff", "issue": "Duplicate persona+evento+categoria is accepted (200). The 'duplicate blocked' rule exists only client-side in PersonMask.save. Add a server-side 409 check."},
+      {"endpoint": "DELETE /api/persons/{id}", "issue": "No cascade: the person's staff links, shifts and availabilities are left orphaned. The table delete button makes this easy to trigger."},
+      {"endpoint": "PersonMask save flow", "issue": "Not atomic. The PUT/POST person runs first, then staff DELETE/POST/PUT one by one. If a later call fails, the save is left half-done (for example the person is created but some links are missing) and retrying Salva on a new person creates a second person (person stays null in the mask)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PersonMask EventPicker", "issue": "FIXED BY TESTER. The PopoverContent had z-50 while DialogContent has z-[100], so the event list was hidden behind the mask. Clicking an option hit the dialog and nothing could be selected, which blocked adding any event association. Added z-[200], the same value TeamSelect and Hospitality use.", "selector": "[data-testid^='mask-assign-event-'][data-testid$='-opt-*']", "priority": "CRITICAL"},
+      {"component": "PeopleTable preference filter", "issue": "prefOptions is built only from r.preferenze (availability-link preferences). Preferences set in the mask (assegnazioni[].preferenza) appear in the Preferenza column but are missing from people-pref-filter, so they cannot be filtered. Seen with a person showing 'Tecnico': the filter only offered 'Non indicata'.", "selector": "[data-testid='people-pref-filter']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Staff tab Team/Mansione cells", "issues": ["On the Staff tab, the multi-value count also includes the person's Volontario links (for example the mansione of a volunteer-only event), and so does the Volontari tab for staff links. Consider limiting assegnazioni to the tab's categoria."]},
+      {"screen": "PersonMask", "issues": ["Data di nascita uses the native <input type=date> instead of the shadcn calendar.", "On mobile the Nome input is auto-focused and selected when the mask opens, which pops up the keyboard over the form.", "'Aggiungi Staff' saved with no event rows creates a person with no role, who lands in 'Da classificare' even though the title said 'Nuovo Staff'. Consider asking for at least one event or showing a hint."]}
+    ]
+  },
+  "passed_checks": [
+    "Desktop Staff, Volontari and Da classificare headers: [checkbox] Cognome, Nome, Cellulare, Ruolo, Preferenza, Team, Mansione, Evento, Azioni. No Invito column. Actions order is invite, delete, edit (pencil last).",
+    "EventRolesDialog and the inline preference/pick-mansione buttons are removed. Clicking the role cell opens only the person-detail-dialog (row click).",
+    "Aggiungi Volontario opens 'Nuovo Volontario' with new rows defaulting to volontario. Aggiungi Staff opens 'Nuovo Staff' with rows defaulting to staff. A new person shows 'Inserimento manuale'.",
+    "Pencil opens 'Modifica — Cognome Nome' with the person's data, the rows, and each row's mansione/preferenza filled in. Editing cognome saves; the table and API update.",
+    "A TEST person with BCR (staff, team Arrivo, Coordinatore) and Maratona (volontario, TEST team, Hostess, pref Tecnico) appears once. Team and Mansione show '2 associazioni', with tooltips 'Bologna City Run 2026: Arrivo\\nMaratona Demo: TEST_TeamMara'. With the event filter on, the row shows that event's values and role.",
+    "Duplicate event+role rows show the person-mask-error message and nothing is saved (0 persons).",
+    "Removing the Maratona row (on mobile) and saving keeps the person; only that link is removed (is_volontario becomes false).",
+    "Unsaved changes: Annulla after editing shows the confirm; dismissing keeps the mask open, accepting closes it. A mask with no edits closes without a confirm.",
+    "Provenienza: POST /api/persons and staff/quick-add set 'manuale'. provenienza in the POST/PUT body is ignored. The public availability POST creates a person with provenienza_tipo link_disponibilita. Older persons, such as demo_p01 in the mask, show non_determinata / 'Non determinata'.",
+    "The team filter (specific team and 'none'), mansione filter, provenienza filter (all 3 values), event filter and search all work.",
+    "Mobile 390px: cards show Preferenza, Team and Mansione, with actions Apri, Invita, Elimina, Modifica (Modifica last). The mask's Salva and Annulla footer stays visible while scrolling. The event picker works on mobile after the z-index fix."
+  ],
+  "test_report_links": ["/app/backend/tests/test_person_mask_staff.py", "/app/test_reports/pytest/pytest_person_mask.xml"],
+  "action_items": [
+    "CRITICAL: In POST/PUT /api/staff (crud _c/_u for coll=staff, and similar refs in shifts/teams), check that evento_id, persona_id and team_id exist with org_id = user.org_id; otherwise return 400/404.",
+    "Keep the z-[200] on PersonMask EventPicker PopoverContent (tester fix) and check other Popover/Command pickers that sit inside z-[100] dialogs.",
+    "Build people-pref-filter options from assegnazioni[].preferenza as well as r.preferenze.",
+    "Add a server-side check that rejects duplicate staff links (same persona+evento+categoria) with 409.",
+    "Optional: cascade or clean up staff links when a person is deleted; make the mask save safer (retry after a partial failure must not duplicate the person)."
+  ],
+  "critical_code_review_comments": [
+    "server.py _assert_event_operational has 'return' as its first statement, so it does no validation. Cross-org reference checks must not depend on it.",
+    "PersonMask.save: on a partial failure, the mask keeps person=null, so pressing Salva again POSTs a second person.",
+    "Persons.jsx prefOptions ignores assegnazioni preferenza (see ui_bugs). mansOpts ignores evFilter while teamOpts respects it (inconsistent).",
+    "Persons.jsx is 494 lines and server.py is over 14k lines; consider splitting."
+  ],
+  "updated_files": ["/app/frontend/src/components/PersonMask.jsx (EventPicker PopoverContent z-[200])", "/app/backend/tests/test_person_mask_staff.py"],
+  "success_rate": {"backend": "67% (6/9; 3 failures: 2 org-isolation, 1 duplicate-not-blocked)", "frontend": "~92% (all requested flows pass after the tester's z-index fix; the preference filter misses mask preferences)"},
+  "seed_data_creation": "Created and deleted: TEST_ persons (API and UI), their staff links, TEST_TeamMara team (Maratona), TEST_MaskEv event plus its avail_link and availability (removed by id via mongo, as there is no API for those). Verified 0 TEST_ persons left in the Demo org. Demo seed data was not modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_person_mask_staff.py -p no:xdist -o addopts=''. UI: log in through page.request.post /api/auth/login, set localStorage acting_org_id=b7f40862230441b9a0bedabefe8dab49, go to /staff-volontari and accept the cookie banner. Only demo_evt_bcr has teams; create a TEST team on demo_evt_maratona to test multi-team. POST /events/{id}/availability/link revokes the existing link, so use a TEST event. The public submit needs preferenza_attivita='Altro' or a ruoli_staff value."
+}
