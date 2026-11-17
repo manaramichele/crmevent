@@ -14,7 +14,7 @@ ORG_COLLS = ["persons", "staff", "availabilities", "events", "settings", "avail_
 
 
 def _register(tag):
-    ts = int(time.time() * 1000)
+    ts = f"{int(time.time() * 1000)}{__import__('uuid').uuid4().hex[:6]}"
     email = f"test_ol_{tag}_{ts}@example.com"
     s = requests.Session()
     r = s.post(f"{BASE_URL}/api/auth/register-organization", json={

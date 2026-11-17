@@ -2858,19 +2858,13 @@ async def update_settings(body: dict, admin: dict = Depends(require_admin)):
     return await db.settings.find_one({"id": admin["org_id"]}, {"_id": 0})
 
 
-USAGE_MAP = {"tipologie_evento": ("events", "tipologia"), "settori": ("companies", "settore"),
-             "tipi_azienda": ("companies", "tipo"),
-             "ruoli_staff": ("staff", "ruolo"), "aree_operative": ("staff", "area"),
-             "livelli_sponsorship": ("deals", "livello"), "taglie": ("persons", "taglia")}
-
-
 @api.get("/settings/usage")
 async def settings_usage(list: str, value: str, admin: dict = Depends(require_admin)):
-    m = USAGE_MAP.get(list)
-    if not m:
+    if list not in option_lists.LISTS:
         return {"count": 0}
-    coll, field = m
-    count = await db[coll].count_documents({"org_id": admin["org_id"], field: value})
+    count = 0
+    for coll, field, _, extra in option_lists.LISTS[list][2]:
+        count += await db[coll].count_documents({"org_id": admin["org_id"], field: value, **(extra or {})})
     return {"count": count}
 
 

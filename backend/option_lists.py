@@ -165,7 +165,7 @@ def build(db, deps: dict):
         if not user.get("platform_scope"):
             for coll, field, arr, extra in LISTS[key][2]:
                 q = {"org_id": user["org_id"], field: body.old, **(extra or {})}
-                res = await (db[coll].update_many(q, {"$set": {f"{field}.$": new}}) if arr else db[coll].update_many(q, {"$set": {field: new}}))
+                res = await (db[coll].update_many(q, {"$set": {f"{field}.$[el]": new}}, array_filters=[{"el": body.old}]) if arr else db[coll].update_many(q, {"$set": {field: new}}))
                 n += res.modified_count
         return {"ok": True, "records_updated": n}
 
