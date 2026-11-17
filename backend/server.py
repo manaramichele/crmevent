@@ -1176,6 +1176,7 @@ class Presence(BaseModel):  # collection: staff (Persona <-> Evento)
     data_partenza: Optional[str] = None
     ora_partenza: Optional[str] = None
     stato: Optional[str] = "da_contattare"
+    preferenza: Optional[str] = None
     note_operative: Optional[str] = None
     servizio_ospitalita: Optional[str] = None
     esigenze_alimentari: Optional[List[str]] = None
@@ -1513,6 +1514,8 @@ def crud_routes(path, coll, model, org_scoped=True):
             raise HTTPException(status_code=403, detail="Puoi operare solo sugli eventi assegnati: non puoi creare nuovi eventi")
         if coll != "events":
             _assert_ev_allowed(user, data.get("evento_id"))
+        if coll == "persons":
+            data["provenienza"] = {"tipo": "manuale", "at": now_iso(), "by": user.get("email")}
         if _team_ids(user) is not None and coll in ("teams", "staff", "shifts"):
             if coll == "teams":
                 raise HTTPException(status_code=403, detail="Puoi operare solo sui Team assegnati: non puoi creare nuovi Team")
@@ -1987,6 +1990,8 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "eventi_ids": list({x["evento_id"] for x in prs}),
                     "eventi_count": len({x["evento_id"] for x in prs}),
                     "preferenze": prefs.get(pid, []),
+                    "provenienza_tipo": (p.get("provenienza") or {}).get("tipo") or "non_determinata",
+                    "assegnazioni": [{k: x.get(k) for k in ("id", "evento_id", "categoria", "team_id", "ruolo", "preferenza", "stato")} for x in prs],
                     "mansioni": [{"evento_id": x["evento_id"], "ruolo": x.get("ruolo")} for x in prs]})
     return out
 
@@ -2032,7 +2037,8 @@ async def staff_quick_add(body: StaffQuickAddIn, admin: dict = Depends(require_a
         person = existing
     await SAAS["check_people"](admin["org_id"], (person or {}).get("id"))
     if not person:
-        person = TN.normalize_fields("persons", {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso()})
+        person = TN.normalize_fields("persons", {"id": new_id(), "org_id": admin["org_id"], "nome": body.nome.strip(), "cognome": (body.cognome or "").strip(), "email": email, "cellulare": tel, "created_at": now_iso(),
+                                                 "provenienza": {"tipo": "manuale", "at": now_iso(), "by": admin.get("email"), "evento_id": body.evento_id}})
         await db.persons.insert_one({**person})
     categoria = body.categoria if body.categoria in ("staff", "volontario") else "staff"
     link = await db.staff.find_one({**oq(admin), "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
@@ -5749,7 +5755,7 @@ async def add_staff_candidate(org_id: str, body: StaffCandidateIn, user: dict = 
     await SAAS["check_people"](org_id, (person or {}).get("id"))
     if not person:
         person = TN.normalize_fields("persons", {"id": new_id(), "org_id": org_id, "nome": body.nome.strip(), "cognome": body.cognome.strip(),
-                  "email": email, "cellulare": tel, "created_at": now_iso()})
+                  "email": email, "cellulare": tel, "created_at": now_iso(), "provenienza": {"tipo": "manuale", "at": now_iso(), "by": user.get("email"), "evento_id": body.evento_id}})
         await db.persons.insert_one({**person})
     link = await db.staff.find_one({"org_id": org_id, "persona_id": person["id"], "evento_id": body.evento_id}, {"_id": 0})
     if not link:
@@ -11103,6 +11109,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                                          "email": email or None, "cellulare": cell or None,
                                          "data_nascita": submitted["data_nascita"], "codice_fiscale": cf_norm or None,
                                          "tag": ["disponibilita"],
+                                         "provenienza": {"tipo": "link_disponibilita", "at": now_iso(), "evento_id": link["evento_id"], "link_code": code},
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
         pid = pdoc["id"]
     now = now_iso()
