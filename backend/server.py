@@ -4532,7 +4532,7 @@ async def remove_org_member(org_id: str, target_id: str, user: dict = Depends(ge
 
 # ---------------- platform: account & org management (superadmin) ----------------
 # Collections whose documents belong EXCLUSIVELY to a single organization (org_id scoped).
-ORG_CASCADE_COLLECTIONS = ["controlroom_purchases", "events", "companies", "persons", "deals", "staff", "teams", "shifts",
+ORG_CASCADE_COLLECTIONS = ["controlroom_purchases", "cr_settings", "cr_sectors", "cr_posts", "cr_resources", "cr_interventions", "cr_log", "events", "companies", "persons", "deals", "staff", "teams", "shifts",
                            "event_maps", "activities", "followups", "calendar_event_links", "files",
                            "person_companies", "lodgings", "meals", "briefing_versions", "invoices",
                            "structures", "fic_settings", "org_invites", "leads", "memberships",
@@ -13985,7 +13985,8 @@ app.include_router(ADDONS["router"])
 app.add_event_handler("startup", ADDONS["ensure"])
 CONTROL_ROOM = controlroom.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "get_current_user": get_current_user,
                                      "audit": record_audit, "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
-                                     "tax_rate_id": _get_tax_rate_id, "stripe_mode": STRIPE_MODE, "logger": logger})
+                                     "tax_rate_id": _get_tax_rate_id, "stripe_mode": STRIPE_MODE, "logger": logger,
+                                     "resolve_attachment": lambda u, o: _route_file_rec(u, o), "read_file_rec": _read_file_rec})
 app.include_router(CONTROL_ROOM["router"])
 app.add_event_handler("startup", CONTROL_ROOM["ensure"])
 async def _route_file_rec(url: str, org_id: str) -> Optional[dict]:

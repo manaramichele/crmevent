@@ -65,6 +65,7 @@ ROUTE_RULES = [
     ("/eventmap", "*", None),
     ("/iscritti", "*", None),
     ("/saas/", "*", None),
+    ("/controlroom/events/{event_id}/ops", "*", None),  # permessi e acquisto verificati in controlroom_ops
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),
     ("/events/{event_id}/upgrade", None, None),

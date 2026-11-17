@@ -7,6 +7,8 @@ import stripe as stripe_sdk
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import controlroom_ops
+
 PRICE_NET = 119.00
 SERVICE_KEY = "control-room"
 LINE_NAME = "CONTROL ROOM — 119,00 € / EVENTO"
@@ -27,6 +29,8 @@ def build(db, deps):
     async def ensure():
         await db.controlroom_purchases.create_index([("org_id", 1), ("event_id", 1)])
         await db.controlroom_purchases.create_index("stripe_session_id", sparse=True)
+        for c in ("cr_settings", "cr_sectors", "cr_posts", "cr_resources", "cr_interventions", "cr_log"):
+            await db[c].create_index([("org_id", 1), ("event_id", 1)])
         await db.marketplace_services.update_one({"key": SERVICE_KEY}, {"$setOnInsert": {
             "id": uuid.uuid4().hex, "key": SERVICE_KEY, "name": "Control Room", "activation": "controlroom", "billing_method": "stripe", "category": "Logistica",
             "description": "Centrale operativa digitale per coordinare volontari, postazioni, mezzi di soccorso e interventi durante la manifestazione.",
@@ -145,5 +149,7 @@ def build(db, deps):
     @r.get("/platform/controlroom/purchases")
     async def sa_list(_: dict = Depends(sa)):
         return await db.controlroom_purchases.find({}, {"_id": 0, "history": 0}).sort("created_at", -1).to_list(500)
+
+    controlroom_ops.attach(r, db, deps, require_active)
 
     return {"router": r, "ensure": ensure, "handle_webhook": handle_webhook, "on_refund": on_refund, "require_active": require_active}

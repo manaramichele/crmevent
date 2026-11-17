@@ -4,7 +4,8 @@ import api, { formatApiError } from "@/lib/api";
 import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { RadioTower, CheckCircle2, MapPinned, Siren, Users, Smartphone, ClipboardList, ShieldAlert } from "lucide-react";
+import Ops from "@/components/controlroom/Ops";
+import { RadioTower, MapPinned, Siren, Users, Smartphone, ClipboardList, ShieldAlert } from "lucide-react";
 
 const FEATURES = [[MapPinned, "Mappa operativa", "Percorso, postazioni, ristori, punti critici e mezzi su un'unica mappa."], [Users, "Risorse e postazioni", "Staff, volontari, ambulanze, mezzi e forze dell'ordine autorizzate."],
   [Siren, "Interventi", "Segnalazioni con priorità, squadre assegnate e stati fino alla chiusura."], [Smartphone, "Accesso mobile", "Gli operatori confermano la presenza, segnalano e ricevono incarichi."],
@@ -61,12 +62,7 @@ export default function ControlRoom() {
           <select value={ev.id} onChange={(e) => setParams({ event: e.target.value })} className="h-10 w-full max-w-md rounded-md border border-slate-200 bg-white px-3 text-sm" data-testid="cr-event-select">
             {info.events.map((e) => <option key={e.id} value={e.id}>{e.nome}{e.active ? " · attiva" : ""}</option>)}
           </select>
-          {ev.active ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6" data-testid="cr-dashboard">
-              <div className="flex items-center gap-2 font-semibold text-emerald-800"><CheckCircle2 className="h-5 w-5" />Control Room attiva per {ev.nome}</div>
-              <p className="mt-2 text-sm text-emerald-900/80">La dashboard operativa con mappa, risorse, interventi e accesso mobile è in fase di realizzazione e comparirà qui automaticamente, senza ulteriori acquisti.</p>
-            </div>
-          ) : <Intro ev={ev} info={info} onBuy={buy} busy={busy} />}
+          {ev.active ? <div data-testid="cr-dashboard"><Ops key={ev.id} eventId={ev.id} /></div> : <Intro ev={ev} info={info} onBuy={buy} busy={busy} />}
         </>
       )}
     </div>
