@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, RadioTower, Handshake, Contact,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning, Map as MapIcon, Film,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning, Map as MapIcon, Film, Boxes, ReceiptText,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
@@ -40,30 +40,48 @@ function NewsButton() {
   );
 }
 
+const MODULE_PATHS = ["/marketplace", "/control-room", "/event-planner", "/event-map", "/organizzazione"];
+const isVolUser = (u) => u && (u.role === "staff" || u.role === "volunteer");
+
 const ORG_NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, id: "dashboard", perm: "dashboard" },
   { to: "/azioni-rapide", label: "Azioni rapide", icon: Zap, id: "azioni-rapide", perm: "*" },
-  { to: "/marketplace", label: "Marketplace", icon: Store, id: "marketplace", perm: "*" },
   { to: "/eventi", label: "Eventi", icon: CalendarDays, id: "eventi", perm: "eventi" },
-  { to: "/event-planner", label: "Event Planner", icon: MapIcon, id: "event-planner", perm: "*" },
-  { to: "/event-map", label: "Event Map", icon: Film, id: "event-map", perm: "*" },
   { to: "/staff-volontari", label: "Staff / Volontari", icon: UserCog, id: "staff-volontari", perm: "staff" },
-  { to: "/control-room", label: "Control Room", icon: RadioTower, id: "control-room", perm: "eventi" },
+  { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor", perm: "sponsor" },
   { to: "/aziende", label: "Aziende", icon: Building2, id: "aziende", perm: "aziende" },
   { to: "/ospitalita", label: "Ospitalità & Pasti", icon: BedDouble, id: "ospitalita", perm: "ospitalita" },
-  { to: "/sponsor", label: "Sponsor & Partner", icon: Handshake, id: "sponsor", perm: "sponsor" },
+  { to: "/marketplace", label: "Marketplace", icon: Store, id: "marketplace", perm: "*" },
+];
+// Moduli operativi: lucchetto se il modulo non è attivo per l'organizzazione (la pagina guida all'attivazione).
+const PLANNER_NAV = [
+  { to: "/event-planner", label: "Event Planner", icon: MapIcon, id: "event-planner", perm: "*", module: "planner" },
+  { to: "/event-map", label: "Event Map", icon: Film, id: "event-map", perm: "*", module: "eventmap" },
+];
+const CR_NAV = [{ to: "/control-room", label: "Control Room", icon: RadioTower, id: "control-room", perm: "eventi", module: "controlroom" }];
+const ORGANIZATION_NAV = [
+  { to: "/organizzazione/moduli", label: "Moduli e Attivazioni", icon: Boxes, id: "org-moduli", perm: "admin" },
+  { to: "/organizzazione/utenti", label: "Utenti e Permessi", icon: Users, id: "org-utenti", perm: "admin" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
 ];
+const ACCOUNT_NAV = [{ to: "/profilo", label: "Profilo & Account", icon: CircleUserRound, id: "account", perm: "*" }];
 // Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
 const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", badge: "ticketsUnread" }];
 
-// Super Admin operational menu = same CRMEvent menu as organizers, minus org self-billing (e Permessi: invariato).
-const SUPER_ORG_NAV = ORG_NAV;
-const orgNavFor = (u) => ORG_NAV.flatMap((n) => {
-  if (n.perm === "*") return [n];
-  if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...n, locked: true }];
-  return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [n] : [];
+const navFor = (u, items, access) => items.flatMap((n) => {
+  const off = n.module && access && access[n.module] === false;
+  const m = off ? { ...n, locked: true, lockTitle: "Modulo non attivo: aprilo per attivarlo" } : n;
+  if (n.perm === "*") return [m];
+  if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...m, locked: true }];
+  return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [m] : [];
 });
+const orgGroups = (u, access, iscrittiOn) => [
+  { items: withIscritti(navFor(u, ORG_NAV, access), iscrittiOn) },
+  { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access) },
+  { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access) },
+  { title: "Organizzazione", id: "organizzazione", items: navFor(u, ORGANIZATION_NAV, access) },
+  { title: "Account", id: "account", items: ACCOUNT_NAV },
+].filter((g) => g.items.length);
 
 // Moduli Marketplace attivi: voce di menu dopo "Aziende".
 const ISCRITTI_NAV = { to: "/iscritti", label: "Elenco Iscritti", icon: Contact, id: "iscritti", perm: "*" };
@@ -80,7 +98,7 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo", badge: "demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },
   { to: "/piattaforma/marketplace", label: "Marketplace", icon: Store, id: "piattaforma-marketplace" },
-  { to: "/piattaforma/event-planner-map", label: "Event Planner & Event Map", icon: MapIcon, id: "piattaforma-addons" },
+  { to: "/piattaforma/event-planner-map", label: "Moduli e Attivazioni", icon: Boxes, id: "piattaforma-addons" },
   { to: "/piattaforma/modelli-pipeline", label: "Modelli Pipeline", icon: LayoutTemplate, id: "modelli-pipeline" },
   { to: "/piattaforma/messaggi", label: "Messaggi", icon: BellRing, id: "messaggi" },
   { to: "/piattaforma/novita", label: "Novità", icon: Sparkles, id: "piattaforma-novita" },
@@ -103,6 +121,7 @@ const MARKETING_NAV = [
   { to: "/marketing/social", label: "Social", icon: Megaphone, id: "social" },
   { to: "/marketing/calendario", label: "Calendario editoriale", icon: CalendarRange, id: "social-calendario" },
   { to: "/marketing/impostazioni", label: "Impostazioni Social", icon: SlidersHorizontal, id: "social-impostazioni" },
+  { to: "/marketing/admin", label: "Fatturazione e integrazioni", icon: ReceiptText, id: "marketing-admin" },
 ];
 
 function OrgSwitcher({ orgs, actingOrgId, onChange }) {
@@ -276,6 +295,11 @@ export default function Layout({ children }) {
     api.get("/iscritti/status").then(({ data }) => setIscrittiOn(!!data.active)).catch(() => setIscrittiOn(false));
   }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
   const [counts, setCounts] = useState({});
+  const [access, setAccess] = useState(null);
+  useEffect(() => {
+    if (isVolUser(user) || (!isSuper && !user?.org_id)) { setAccess(null); return; }
+    api.get("/org/modules/access").then(({ data }) => setAccess(data)).catch(() => setAccess(null));
+  }, [isSuper, user?.org_id, actingOrgId, MODULE_PATHS.some((p) => location.pathname.startsWith(p)) ? location.pathname : ""]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!isSuper) return undefined;
     const load = () => api.get("/platform/booking-counts").then(({ data }) => setCounts((c) => ({ ...c, ...data }))).catch(() => {});
@@ -356,15 +380,15 @@ export default function Layout({ children }) {
   }, [mobileOpen]);
 
   const navGroups = isSuper
-    ? [{ items: SUPER_ORG_NAV }, { title: "Amministrazione piattaforma", items: PLATFORM_NAV }, { title: "Marketing CRMEvent — Piattaforma", items: MARKETING_NAV }]
-    : [{ items: withIscritti(orgNavFor(user), iscrittiOn) }];
+    ? [...orgGroups(user, access, false), { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }, { title: "Amministrazione piattaforma", id: "platform", items: PLATFORM_NAV }]
+    : orgGroups(user, access, iscrittiOn);
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !isPlatformRoute && (!orgsLoaded || !validActing);
   const activeOrgName = orgs.find((o) => o.id === actingOrgId)?.nome || user?.org_name;
 
   const renderLink = (n, onClick) => (
-    <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`} title={n.locked ? "Non incluso nel tuo piano" : undefined}
+    <NavLink key={n.to} to={n.to} end={n.end} onClick={onClick} data-testid={`sidebar-link-${n.id}`} title={n.locked ? (n.lockTitle || "Non incluso nel tuo piano") : undefined}
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
           isActive ? "bg-tiffany-light text-tiffany-fg" : n.locked ? "text-slate-400 hover:bg-slate-50" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -389,7 +413,7 @@ export default function Layout({ children }) {
         {navGroups.map((g, gi) => (
           <div key={gi} className={gi > 0 ? "pt-4 mt-3 border-t border-slate-100" : ""}>
             {g.title && !collapsed && (
-              <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400" data-testid="nav-group-platform">{g.title}</div>
+              <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400" data-testid={`nav-group-${g.id}`}>{g.title}</div>
             )}
             <div className="space-y-1">{g.items.map((n) => renderLink(n))}</div>
           </div>
@@ -416,7 +440,7 @@ export default function Layout({ children }) {
             <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-3 py-3 space-y-1 pb-[calc(env(safe-area-inset-bottom)+24px)]" data-testid="mobile-drawer-nav">
               {navGroups.map((g, gi) => (
                 <div key={gi} className={gi > 0 ? "pt-3 mt-2 border-t border-slate-100" : ""}>
-                  {g.title && <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.title}</div>}
+                  {g.title && <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400" data-testid={`mobile-nav-group-${g.id}`}>{g.title}</div>}
                   <div className="space-y-1">{g.items.map((n) => renderLink(n, () => setMobileOpen(false)))}</div>
                 </div>
               ))}

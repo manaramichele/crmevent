@@ -206,7 +206,12 @@ def build(db, deps: dict):
             "code": "addon_required", "product": product, "slug": SLUG[product],
             "message": f"{PRODUCTS[product]} non è attivo per {what}. Attivalo dal Marketplace per continuare: i dati già creati restano conservati."})
 
+    async def _disabled(org_id: str, product: str) -> bool:
+        return bool(await db.organizations.find_one({"id": org_id, "modules_disabled": product}, {"_id": 1}))
+
     async def is_covered(org_id: str, product: str, event_id: str) -> bool:
+        if await _disabled(org_id, product):
+            return False
         if await _unrestricted(org_id):
             return True
         s = await summary(org_id, product)
@@ -233,7 +238,12 @@ def build(db, deps: dict):
         except DuplicateKeyError:
             await db.addon_activations.update_one({"org_id": org_id, "product": product, "event_id": eid}, {"$set": doc})
 
+    def _off_error(product: str) -> HTTPException:
+        return HTTPException(status_code=403, detail=f"{PRODUCTS[product]} è stato disattivato per questa organizzazione: contatta l'assistenza CRMEvent. I dati restano conservati.")
+
     async def activate(org_id: str, product: str, eid: str, by: str) -> dict:
+        if await _disabled(org_id, product):
+            raise _off_error(product)
         ev = await _event(org_id, eid)
         s = await summary(org_id, product)
         cur = next((a for a in s["activations"] if a["event_id"] == eid), None)
@@ -277,6 +287,8 @@ def build(db, deps: dict):
         acts = {a["event_id"]: a for a in s["activations"]}
         evs = await db.events.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).sort("data_inizio", -1).to_list(500)
         sub = s.get("org_subscription")
+        if await _disabled(org_id, s["product"]):
+            return [{**e, "active": False, "assigned": e["id"] in acts, "source": None, "expires_at": None, "module_disabled": True} for e in evs]
         return [{**e, "active": bool(sub) or (e["id"] in acts and acts[e["id"]]["covered"]), "assigned": e["id"] in acts,
                  "source": (acts.get(e["id"]) or {}).get("source") or (("subscription" if sub["source"] == "purchase" else sub["source"]) if sub else None), "expires_at": (acts.get(e["id"]) or {}).get("expires_at")} for e in evs]
 
@@ -284,8 +296,9 @@ def build(db, deps: dict):
     @r.get("/addons/{product}")
     async def org_status(product: str, user: dict = Depends(admin_dep)):
         s = await summary(user["org_id"], _product(product))
+        off = await _disabled(user["org_id"], s["product"])
         return {**{k: v for k, v in s.items() if k not in ("grants", "activations")}, "events": await _events_view(user["org_id"], s),
-                "can_purchase": _can_buy(user)}
+                "can_purchase": _can_buy(user) and not off, "module_disabled": off}
 
     @r.post("/addons/{product}/events/{eid}/activate")
     async def org_activate(product: str, eid: str, user: dict = Depends(admin_dep)):
@@ -321,6 +334,8 @@ def build(db, deps: dict):
         product = _product(product)
         if not _can_buy(user):
             raise HTTPException(status_code=403, detail="Non hai il permesso di acquistare servizi Marketplace")
+        if await _disabled(user["org_id"], product):
+            raise _off_error(product)
         s = await summary(user["org_id"], product)
         if product == "planner":
             return await _planner_checkout(body, user, s)

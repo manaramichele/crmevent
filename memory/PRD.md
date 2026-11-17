@@ -1065,6 +1065,14 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Riorganizzazione menu · Moduli e Attivazioni (2026-11-17)
+- Scelte utente: abbonamento/fatturazione restano in Account; moduli non attivi visibili con lucchetto (Event Planner, Event Map, Control Room); Marketing & Admin solo Super Admin.
+- Menu: principale (Dashboard, Azioni rapide, Eventi, Staff/Volontari, Sponsor & Partner, Aziende, Ospitalità, Iscritti, Marketplace) → gruppo Event Planner & Event Map → gruppo Control Room → Organizzazione (Moduli e Attivazioni, Utenti e Permessi, Impostazioni; solo admin) → Account → [SA] Marketing & Admin (+ Fatturazione e integrazioni /marketing/admin) → [SA] Amministrazione piattaforma (voce "Moduli e Attivazioni" = config globale /piattaforma/event-planner-map).
+- backend/modules_hub.py: GET /org/modules (admin org, sola lettura), GET /org/modules/access (lucchetti menu), GET /platform/orgs/{id}/modules (+storico audit), POST .../modules/{key}/state (disattiva/riattiva senza cancellare dati: organizations.modules_disabled), POST .../modules/controlroom/grant e /{pid}/revoke (concessione gratuita per evento, 0 €, nessuno Stripe). Enforcement: addons.is_covered/activate/checkout e controlroom.is_active/status/checkout rispettano modules_disabled.
+- Frontend: OrgDetail tab "Moduli e Attivazioni" (OrgModulesAdmin), /organizzazione/moduli e /organizzazione/utenti (OrgHub), Profilo senza tab Utenti (redirect), Brevo + Fatture in Cloud spostati da /piattaforma a /marketing/admin (OAuth FIC ?fic= inoltrato), AddonHub avviso modulo disattivato.
+- Test: iteration_173 (11/11 backend, UI SA/org admin/mobile) + fix dei 2 problemi minori (activate/checkout su modulo disattivato, avviso AddonHub) verificati via curl.
+
+
 ## Control Room — Importazione postazioni da Event Planner (2026-11-17) — NON pubblicato
 - backend/controlroom_planner.py: GET /ops/planner (progetti non archiviati dell'evento, punti e strutture con centro; linee escluse; categoria suggerita da nome libreria; persone collegate; già importata) e POST /ops/planner/import (solo responsabile; collega planner_project_id/planner_feature_id → nessun doppione; km dal GPX solo entro 500 m; opzionale assegnazione persone dai turni Event Planner come risorse Staff; opzionale aggiornamento posizione delle già importate).
 - Frontend: pulsante "Importa da Event Planner" nella scheda Postazioni + PlannerImport.jsx.

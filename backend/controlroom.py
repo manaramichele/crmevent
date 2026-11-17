@@ -41,6 +41,8 @@ def build(db, deps):
         await db.marketplace_services.update_one({"key": SERVICE_KEY}, {"$set": {"price": PRICE_NET, "price_type": "per_event"}})
 
     async def is_active(org_id: str, event_id: str) -> bool:
+        if await db.organizations.find_one({"id": org_id, "modules_disabled": "controlroom"}, {"_id": 1}):
+            return False
         return bool(await db.controlroom_purchases.find_one({"org_id": org_id, "event_id": event_id, "status": "active"}, {"_id": 1}))
 
     async def require_active(org_id: str, event_id: str):
@@ -57,8 +59,9 @@ def build(db, deps):
             raise HTTPException(status_code=403, detail="Nessuna organizzazione attiva")
         evs = await db.events.find({"org_id": org}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1, "citta": 1}).sort("data_inizio", -1).to_list(500)
         act = {p["event_id"]: p for p in await db.controlroom_purchases.find({"org_id": org, "status": {"$in": ["active", "pending"]}}, {"_id": 0}).to_list(1000)}
-        return {"price_net": PRICE_NET, "can_purchase": user.get("org_role") in ("admin_org", "superadmin"),
-                "events": [{**e, "active": (act.get(e["id"]) or {}).get("status") == "active", "pending": (act.get(e["id"]) or {}).get("status") == "pending"} for e in evs]}
+        off = bool(await db.organizations.find_one({"id": org, "modules_disabled": "controlroom"}, {"_id": 1}))
+        return {"price_net": PRICE_NET, "can_purchase": user.get("org_role") in ("admin_org", "superadmin") and not off, "module_disabled": off,
+                "events": [{**e, "active": not off and (act.get(e["id"]) or {}).get("status") == "active", "pending": (act.get(e["id"]) or {}).get("status") == "pending"} for e in evs]}
 
     @r.get("/controlroom/events/{eid}/status")
     async def status(eid: str, user: dict = Depends(member)):
@@ -66,7 +69,7 @@ def build(db, deps):
         if not ev:
             raise HTTPException(status_code=404, detail="Evento non trovato")
         p = await db.controlroom_purchases.find_one({"org_id": user["org_id"], "event_id": eid, "status": "active"}, {"_id": 0})
-        return {"event": ev, "active": bool(p), "purchase": _pub(p)}
+        return {"event": ev, "active": bool(p) and await is_active(user["org_id"], eid), "purchase": _pub(p)}
 
     @r.post("/controlroom/events/{eid}/checkout")
     async def checkout(eid: str, body: CheckoutIn, user: dict = Depends(admin)):
@@ -74,6 +77,8 @@ def build(db, deps):
         ev = await db.events.find_one({"id": eid, "org_id": org["id"]}, {"_id": 0, "id": 1, "nome": 1})
         if not ev:
             raise HTTPException(status_code=404, detail="Evento non trovato")
+        if "controlroom" in (org.get("modules_disabled") or []):
+            raise HTTPException(status_code=403, detail="Control Room è stata disattivata per questa organizzazione: contatta l'assistenza CRMEvent")
         if await is_active(org["id"], eid):
             raise HTTPException(status_code=409, detail="Control Room è già attiva per questo evento")
         missing = deps["billing_missing"](org.get("billing") or {})

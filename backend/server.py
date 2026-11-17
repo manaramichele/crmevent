@@ -52,6 +52,7 @@ import promo_materials
 import promo_reels
 import ai_traffic
 import controlroom
+import modules_hub
 import referenti_integrazione
 import gcal_availability
 import privacy_consent
@@ -6636,6 +6637,12 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
 AUDIT_ACTION_LABELS = {
+    "module_enabled": "Modulo riattivato",
+    "module_disabled": "Modulo disattivato",
+    "controlroom_granted": "Control Room concessa gratuitamente",
+    "controlroom_grant_revoked": "Concessione Control Room revocata",
+    "controlroom_paid": "Control Room acquistata",
+    "controlroom_refunded": "Control Room rimborsata",
     "permissions_changed": "Modifica permessi",
     "org_access": "Accesso organizzazione",
     "impersonation_started": "Avvio accesso come utente",
@@ -13989,6 +13996,8 @@ CONTROL_ROOM = controlroom.build(db, {"require_admin": require_admin, "require_s
                                      "resolve_attachment": lambda u, o: _route_file_rec(u, o), "read_file_rec": _read_file_rec})
 app.include_router(CONTROL_ROOM["router"])
 app.add_event_handler("startup", CONTROL_ROOM["ensure"])
+app.include_router(modules_hub.build(db, {"require_member": require_org_member, "require_superadmin": require_superadmin,
+                                         "record_audit": record_audit, "addon_summary": ADDONS["summary"]})["router"])
 async def _route_file_rec(url: str, org_id: str) -> Optional[dict]:
     """Record completo del file CRMEvent (id, storage_path, original_filename...) per Percorsi Eventi; None se esterno/non dell'org."""
     if not url:

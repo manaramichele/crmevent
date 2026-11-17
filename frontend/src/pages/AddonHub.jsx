@@ -78,7 +78,9 @@ export default function AddonHub({ slug }) {
   return (
     <div className="animate-fade-up space-y-6" data-testid={`addon-hub-${slug}`}>
       <PageHeader title={info.name} subtitle={info.tagline} />
-      {!s ? <p className="text-sm text-slate-400">Caricamento...</p> : !hasRights ? <InfoPage info={info} s={s} /> : (
+      {!s ? <p className="text-sm text-slate-400">Caricamento...</p> : s.module_disabled ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900" data-testid="addon-module-disabled">{info.name} è stato disattivato per la tua organizzazione. Progetti e dati restano conservati: contatta l'assistenza CRMEvent per riattivarlo.</div>
+      ) : !hasRights ? <InfoPage info={info} s={s} /> : (
         <>
           <div className="grid gap-3 sm:grid-cols-3" data-testid="addon-counters">
             <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs text-slate-400 uppercase font-semibold">Inclusi nel piano</div><div className="text-xl font-bold" data-testid="addon-included">{s.unrestricted ? "Illimitati" : `${s.included_used} / ${s.included}`}</div></div>
