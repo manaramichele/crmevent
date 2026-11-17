@@ -78,6 +78,7 @@ import PlatformPartners from "@/pages/PlatformPartners";
 import { captureReferral } from "@/lib/referral";
 import { captureAttribution } from "@/lib/attribution";
 import SeoPage from "@/pages/SeoPage";
+import OperatorMobile from "@/pages/OperatorMobile";
 
 captureReferral();
 captureAttribution();
@@ -151,6 +152,7 @@ function Shell() {
         <Route path="/partecipa/:code" element={<Partecipa />} />
         <Route path="/prezzi" element={<Pricing />} />
         <Route path="/funzionalita/:slug" element={<SeoPage />} />
+        <Route path="/cr/op/:token" element={<OperatorMobile />} />
         <Route path="/organizzatori/:slug" element={<SeoPage />} />
         <Route path="/faq" element={<SeoPage />} />
         <Route path="/registrati" element={<Register />} />

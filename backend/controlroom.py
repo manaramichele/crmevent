@@ -31,6 +31,8 @@ def build(db, deps):
         await db.controlroom_purchases.create_index("stripe_session_id", sparse=True)
         for c in ("cr_settings", "cr_sectors", "cr_posts", "cr_resources", "cr_interventions", "cr_log"):
             await db[c].create_index([("org_id", 1), ("event_id", 1)])
+        for t in controlroom_ops.ENSURE:
+            await t()
         await db.marketplace_services.update_one({"key": SERVICE_KEY}, {"$setOnInsert": {
             "id": uuid.uuid4().hex, "key": SERVICE_KEY, "name": "Control Room", "activation": "controlroom", "billing_method": "stripe", "category": "Logistica",
             "description": "Centrale operativa digitale per coordinare volontari, postazioni, mezzi di soccorso e interventi durante la manifestazione.",

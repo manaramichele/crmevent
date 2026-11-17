@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Plus, UserPlus, Crosshair, Phone } from "lucide-react";
-import { PRESIDIO, RES_STATES, KINDS, label, resourceIcon, nameOf } from "./meta";
+import { PRESIDIO, RES_STATES, KINDS, label, resourceIcon, nameOf, PRIORITY, ITV_STATES, CLOSED, fmtTime } from "./meta";
 
 const TABS = [["resources", "Risorse"], ["posts", "Postazioni"], ["sectors", "Settori"], ["interventions", "Interventi"], ["alerts", "Avvisi"]];
 const Sel = ({ value, onChange, children, testid }) => <select value={value} onChange={(e) => onChange(e.target.value)} className="h-9 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs" data-testid={testid}>{children}</select>;
@@ -85,14 +85,16 @@ function Sectors({ d, open, highlight, setHighlight, onAdd }) {
   );
 }
 
+const RANK = { critica: 0, alta: 1, media: 2, bassa: 3 };
 function Interventions({ d, open }) {
-  return d.interventions.length ? d.interventions.map((i) => (
+  const rows = d.interventions.filter((i) => !CLOSED.includes(i.stato)).sort((a, b) => RANK[a.priorita] - RANK[b.priorita] || b.numero - a.numero);
+  return rows.length ? rows.map((i) => (
     <Row key={i.id} onClick={() => open("interventions", i.id)} testid={`cr-intervention-${i.id}`}>
-      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${i.stato === "chiuso" ? "bg-slate-300" : i.priorita === "urgente" ? "bg-red-600" : "bg-orange-400"}`} />
-      <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{i.titolo}</div><div className="text-[11px] text-slate-500">{new Date(i.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {i.created_by}</div></div>
-      <Badge c={i.stato === "chiuso" ? "bg-slate-100 text-slate-500" : i.priorita === "urgente" ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}>{i.stato === "chiuso" ? "CHIUSO" : i.priorita === "urgente" ? "URGENTE" : "APERTO"}</Badge>
+      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PRIORITY[i.priorita][1] }} />
+      <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{i.codice} · {i.descrizione}</div><div className="text-[11px] text-slate-500">{fmtTime(i.created_at).slice(0, 5)} · {ITV_STATES[i.stato][0]}{i.senza_squadra ? " · senza squadra" : i.attesa_conferma ? " · NON CONFERMATA" : ""}</div></div>
+      <Badge c={PRIORITY[i.priorita][2]}>{PRIORITY[i.priorita][0]}</Badge>
     </Row>
-  )) : <div className="py-6 text-center text-xs text-slate-400">Nessun intervento. La gestione completa arriva con la Fase 3.</div>;
+  )) : <div className="py-6 text-center text-xs text-slate-400">Nessun intervento aperto</div>;
 }
 
 function Alerts({ d, open }) {

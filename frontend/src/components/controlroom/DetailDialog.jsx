@@ -75,7 +75,7 @@ function ResourceBody({ d, r, act }) {
 
 // Scheda dell'elemento selezionato (postazione, risorsa, settore, intervento).
 export function DetailDialog({ d, sel, onClose, act }) {
-  const coll = sel ? { posts: d.posts, resources: d.resources, sectors: d.sectors, interventions: d.interventions }[sel[0]] : null;
+  const coll = sel ? { posts: d.posts, resources: d.resources, sectors: d.sectors }[sel[0]] : null;
   const it = coll?.find((x) => x.id === sel[1]);
   if (!sel || !it) return null;
   const [kind] = sel;
@@ -83,7 +83,7 @@ export function DetailDialog({ d, sel, onClose, act }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg space-y-3 overflow-y-auto" data-testid={`cr-detail-${kind}`}>
-        <DialogHeader><DialogTitle className="font-display">{kind === "interventions" ? it.titolo : nameOf(it)}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="font-display">{nameOf(it)}</DialogTitle></DialogHeader>
         {kind === "posts" && <PostBody d={d} p={it} act={act} />}
         {kind === "resources" && <ResourceBody d={d} r={it} act={act} />}
         {kind === "sectors" && <div className="grid grid-cols-2 gap-3"><Info l="Codice" v={it.codice} /><Info l="Km" v={`${it.km_inizio ?? "?"} – ${it.km_fine ?? "?"}`} /><Info l="Responsabile" v={it.responsabile} /><Info l="Note" v={it.note} /><Call tel={it.telefono} testid="cr-sector-call" /></div>}

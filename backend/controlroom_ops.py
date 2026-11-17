@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import Body, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
+import controlroom_itv as ITV
 import event_routes as EVR
 import permissions as P
 
@@ -95,12 +96,21 @@ class CategoryIn(BaseModel):
     color: str = "#64748B"
 
 
+class ItvTypeIn(CategoryIn):
+    priorita: Literal[ITV.PRIORITIES] = "media"
+    gruppo: Optional[str] = Field(None, max_length=60)
+
+
 class SettingsIn(BaseModel):
     status: Optional[Literal[EVENT_STATES]] = None
     responsabile: Txt = None
     responsabile_tel: Txt = None
+    centrale_tel: Txt = None
     route_map_id: Txt = None
     categories: Optional[list[CategoryIn]] = None
+    itv_types: Optional[list[ItvTypeIn]] = Field(None, min_length=1, max_length=60)
+    assign_sets_busy: Optional[bool] = None
+    confirm_timeout_min: Optional[int] = Field(None, ge=1, le=60)
     version: int
 
 
@@ -128,7 +138,7 @@ class FromStaffIn(BaseModel):
 
 
 KINDS = {"sectors": ("cr_sectors", SectorIn, "settore"), "posts": ("cr_posts", PostIn, "postazione"),
-         "resources": ("cr_resources", ResourceIn, "risorsa"), "interventions": ("cr_interventions", InterventionIn, "intervento")}
+         "resources": ("cr_resources", ResourceIn, "risorsa")}
 PHONE_FIELDS = ("telefono", "responsabile_tel")
 
 
@@ -145,6 +155,9 @@ def _clean(d):
     return {k: v for k, v in d.items() if k not in ("_id", "org_id")}
 
 
+ENSURE = []
+
+
 def attach(r, db, deps, require_active):
     ops_dep = deps["require_admin"]
     base = "/controlroom/events/{event_id}/ops"
@@ -156,6 +169,12 @@ def attach(r, db, deps, require_active):
 
     async def ctx(u, eid, write=False):
         pm = perms(u)
+        if pm["view"]:
+            # Ruolo Control Room per evento (admin = responsabile; altrimenti assegnato, o derivato dai permessi Staff)
+            cr = None if u.get("org_role") in ("admin_org", "superadmin") else await db.cr_roles.find_one({"org_id": u["org_id"], "event_id": eid, "user_id": u.get("user_id")}, {"_id": 0})
+            pm["role"] = cr["role"] if cr else ("responsabile" if pm["edit"] else "visualizzatore")
+            pm["sectors"] = (cr or {}).get("sector_ids") or []
+            pm["edit"] = pm["role"] == "responsabile"
         if not pm["view"] or (write and not pm["edit"]):
             raise HTTPException(status_code=403, detail="Non hai i permessi per modificare la Control Room" if write else "Non hai accesso alla Control Room")
         ev = await db.events.find_one({"org_id": u["org_id"], "id": eid}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1, "data_fine": 1, "ora_inizio": 1, "citta": 1})
@@ -239,6 +258,9 @@ def attach(r, db, deps, require_active):
             return "in_attesa"
         return "non_presidiata"
 
+    H = {"ctx": ctx, "q": q, "settings": settings, "touch": touch, "external": EXTERNAL_VEHICLES, "ensure_tasks": ENSURE}
+    ITV.attach(r, db, deps, require_active, H)
+
     @r.get(base)
     async def state(event_id: str, u: dict = Depends(ops_dep)):
         ev, pm = await ctx(u, event_id)
@@ -246,7 +268,6 @@ def attach(r, db, deps, require_active):
         sectors = await db.cr_sectors.find(q(u, event_id), {"_id": 0, "org_id": 0}).sort("km_inizio", 1).to_list(500)
         posts = await db.cr_posts.find(q(u, event_id), {"_id": 0, "org_id": 0}).sort("km", 1).to_list(2000)
         res = await db.cr_resources.find(q(u, event_id), {"_id": 0, "org_id": 0}).sort("created_at", 1).to_list(5000)
-        itv = await db.cr_interventions.find(q(u, event_id), {"_id": 0, "org_id": 0}).sort("created_at", -1).to_list(1000)
         log = await db.cr_log.find(q(u, event_id), {"_id": 0, "org_id": 0}).sort("at", -1).to_list(40)
         pids = [x["persona_id"] for x in res if x.get("persona_id")]
         pers = {p["id"]: p for p in await db.persons.find({"org_id": u["org_id"], "id": {"$in": pids}}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "cellulare": 1, "telefono": 1}).to_list(5000)}
@@ -272,15 +293,14 @@ def attach(r, db, deps, require_active):
             sc["summary"] = {"postazioni": len(sp), "volontari": sum(1 for x in inside if x["kind"] == "persona"),
                              "presenti": sum(p["presenti"] for p in sp), "mezzi": sum(1 for x in inside if x["kind"] == "mezzo"),
                              "mezzi_disponibili": sum(1 for x in inside if x["kind"] == "mezzo" and x["stato"] == "disponibile")}
-        open_itv = [i for i in itv if i["stato"] != "chiuso"]
+        x3 = await H["extra"](u, event_id, pm, s, res, posts)
         mezzi = [x for x in res if x["kind"] == "mezzo"]
         kpi = {"volontari_presenti": sum(1 for x in res if x["kind"] == "persona" and x.get("presente")) + sum(p.get("presenti_manuali") or 0 for p in posts),
                "postazioni_presidiate": sum(1 for p in posts if p["presidio"] == "presidiata"), "postazioni_attive": sum(1 for p in posts if p["presidio"] != "non_attiva"),
                "ambulanze_disponibili": sum(1 for x in mezzi if x.get("tipologia") == "ambulanza" and x["stato"] == "disponibile"),
                "mezzi_operativi": sum(1 for x in mezzi if x["stato"] in ("disponibile", "impegnato")), "risorse_impegnate": sum(1 for x in res if x["stato"] == "impegnato"),
-               "non_raggiungibili": sum(1 for x in res if x["stato"] == "non_raggiungibile"), "interventi_aperti": len(open_itv),
-               "interventi_urgenti": sum(1 for i in open_itv if i["priorita"] == "urgente")}
-        alerts = ([{"level": "high", "text": f"Intervento urgente: {i['titolo']}", "ref": ["interventions", i["id"]]} for i in open_itv if i["priorita"] == "urgente"]
+               "non_raggiungibili": sum(1 for x in res if x["stato"] == "non_raggiungibile"), **x3.pop("itv_kpi")}
+        alerts = (x3.pop("itv_alerts")
                   + [{"level": "high", "text": f"{p['nome']}: postazione non presidiata", "ref": ["posts", p["id"]]} for p in posts if p["presidio"] == "non_presidiata"]
                   + [{"level": "mid", "text": f"{p['nome']}: mancano {p['mancanti']} operatori", "ref": ["posts", p["id"]]} for p in posts if p["presidio"] == "parziale"]
                   + [{"level": "mid", "text": f"{x.get('nome') or x.get('codice')}: non raggiungibile", "ref": ["resources", x["id"]]} for x in res if x["stato"] == "non_raggiungibile"])
@@ -291,9 +311,9 @@ def attach(r, db, deps, require_active):
                         row[f] = None
                         row["contatti_nascosti"] = True
         routes = EVR.public(await EVR.list_routes(db, u["org_id"], event_id, deps["resolve_attachment"]))
-        return {"event": ev, "settings": _clean(s), "sectors": sectors, "posts": posts, "resources": res, "interventions": itv, "log": log, "kpi": kpi, "alerts": alerts,
+        return {**x3, "event": ev, "settings": _clean(s), "sectors": sectors, "posts": posts, "resources": res, "log": log, "kpi": kpi, "alerts": alerts,
                 "routes": routes, "vehicles": [{"key": k, "label": lbl} for k, lbl in VEHICLES], "external_vehicles": sorted(EXTERNAL_VEHICLES),
-                "perms": {"edit": pm["edit"], "contacts": pm["contacts"]}, "rev": s.get("rev", 1), "server_time": _now()}
+                "perms": {"edit": pm["edit"], "contacts": pm["contacts"], "role": pm["role"], "sectors": pm["sectors"]}, "user_id": u.get("user_id"), "rev": s.get("rev", 1), "server_time": _now()}
 
     @r.get(base + "/rev")
     async def rev(event_id: str, u: dict = Depends(ops_dep)):
@@ -319,6 +339,11 @@ def attach(r, db, deps, require_active):
         await ctx(u, event_id, write=True)
         cur = await settings(u, event_id)
         upd = {k: v for k, v in body.model_dump(exclude={"version"}, exclude_unset=True).items()}
+        if "itv_types" in upd:
+            keys = [c["key"] for c in upd["itv_types"]]
+            used = set(await db.cr_interventions.distinct("tipologia", q(u, event_id)))
+            if len(set(keys)) != len(keys) or used - set(keys):
+                raise HTTPException(status_code=400, detail="Tipologie non valide: chiavi duplicate o tipologia usata da un intervento")
         if "categories" in upd:
             keys = [c["key"] for c in upd["categories"]]
             used = set(await db.cr_posts.distinct("categoria", q(u, event_id)))
@@ -392,6 +417,9 @@ def attach(r, db, deps, require_active):
         if not res.matched_count:
             raise conflict() if await db.cr_resources.find_one(q(u, event_id, id=oid), {"_id": 1}) else HTTPException(status_code=404, detail="Risorsa non trovata")
         await touch(u, event_id, "status", "risorsa", oid, body.stato)
+        if body.stato in ("fuori_servizio", "non_raggiungibile"):
+            x = await db.cr_resources.find_one(q(u, event_id, id=oid), {"_id": 0, "nome": 1, "codice": 1})
+            await H["notify"](u["org_id"], event_id, "risorsa", f"{x.get('nome') or x.get('codice') or 'Risorsa'}: {body.stato.replace('_', ' ')}", "warn")
         return {"ok": True}
 
     @r.patch(base + "/posts/{oid}/position")
@@ -461,8 +489,6 @@ def attach(r, db, deps, require_active):
             data["gps"] = gps_of(data, cur)
             if cur.get("persona_id"):
                 data["persona_id"], data["nome"], data["telefono"] = cur["persona_id"], None, None
-        if kind == "interventions" and data["stato"] == "chiuso" and cur["stato"] != "chiuso":
-            data["chiuso_at"], data["chiuso_by"] = _now(), u.get("email")
         res = await db[coll].update_one(q(u, event_id, id=oid, version=version), {"$set": {**data, "updated_at": _now(), "updated_by": u.get("email")}, "$inc": {"version": 1}})
         if not res.matched_count:
             raise conflict()

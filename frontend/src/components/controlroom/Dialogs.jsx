@@ -49,16 +49,45 @@ export function StaffImport({ open, onOpenChange, d, base, onSubmit }) {
   );
 }
 
+function ItvSettings({ v, setV, d }) {
+  const types = v.itv_types || [];
+  const setT = (i, k, x) => setV({ ...v, itv_types: types.map((c, j) => (j === i ? { ...c, [k]: x } : c)) });
+  const used = new Set(d.interventions.map((i) => i.tipologia));
+  return (
+    <div className="space-y-2 border-t border-slate-100 pt-3" data-testid="cr-settings-itv">
+      <div className="text-xs font-semibold text-slate-600">Interventi</div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Input value={v.centrale_tel || ""} disabled={!d.perms.contacts} onChange={(e) => setV({ ...v, centrale_tel: e.target.value })} placeholder="Telefono Control Room (per gli operatori)" data-testid="cr-settings-centrale-tel" />
+        <label className="flex items-center gap-2 text-xs">Avviso se non confermato dopo<Input type="number" min="1" max="60" value={v.confirm_timeout_min || 3} onChange={(e) => setV({ ...v, confirm_timeout_min: e.target.value })} className="h-9 w-16" data-testid="cr-settings-timeout" />min</label>
+        <label className="flex items-center gap-2 text-xs sm:col-span-2"><input type="checkbox" checked={!!v.assign_sets_busy} onChange={(e) => setV({ ...v, assign_sets_busy: e.target.checked })} data-testid="cr-settings-busy" />All'assegnazione la risorsa disponibile diventa IMPEGNATA</label>
+      </div>
+      <div className="text-xs font-semibold text-slate-600">Tipologie di intervento</div>
+      {types.map((t, i) => (
+        <div key={t.key} className="flex flex-wrap items-center gap-1.5" data-testid={`cr-itvtype-${t.key}`}>
+          <input type="color" value={t.color} onChange={(e) => setT(i, "color", e.target.value)} className="h-9 w-9 shrink-0 rounded border border-slate-200" />
+          <Input value={t.label} onChange={(e) => setT(i, "label", e.target.value)} className="h-9 min-w-0 flex-1" data-testid={`cr-itvtype-label-${t.key}`} />
+          <select value={t.icon} onChange={(e) => setT(i, "icon", e.target.value)} className="h-9 w-24 rounded-md border border-slate-200 px-1 text-xs">{ICON_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}</select>
+          <select value={t.priorita} onChange={(e) => setT(i, "priorita", e.target.value)} className="h-9 rounded-md border border-slate-200 px-1 text-xs" data-testid={`cr-itvtype-prio-${t.key}`}>{["bassa", "media", "alta", "critica"].map((p) => <option key={p} value={p}>{p}</option>)}</select>
+          <Input value={t.gruppo || ""} onChange={(e) => setT(i, "gruppo", e.target.value)} placeholder="Gruppo operativo" className="h-9 w-28" />
+          <Button variant="ghost" size="icon" disabled={used.has(t.key)} onClick={() => setV({ ...v, itv_types: types.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
+        </div>))}
+      <Button variant="outline" size="sm" onClick={() => setV({ ...v, itv_types: [...types, { key: `itv_${Date.now().toString(36)}`, label: "Nuova tipologia", icon: "MapPin", color: "#64748B", priorita: "media", gruppo: "" }] })} data-testid="cr-itvtype-add"><Plus className="mr-1 h-4 w-4" />Aggiungi tipologia</Button>
+    </div>
+  );
+}
+
 // Responsabile, percorso e categorie personalizzabili delle postazioni.
 export function SettingsDialog({ open, onOpenChange, d, onSubmit }) {
   const [v, setV] = useState({});
-  useEffect(() => { if (open) setV({ responsabile: d.settings.responsabile || "", responsabile_tel: d.settings.responsabile_tel || "", route_map_id: d.settings.route_map_id || "", categories: d.settings.categories }); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) setV({ responsabile: d.settings.responsabile || "", responsabile_tel: d.settings.responsabile_tel || "", route_map_id: d.settings.route_map_id || "", categories: d.settings.categories,
+    centrale_tel: d.settings.centrale_tel || "", itv_types: d.itv_types, assign_sets_busy: d.settings.assign_sets_busy ?? true, confirm_timeout_min: d.settings.confirm_timeout_min || 3 }); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const cats = v.categories || [];
   const setCat = (i, k, x) => setV({ ...v, categories: cats.map((c, j) => (j === i ? { ...c, [k]: x } : c)) });
   const used = new Set(d.posts.map((p) => p.categoria));
   const submit = async () => {
     const body = { ...v, route_map_id: v.route_map_id || null, version: d.settings.version };
-    if (!d.perms.contacts) delete body.responsabile_tel;
+    if (!d.perms.contacts) { delete body.responsabile_tel; delete body.centrale_tel; }
+    body.confirm_timeout_min = Number(body.confirm_timeout_min) || 3;
     if (await onSubmit(body)) onOpenChange(false);
   };
   return (
@@ -80,6 +109,7 @@ export function SettingsDialog({ open, onOpenChange, d, onSubmit }) {
             <Button variant="ghost" size="icon" disabled={used.has(c.key)} title={used.has(c.key) ? "Usata da una postazione" : "Rimuovi"} onClick={() => setV({ ...v, categories: cats.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
           </div>))}</div>
         <Button variant="outline" size="sm" onClick={() => setV({ ...v, categories: [...cats, { key: `cat_${Date.now().toString(36)}`, label: "Nuova categoria", icon: "MapPin", color: "#64748B" }] })} data-testid="cr-cat-add"><Plus className="mr-1 h-4 w-4" />Aggiungi categoria</Button>
+        <ItvSettings v={v} setV={setV} d={d} />
         <DialogFooter><Button onClick={submit} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid="cr-settings-submit">Salva</Button></DialogFooter>
       </DialogContent>
     </Dialog>

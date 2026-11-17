@@ -25,3 +25,17 @@ export const posOf = (r, posts) => {
   return p && p.lng != null ? [p.lng, p.lat] : null;
 };
 export const nameOf = (r) => r.nome || r.codice || "Risorsa";
+
+export const PRIORITY = { bassa: ["BASSA", "#94A3B8", "bg-slate-200 text-slate-700"], media: ["MEDIA", "#EAB308", "bg-yellow-100 text-yellow-800"],
+  alta: ["ALTA", "#F97316", "bg-orange-100 text-orange-800"], critica: ["CRITICA", "#DC2626", "bg-red-600 text-white"] };
+export const ITV_STATES = { segnalato: ["SEGNALATO", "bg-sky-100 text-sky-800"], preso_in_carico: ["PRESO IN CARICO", "bg-indigo-100 text-indigo-800"],
+  squadra_inviata: ["SQUADRA INVIATA", "bg-violet-100 text-violet-800"], sul_posto: ["SUL POSTO", "bg-amber-100 text-amber-800"], risolto: ["RISOLTO", "bg-emerald-100 text-emerald-800"],
+  chiuso: ["CHIUSO", "bg-slate-800 text-white"], in_attesa: ["IN ATTESA", "bg-slate-100 text-slate-700"], annullato: ["ANNULLATO", "bg-slate-100 text-slate-400 line-through"] };
+export const FLOW = { segnalato: ["preso_in_carico", "in_attesa", "annullato"], preso_in_carico: ["squadra_inviata", "in_attesa", "annullato"], in_attesa: ["preso_in_carico", "squadra_inviata", "annullato"],
+  squadra_inviata: ["sul_posto", "in_attesa", "annullato"], sul_posto: ["risolto", "in_attesa"], risolto: ["chiuso", "sul_posto"], chiuso: [], annullato: [] };
+export const CLOSED = ["chiuso", "annullato"];
+export const ASG = { non_confermata: ["NON CONFERMATA", "bg-red-100 text-red-700"], confermata: ["CONFERMATA", "bg-emerald-100 text-emerald-800"],
+  rifiutata: ["RIFIUTATA", "bg-slate-200 text-slate-600"], revocata: ["REVOCATA", "bg-slate-100 text-slate-400"] };
+export const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—");
+export const fmtDT = (iso) => (iso ? new Date(iso).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
+export const Pill = ({ c, children, testid }) => <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${c}`} data-testid={testid}>{children}</span>;

@@ -116,13 +116,21 @@ export default function OpsMap({ apiKey, route, data, hidden, highlight, placing
       if (r.gps?.last_lat != null) add([r.gps.last_lng, r.gps.last_lat], el("#0f172a", svg("MapPin", 12), `${nameOf(r)} · posizione GPS rilevata ${r.gps.last_at || ""}`));
     });
     if (!hidden.has("interventions")) {
-      data.interventions.filter((i) => i.stato !== "chiuso").forEach((i) => {
-        const p = data.posts.find((x) => x.id === i.post_id);
-        const ll = i.lng != null ? [i.lng, i.lat] : p?.lng != null ? [p.lng, p.lat] : null;
-        if (!ll) return;
-        const node = el(i.priorita === "urgente" ? "#DC2626" : "#F97316", svg("Siren", 14), i.titolo, "cr-itv animate-pulse");
+      const PCOL = { bassa: "#94A3B8", media: "#EAB308", alta: "#F97316", critica: "#DC2626" };
+      const types = Object.fromEntries((data.itv_types || []).map((t) => [t.key, t.label]));
+      data.interventions.filter((i) => !["chiuso", "annullato"].includes(i.stato)).forEach((i) => {
+        if (i.lng == null) return;
+        const ll = [i.lng, i.lat];
+        const time = new Date(i.created_at).toLocaleTimeString("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" });
+        const node = el(PCOL[i.priorita] || "#F97316", svg("Siren", 14), `${i.codice} · ${types[i.tipologia] || i.tipologia} · ${i.priorita.toUpperCase()} · ${i.stato.replace(/_/g, " ").toUpperCase()} · ${time}`, `cr-itv ${i.priorita === "critica" ? "animate-pulse" : ""}`);
+        node.style.borderRadius = "6px";
+        node.style.width = "auto";
+        node.style.padding = "0 6px";
+        node.style.gap = "3px";
+        node.insertAdjacentHTML("beforeend", `<span style="color:#fff;font:700 10px sans-serif">${i.codice}</span>`);
+        node.dataset.testid = `cr-map-itv-${i.codice}`;
         node.addEventListener("click", (e) => { e.stopPropagation(); cb.current.onOpen("interventions", i.id); });
-        add(ll, node, { offset: i.lng != null ? [0, 0] : [-22, -22] });
+        add(ll, node, { offset: i.post_id ? [-26, -26] : [0, 0] });
       });
     }
   }, [data, route, hidden, canEdit]);
