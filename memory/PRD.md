@@ -1017,5 +1017,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - postbuild.js: HTML statico per ogni pagina pubblica (contenuto leggibile senza JS dietro overlay #boot) + sitemap 17 URL + .gz. robots.txt aggiornato.
 - Attribuzione: lib/attribution.js (referrer/utm, AI = chatgpt/perplexity/gemini/copilot/claude, solo con consenso analitico, una visita per visitatore al giorno) → POST /api/public/visit (db.web_visits); organizations.attribution alla registrazione; evento GA4 ai_assistant_visit. Report SA: GET /api/platform/ai-traffic, tab Marketing «Assistenti AI».
 - Da fare su Aruba: memory/seo_nginx_ga4.md (redirect www, try_files $uri/index.html, gzip; gruppo canali GA4).
+
+## Event Map: nuovo layout titolo/logo (2026-11-17)
+- eventmap_render.py: fascia iniziale compatta semitrasparente in alto (area sicura: 5,5% altezza nei verticali, 32U negli altri) con logo evento a sinistra, titolo adattivo (56→34U, max 2 righe) e sottotitolo · data; la fascia scompare dopo l'apertura, il logo resta fisso nella stessa posizione fino alla fine; rimossa la scheda finale con titolo. Logo più contenuto (LOGO_BOX ridotto). Solo nuove generazioni/rigenerazioni; video esistenti invariati.
+- Script di verifica: scripts/promo_video/em_layout_check.py.
+
 - Test: iteration_166 (backend 10/10, frontend ok; corretti tab AI, spinner, scroll-to-top, revoca consenso, dedup visite).
 

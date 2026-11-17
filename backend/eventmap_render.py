@@ -17,7 +17,7 @@ ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eventmap_asse
 TS = 512
 UA = {"User-Agent": "CRMEvent-EventMap/1.0 (+https://crmevent.it)"}
 SIZES = {"9:16": (1080, 1920), "1:1": (1080, 1080), "16:9": (1920, 1080)}
-LOGO_BOX = {"9:16": (300, 140), "1:1": (240, 110), "16:9": (300, 120)}  # riquadro massimo del logo (unità U)
+LOGO_BOX = {"9:16": (220, 96), "1:1": (190, 84), "16:9": (210, 84)}  # riquadro massimo del logo (unità U)
 LOGO_MARGIN, LOGO_PAD = 32, 14
 FPS = 30
 STYLES = {
@@ -374,6 +374,7 @@ class Renderer:
         for a in self.aid:
             a["xy"] = self.point_at(a["m"])[0]
         self.logo = self._fit(job.get("logo_path"), *LOGO_BOX[job.get("format", "9:16")], self.U)
+        self._band_layout()
         self.static = self._static()
         self.chart = self._chart() if self.prof else None
         self._final_frame(bx1 - bx0, by1 - by0)
@@ -381,7 +382,7 @@ class Renderer:
     def _final_frame(self, bw, bh):
         """Inquadratura finale: il percorso intero sta tra la scheda titolo e l'altimetria, senza esserne coperto."""
         U = self.U
-        top = max(int(self.H * 0.07), self.logo_bottom() + int(20 * U)) + int(232 * U)
+        top = (self.logo_bottom() + int(24 * U)) if self.logo else self.safe_top
         bottom = (self.cbox[1] - int(24 * U)) if self.chart else self.H - int(120 * U)
         rh = max(bottom - top, self.H * 0.3)
         self.fin_w = max(bw * 1.15, bh * 1.15 * self.W / rh, self.W * 0.5)
@@ -410,8 +411,51 @@ class Renderer:
         except Exception:
             return None
 
+    def _band_layout(self):
+        """Fascia compatta in alto (area sicura social): logo a sinistra, titolo adattivo e data/gara a destra. Il logo resta nella stessa posizione per tutto il video."""
+        U, j = self.U, self.job
+        self.safe_top = int(self.H * 0.055) if self.H > self.W else int(LOGO_MARGIN * U)
+        mx, pad, p = int(40 * U), int(16 * U), int(LOGO_PAD * U)
+        lw, lh = (self.logo.width + 2 * p, self.logo.height + 2 * p) if self.logo else (0, 0)
+        x0, x1 = mx, self.W - mx
+        tx = x0 + pad + (lw + int(20 * U) if lw else int(8 * U))
+        avail = x1 - pad - tx
+        title = (j.get("title") or "Evento").strip()
+        size = 56
+        while size > 34 and font(size * U).getlength(title) > avail:
+            size -= 2
+        tf = font(size * U)
+        lines = [title]
+        if tf.getlength(title) > avail:
+            words, lines, cur = title.split(), [], ""
+            for w in words:
+                c = (cur + " " + w).strip()
+                if tf.getlength(c) <= avail or not cur:
+                    cur = c
+                else:
+                    lines.append(cur)
+                    cur = w
+            lines.append(cur)
+            if len(lines) > 2:
+                lines = [lines[0], " ".join(lines[1:])]
+            while tf.getlength(lines[-1] + "…") > avail and len(lines[-1]) > 4:
+                lines[-1] = lines[-1][:-1]
+                if tf.getlength(lines[-1]) <= avail and lines[-1] != title:
+                    lines[-1] = lines[-1].rstrip() + "…"
+                    break
+        sf = font(26 * U, False)
+        sub = " · ".join(x for x in [(j.get("subtitle") or "").strip(), (j.get("date") or "").strip()] if x)
+        while sub and sf.getlength(sub) > avail and len(sub) > 8:
+            sub = sub[:-2]
+        lhgt = int(size * U * 1.18)
+        text_h = len(lines) * lhgt + (int(36 * U) if sub else 0)
+        band_h = max(lh, text_h) + 2 * pad
+        y0 = self.safe_top
+        self.band = {"box": (x0, y0, x1, y0 + band_h), "tx": tx, "ty": y0 + (band_h - text_h) // 2, "lines": lines, "tf": tf, "lhgt": lhgt, "sub": sub, "sf": sf}
+        self.logo_xy = (x0 + pad, y0 + (band_h - lh) // 2)
+
     def logo_bottom(self):
-        return (int(LOGO_MARGIN * self.U) + self.logo.height + int(2 * LOGO_PAD * self.U)) if self.logo else 0
+        return (self.logo_xy[1] + self.logo.height + int(2 * LOGO_PAD * self.U)) if self.logo else 0
 
     def _timeline(self, dur):
         """Segmenti di movimento (rampe morbide) e soste ai ristori, in tempo normalizzato 0..1."""
@@ -461,9 +505,9 @@ class Renderer:
         d.rounded_rectangle((x, y, x + pw, y + ph), radius=int(12 * U), fill=(255, 255, 255, 225))
         d.text((x + int(14 * U), y + int(6 * U)), "Powered by", font=f, fill=(71, 85, 105, 255))
         ov.alpha_composite(lg, (x + int(14 * U), y + int(24 * U)))
-        if self.logo:  # logo evento fisso in alto a destra per tutto il video
-            p, mg = int(LOGO_PAD * U), int(LOGO_MARGIN * U)
-            lx, ly = self.W - mg - self.logo.width - 2 * p, mg
+        if self.logo:  # logo evento fisso in alto, nella fascia del titolo, per tutto il video
+            p = int(LOGO_PAD * U)
+            lx, ly = self.logo_xy
             d.rounded_rectangle((lx, ly, lx + self.logo.width + 2 * p, ly + self.logo.height + 2 * p), radius=int(16 * U), fill=(255, 255, 255, 215))
             ov.alpha_composite(self.logo, (lx + p, ly + p))
         d.text((int(24 * U), self.H - int(30 * U)), self.attribution, font=font(13 * U, False), fill=(255, 255, 255, 170) if self.job.get("style") != "streets" else (40, 40, 40, 190))
@@ -628,31 +672,17 @@ class Renderer:
         w = math.exp(lerp(math.log(self.follow_w), math.log(self.fin_w), k))
         return (lerp(c0[0], self.fin_c[0], k), lerp(c0[1], self.fin_c[1], k)), w, self.total
 
-    def card(self, ov, d, alpha, big=False):
-        U, j = self.U, self.job
+    def card(self, ov, d, alpha):
+        """Fascia iniziale semitrasparente con titolo e data; il logo è nello strato fisso."""
+        U, b = self.U, self.band
         a = int(255 * alpha)
-        tf, df = font((64 if big else 54) * U), font(30 * U, False)
-        title = j.get("title") or "Evento"
-        while d.textlength(title, font=tf) > self.W - 140 * U and len(title) > 8:
-            title = title[:-2]
-        sub = (j.get("subtitle") or "").strip()
-        sf = font(34 * U)
-        while sub and d.textlength(sub, font=sf) > self.W - 140 * U and len(sub) > 8:
-            sub = sub[:-2]
-        h = int(64 * U) + int(48 * U) + int(40 * U) + (int(48 * U) if sub else 0)
-        y = max(int(self.H * (0.07 if big else 0.08)), self.logo_bottom() + int(20 * U))
-        d.rounded_rectangle((int(48 * U), y, self.W - int(48 * U), y + h + (int(60 * U) if big else 0)), radius=int(28 * U), fill=(10, 14, 22, int(200 * alpha)))
-        cy = y + int(26 * U)
-        d.text((self.W / 2, cy), title, font=tf, fill=(255, 255, 255, a), anchor="mt")
-        cy += int(72 * U)
-        if sub:
-            d.text((self.W / 2, cy), sub, font=sf, fill=self.st["route"] + (a,), anchor="mt")
-            cy += int(48 * U)
-        if j.get("date"):
-            d.text((self.W / 2, cy), j["date"], font=df, fill=(203, 213, 225, a), anchor="mt")
-            cy += int(46 * U)
-        if big:
-            d.text((self.W / 2, cy), self.total_label, font=font(58 * U), fill=self.st["route"] + (a,), anchor="mt")
+        d.rounded_rectangle(b["box"], radius=int(22 * U), fill=(10, 14, 22, int(175 * alpha)))
+        y = b["ty"]
+        for ln in b["lines"]:
+            d.text((b["tx"], y), ln, font=b["tf"], fill=(255, 255, 255, a), stroke_width=max(1, int(1.5 * U)), stroke_fill=(10, 14, 22, int(a * 0.6)))
+            y += b["lhgt"]
+        if b["sub"]:
+            d.text((b["tx"], y + int(4 * U)), b["sub"], font=b["sf"], fill=(226, 232, 240, a))
 
     def frame(self, t):
         (cx, cy), w, m = self.camera(t)
@@ -703,8 +733,6 @@ class Renderer:
             d.ellipse((hx - 14 * U, hy - 14 * U, hx + 14 * U, hy + 14 * U), fill=(255, 255, 255, 255), outline=self.st["route"] + (255,), width=max(3, int(6 * U)))
         if t < self.sp["t_in"] + 0.04:
             self.card(ov, d, 1.0 if t < self.sp["t_in"] else 1 - (t - self.sp["t_in"]) / 0.04)
-        elif t > fin + 0.02:
-            self.card(ov, d, min(1.0, (t - fin - 0.02) / 0.04), big=True)
         if a_in < t < fin + 0.04:
             a = int(255 * min(1, (t - a_in) / 0.03, (fin + 0.04 - t) / 0.03))
             bw, bh = int(420 * U), int(164 * U)
