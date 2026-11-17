@@ -29,8 +29,8 @@ function Settings({ s, setS, onSave, busy }) {
 function Preview({ title, logos }) {
   if (!logos.length) return <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400" data-testid="carousel-preview-empty">Nessun logo pubblicato: in homepage la sezione non viene mostrata.</p>;
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-      <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="carousel-preview-desktop"><div className="mb-4 flex items-center gap-1.5 text-xs font-semibold text-slate-400"><Monitor className="h-4 w-4" />Desktop</div><LogoCarousel title={title} logos={logos} testid="preview-desktop" /></div>
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-6" data-testid="carousel-preview-desktop"><div className="mb-4 flex items-center gap-1.5 text-xs font-semibold text-slate-400"><Monitor className="h-4 w-4" />Desktop</div><LogoCarousel title={title} logos={logos} testid="preview-desktop" /></div>
       <div className="mx-auto w-[300px] rounded-[2rem] border-[6px] border-slate-900 bg-white px-3 py-6" data-testid="carousel-preview-mobile"><div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-slate-400"><Smartphone className="h-4 w-4" />Smartphone</div><LogoCarousel title={title} logos={logos} compact testid="preview-mobile" /></div>
     </div>
   );

@@ -1065,6 +1065,14 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Marketing → Home Page e carosello loghi eventi (2026-11-17)
+- Scelte utente: la pubblicazione la decide il Super Admin (non l'organizzatore); in pubblico solo il logo (nome evento come alt/title).
+- Voce "Event Planner in homepage" rimossa; nuova /marketing/home-page (solo SA) con tab "Sezioni homepage" (PlannerDemoAdmin: visibilità video + statistiche invariate) e "Carosello loghi eventi". Vecchio URL → redirect.
+- backend/homepage.py: GET /public/home-carousel, GET /public/home-logos/{id}.webp (miniatura webp ottimizzata, cache Mongo homepage_logo_cache per file, immutable + ?v=hash del file), GET/PUT /homepage/settings (titolo, mostra/nascondi, auto_new = pubblica automaticamente i nuovi eventi creati dopo l'attivazione), GET /homepage/logos, GET /homepage/logos/{id}/thumb.webp (SA), POST /homepage/logos/{id} {approved|excluded|null}. Stato salvato in events.homepage_logo; approvazione legata al file: se il logo cambia l'evento torna "Non pubblicato". Solo loghi caricati su CRMEvent (png/jpg/webp/gif); esterni/SVG/corrotti non pubblicabili. Ordinamento casefold + id.
+- Frontend: EventLogosCarousel.jsx (scorrimento automatico, pausa su interazione, swipe, frecce desktop, riduzione movimento, nessuna duplicazione se pochi loghi) tra PlannerDemoSection ed EventMapSection; HomePageAdmin.jsx con anteprima desktop/smartphone, tabella con ricerca/filtri, Pubblica/Escludi.
+- Test: iteration_174 + correzioni (500 su immagini non leggibili → 404, anteprima protetta SA, riapprovazione al cambio logo) verificate via curl.
+
+
 ## Moduli e Attivazioni centralizzato in Dashboard piattaforma (2026-11-17)
 - Gruppo SA rinominato "Dashboard piattaforma": Dashboard, Organizzazioni (/piattaforma?sezione=organizzazioni), Moduli e Attivazioni (/piattaforma/moduli), poi le voci esistenti. Voce rimossa dal gruppo Organizzazione per il SA; l'Admin Organizzazione mantiene la consultazione in /organizzazione/moduli.
 - Nuova pagina ModulesAdmin.jsx: tabella di tutte le organizzazioni (GET /api/platform/modules/orgs, solo SA) con ricerca e filtro per modulo/disattivati; "Gestisci" apre OrgModulesAdmin (stesso componente della scheda organizzazione, nessuna logica duplicata); tab "Configurazione globale" (ConfigCard). /piattaforma/event-planner-map → redirect a ?tab=config. Rimossi il vecchio dialog e la tabella di AddonAdmin.

@@ -1,0 +1,39 @@
+{
+  "summary": "Tested Marketing → Home Page end to end (backend + SA admin UI + public homepage). Backend: 4/4 pytest pass (auth 401/403, validation, settings, publish/exclude/reset, case-insensitive sort, external logo not publishable, webp thumbs <=640x320, ?v= changes on logo change, delete removes, auto_new applies only to events created after enabling, carousel disabled). SA UI: old sidebar item gone, sidebar-link-marketing-home-page present, the old URL redirects to ?tab=sezioni, pdemo-enabled/pdemo-save/pdemo-stats-period work, carousel settings persist after reload, search/org/status filters work, Pubblica/Escludi work, Pubblica is disabled for external logos. Public homepage: the section sits between home-event-planner and home-event-map. The title reflects the saved value and the section hides when the carousel is disabled. All tiles are 176x96 with object-contain. Auto-scroll runs, pauses on hover and resumes after 2.5s. Desktop arrows work, mobile has no arrows and swipes horizontally, reduced motion stops auto-scroll, no duplicates when there are only 2 logos, and no org name appears publicly. Found 1 layout bug in the admin preview (fixed by testing agent) and 1 backend robustness bug (corrupt/SVG image gives a 500).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/public/home-logos/{id}.webp", "issue": "Returns 500 (PIL.UnidentifiedImageError in homepage._thumb) when the event logo file cannot be decoded by PIL: a corrupt upload, or an SVG uploaded as image/svg+xml, which /api/upload accepts as kind=image. /api/homepage/logos still reports valid=true, so the SA can publish it and the public carousel then shows a broken tile. Fix: wrap _thumb in try/except and return 404. In _with_file, also exclude image/svg+xml or rasterize it, or mark such rows valid=false."},
+      {"endpoint": "GET /api/public/home-logos/{id}.webp?preview=1", "issue": "preview=1 has no auth, so anyone can fetch the optimized logo of any unpublished or excluded event by id. Low risk because ids are random and uploaded logos already have public tokens, but it bypasses the SA publication decision. Consider requiring a superadmin session for preview."},
+      {"endpoint": "PUT /api/events/{id} (logo change)", "issue": "Product note: an 'approved' status stays after the organizer replaces the logo, so a new logo goes live without SA review. This may be intended; consider resetting to pending when the fid changes."},
+      {"endpoint": "homepage._with_file", "issue": "Filters files with is_deleted: False (exact match), while /api/files uses {$ne: True}. Legacy file docs without the is_deleted field would be treated as invalid."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "HomePageAdmin Preview", "issue": "FIXED by testing agent. The grid used lg:grid-cols-[1fr_auto]: the 1fr track grew to its content width (2206px), the page overflowed horizontally, the smartphone preview was pushed off-screen (x=2510), and the desktop preview never auto-scrolled or showed arrows. Changed it to lg:grid-cols-[minmax(0,1fr)_auto] and added min-w-0 to the desktop card. Verified: desktop 836px, mobile 300px, no page overflow, auto-scroll runs.", "selector": "[data-testid=carousel-preview-desktop]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin logos table", "issues": ["Rows with an undecodable logo show a broken <img> with alt text and an enabled Pubblica button (follows from the backend issue above)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_homepage_carousel.py", "/app/backend/tests/ui_homepage_setup.py", "/app/test_reports/pytest/pytest_homepage.xml"],
+  "action_items": [
+    "homepage.py public_logo: catch PIL errors in _thumb and return 404 instead of 500. Treat non-raster images (SVG) or undecodable files as valid=false in list_logos/_with_file so Pubblica is disabled.",
+    "Optional: require superadmin for ?preview=1 thumbnails",
+    "Optional: decide whether to reset approval when an event's logo file changes"
+  ],
+  "critical_code_review_comments": [
+    "The preview ingress rewrites Cache-Control to no-store. The backend correctly emits 'public, max-age=604800, immutable' (verified on localhost:8001), so the long cache only applies in production.",
+    "homepage_logo_cache documents are not removed when an event is deleted (orphan cache rows). The public 404 still works because the event lookup fails first.",
+    "auto_since stays set after auto_new is turned off. This is harmless because auto_new is checked first, and turning it back on resets auto_since."
+  ],
+  "updated_files": ["/app/frontend/src/pages/HomePageAdmin.jsx", "/app/backend/tests/test_homepage_carousel.py", "/app/backend/tests/ui_homepage_setup.py"],
+  "success_rate": {"backend": "100% (4/4 pytest; 1 extra edge case found: corrupt/SVG image gives 500)", "frontend": "95% (1 preview layout bug, fixed)"},
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created TEST_HP Org and TEST_HPUI Org through /auth/register-organization, with about 20 TEST_ events and uploaded PNG files (plus 1 corrupt PNG and 1 SVG). All of them were deleted by id: events through the API, then files, cache rows, users, orgs, subscriptions and memberships. homepage_settings reset to carousel_enabled=true, auto_new=false, default title. The public carousel is empty again. The real event 'Trail del Lago' was not touched by the tests; its homepage_logo {status:null, at 19:49} predates this run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest tests/test_homepage_carousel.py -n 0` from /app/backend. It self-creates and cleans up a TEST_HP org. For UI: `python tests/ui_homepage_setup.py setup 12` creates an org with 12 events and logos (11 published), and `cleanup` removes them and resets the settings. The cookie banner button is 'Accept all'. Images in the public carousel are loading=lazy, so scroll into view before checking naturalWidth."
+}
