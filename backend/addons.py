@@ -238,7 +238,12 @@ def build(db, deps: dict):
         except DuplicateKeyError:
             await db.addon_activations.update_one({"org_id": org_id, "product": product, "event_id": eid}, {"$set": doc})
 
+    def _off_error(product: str) -> HTTPException:
+        return HTTPException(status_code=403, detail=f"{PRODUCTS[product]} è stato disattivato per questa organizzazione: contatta l'assistenza CRMEvent. I dati restano conservati.")
+
     async def activate(org_id: str, product: str, eid: str, by: str) -> dict:
+        if await _disabled(org_id, product):
+            raise _off_error(product)
         ev = await _event(org_id, eid)
         s = await summary(org_id, product)
         cur = next((a for a in s["activations"] if a["event_id"] == eid), None)
@@ -291,8 +296,9 @@ def build(db, deps: dict):
     @r.get("/addons/{product}")
     async def org_status(product: str, user: dict = Depends(admin_dep)):
         s = await summary(user["org_id"], _product(product))
+        off = await _disabled(user["org_id"], s["product"])
         return {**{k: v for k, v in s.items() if k not in ("grants", "activations")}, "events": await _events_view(user["org_id"], s),
-                "can_purchase": _can_buy(user)}
+                "can_purchase": _can_buy(user) and not off, "module_disabled": off}
 
     @r.post("/addons/{product}/events/{eid}/activate")
     async def org_activate(product: str, eid: str, user: dict = Depends(admin_dep)):
@@ -328,6 +334,8 @@ def build(db, deps: dict):
         product = _product(product)
         if not _can_buy(user):
             raise HTTPException(status_code=403, detail="Non hai il permesso di acquistare servizi Marketplace")
+        if await _disabled(user["org_id"], product):
+            raise _off_error(product)
         s = await summary(user["org_id"], product)
         if product == "planner":
             return await _planner_checkout(body, user, s)

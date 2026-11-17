@@ -1,0 +1,33 @@
+{
+  "summary": "Menu reorganization + Moduli e Attivazioni hub tested end-to-end. Backend: 11/11 pytest pass (SA modules list/history, CR free grant -> status active -> idempotent re-grant -> revoke (2nd revoke 400), toggle controlroom -> status false, access false, checkout 403, purchase row kept, re-enable restores; toggle planner -> access false, audit module_disabled, re-enable; 403 for org admin on all /platform/orgs/{id}/modules* routes; X-Org-Id spoof to another org -> 403; staff member -> /org/modules 403 but /org/modules/access 200; unauth 401). UI SA: sidebar groups in the expected order (planner, controlroom, organizzazione, account, marketing-admin, platform), no duplicate Event Planner/Control Room links, CR lock shown -> grant via OrgDetail ?tab=moduli -> lock gone after navigation -> revoke works, history table shows entries, planner toggle shows 'Disattivato dal Super Admin' + sidebar lock, re-enable OK. /marketing/admin shows fic-card + brevo-card, brevo-check-btn returns a toast ('BREVO_API_KEY non configurata', the env has no key), /piattaforma organizzazioni shows platform-integrations-moved and no fic/brevo cards. Org admin (new TEST_ org): groups planner/controlroom/organizzazione/account only, locks on all 3 modules, /organizzazione/moduli cards + Marketplace link (no toggles), /organizzazione/utenti table, /marketing/admin and /piattaforma redirect to /app, /profilo?tab=utenti redirects to /organizzazione/utenti, Profilo tabs = Account + Il mio abbonamento. /event-planner, /event-map, /control-room, /marketplace load. Mobile 390px drawer shows all groups and navigation closes the drawer. One gap: when the SA disables Event Planner/Event Map, the per-event activate/checkout endpoints still work (see below).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/addons/{product}/events/{eid}/activate and POST /api/addons/{product}/checkout", "issue": "These endpoints do not check whether the SA has disabled the module (modules_disabled). activate() in addons.py:241 and checkout() in addons.py:326 never call _disabled(). For an org whose plan includes the product (included_free>0, e.g. TEST_EventMap Org planner 0/1), an admin can still activate an event while the module is disabled. This uses up the included slot. They can also start a Stripe checkout for a disabled module. Control Room already blocks this (checkout returns 403 when disabled). Not reproduced live, because doing so would have used up the TEST_EventMap Org included slot. On a trial TEST org the call returned 403 addon_required only because it had no included slots."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EventPlanner page (/event-planner) when the module is disabled by the SA", "issue": "The event row still shows the 'Attiva (incluso)' button and there is no 'module disabled' notice, even though GET /addons/planner returns events[].module_disabled=true. The user is invited to activate a disabled module (and see the backend issue above).", "selector": "EventPlanner event row activate button", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_modules_hub.py", "/app/backend/tests/ui_modules_hub_setup.py", "/app/test_reports/pytest/pytest_modules_hub.xml"],
+  "action_items": [
+    "Add an `if await _disabled(org_id, product): raise 403` guard to addons.activate() and to the /addons/{product}/checkout route (planner and eventmap), the same way controlroom checkout does",
+    "EventPlanner/EventMap pages: when events[].module_disabled is true, hide or disable the 'Attiva' / purchase CTAs and show a 'Modulo disattivato dal Super Admin, contatta l'assistenza' banner"
+  ],
+  "critical_code_review_comments": [
+    "addons.consume_video does not check modules_disabled either. It relies on summary/activations, so a disabled Event Map with existing covered activations could still use up video credits if the generator calls consume_video directly (is_covered is checked elsewhere; verify that the generator path calls is_covered first).",
+    "modules_hub._modules runs summary() and one events query for each module on every /org/modules/access call. The sidebar calls this on navigation, so caching or a lighter query would help.",
+    "OrgModulesAdmin CrGrant builds its event list from /platform/addons/orgs/{id}.planner.events; if that request fails, the grant list silently shows 'Nessun evento'."
+  ],
+  "updated_files": ["/app/backend/tests/test_modules_hub.py", "/app/backend/tests/ui_modules_hub_setup.py"],
+  "success_rate": {"backend": "100% (11/11) for the requested endpoints; 1 minor guard gap in addons activate/checkout", "frontend": "~95%"},
+  "test_credentials": "Super Admin from /app/memory/test_credentials.md works. The test_cr_* users from earlier iterations no longer exist in the DB.",
+  "seed_data_creation": "TEST_MH orgs/users were created through /auth/register-organization, plus 1 staff membership and 1 event in the UI org. All were deleted by id at the end. In TEST_EventMap Org, the CR grants made by the test were revoked, modules_disabled is [], and there are 0 active CR purchases. The revoked grant rows and audit entries remain as history.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest tests/test_modules_hub.py -n 0`. It registers its own TEST_MH orgs (a staff member is created by inserting a membership directly into mongo) and cleans up afterwards. TEST_EventMap Org id 4343e7742dd04ff8ad9d9157b34176ac, event TEST_Pisa Run 87d6098128cc4feda081e8a7de01b32f. For the SA UI, set localStorage acting_org_id or use org-switcher-select. Use `ui_modules_hub_setup.py setup|cleanup` for a throwaway org admin (password TestMH2026!). When handling window.confirm in a playwright script, import asyncio inside the script."
+}
