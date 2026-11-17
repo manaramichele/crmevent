@@ -11,7 +11,7 @@ const Sel = ({ value, onChange, children, testid }) => <select value={value} onC
 
 export function ItvList({ d, open }) {
   const [f, setF] = useState({ sector: "", type: "", state: "aperti", team: "", q: "", sort: "prio" });
-  const [cards, setCards] = useState(false);
+  const [cards, setCards] = useState(() => window.innerWidth < 640);
   const set = (k) => (v) => setF((o) => ({ ...o, [k]: v }));
   const types = Object.fromEntries(d.itv_types.map((t) => [t.key, t]));
   const rows = useMemo(() => d.interventions.filter((i) => (!f.sector || i.sector_id === f.sector) && (!f.type || i.tipologia === f.type)

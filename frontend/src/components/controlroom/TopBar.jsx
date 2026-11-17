@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Siren, Users, ShieldCheck, Ambulance, Truck, Activity, PhoneOff, AlertOctagon, Settings2, Bell, Volume2, VolumeX, KeyRound } from "lucide-react";
 import { EVENT_STATES, label, fmtTime } from "./meta";
@@ -16,9 +16,17 @@ function Clock() {
 
 function Bell_({ d, onRead, openItv }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const out = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", out); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", out); document.removeEventListener("keydown", esc); };
+  }, [open]);
   const toggle = () => { if (!open && d.unread) onRead(); setOpen(!open); };
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <Button variant="outline" size="icon" onClick={toggle} className="relative h-10 w-10 rounded-full" title="Notifiche" data-testid="cr-notif-btn"><Bell className="h-4 w-4" />
         {d.unread > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white" data-testid="cr-notif-count">{d.unread}</span>}</Button>
       {open && <div className="absolute right-0 top-12 z-50 max-h-96 w-[min(340px,90vw)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl" data-testid="cr-notif-list">

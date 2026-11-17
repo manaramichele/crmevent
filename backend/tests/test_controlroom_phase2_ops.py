@@ -7,8 +7,8 @@ load_dotenv("/app/frontend/.env")
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = BASE_URL + "/api"
 PWD = "TestCR2026!"
-ORG_A = "9bb535b289f74a2395a6114ff0e2f0b5"
-EV_A = "09e1b85e1b774b79956a31fd139a60c8"
+ORG_A = "e89bef6de0d643b5a03b85fa26e9e3ae"
+EV_A = "2ffc1b48b9f34bf9901da7aa1eb7f0b7"
 OPS = f"{API}/controlroom/events/{EV_A}/ops"
 
 
@@ -96,7 +96,7 @@ class TestAccess:
         assert d["perms"]["edit"] is False
         print("collab contacts perm:", d["perms"]["contacts"])
         assert C.post(f"{OPS}/sectors", json={"nome": "TEST_x"}).status_code == 403
-        assert C.post(f"{OPS}/interventions", json={"titolo": "TEST_x"}).status_code == 403
+        assert C.post(f"{OPS}/interventions", json={"tipologia": "altro", "priorita": "media", "descrizione": "TEST_x", "riferimento": "x"}).status_code == 403  # Phase 3 schema
         assert C.get(f"{OPS}/staff").status_code == 403
         if d["posts"]:
             p = d["posts"][0]
@@ -228,18 +228,16 @@ class TestResources:
 
 
 class TestInterventionsSettings:
-    def test_intervention(self, A, created):
+    def test_intervention(self, A, created):  # updated to Phase 3 schema (interventions now in controlroom_itv)
         k0 = state(A)["kpi"]
-        r = A.post(f"{OPS}/interventions", json={"titolo": "TEST_Malore", "priorita": "urgente", "km": 2})
+        r = A.post(f"{OPS}/interventions", json={"tipologia": "sanitario", "priorita": "critica", "descrizione": "TEST_Malore", "km": 2})
         assert r.status_code == 200, r.text
-        it = r.json(); created.append(("interventions", it["id"]))
+        it = r.json()
         k1 = state(A)["kpi"]
-        assert k1["interventi_aperti"] == k0["interventi_aperti"] + 1 and k1["interventi_urgenti"] == k0["interventi_urgenti"] + 1
-        r = A.put(f"{OPS}/interventions/{it['id']}", json={**it, "stato": "chiuso"})
+        assert k1["interventi_aperti"] == k0["interventi_aperti"] + 1 and k1["interventi_critici"] == k0["interventi_critici"] + 1
+        r = A.post(f"{OPS}/interventions/{it['id']}/status", json={"to": "annullato", "motivo": "TEST cleanup", "version": it["version"]})
         assert r.status_code == 200, r.text
-        d = state(A)
-        assert d["kpi"]["interventi_aperti"] == k0["interventi_aperti"]
-        assert find(d["interventions"], it["id"])["chiuso_by"]
+        assert state(A)["kpi"]["interventi_aperti"] == k0["interventi_aperti"]
 
     def test_settings(self, A):
         s = state(A)["settings"]

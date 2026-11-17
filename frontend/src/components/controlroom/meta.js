@@ -35,7 +35,7 @@ export const FLOW = { segnalato: ["preso_in_carico", "in_attesa", "annullato"], 
   squadra_inviata: ["sul_posto", "in_attesa", "annullato"], sul_posto: ["risolto", "in_attesa"], risolto: ["chiuso", "sul_posto"], chiuso: [], annullato: [] };
 export const CLOSED = ["chiuso", "annullato"];
 export const ASG = { non_confermata: ["NON CONFERMATA", "bg-red-100 text-red-700"], confermata: ["CONFERMATA", "bg-emerald-100 text-emerald-800"],
-  rifiutata: ["RIFIUTATA", "bg-slate-200 text-slate-600"], revocata: ["REVOCATA", "bg-slate-100 text-slate-400"] };
+  rifiutata: ["RIFIUTATA", "bg-slate-200 text-slate-600"], revocata: ["REVOCATA", "bg-slate-100 text-slate-400"], completata: ["COMPLETATA", "bg-slate-100 text-slate-600"] };
 export const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—");
 export const fmtDT = (iso) => (iso ? new Date(iso).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
 export const Pill = ({ c, children, testid }) => <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${c}`} data-testid={testid}>{children}</span>;

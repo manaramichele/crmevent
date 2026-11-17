@@ -25,6 +25,7 @@ FLOW = {"segnalato": {"preso_in_carico", "in_attesa", "annullato"}, "preso_in_ca
 CLOSED = {"chiuso", "annullato"}
 TIMES = {"preso_in_carico": "t_presa", "squadra_inviata": "t_invio", "sul_posto": "t_arrivo", "risolto": "t_risoluzione", "chiuso": "t_chiusura"}
 ACTIVE_ASG = {"non_confermata", "confermata"}
+LINEAR = ["preso_in_carico", "squadra_inviata", "sul_posto", "risolto"]
 ITV_TYPES = [("sanitario", "Soccorso sanitario", "Cross", "#DC2626", "alta", "Sanitario"), ("infortunio", "Infortunio atleta", "HeartPulse", "#E11D48", "alta", "Sanitario"),
              ("ostacolo", "Ostacolo sul percorso", "TriangleAlert", "#EA580C", "media", "Percorso"), ("viabilita", "Problema di viabilità", "TrafficCone", "#CA8A04", "media", "Viabilità"),
              ("sicurezza", "Sicurezza", "Shield", "#1D4ED8", "alta", "Sicurezza"), ("disperso", "Persona dispersa", "Users", "#7C3AED", "alta", "Sicurezza"),
@@ -240,9 +241,9 @@ def attach(r, db, deps, require_active, H):
             raise HTTPException(status_code=404, detail="Intervento non trovato")
         return it
 
-    async def save_itv(it, upd, version=None, extra_ops=None):
+    async def save_itv(it, upd, version=None, extra_ops=None, array_filters=None):
         flt = {"org_id": it["org_id"], "event_id": it["event_id"], "id": it["id"], "version": it["version"] if version is None else version}
-        res = await db.cr_interventions.update_one(flt, {"$set": {**upd, "updated_at": _now()}, "$inc": {"version": 1}, **(extra_ops or {})})
+        res = await db.cr_interventions.update_one(flt, {"$set": {**upd, "updated_at": _now()}, "$inc": {"version": 1}, **(extra_ops or {})}, array_filters=array_filters)
         if not res.matched_count:
             raise HTTPException(status_code=409, detail="Intervento modificato nel frattempo da un altro operatore: ricarico la versione più recente")
 
@@ -260,7 +261,11 @@ def attach(r, db, deps, require_active, H):
         upd = {"stato": to}
         if TIMES.get(to) and not it.get(TIMES[to]):
             upd[TIMES[to]] = _now()
-        await save_itv(it, upd, version, {"$push": {"history": {"at": _now(), "from": frm, "to": to, "by": by, "by_name": by_name, "note": note, "motivo": motivo, "forzato": force}}})
+        af = None
+        if to in CLOSED and any(a["stato"] in ACTIVE_ASG for a in it.get("assignments") or []):
+            upd["assignments.$[a].stato"] = "completata"
+            af = [{"a.stato": {"$in": list(ACTIVE_ASG)}}]
+        await save_itv(it, upd, version, {"$push": {"history": {"at": _now(), "from": frm, "to": to, "by": by, "by_name": by_name, "note": note, "motivo": motivo, "forzato": force}}}, af)
         if to in CLOSED:
             await release(it)
         typ = {"chiuso": "chiusura", "annullato": "annullamento", "risolto": "risoluzione", "sul_posto": "arrivo", "squadra_inviata": "partenza",
@@ -307,11 +312,13 @@ def attach(r, db, deps, require_active, H):
     @r.put(base + "/interventions/{iid}")
     async def edit_itv(event_id: str, iid: str, body: ItvEdit, u: dict = Depends(ops_dep)):
         it = await get_itv(u["org_id"], event_id, iid)
-        await cctx(u, event_id, "manage", it)
+        _, pm = await cctx(u, event_id, "manage", it)
         data = body.model_dump(exclude={"version", "origine"})
         if data["tipologia"] not in {t["key"] for t in await types_of(u["org_id"], event_id)}:
             raise HTTPException(status_code=400, detail="Tipologia non valida")
         pos = await resolve_pos(u["org_id"], event_id, data)
+        if pm["role"] == "coordinatore" and pos["sector_id"] not in pm["sectors"]:
+            raise HTTPException(status_code=403, detail="Puoi spostare l'intervento solo nel tuo settore")
         await save_itv(it, {**data, **pos}, body.version)
         by, name = who(u)
         if data["priorita"] != it["priorita"]:
@@ -443,6 +450,7 @@ def attach(r, db, deps, require_active, H):
     @r.get(base + "/interventions/{iid}/health")
     async def get_health(event_id: str, iid: str, u: dict = Depends(ops_dep)):
         await cctx(u, event_id, "resp")
+        await get_itv(u["org_id"], event_id, iid)
         return {"notes": await db.cr_itv_health.find(q(u, event_id, intervention_id=iid), {"_id": 0, "org_id": 0}).sort("at", 1).to_list(200)}
 
     @r.post(base + "/interventions/{iid}/health")
@@ -488,6 +496,8 @@ def attach(r, db, deps, require_active, H):
         await db.cr_messages.insert_one({**doc})
         for i in rec:
             await notify(u["org_id"], event_id, "messaggio", f"Messaggio dalla Control Room: {body.text[:80]}", "info", None, f"op:{i['id']}")
+        if body.to_type == "coordinatori":
+            await notify(u["org_id"], event_id, "messaggio", f"Ai coordinatori: {body.text[:80]}", "info")
         await diary(u["org_id"], event_id, by, name, "comunicazione", f"Messaggio a {label}: {body.text[:120]}", {"id": body.intervention_id} if body.intervention_id else None)
         await bump(u["org_id"], event_id)
         return {"id": doc["id"], "recipients": len(rec)}
@@ -732,17 +742,18 @@ def attach(r, db, deps, require_active, H):
             await diary(inv["org_id"], inv["event_id"], oid, name, "aggiornamento", f"{it['codice']}: {body.note}", it)
             await notify(inv["org_id"], inv["event_id"], "aggiornamento", f"{it['codice']}: aggiornamento da {name}", "info", it)
         else:
+            target = {"conferma": "preso_in_carico", "partito": "squadra_inviata", "arrivato": "sul_posto", "risolto": "risolto"}[body.action]
+            cur = LINEAR.index(it["stato"]) if it["stato"] in LINEAR else -1
+            steps = LINEAR[cur + 1:LINEAR.index(target) + 1]
+            if not steps and body.action != "conferma":
+                raise HTTPException(status_code=409, detail=f"Azione non coerente con lo stato attuale ({it['stato'].replace('_', ' ')})")
             if a["stato"] == "non_confermata":
                 await set_asg(it, x["id"], {"stato": "confermata", "confirmed_at": _now(), "confirmed_via": "app"})
                 await diary(inv["org_id"], inv["event_id"], oid, name, "conferma", f"{it['codice']}: presa in carico confermata da {name}", it, resource_id=x["id"])
+            for stp in steps:
                 it = await get_itv(inv["org_id"], inv["event_id"], iid)
-            target = {"conferma": "preso_in_carico", "partito": "squadra_inviata", "arrivato": "sul_posto", "risolto": "risolto"}[body.action]
-            if body.action == "conferma" and it["stato"] not in ("segnalato", "in_attesa"):
-                target = None
-            if target and target != it["stato"]:
-                if target not in FLOW[it["stato"]]:
-                    raise HTTPException(status_code=409, detail=f"Azione non coerente con lo stato attuale ({it['stato'].replace('_', ' ')})")
-                await transition(it, target, oid, name, body.note)
+                await transition(it, stp, oid, name, body.note if stp == target else None)
+            if steps:
                 await notify(inv["org_id"], inv["event_id"], "stato", f"{it['codice']}: {name} → {target.replace('_', ' ')}", "info", it)
         await bump(inv["org_id"], inv["event_id"])
         return {"ok": True, "at": _now()}

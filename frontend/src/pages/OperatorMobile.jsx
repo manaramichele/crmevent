@@ -86,11 +86,13 @@ function Mine({ d, act, back, upload }) {
             {i.mine_report && <div className="text-xs text-sky-700">Segnalazione inviata da te · ricevuta dalla centrale alle {fmtTime(i.created_at)}{i.stato !== "segnalato" ? " · presa in carico" : " · in attesa di presa in carico"}</div>}
             {a && <div className="text-xs">Incarico: <Pill c={ASG[a.stato][1]}>{ASG[a.stato][0]}</Pill></div>}
             {active && <div className="grid grid-cols-2 gap-2">
-              {a.stato === "non_confermata" && <Big onClick={() => act(i, "conferma")} className="col-span-2 bg-emerald-600 text-white" data-testid={`op-act-conferma-${i.codice}`}>CONFERMA PRESA IN CARICO</Big>}
-              <Big onClick={() => act(i, "partito")} className="bg-violet-600 text-white" data-testid={`op-act-partito-${i.codice}`}>PARTITO</Big>
-              <Big onClick={() => act(i, "arrivato")} className="bg-amber-500 text-slate-900" data-testid={`op-act-arrivato-${i.codice}`}>ARRIVATO SUL POSTO</Big>
+              {(a.stato === "non_confermata" || ["segnalato", "in_attesa"].includes(i.stato)) && <Big onClick={() => act(i, "conferma")} className="col-span-2 bg-emerald-600 text-white" data-testid={`op-act-conferma-${i.codice}`}>CONFERMA PRESA IN CARICO</Big>}
+              {(() => {
+                const LIN = ["preso_in_carico", "squadra_inviata", "sul_posto", "risolto"], cur = LIN.indexOf(i.stato);
+                const nexts = [["partito", "squadra_inviata", "PARTITO", "bg-violet-600 text-white"], ["arrivato", "sul_posto", "ARRIVATO SUL POSTO", "bg-amber-500 text-slate-900"], ["risolto", "risolto", "INTERVENTO RISOLTO", "bg-emerald-100 text-emerald-800"]].filter(([, s]) => LIN.indexOf(s) > cur);
+                return nexts.slice(0, 2).map(([k, , l, c]) => <Big key={k} onClick={() => act(i, k)} className={c} data-testid={`op-act-${k}-${i.codice}`}>{l}</Big>);
+              })()}
               <Big onClick={() => act(i, "aggiorna", "Scrivi l'aggiornamento")} className="bg-slate-100 text-slate-800" data-testid={`op-act-aggiorna-${i.codice}`}>AGGIORNA</Big>
-              <Big onClick={() => act(i, "risolto")} className="bg-emerald-100 text-emerald-800" data-testid={`op-act-risolto-${i.codice}`}>INTERVENTO RISOLTO</Big>
               {a.stato === "non_confermata" && <button type="button" onClick={() => act(i, "rifiuta", "Motivo del rifiuto (obbligatorio)")} className="col-span-2 text-sm font-semibold text-red-600 underline" data-testid={`op-act-rifiuta-${i.codice}`}>Rifiuta incarico</button>}
               <label className="col-span-2 flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 text-sm"><Camera className="h-4 w-4" />Aggiungi foto<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) upload(i, f); }} /></label>
             </div>}

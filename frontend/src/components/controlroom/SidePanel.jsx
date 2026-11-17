@@ -116,7 +116,7 @@ export function SidePanel(props) {
   return (
     <div className="flex h-full flex-col" data-testid="cr-side-panel">
       <div className="flex flex-wrap gap-1 border-b border-slate-100 p-2">
-        {TABS.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`shrink-0 rounded-full px-2.5 py-1.5 text-xs font-semibold transition-colors ${tab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`} data-testid={`cr-tab-${k}`}>
+        {TABS.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`shrink-0 rounded-full px-2 py-1.5 text-[11px] font-semibold transition-colors ${tab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`} data-testid={`cr-tab-${k}`}>
           {l}{k === "alerts" && d.alerts.length > 0 && <span className="ml-1 rounded-full bg-red-600 px-1.5 text-[10px] text-white">{d.alerts.length}</span>}</button>)}
       </div>
       {(tab === "resources" || tab === "posts") && <div className="relative px-2 pt-2"><Search className="absolute left-4 top-1/2 mt-1 h-4 w-4 -translate-y-1/2 text-slate-400" />
