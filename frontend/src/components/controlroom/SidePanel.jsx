@@ -42,13 +42,14 @@ function Resources({ d, q, open, onAdd, onImport }) {
   );
 }
 
-function Posts({ d, q, open, onPlace, placing }) {
+function Posts({ d, q, open, onPlace, placing, onPlannerImport }) {
   const rows = d.posts.filter((p) => !q || [p.nome, p.codice, p.telefono, p.responsabile].some((x) => x && x.toLowerCase().includes(q)));
   const cats = Object.fromEntries(d.settings.categories.map((c) => [c.key, c.label]));
   return (
     <>
       {d.perms.edit && <Button size="sm" onClick={onPlace} className={`w-full ${placing ? "bg-amber-500 hover:bg-amber-600" : "bg-[#0ABAB5] hover:bg-[#09A8A3]"} text-slate-900`} data-testid="cr-place-post-btn">
         <Crosshair className="mr-1 h-4 w-4" />{placing ? "Clicca sulla mappa… (annulla)" : "Nuova postazione sulla mappa"}</Button>}
+      {d.perms.edit && <Button size="sm" variant="outline" onClick={onPlannerImport} className="w-full" data-testid="cr-planner-import-btn">Importa da Event Planner</Button>}
       {rows.map((p) => {
         const s = PRESIDIO[p.presidio];
         return (

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 import controlroom_itv as ITV
 import controlroom_report as REP
+import controlroom_planner as CRP
 import event_routes as EVR
 import permissions as P
 
@@ -266,6 +267,7 @@ def attach(r, db, deps, require_active):
     H = {"ctx": ctx, "q": q, "settings": settings, "touch": touch, "external": EXTERNAL_VEHICLES, "ensure_tasks": ENSURE}
     ITV.attach(r, db, deps, require_active, H)
     REP.attach(r, db, deps, H)
+    CRP.attach(r, db, deps, H)
 
     @r.get(base)
     async def state(event_id: str, u: dict = Depends(ops_dep)):

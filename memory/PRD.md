@@ -1064,5 +1064,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: iteration_172 (16/16 + 74/74 regressione, UI ok) → correzioni minori verificate. Dati TEST_CR rimossi.
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
+
+## Control Room — Importazione postazioni da Event Planner (2026-11-17) — NON pubblicato
+- backend/controlroom_planner.py: GET /ops/planner (progetti non archiviati dell'evento, punti e strutture con centro; linee escluse; categoria suggerita da nome libreria; persone collegate; già importata) e POST /ops/planner/import (solo responsabile; collega planner_project_id/planner_feature_id → nessun doppione; km dal GPX solo entro 500 m; opzionale assegnazione persone dai turni Event Planner come risorse Staff; opzionale aggiornamento posizione delle già importate).
+- Frontend: pulsante "Importa da Event Planner" nella scheda Postazioni + PlannerImport.jsx.
+- Verifica: curl (import, re-import senza doppioni, km, persona+turno, isolamento org B, collaboratore 403) + screenshot dialogo. Testing agent non eseguito. Dati TEST_CR rimossi.
+
 ## In coda
 - Duplica evento (richiesta utente, da avviare).

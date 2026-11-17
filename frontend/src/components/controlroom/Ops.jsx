@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import api from "@/lib/api";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { WifiOff, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Layers, Siren } from "lucide-react";
 import { distance } from "@/lib/geo";
@@ -15,6 +16,7 @@ import { ItvNew } from "./ItvNew";
 import { ItvDetail } from "./ItvDetail";
 import { ItvList, Comms, Diary } from "./ItvViews";
 import { AccessDialog } from "./Access";
+import { PlannerImport } from "./PlannerImport";
 import { CLOSED } from "./meta";
 import { sectorFields, postFields, resourceFields, toForm } from "./forms";
 
@@ -87,6 +89,7 @@ export default function Ops({ eventId }) {
   const [staffOpen, setStaffOpen] = useState(false);
   const [setOpen, setSetOpen] = useState(false);
   const [accOpen, setAccOpen] = useState(false);
+  const [plOpen, setPlOpen] = useState(false);
   const [msgPreset, setMsgPreset] = useState(null);
   const [shifts, setShifts] = useState([]);
   const [sound, setSound] = useState(() => localStorage.getItem("cr_sound") === "1");
@@ -145,7 +148,7 @@ export default function Ops({ eventId }) {
   const createItv = async (v) => { const r = await call("post", "/interventions", v, "Intervento registrato"); if (r?.id) setItvId(r.id); return r; };
   const itv = itvId && d.interventions.find((i) => i.id === itvId);
   const panelProps = { d, tab, setTab, open, placing: placing === "post", highlight: hl, setHighlight: setHl, onPlace: () => { setPlacing(placing === "post" ? null : "post"); setFull(false); },
-    onImport: () => setStaffOpen(true), onAdd: () => add(tab), onPlaceItv: () => setPlacing(placing === "itv" ? null : "itv") };
+    onImport: () => setStaffOpen(true), onPlannerImport: () => setPlOpen(true), onAdd: () => add(tab), onPlaceItv: () => setPlacing(placing === "itv" ? null : "itv") };
 
   return (
     <div className="space-y-3 pb-20 lg:pb-0" data-testid="cr-ops">
@@ -191,6 +194,7 @@ export default function Ops({ eventId }) {
       <StaffImport open={staffOpen} onOpenChange={setStaffOpen} d={d} base={base} onSubmit={(b) => call("post", "/resources/from-staff", b, "Persone assegnate")} />
       <SettingsDialog open={setOpen} onOpenChange={setSetOpen} d={d} onSubmit={(b) => call("put", "/settings", b, "Impostazioni salvate")} />
       {accOpen && <AccessDialog open onOpenChange={setAccOpen} d={d} base={base} call={call} />}
+      <PlannerImport open={plOpen} onOpenChange={setPlOpen} d={d} base={base} call={async (m, p, b) => { const r = await call(m, p, b); if (r) toast.success(`Importazione completata: ${r.created} nuove postazioni, ${r.updated} aggiornate, ${r.people} persone assegnate`); return r; }} />
     </div>
   );
 }
