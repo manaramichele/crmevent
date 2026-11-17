@@ -1,0 +1,28 @@
+{
+  "summary": "Retest of the 6 fixes from iteration_168. All of them work. Backend: 39/39 pytest pass (11 new fix tests + 14 Phase-2 + 14 Phase-1). UI checked on desktop 1920 and mobile 390. (1) Collaboratore C: GET /controlroom/events with X-Org-Id = org A returns org A events and can_purchase=false. /status also works. Without the header C sees the primary org, which does not include EV_A. In the UI, switching org to 'TEST_CR Org a' and picking 'TEST_CR Gara A' opens a read-only dashboard: the cr-status badge shows; there is no status select, settings, NUOVO INTERVENTO, import, add or place-post. Writes (POST/PUT/DELETE posts, presence, status, checkout) return 403. (2) Fullscreen: cr-map-wrap is portaled to BODY, covers 1920x1080 and 390x844 exactly, the exit button is visible top-right, the canvas fills the viewport, and after exiting the map resizes back and markers stay clickable. (3) .cr-res markers are offset by about 22px from .cr-post, so the post icon is mostly visible. Both open the correct detail dialog. (4) Avvisi tab and badge sit inside the panel on desktop and mobile; filters are in a 2x2 grid; the vehicle chip reads 'Mezzo: Ambulanza'; text typed in the settings dialog survives a rev bump plus 8s of polling. (5) PUT merge: a partial PUT keeps codice/categoria/km/lat/previsti/note and the resource's targa and GPS device; explicit null clears a field; wrong or missing version gives 409. Presence on mezzo or squadra gives 404, on persona 200. (6) Admin regression via UI: place post via map click (lat/lng prefilled), drag (coords saved, version 2), staff import, presence, status impegnato/disponibile, NUOVO INTERVENTO (KPI 1->2). All created data was cleaned up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/controlroom/events, /status, /confirmation", "issue": "These now use require_org_member, which needs an active membership record. Users that have users.org_id but no membership now get 403 'Nessuna organizzazione associata all'account' (before they got 200). This is consistent with the rest of the app. One such account exists in the DB: staffmember@tabtest.crmevent.it (not a CR test account). FYI only, unless legacy users without memberships must be supported."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Operational map", "issues": ["The resource marker (offset [22,-22]) still overlaps the post marker by about 8x8px at one corner. Both stay clickable; cosmetic only."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_controlroom_phase2_fixes.py", "/app/backend/tests/test_controlroom_phase2_ops.py", "/app/backend/tests/test_controlroom_phase1.py", "/app/test_reports/pytest/pytest_cr_fixes.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "controlroom_ops.update: a body without 'version' produces a version=None filter and returns 409 (correct, but the message could be clearer, e.g. 400 'version mancante').",
+    "Legacy users without a membership lose access to the Phase-1 CR endpoints (see minor backend issue)."
+  ],
+  "updated_files": ["/app/backend/tests/test_controlroom_phase2_fixes.py (new)", "/app/backend/tests/test_controlroom_phase1.py (staff fixture now inserts and cleans up a membership record, needed by require_org_member)"],
+  "success_rate": {"backend": "100% (39/39)", "frontend": "100% of retested flows"},
+  "seed_data_creation": "None persisted. Temporary TEST_ posts, resources, interventions and sectors were created and deleted by id. EV_A state matches the start (1 post, 3 resources, 1 intervention, 1 sector, responsabile None).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run the CR pytest files with -o addopts=\"\" (no xdist): the Phase-1 module fixtures share state across classes and break under loadscope workers. UI login uses page.request.post('/api/auth/login'). For collaboratore C select org 9bb535b289f74a2395a6114ff0e2f0b5 in org-switcher-select. MapTiler returns 403 on preview, so the map uses the OSM fallback by design."
+}

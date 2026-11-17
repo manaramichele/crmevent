@@ -68,6 +68,7 @@ import QuickActions from "@/pages/QuickActions";
 import Marketplace from "@/pages/Marketplace";
 import MarketplaceAdmin from "@/pages/MarketplaceAdmin";
 import AddonHub from "@/pages/AddonHub";
+import ControlRoom from "@/pages/ControlRoom";
 import AddonAdmin from "@/pages/AddonAdmin";
 import EventMapStudio from "@/pages/EventMapStudio";
 import Tickets from "@/pages/Tickets";
@@ -77,6 +78,7 @@ import PlatformPartners from "@/pages/PlatformPartners";
 import { captureReferral } from "@/lib/referral";
 import { captureAttribution } from "@/lib/attribution";
 import SeoPage from "@/pages/SeoPage";
+import OperatorMobile from "@/pages/OperatorMobile";
 
 captureReferral();
 captureAttribution();
@@ -150,6 +152,7 @@ function Shell() {
         <Route path="/partecipa/:code" element={<Partecipa />} />
         <Route path="/prezzi" element={<Pricing />} />
         <Route path="/funzionalita/:slug" element={<SeoPage />} />
+        <Route path="/cr/op/:token" element={<OperatorMobile />} />
         <Route path="/organizzatori/:slug" element={<SeoPage />} />
         <Route path="/faq" element={<SeoPage />} />
         <Route path="/registrati" element={<Register />} />
@@ -175,6 +178,7 @@ function Shell() {
         <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
         <Route path="/event-planner" element={<Protected><AddonHub key="ep" slug="event-planner" /></Protected>} />
         <Route path="/event-map" element={<Protected><AddonHub key="em" slug="event-map" /></Protected>} />
+        <Route path="/control-room" element={<Protected><ControlRoom /></Protected>} />
         <Route path="/event-map/:id" element={<Protected><EventMapStudio /></Protected>} />
         <Route path="/piattaforma/event-planner-map" element={<Protected><SuperAdminOnly><AddonAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/marketplace" element={<Protected><SuperAdminOnly><MarketplaceAdmin /></SuperAdminOnly></Protected>} />

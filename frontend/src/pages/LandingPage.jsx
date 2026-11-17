@@ -9,7 +9,7 @@ import PlannerDemoSection from "@/components/landing/PlannerDemoSection";
 import EventMapSection from "@/components/landing/EventMapSection";
 import { toast } from "sonner";
 import {
-  CalendarDays, Building2, Handshake, UserCog, Users2, Clock, Map as MapIcon, Film,
+  CalendarDays, Building2, Handshake, UserCog, Users2, Clock, Map as MapIcon, Film, RadioTower,
   CalendarCheck2, ArrowRight, Check, Menu, X, MapPin, Navigation, Sparkles,
 } from "lucide-react";
 
@@ -106,6 +106,7 @@ const FEATURES = [
   [MapIcon, "Event Planner", "Progetta il tuo evento direttamente sulla mappa. Organizza percorsi, aree operative, gazebo, strutture, sponsor e punti di assistenza in un unico spazio."],
   [CalendarCheck2, "Google Calendar", "Porta eventi e turni nel calendario degli utenti."],
   [Film, "Event Map", "Genera dalla traccia GPX un video animato del percorso, pronto per i social."],
+  [RadioTower, "Control Room", "Gestisci in tempo reale postazioni, volontari, mezzi di soccorso e interventi durante l'evento.", null, "/funzionalita/control-room"],
 ];
 
 function DemoForm() {
@@ -244,12 +245,12 @@ export default function LandingPage() {
       <Section id="funzionalita" className="py-20 bg-slate-50/60 border-y border-slate-100">
         <div className="text-center max-w-2xl mx-auto"><Eyebrow>Funzionalità</Eyebrow><H2>Un'unica piattaforma per tutto il tuo evento</H2></div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-12" data-testid="home-features">
-          {FEATURES.map(([Icon, t, d, badge]) => (
-            <div key={t} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:-translate-y-0.5 transition-[transform,box-shadow]">
+          {FEATURES.map(([Icon, t, d, badge, to]) => { const C = to ? Link : "div"; return (
+            <C key={t} {...(to ? { to, "data-testid": "home-feature-control-room" } : {})} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:-translate-y-0.5 transition-[transform,box-shadow]">
               <div className="w-10 h-10 rounded-lg bg-tiffany-light flex items-center justify-center mb-3"><Icon className="w-5 h-5 text-tiffany-active" /></div>
               <h3 className="font-display font-bold text-slate-900 flex items-center gap-2 flex-wrap">{t}{badge && <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">{badge}</span>}</h3>
               <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{d}</p>
-            </div>))}
+            </C>); })}
         </div>
       </Section>
 

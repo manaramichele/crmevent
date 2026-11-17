@@ -1,0 +1,43 @@
+{
+  "summary": "Control Room Phase 4 testing (backend + UI). Run serially with -n 0. Backend: the new test_controlroom_phase4.py passes 16 of 16. It covers: KPI keys, and KPI values changing as posts, presence, teams, interventions and state moves are created; diary rows for post/resource/sector/presence with type, dal/al (ISO and the JS Z format), priorita and operatore filters; no delete for the diary (404/405); report.pdf and report.xlsx return 200 for the responsabile, 403 for test_cr_c (visualizzatore, X-Org-Id org A), 404 for org B, 402 for the 'Non attivo' event and 401 without auth. The PDF has all the sections (checked by text extraction with pymupdf). The xlsx has exactly the sheets Riepilogo/Postazioni/Personale/Interventi/Cronologia. A logo_url on the event embeds an image in the PDF header. The mobile m_home returns post and sector phones. Regression for Phase 1-3 (phase1, phase2_ops, phase2_fixes, phase3_itv, phase3_edge, retest171) passes 74 of 74 after updating the stale hardcoded IDs. The 409-on-closed regression from iteration 171 is now fixed. UI desktop 1920: 12 KPI tiles. cr-critical-banner shows '3 CRITICITÀ ROSSE' with clickable codes that open the detail. cr-light is red/red/red/yellow in the table and appears 4x in the cards. Post markers have a colored ring (orange = parziale, grey = in attesa). Clicking a post or intervention marker opens its detail dialog. The Diario has cr-report-box with PDF and Excel downloads (files downloaded), and the type, priority, date, operator and refresh filters all work. There is no delete button. As the visualizzatore, test_cr_c sees no report box, no CSV export and no new-intervention button. Mobile 390 /cr/op/{token}: op-contacts shows 2 tel: links (post and sector), op-map shows 2 markers (post + open intervention), there is no horizontal overflow (390/390), and the Phase 3 CONFERMA action moved the intervention to PRESO IN CARICO. No JS page errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /ops/report.pdf", "issue": "In the 'Criticità principali' table the priority column is doubled, e.g. 'alta (alta (Rosso))'. controlroom_report.py l.106 uses f\"{x['priorita']} ({x['semaforo']})\" but semaforo already contains 'alta (Rosso)'. Use x['semaforo'] only."},
+      {"endpoint": "GET /ops/report.pdf", "issue": "'Data evento' shows the raw ISO date (2026-12-06) instead of an Italian format (06/12/2026)."},
+      {"endpoint": "touch() → cr_diary (controlroom_ops.py l.203-205)", "issue": "Diary text for post/resource/sector changes uses the internal English action keys: 'postazione · create · X', 'risorsa · presence · presente', 'risorsa · status · impegnato', 'move', 'delete', 'update'. These rows are shown to operators and printed in the report Cronologia. Map them to Italian labels (creata/modificata/eliminata/spostata/presenza/stato)."},
+      {"endpoint": "GET /ops kpi.criticita_rosse + cr-critical-banner", "issue": "Interventions in state 'risolto' (not yet chiuso) still count as 'Criticità rosse da gestire' and stay in the red banner. Verified: after alta→risolto, criticita_rosse did not decrease. Consider excluding 'risolto' if 'da gestire' means still unresolved (product decision)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OpsMap intervention markers", "issue": "Interventions linked to the same post at identical coordinates get the same offset ([-26,-26]) and overlap exactly. INT-001 fully covers INT-002, so the INT-002 marker cannot be clicked (Playwright: 'INT-001 subtree intercepts pointer events'). Spread or stack the markers (small index-based offset or a cluster).", "selector": "[data-testid=cr-map-itv-INT-002]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Map / mobile map", "issues": ["Traffic-light inconsistency: the semaphore defines alta = ROSSO, but the desktop map PCOL (OpsMap.jsx l.120) and the mobile OpMap (PRIORITY[alta][1]) draw alta interventions in orange (#F97316). Use the LIGHT colors for alta and critica so they show red."]},
+      {"screen": "Diario operativo filters", "issues": ["Dal/Al use the native <input type=datetime-local> (shown as mm/dd/yyyy in this browser, not Italian) instead of a shadcn date/time picker.", "The diary sorts oldest first: with ~265 rows the newest activity is at the very bottom. Consider newest first or auto-scroll.", "The diary list does not refresh with the live poll; it reloads only on a filter change or 'Aggiorna'."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_controlroom_phase4.py", "/app/backend/tests/ui_cr172_setup.py", "/app/backend/tests/cr_ids.py", "/app/test_reports/pytest/cr_phase4.xml", "/app/test_reports/pytest/cr_regression172.xml"],
+  "action_items": [
+    "controlroom_report.py l.106: use x['semaforo'] alone in the Criticità principali priority column (it is currently doubled).",
+    "Localize the diary text written by touch() for postazione/risorsa/settore (create/update/delete/move/presence/status → Italian).",
+    "OpsMap: avoid exact overlap of intervention markers on the same post, so every marker is clickable.",
+    "Use red for alta on the desktop map and the mobile map, to match the semaphore (alta + critica = ROSSO).",
+    "Optional: format 'Data evento' in the PDF as dd/mm/yyyy; replace the native datetime-local inputs in the Diario with a shadcn picker; decide whether 'risolto' should leave criticita_rosse.",
+    "Add the 'Control Room Fase 2' section (test_cr_a/b/c@crmevent-test.it / TestCR2026!) back to /app/memory/test_credentials.md. It is currently missing from the file."
+  ],
+  "critical_code_review_comments": [
+    "controlroom_itv.py is now 805 lines (>700): split the mobile (m_*) endpoints into their own module.",
+    "ItvViews.jsx Diary calls load() during render (`if (rows === null) load();`), so it can fire duplicate requests on re-renders before the first response. Move it into a useEffect.",
+    "The report collect() loads up to 20000 diary rows plus every intervention into memory and builds the PDF synchronously inside the event loop (reportlab doc.build). For big events, consider asyncio.to_thread for the build.",
+    "The diary dal/al filter compares strings against stored UTC isoformat. It works with both '+00:00' and 'Z' inputs, which I verified, but non-UTC offsets passed by API clients would compare incorrectly. Consider normalizing to UTC server-side."
+  ],
+  "updated_files": ["/app/backend/tests/test_controlroom_phase4.py", "/app/backend/tests/ui_cr172_setup.py", "/app/backend/tests/cr_ids.py", "/app/backend/tests/test_controlroom_phase2_ops.py (IDs)", "/app/backend/tests/test_controlroom_phase2_fixes.py (IDs)", "/app/backend/tests/test_controlroom_phase3_itv.py (IDs)", "/app/backend/tests/cleanup_cr_phase3_ui.py (IDs)"],
+  "success_rate": {"backend": "100% (90/90: 16 Phase 4 + 74 regression)", "frontend": "~95% (all requested flows pass; 1 overlapping-marker click issue, plus design notes)"},
+  "seed_data_creation": "Only TEST_ data in org A event 08e8a867… (TEST_CR Gara A): TEST_P4 and TEST_UI172 sectors/posts/resources/invites, all deleted. Test interventions INT-004..INT-044 range (TEST_P4 / TEST_UI172) were annulled, since there is no delete endpoint. INT-044 (TEST_UI172 alta) was annulled during cleanup. A TEST 1x1 PNG was uploaded to db.files for the logo test; the event logo_url was restored to None. The seeded 'Ristoro km 3' and INT-001/002/003 are untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Current IDs after the reseed: org A e2356cc12b95447eb15b53d5aad01d32, event 'TEST_CR Gara A' 08e8a867893f4e2b835e2d43dd4fe65d, inactive event 32fc35e52d244d57858c728cfb38f1c7 (run tests/cr_ids.py to look them up again). Run the CR suites with -n 0. test_cr_c logs into 'TEST_CR Org C' by default; switch with [data-testid=org-switcher-select] to 'TEST_CR Org a'. Dismiss the 'Non ora' demo popup and the cookie banner before clicking. ui_cr172_setup.py setup|cleanup creates the post/sector with phones, the operator invite and an alta intervention for the /cr/op/{token} checks. The event route is in Milan (around 45.47, 9.19)."
+}

@@ -1022,5 +1022,53 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - eventmap_render.py: fascia iniziale compatta semitrasparente in alto (area sicura: 5,5% altezza nei verticali, 32U negli altri) con logo evento a sinistra, titolo adattivo (56→34U, max 2 righe) e sottotitolo · data; la fascia scompare dopo l'apertura, il logo resta fisso nella stessa posizione fino alla fine; rimossa la scheda finale con titolo. Logo più contenuto (LOGO_BOX ridotto). Solo nuove generazioni/rigenerazioni; video esistenti invariati.
 - Script di verifica: scripts/promo_video/em_layout_check.py.
 
+
+## Control Room — Fase 1 (2026-11-17) — NON pubblicato
+- backend/controlroom.py: servizio Marketplace «control-room» (119 € + IVA per evento, price_type per_event, nessuna inclusione nei piani); db.controlroom_purchases (pending/active/expired/failed/duplicate_paid/refunded); POST /api/controlroom/events/{eid}/checkout (solo admin, dati fatturazione, Stripe payment, riga «CONTROL ROOM — 119,00 € / EVENTO», descrizione evento, tax rate, fattura Stripe, adaptive pricing off); attivazione solo con sessione complete+paid (webhook o /confirmation), idempotente; rimborso via charge.refunded; require_active(org, evento) per le fasi successive; /api/platform/controlroom/purchases (SA); cascade eliminazione org.
+- Frontend: voce menu «Control Room» sotto Staff / Volontari; /control-room (selezione evento, presentazione + ATTIVA CONTROL ROOM, stato attivo con segnaposto dashboard); card Marketplace; scheda nella griglia funzionalità della home (senza prezzo) → /funzionalita/control-room (pagina pubblica SEO senza prezzo).
+- Test: iteration_167 (14 test backend + UI; corretto dal tester tax_code/managed_payments; poi corretti pulsante dopo annullamento, errore 500 su sessione non valida, cascade, fattura).
+- Prossime fasi: 2 dashboard/mappa/risorse/postazioni, 3 interventi/assegnazioni/comunicazioni/mobile, 4 GPS/diario/report, 5 test completi.
+
 - Test: iteration_166 (backend 10/10, frontend ok; corretti tab AI, spinner, scroll-to-top, revoca consenso, dedup visite).
 
+
+## Control Room — Fase 2 (2026-11-17) — NON pubblicato
+- backend/controlroom_ops.py (agganciato da controlroom.build): API /api/controlroom/events/{event_id}/ops (stato completo, /rev, /route, /settings, /staff, CRUD generico sectors|posts|resources|interventions, posts/{id}/position + duplicate, resources/from-staff, resources/{id}/presence|status). Collezioni cr_settings/cr_sectors/cr_posts/cr_resources/cr_interventions/cr_log (in cascade org). Acquisto attivo obbligatorio (402), isolamento org/evento, view = eventi|staff view, modifica = staff edit, telefoni solo con staff|anagrafiche view; version per concorrenza (409); cr_log autore/data; GPS solo modello (device, stato, ultima posizione mai simulata); PUT con merge.
+- permissions.py: ROUTE_RULES "/controlroom/events/{event_id}/ops" = "*" (controlli nel modulo, nessun gating piano). Endpoint Fase 1 ora usano require_org_member (X-Org-Id).
+- Frontend components/controlroom/*: TopBar (evento, data, orologio, stato, responsabile, NUOVO INTERVENTO, 8 KPI), OpsMap (MapLibre MapTiler con ripiego OSM, GPX, partenza/arrivo, km, settori evidenziabili, postazioni trascinabili, mezzi, interventi), filtri a chip, SidePanel richiudibile (Risorse/Postazioni/Settori/Interventi/Avvisi), schede dettaglio, import da Staff/Volontari, impostazioni con categorie personalizzabili, polling 5 s + banner connessione persa, schermo intero via portal.
+- Categorie postazioni: 12 iniziali + Vigili del Fuoco e Chiusura stradale (richieste dalla mappa).
+- Test: iteration_168 (15+14 backend, UI) → 6 correzioni → iteration_169 39/39, UI ok. Dati test TEST_CR rimossi; ricrearli con backend/scripts/seed_cr_test.py.
+- Prossime fasi: 3 interventi completi/assegnazioni/notifiche/accesso mobile e check-in operatori; 4 GPS reale/diario/report PDF-Excel; 5 test completi.
+
+
+
+## Control Room — Fase 3 (2026-11-17) — NON pubblicato
+- Scelte utente: invito operatori senza account = link personale + QR condiviso manualmente (nessun invio automatico); segnale acustico critici disattivato di default (toggle per browser).
+- backend/controlroom_itv.py (agganciato da controlroom_ops.attach): interventi con codice atomico INT-001 (cr_counters), 11 tipologie configurabili (itv_types in cr_settings), priorità bassa/media/alta/critica, flusso stati con history, annullo con motivo, riapertura/forzatura solo responsabile con motivo/nota, chiusura solo responsabile, orari server; posizione (coordinate/postazione/settore/km/riferimento, da_confermare, postazione più vicina ≤1,5 km); assegnazioni NON CONFERMATA→CONFERMATA (app o via radio)/RIFIUTATA/REVOCATA/COMPLETATA, risorsa impegnata (configurabile), mezzi enti esterni con autorizzazione + conferma accordo, sovrapposizioni; allegati foto privati (magic bytes, max 8 MB); note sanitarie separate solo responsabile; comunicazioni (operatore/squadra/settore/coordinatori/tutti) con consegna/lettura reali; notifiche con non lette; diario operativo + export CSV; ruoli CR per evento (cr_roles: responsabile/coordinatore con settori/visualizzatore; admin = responsabile); inviti mobile (token hash, scadenza, revoca, ruolo operatore/coordinatore, priorità opzionale).
+- API mobile pubblica /api/cr-mobile/{token}: home, checkin, reports (client_id idempotente), azioni con avanzamento lineare, foto, messaggi.
+- Frontend: viste Operativa/Interventi (tabella/schede, filtri, ordinamento)/Comunicazioni/Diario; banner + flash critici; campanella; "Intervento qui" sulla mappa; ItvDetail; Ruoli e accessi con QR; pagina operatore /cr/op/:token.
+- Test: iteration_170 (21/21 + UI) → correzioni → iteration_171 (fix verificati) → ultimo fix 409 su intervento chiuso verificato con pytest. Dati TEST_CR rimossi (seed: backend/scripts/seed_cr_test.py).
+- Prossime fasi: 4 GPS reale, report PDF/Excel, statistiche; 5 test completi.
+
+
+## Event Planner — verifica qualità Satellite (2026-11-17)
+- Diagnosi: lo stile MapTiler "hybrid" usa satellite-v2 (tiles.json maxzoom 22, tile 512 px) → configurazione corretta. A Milano centro oltre z19 i tile MapTiler sono riscalati (dettaglio reale assente); Esri World Imagery z19 molto più nitido.
+- Scelta utente: restare solo su MapTiler → nessuna modifica al codice.
+
+## Control Room — Fase 4 (2026-11-17) — NON pubblicato
+- Scelte utente: 4 priorità mantenute + semaforo (bassa=Verde, media=Giallo, alta/critica=Rosso); voce menu sempre visibile.
+- 12 KPI dashboard; banner rosso alta+critica non risolte; anello stato postazioni sulla mappa; marker interventi colori semaforo e impilati.
+- Diario: righe anche per postazioni/risorse/settori, filtri data/ora, categoria, priorità, operatore; più recente in alto; non cancellabile.
+- backend/controlroom_report.py: /ops/report.pdf e /ops/report.xlsx (solo responsabile; logo evento se presente).
+- Mobile operatore: MAPPA e contatti responsabili.
+- Test: iteration_172 (16/16 + 74/74 regressione, UI ok) → correzioni minori verificate. Dati TEST_CR rimossi.
+- Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
+
+
+## Control Room — Importazione postazioni da Event Planner (2026-11-17) — NON pubblicato
+- backend/controlroom_planner.py: GET /ops/planner (progetti non archiviati dell'evento, punti e strutture con centro; linee escluse; categoria suggerita da nome libreria; persone collegate; già importata) e POST /ops/planner/import (solo responsabile; collega planner_project_id/planner_feature_id → nessun doppione; km dal GPX solo entro 500 m; opzionale assegnazione persone dai turni Event Planner come risorse Staff; opzionale aggiornamento posizione delle già importate).
+- Frontend: pulsante "Importa da Event Planner" nella scheda Postazioni + PlannerImport.jsx.
+- Verifica: curl (import, re-import senza doppioni, km, persona+turno, isolamento org B, collaboratore 403) + screenshot dialogo. Testing agent non eseguito. Dati TEST_CR rimossi.
+
+## In coda
+- Duplica evento (richiesta utente, da avviare).
