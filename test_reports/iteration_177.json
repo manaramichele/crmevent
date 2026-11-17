@@ -1,0 +1,47 @@
+{
+  "summary": "Retest of the Staff e Volontari reorganisation in the Demo org, as Super Admin with X-Org-Id. Backend: 14 of 15 pytest cases pass, including 6 new iteration_177 tests. The fixes from iteration_176 are confirmed. POST rejects evento_id/persona_id/team_id from another org with 404 'non trovato in questa organizzazione'. PUT rejects a foreign evento_id/team_id with 404. A duplicate persona+evento+categoria POST returns 409, while the same event with another categoria is allowed. Setting team_id='' through PUT persists as empty. The one failure is minor: a PUT that changes categoria can still create a duplicate link. Frontend: every requested flow passes. Checked: the mask and EventPicker, the per-tab association counts, event-specific values under the event filter, the preference filter, removing an association, clearing a team, retry after a failed save, the client duplicate guard, mobile 390px and provenance.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/staff/{id}", "issue": "The duplicate check exists only in POST. A PUT that changes categoria (volontario -> staff) when the same persona+evento already has a staff link returns 200 and creates a duplicate. The mask blocks this case client-side, so the risk is API-only."},
+      {"endpoint": "DELETE /api/persons/{id}", "issue": "Pre-existing and unchanged: deleting a person does not cascade to their staff links, shifts or availabilities."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PersonMask (mobile)", "issues": ["The EventPicker CommandInput ('Cerca evento…') probably takes focus when opened on mobile, which would bring up the keyboard. This is minor.", "Data di nascita still uses the native <input type=date> instead of the shadcn calendar."]},
+      {"screen": "PersonMask", "issues": ["The anagrafica field 'Qualifica' (person.ruolo) sits next to the per-event 'Mansione' and may confuse users."]}
+    ]
+  },
+  "passed_checks": [
+    "Aggiungi Staff opens 'Nuovo Staff' with exactly one empty row preset to Staff and provenance 'Inserimento manuale'. Aggiungi Volontario opens 'Nuovo Volontario' with the row preset to volontario.",
+    "The EventPicker is selectable on desktop and on mobile (z-index fix holds). Event, team (Arrivo), mansione (Coordinatore) and preferenza (Hostess) all save. The person appears exactly once in the Staff tab and the API holds one person with one link.",
+    "Editing via the pencil to add a Maratona staff row (TEST team, Tecnico, pref Sicurezza) and a Maratona volontario row (Accoglienza) works. With no event filter, the Staff tab shows '2 associazioni' for Team and Mansione. Filtering Maratona shows TEST team/Tecnico; filtering BCR shows Arrivo/Coordinatore.",
+    "The Volontari tab shows only the volunteer link (team —, mansione Accoglienza, role Volontario), so the per-tab categoria filtering works.",
+    "people-pref-filter lists the preferences set in the mask (Hostess, Sicurezza, Non indicata). Filtering on Hostess returns the TEST person.",
+    "Removing the volontario row and saving keeps the person; the link is deleted and is_volontario becomes false.",
+    "Choosing 'Nessun team' and saving persists team_id='' in the API.",
+    "Retry: with the first POST /api/staff forced to fail (500), the mask shows the error. A second Salva creates no second person: exactly 1 person with 1 link.",
+    "Two rows with the same event and role are blocked client-side with an error message.",
+    "Mobile 390px: the mask opens without focusing Nome (focus stays on the trigger button) and Salva/Annulla stay visible in a sticky footer at y=779 of 844.",
+    "Provenance filters manuale, link_disponibilita and non_determinata filter correctly. The backend tests cover manuale on POST and quick-add, link_disponibilita on public submit, and non_determinata for historic records."
+  ],
+  "test_report_links": ["/app/backend/tests/test_person_mask_staff.py", "/app/test_reports/pytest/iter177.xml"],
+  "action_items": [
+    "Optional: add the persona+evento+categoria duplicate check (409) to PUT /api/staff/{id} when categoria, evento_id or persona_id change.",
+    "Optional (pre-existing): cascade person delete to staff, shifts and availabilities, or block it."
+  ],
+  "critical_code_review_comments": [
+    "PersonMask.save mutates the row object (r.id = s.id) and also calls setRows. It works, but it relies on mutating state.",
+    "If a save fails after some rows were already created and the user then removes one of those rows before retrying, that link is not deleted. The delete loop only iterates initial.rows.",
+    "The save is still not atomic (a sequence of person PUT/POST, then staff DELETE/POST/PUT). The retry path no longer creates a second person."
+  ],
+  "updated_files": ["/app/backend/tests/test_person_mask_staff.py"],
+  "success_rate": {"backend": "93% (14/15; the failure is the minor PUT-duplicate check)", "frontend": "100%"},
+  "seed_data_creation": "Created a TEST team on demo_evt_maratona, 2 TEST persons through the UI and the persons/links from pytest. All were deleted by id; 0 TEST_ persons, teams or events remain in the Demo org.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_person_mask_staff.py (xdist works). UI: page.request.post /api/auth/login, set localStorage acting_org_id, go to /staff-volontari and click 'Accept all' on the cookie banner. The event filter is a shadcn Select ([data-testid=people-event-filter] button, then role=option). For TeamSelect use the options mask-assign-team-{i}-opt-{teamId|none}. Only demo_evt_bcr has seeded teams."
+}

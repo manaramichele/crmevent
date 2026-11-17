@@ -191,3 +191,79 @@ class TestOrgIsolation:
         if x.status_code in (200, 201):
             CREATED["staff"].append(x.json()["id"])
         assert x.status_code in (400, 403, 404), f"foreign person accepted: {x.status_code}"
+
+# iteration_177: retest fixes (PUT org isolation, 409 duplicate, clear team)
+class TestIter177Fixes:
+    def _person_link(self, s, ev=EV1, cat="staff", **kw):
+        r = s.post(f"{BASE_URL}/api/persons", json={"nome": "TEST_R177", "cognome": f"TEST_R177{uuid.uuid4().hex[:5]}"})
+        pid = r.json()["id"]; CREATED["persons"].append(pid)
+        l = s.post(f"{BASE_URL}/api/staff", json={"persona_id": pid, "evento_id": ev, "categoria": cat, **kw})
+        assert l.status_code in (200, 201), l.text
+        CREATED["staff"].append(l.json()["id"])
+        return pid, l.json()
+
+    def test_duplicate_is_409_with_message(self, s):
+        pid, l = self._person_link(s)
+        b = s.post(f"{BASE_URL}/api/staff", json={"persona_id": pid, "evento_id": EV1, "categoria": "staff"})
+        if b.status_code in (200, 201):
+            CREATED["staff"].append(b.json()["id"])
+        assert b.status_code == 409, b.text
+        # same person+event but different categoria allowed
+        c = s.post(f"{BASE_URL}/api/staff", json={"persona_id": pid, "evento_id": EV1, "categoria": "volontario"})
+        assert c.status_code in (200, 201), c.text
+        CREATED["staff"].append(c.json()["id"])
+
+    def test_foreign_refs_message(self, s):
+        other = _sess(OTHER_ORG)
+        foreign_ev = other.get(f"{BASE_URL}/api/events").json()[0]["id"]
+        r = s.post(f"{BASE_URL}/api/persons", json={"nome": "TEST_R177", "cognome": f"TEST_R177{uuid.uuid4().hex[:5]}"})
+        pid = r.json()["id"]; CREATED["persons"].append(pid)
+        x = s.post(f"{BASE_URL}/api/staff", json={"persona_id": pid, "evento_id": foreign_ev, "categoria": "staff"})
+        if x.status_code in (200, 201): CREATED["staff"].append(x.json()["id"])
+        assert x.status_code == 404 and "non trovato in questa organizzazione" in x.text, x.text
+
+    def test_foreign_team_post_rejected(self, s):
+        other = _sess(OTHER_ORG)
+        tms = other.get(f"{BASE_URL}/api/teams").json()
+        if not tms: pytest.skip("other org no teams")
+        r = s.post(f"{BASE_URL}/api/persons", json={"nome": "TEST_R177", "cognome": f"TEST_R177{uuid.uuid4().hex[:5]}"})
+        pid = r.json()["id"]; CREATED["persons"].append(pid)
+        x = s.post(f"{BASE_URL}/api/staff", json={"persona_id": pid, "evento_id": EV1, "categoria": "staff", "team_id": tms[0]["id"]})
+        if x.status_code in (200, 201): CREATED["staff"].append(x.json()["id"])
+        assert x.status_code == 404, x.text
+
+    def test_put_foreign_event_and_team_rejected(self, s):
+        other = _sess(OTHER_ORG)
+        foreign_ev = other.get(f"{BASE_URL}/api/events").json()[0]["id"]
+        tms = other.get(f"{BASE_URL}/api/teams").json()
+        pid, l = self._person_link(s)
+        x = s.put(f"{BASE_URL}/api/staff/{l['id']}", json={"evento_id": foreign_ev})
+        assert x.status_code == 404, x.text
+        if tms:
+            y = s.put(f"{BASE_URL}/api/staff/{l['id']}", json={"team_id": tms[0]["id"]})
+            assert y.status_code == 404, y.text
+        g = s.get(f"{BASE_URL}/api/staff/{l['id']}").json()
+        assert g["evento_id"] == EV1
+
+    def test_clear_team_persists_empty(self, s):
+        t1 = _teams(s, EV1)
+        if not t1: pytest.skip("no team")
+        pid, l = self._person_link(s, team_id=t1[0]["id"])
+        assert l["team_id"] == t1[0]["id"]
+        u = s.put(f"{BASE_URL}/api/staff/{l['id']}", json={"team_id": ""})
+        assert u.status_code == 200, u.text
+        g = s.get(f"{BASE_URL}/api/staff/{l['id']}").json()
+        assert not g.get("team_id"), g
+        e = _enriched(s, pid)
+        assert not e["assegnazioni"][0].get("team_id")
+
+    def test_put_into_duplicate(self, s):
+        """Informational: PUT changing categoria to collide with existing link."""
+        pid, a = self._person_link(s)
+        b = s.post(f"{BASE_URL}/api/staff", json={"persona_id": pid, "evento_id": EV1, "categoria": "volontario"})
+        CREATED["staff"].append(b.json()["id"])
+        x = s.put(f"{BASE_URL}/api/staff/{b.json()['id']}", json={"categoria": "staff"})
+        print("PUT into duplicate status:", x.status_code)
+        if x.status_code == 200:
+            s.put(f"{BASE_URL}/api/staff/{b.json()['id']}", json={"categoria": "volontario"})
+        assert x.status_code == 409, f"PUT allows duplicate: {x.status_code}"

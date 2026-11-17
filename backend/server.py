@@ -1564,6 +1564,11 @@ def crud_routes(path, coll, model, org_scoped=True):
         await _assert_org_operational(user["org_id"])
         _assert_ev_allowed(user, clean.get("evento_id"))
         await _assert_refs_in_org(user["org_id"], clean)
+        if coll == "staff" and clean.get("categoria"):
+            cur = await db.staff.find_one({"org_id": user["org_id"], "id": item_id}, {"_id": 0, "persona_id": 1, "evento_id": 1}) or {}
+            if await db.staff.find_one({"org_id": user["org_id"], "id": {"$ne": item_id}, "persona_id": clean.get("persona_id") or cur.get("persona_id"),
+                                        "evento_id": clean.get("evento_id") or cur.get("evento_id"), "categoria": clean["categoria"]}, {"_id": 1}):
+                raise HTTPException(status_code=409, detail="La persona è già associata a questo evento con lo stesso ruolo")
         if coll in ("staff", "shifts"):
             _assert_team_allowed(user, clean.get("team_id"))
         if coll == "staff" and "team_id" in clean and not (user.get("perm") or {"admin": True}).get("admin"):

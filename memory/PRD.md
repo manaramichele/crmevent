@@ -1065,6 +1065,14 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Staff e Volontari: maschera unica e provenienza (2026-11-17)
+- Scelta utente: Ruolo Staff/Volontario per ogni evento (come prima).
+- PersonMask.jsx: stessa maschera per matita, "Aggiungi Staff", "Aggiungi Volontario" (A anagrafica completa, B provenienza + preferenze dai link, C eventi con evento ricercabile, ruolo, preferenza, team, mansione; Aggiungi evento/rimuovi; conferma modifiche non salvate; retry senza doppioni).
+- Persons.jsx: colonne Cognome, Nome, Cellulare, Ruolo, Preferenza, Team, Mansione, Evento, Azioni (matita ultima); rimossi dialog ruoli dalla cella e pulsanti inline preferenza/mansione; "N associazioni" senza filtro evento; filtri team, mansione, provenienza; assegnazioni filtrate per scheda.
+- Backend: persons.provenienza {tipo manuale|link_disponibilita, at, by/evento_id/link_code} impostata solo dal sistema (crud, quick-add, staff-candidates, link pubblico); storici = non_determinata; Presence.preferenza; persons-enriched espone assegnazioni + provenienza_tipo; _assert_refs_in_org su crud (evento/persona/team della stessa org); 409 duplicato persona+evento+ruolo su POST e PUT.
+- Test: iteration_176/177 (tutti i flussi ok).
+
+
 ## Menu: rimossa voce laterale Profilo & Account (2026-11-17)
 - Gruppo "Account" eliminato dal menu laterale; /profilo resta raggiungibile dal menu utente in alto a destra (desktop e mobile). Utenti e Permessi invariato.
 
