@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 # Control Room Phase 3 edge cases: coordinatore edit scope, reopen by coordinatore, cross-org mobile token, reopen assignment consistency
 import requests, pytest
 from test_controlroom_phase3_itv import A, C, W, _login, OPS, MB, API, new_itv, st, itv, state, res_state  # noqa

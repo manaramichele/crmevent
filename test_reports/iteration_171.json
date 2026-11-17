@@ -1,0 +1,30 @@
+{
+  "summary": "Retest of the iteration 170 Control Room Phase 3 fixes. Backend, run serially (-n 0): the new test_controlroom_phase3_retest171.py passes 9 of 10. test_controlroom_phase3_itv.py and the edge suite pass 24 of 25; the edge suite is now 4 of 4, including test_partito_after_central_confirm_on_segnalato. Phase 1 and 2 regression passes 39 of 39. Verified fixes: (1) PARTITO after a radio confirm on a SEGNALATO intervention now auto-steps preso_in_carico→squadra_inviata, with history and t_presa/t_invio set; RISOLTO from SEGNALATO walks all 4 steps; ARRIVATO from IN_ATTESA works. (2) Backward PARTITO/ARRIVATO on SUL_POSTO returns 409 with no side effects: the assignment stays non_confermata, the version does not change and no diary row is added. A second RISOLTO returns 409. (3) Annulling sets the assignments to 'completata' and frees the resource; after reopen senza_squadra=true and the resource can be reassigned. (4) A coordinatore scoped to S1 gets 403 on PUT with km in S2 or sector_id=S2, while an edit inside S1 returns 200. (5) GET/POST health on an unknown iid returns 404. (6) A message to coordinatori creates a centrale notification. One regression found: after fix (3), a mobile action on a closed intervention returns 403 'Questo intervento non ti è assegnato' instead of 409 'già chiuso'. UI mobile 390 (/cr/op/{token}): buttons match the state on all five setup interventions. SEGNALATO+confermata shows conferma/partito/arrivato. SUL_POSTO shows conferma (assignment not yet confirmed) and risolto only. PRESO_IN_CARICO shows partito/arrivato. CHIUSO shows no actions. Clicking PARTITO on SEGNALATO gives the toast and moves the state to SQUADRA INVIATA with arrivato/risolto shown; RISOLTO leaves only AGGIORNA. No horizontal overflow. UI desktop 1920: the bell dropdown closes on outside click, Escape and a second toggle; side tabs are 28px tall; the Interventi list defaults to the table. At 390 it defaults to cards, the bell list fits in the viewport and an outside tap closes it. No JS page errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/cr-mobile/{token}/interventions/{iid}/action", "issue": "Regression caused by the 'completata on close' fix. On a chiuso/annullato intervention, the active-assignment lookup (stato in ACTIVE_ASG) now finds nothing, so the endpoint returns 403 'Questo intervento non ti è assegnato' before reaching the CLOSED check (409 'Intervento già chiuso o annullato'). The operator gets a misleading message. Fix in m_action: move the `if it['stato'] in CLOSED: 409` check BEFORE the assignment check, or look up the assignment including 'completata' for that check. Old test_controlroom_phase3_itv.py::TestMobile::test_actions fails on this (expects 409)."},
+      {"endpoint": "POST /api/cr-mobile/{token}/interventions/{iid}/action", "issue": "Still not fully atomic when steps are valid: set_asg (confirm) runs before the transitions loop. If a transition then fails (e.g. a 409 version race with the centrale), the assignment stays confirmed with a diary row. Low impact."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_controlroom_phase3_retest171.py", "/app/backend/tests/test_controlroom_phase3_itv.py", "/app/backend/tests/test_controlroom_phase3_edge.py", "/app/backend/tests/ui_cr171_setup.py", "/app/test_reports/pytest/cr_phase3_retest.xml"],
+  "action_items": [
+    "In m_action (controlroom_itv.py ~l.726-731), check it['stato'] in CLOSED → 409 before the 'non ti è assegnato' 403, so actions on closed interventions keep returning 409."
+  ],
+  "critical_code_review_comments": [
+    "controlroom_itv.py is 795 lines (>700): consider splitting the mobile endpoints (m_*) into their own module.",
+    "m_action: the assignment confirm runs before the multi-step transitions, so a partial failure leaves the assignment confirmed but the state unchanged. Consider validating the version/steps first or confirming after the transitions.",
+    "The CR suites share one event and assume sequential state. Under the default pytest.ini (-n 2 --dist loadscope) the phase3_itv/edge modules each create their own W fixture in the same event, so overlap counts and INT code sequences race (5 spurious failures in a parallel run). Run them with -n 0."
+  ],
+  "updated_files": ["/app/backend/tests/test_controlroom_phase3_retest171.py", "/app/backend/tests/ui_cr171_setup.py"],
+  "success_rate": {"backend": "97% (72/74 serial runs; 1 real regression counted in 2 tests)", "frontend": "100%"},
+  "seed_data_creation": "Only TEST_ data in org A event 2ffc1b48…: TEST_P3 sectors/posts/resources (fixture-cleaned), the TEST_UI171 Op resource+invite (deleted) and TEST_UI171 interventions INT-107..111 (annulled/closed; no delete endpoint exists). The test_cr_c role is restored after the tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run the CR suites with `-n 0` (they share event state). The mobile UI needs the cookie banner dismissed ('Reject non-essential') before clicks. /app/backend/tests/ui_cr171_setup.py setup|cleanup creates an invite plus interventions in several states for the /cr/op/{token} UI checks. Dashboard: /control-room?event=2ffc1b48b9f34bf9901da7aa1eb7f0b7 as test_cr_a."
+}

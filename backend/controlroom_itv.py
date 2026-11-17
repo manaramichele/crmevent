@@ -724,11 +724,11 @@ def attach(r, db, deps, require_active, H):
     async def m_action(token: str, iid: str, body: MobileActionIn):
         inv, x, (oid, name) = await mctx(token)
         it = await get_itv(inv["org_id"], inv["event_id"], iid)
+        if it["stato"] in CLOSED:
+            raise HTTPException(status_code=409, detail="Intervento già chiuso o annullato dalla Control Room")
         a = next((a for a in it.get("assignments") or [] if a["resource_id"] == x["id"] and a["stato"] in ACTIVE_ASG), None)
         if not a:
             raise HTTPException(status_code=403, detail="Questo intervento non ti è assegnato")
-        if it["stato"] in CLOSED:
-            raise HTTPException(status_code=409, detail="Intervento già chiuso o annullato dalla Control Room")
         if body.action == "rifiuta":
             if not body.note:
                 raise HTTPException(status_code=400, detail="Indica la motivazione del rifiuto")

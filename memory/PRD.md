@@ -1040,3 +1040,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: iteration_168 (15+14 backend, UI) → 6 correzioni → iteration_169 39/39, UI ok. Dati test TEST_CR rimossi; ricrearli con backend/scripts/seed_cr_test.py.
 - Prossime fasi: 3 interventi completi/assegnazioni/notifiche/accesso mobile e check-in operatori; 4 GPS reale/diario/report PDF-Excel; 5 test completi.
 
+
+
+## Control Room — Fase 3 (2026-11-17) — NON pubblicato
+- Scelte utente: invito operatori senza account = link personale + QR condiviso manualmente (nessun invio automatico); segnale acustico critici disattivato di default (toggle per browser).
+- backend/controlroom_itv.py (agganciato da controlroom_ops.attach): interventi con codice atomico INT-001 (cr_counters), 11 tipologie configurabili (itv_types in cr_settings), priorità bassa/media/alta/critica, flusso stati con history, annullo con motivo, riapertura/forzatura solo responsabile con motivo/nota, chiusura solo responsabile, orari server; posizione (coordinate/postazione/settore/km/riferimento, da_confermare, postazione più vicina ≤1,5 km); assegnazioni NON CONFERMATA→CONFERMATA (app o via radio)/RIFIUTATA/REVOCATA/COMPLETATA, risorsa impegnata (configurabile), mezzi enti esterni con autorizzazione + conferma accordo, sovrapposizioni; allegati foto privati (magic bytes, max 8 MB); note sanitarie separate solo responsabile; comunicazioni (operatore/squadra/settore/coordinatori/tutti) con consegna/lettura reali; notifiche con non lette; diario operativo + export CSV; ruoli CR per evento (cr_roles: responsabile/coordinatore con settori/visualizzatore; admin = responsabile); inviti mobile (token hash, scadenza, revoca, ruolo operatore/coordinatore, priorità opzionale).
+- API mobile pubblica /api/cr-mobile/{token}: home, checkin, reports (client_id idempotente), azioni con avanzamento lineare, foto, messaggi.
+- Frontend: viste Operativa/Interventi (tabella/schede, filtri, ordinamento)/Comunicazioni/Diario; banner + flash critici; campanella; "Intervento qui" sulla mappa; ItvDetail; Ruoli e accessi con QR; pagina operatore /cr/op/:token.
+- Test: iteration_170 (21/21 + UI) → correzioni → iteration_171 (fix verificati) → ultimo fix 409 su intervento chiuso verificato con pytest. Dati TEST_CR rimossi (seed: backend/scripts/seed_cr_test.py).
+- Prossime fasi: 4 GPS reale, report PDF/Excel, statistiche; 5 test completi.
