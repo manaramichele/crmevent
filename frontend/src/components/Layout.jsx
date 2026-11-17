@@ -95,7 +95,6 @@ const withIscritti = (items, on) => {
 const PLATFORM_NAV = [
   { to: "/piattaforma", label: "Dashboard", icon: ShieldCheck, id: "piattaforma", end: true, activeIf: (l) => l.pathname === "/piattaforma" && new URLSearchParams(l.search).get("sezione") !== "organizzazioni" },
   { to: "/piattaforma?sezione=organizzazioni", label: "Organizzazioni", icon: Building2, id: "piattaforma-organizzazioni", activeIf: (l) => (l.pathname === "/piattaforma" && new URLSearchParams(l.search).get("sezione") === "organizzazioni") || l.pathname.startsWith("/piattaforma/org/") },
-  { to: "/piattaforma/moduli", label: "Moduli e Attivazioni", icon: Boxes, id: "piattaforma-moduli" },
   { to: "/piattaforma/assistenza-video", label: "Prenotazioni assistenza", icon: Headset, id: "assistenza-video", badge: "assistenza" },
   { to: "/piattaforma/demo", label: "Prenotazioni demo", icon: CalendarDays, id: "piattaforma-demo", badge: "demo" },
   { to: "/piattaforma/richieste-demo", label: "Richieste demo", icon: Inbox, id: "piattaforma-richieste-demo" },

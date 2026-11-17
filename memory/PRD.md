@@ -1065,6 +1065,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Moduli e Attivazioni come 4ª scheda di Piattaforma CRMEvent (2026-11-17)
+- Platform.jsx: SEZIONI + "moduli" → <ModulesAdmin embedded /> (stesso componente; parametri org/tab mantengono sezione=moduli). Voce laterale rimossa; /piattaforma/moduli e /piattaforma/event-planner-map reindirizzano alla scheda.
+
+
 ## Menu: "Organizzatori" → "Lead organizzatori" (2026-11-17)
 - La voce di Marketing & Admin era la ricerca lead (LeadFinder), non un duplicato di Organizzazioni: su richiesta utente solo rinominata. URL /marketing/organizzatori invariato.
 
