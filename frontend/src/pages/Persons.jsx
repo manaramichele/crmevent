@@ -68,7 +68,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (tab === "referenti_aziende" && !r.is_referente) return false;
     if (tab === "staff" && !r.is_staff) return false;
     if (tab === "volontari" && !r.is_volontario) return false;
-    if (tab === "da_classificare" && (r.is_referente || r.is_staff || r.is_volontario)) return false;
+    if (tab === "da_classificare" && !r.is_da_classificare && (r.is_referente || r.is_staff || r.is_volontario)) return false;
     if (evFilter !== "all" && !(r.eventi_ids || []).includes(evFilter) && !(r.preferenze || []).some((p) => p.evento_id === evFilter)) return false;
     if (prefFilter !== "all" && !prefsOf(r).some((p) => (p.preferenza || "Non indicata") === prefFilter)) return false;
     if (teamFilter !== "all" && !asg(r).some((a) => (teamFilter === "none" ? !a.team_id : a.team_id === teamFilter))) return false;
@@ -148,7 +148,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         {leaderIds.has(r.id) && <Crown className="w-3.5 h-3.5 text-[#D4AF37]" aria-label="Team Leader" data-testid={`leader-crown-${r.id}`} />}
         {st && <StatusBadge color="blue">Staff</StatusBadge>}{vo && <StatusBadge color="green">Volontario</StatusBadge>}
         {r.is_referente && !isStaffTab && <StatusBadge color="tiffany">Referente</StatusBadge>}
-        {!st && !vo && !(r.is_referente && !isStaffTab) && <span className="text-slate-400">—</span>}
+        {(isStaffTab ? asg(r).some((a) => a.categoria === "da_classificare") : r.is_da_classificare) && <StatusBadge color="orange">Da classificare</StatusBadge>}
+        {!st && !vo && !(r.is_referente && !isStaffTab) && !r.is_da_classificare && <span className="text-slate-400">—</span>}
       </div>
     );
   };
@@ -329,16 +330,27 @@ export default function Persons({ mode = "anagrafiche" }) {
   const [mask, setMask] = useState(null);
 
   const companyOpts = companies.map((c) => ({ value: c.id, label: c.nome }));
-  const personFields = [
+  const personFields = mode === "staff" ? [
+    { name: "nome", label: "Nome", required: true }, { name: "cognome", label: "Cognome" },
+    { name: "email", label: "Email", type: "email" }, { name: "cellulare", label: "Cellulare", type: "tel" },
+    { name: "telefono", label: "Telefono", type: "tel" }, { name: "ruolo", label: "Qualifica" },
+    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "eta", label: "Età", type: "age", virtual: true },
+    { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" },
+    { name: "cerca_indirizzo", type: "address_search", virtual: true },
+    { name: "indirizzo", label: "Indirizzo e numero civico", full: true }, { name: "cap", label: "CAP" }, { name: "citta", label: "Località / Comune" },
+    { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
+    { name: "note", label: "Note", type: "textarea", full: true },
+  ] : [
     { name: "nome", label: "Nome", required: true }, { name: "cognome", label: "Cognome" },
     { name: "ruolo", label: "Qualifica" }, { name: "email", label: "Email", type: "email" },
     { name: "email_secondaria", label: "Email secondaria", type: "email" }, { name: "cellulare", label: "Cellulare", type: "tel" },
     { name: "telefono", label: "Telefono", type: "tel" }, { name: "azienda_id", label: "Azienda principale", type: "select", options: companyOpts },
-    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "linkedin", label: "LinkedIn" },
+    { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" }, { name: "linkedin", label: "LinkedIn" },
     { name: "indirizzo", label: "Indirizzo" }, { name: "cap", label: "CAP" }, { name: "citta", label: "Città" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "foto_url", label: "Foto (URL)" }, { name: "note", label: "Note", type: "textarea", full: true },
-  ].filter((f) => mode !== "staff" || !["email_secondaria", "azienda_id"].includes(f.name));
+  ];
+  const daClassificare = rows.filter((r) => r.is_da_classificare || !(r.is_referente || r.is_staff || r.is_volontario)).length;
   const submitPerson = async (form) => {
     if (editing) { await api.put(`/persons/${editing.id}`, form); toast.success("Persona aggiornata"); }
     else { await api.post("/persons", form); toast.success("Persona creata"); }
@@ -452,7 +464,7 @@ export default function Persons({ mode = "anagrafiche" }) {
           <TabsList className="mb-4 flex-wrap h-auto">
             <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
             <TabsTrigger value="volontari" data-testid="tab-volontari">Volontari</TabsTrigger>
-            <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare</TabsTrigger>
+            <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare{daClassificare > 0 && <span className="ml-1.5 rounded-full bg-amber-100 text-amber-800 px-1.5 text-[11px] font-bold" data-testid="da-classificare-count">{daClassificare}</span>}</TabsTrigger>
             <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
             <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
           </TabsList>

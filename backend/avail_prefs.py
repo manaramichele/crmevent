@@ -38,7 +38,7 @@ def build(db, deps: dict):
         q = {"org_id": org_id, **({"persona_id": {"$in": person_ids}} if person_ids is not None else {})}
         out = {}
         async for a in db.availabilities.find(q, {"_id": 0, "id": 1, "persona_id": 1, "evento_id": 1, "preferenza_attivita": 1, "preferenza_altro": 1,
-                                                  "stato": 1, "updated_at": 1, "created_at": 1}):
+                                                  "stato": 1, "days": 1, "updated_at": 1, "created_at": 1}):
             k = (a.get("persona_id"), a.get("evento_id"))
             if k not in out or (a.get("updated_at") or a.get("created_at") or "") > (out[k].get("updated_at") or out[k].get("created_at") or ""):
                 out[k] = a
@@ -48,7 +48,7 @@ def build(db, deps: dict):
         evn = {e["id"]: e.get("nome") for e in await db.events.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1}).to_list(5000)}
         out = defaultdict(list)
         for (pid, eid), a in (await latest_avs(org_id, person_ids)).items():
-            out[pid].append({"evento_id": eid, "evento_nome": evn.get(eid), "preferenza": pref_label(a), "availability_id": a["id"], "stato": a.get("stato")})
+            out[pid].append({"evento_id": eid, "evento_nome": evn.get(eid), "preferenza": pref_label(a), "availability_id": a["id"], "stato": a.get("stato"), "days": a.get("days") or []})
         return out
 
     @r.post("/persons/mansione-bulk")

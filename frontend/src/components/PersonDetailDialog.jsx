@@ -215,7 +215,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                       <Row label="Cellulare" value={p.cellulare} /><Row label="Telefono" value={p.telefono} />
                       <Row label="Data di nascita" value={p.data_nascita} /><Row label="Età" value={calcAge(p.data_nascita) != null ? `${calcAge(p.data_nascita)} anni` : null} />
                       <Row label="Codice Fiscale" value={p.codice_fiscale ? <span className="font-mono">{p.codice_fiscale}</span> : null} />
-                      <Row label="LinkedIn" value={p.linkedin} />
+                      <Row label="Luogo di nascita" value={p.luogo_nascita} />
                       <Row label="Indirizzo" value={p.indirizzo} /><Row label="CAP" value={p.cap} /><Row label="Città" value={p.citta} />
                       <Row label="Provincia" value={p.provincia} /><Row label="Regione" value={p.regione} /><Row label="Nazione" value={p.nazione} />
                     </div>

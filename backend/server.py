@@ -44,6 +44,7 @@ import brevo_tracker
 import iscritti
 import calendario_italia
 import avail_prefs
+import anagrafica
 import planner
 import addons
 import eventmap
@@ -1141,6 +1142,7 @@ class Person(BaseModel):
     azienda_id: Optional[str] = None
     data_nascita: Optional[str] = None
     codice_fiscale: Optional[str] = None
+    luogo_nascita: Optional[str] = None
     indirizzo: Optional[str] = None
     cap: Optional[str] = None
     citta: Optional[str] = None
@@ -2000,6 +2002,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "is_staff": bool(cats & {"staff", "collaboratore"}),
                     "is_volontario": "volontario" in cats,
                     "is_team": "team" in cats,
+                    "is_da_classificare": "da_classificare" in cats,
                     "aziende_nomi": aziende,
                     "teams_nomi": teams_nomi,
                     "eventi_nomi": eventi_nomi,
@@ -10172,6 +10175,7 @@ async def migrate_memberships():
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
+    logger.info(f"availability -> staff migration: {await ANA['migrate']()}")
     if not await db.schema_meta.find_one({"id": "fic_manual_backlog_v1"}):
         # pagamenti gi\u00e0 registrati prima della fatturazione in bozza: solo generazione manuale dal pulsante (mai automatica)
         await db.invoices.update_many({"kind": {"$in": ["saas_subscription", "marketplace"]}, "fic_document_id": None, "fic_auto": {"$exists": False}},
@@ -11111,6 +11115,8 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
     mismatch = {}
     if person:
         fill = {}
+        if cf_norm and not person.get("luogo_nascita") and ANA["birth_place_from_cf"](cf_norm, birth):
+            await db.persons.update_one({"id": person["id"], "org_id": org_id}, {"$set": {"luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth)}})
         for k in ("email", "cellulare", "data_nascita", "cognome", "codice_fiscale"):
             cur, new = person.get(k), submitted.get(k)
             if new and not cur:
@@ -11124,6 +11130,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         pdoc = await _create("persons", {"org_id": org_id, "nome": submitted["nome"], "cognome": submitted["cognome"],
                                          "email": email or None, "cellulare": cell or None,
                                          "data_nascita": submitted["data_nascita"], "codice_fiscale": cf_norm or None,
+                                         "luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth) if cf_norm else None,
                                          "tag": ["disponibilita"],
                                          "provenienza": {"tipo": "link_disponibilita", "at": now_iso(), "evento_id": link["evento_id"], "link_code": code},
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
@@ -11161,6 +11168,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
             "compilation_lang": lang,
             "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
+    await ANA["ensure_link"](org_id, pid, event["id"], await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0}))
     # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
     try:
         org = await db.organizations.find_one({"id": org_id}, {"_id": 0}) or {}
@@ -14013,6 +14021,8 @@ app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
 app.include_router(AVP["router"])
+ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label})
+app.include_router(ANA["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})
