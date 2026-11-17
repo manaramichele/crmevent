@@ -1065,6 +1065,14 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Control Room: pagina di presentazione + video dimostrativo (2026-11-17)
+- Scelta utente: GPS mostrato nel video come simulazione etichettata ("Simulazione dimostrativa GPS"); nella pagina la voce GPS è "disponibile prossimamente".
+- ControlRoom.jsx: se nessun evento attivo o modulo disattivato → InfoPage di AddonHub (stesso componente di Event Planner) con video, testi, prezzo da backend (price_net), stato marketplace, CTA /marketplace?servizio=control-room (nascosta se disattivato). Con almeno un evento attivo → dashboard operativa invariata.
+- Video: scripts/cr_video/seed.py (dati demo su Demo org/demo_evt_bcr: 3 settori, 6 postazioni, risorse, 1 intervento simulato) + record.py (Playwright, UI reale, badge "Dimostrazione · dati fittizi", schermata finale logo + www.crmevent.it) → /media/control-room-demo.mp4 (56s 1920x1080), poster, /media/brevo/control-room-anteprima.jpg. Concessione demo revocata (dati demo conservati).
+- Marketing: promo material "control-room" (pubblicato, pagina /video/control-room); POST /api/promo-materials/{slug}/media (SA) + pulsanti "Sostituisci video/miniatura" in PromoCard; validazione estensioni/percorsi; versioni includono mp4/poster.
+- Test: iteration_178 (tutto ok) + correzioni minori (validazione media, CTA nascosta se disattivato, anteprima email brandizzata).
+
+
 ## Staff e Volontari: maschera unica e provenienza (2026-11-17)
 - Scelta utente: Ruolo Staff/Volontario per ogni evento (come prima).
 - PersonMask.jsx: stessa maschera per matita, "Aggiungi Staff", "Aggiungi Volontario" (A anagrafica completa, B provenienza + preferenze dai link, C eventi con evento ricercabile, ruolo, preferenza, team, mansione; Aggiungi evento/rimuovi; conferma modifiche non salvate; retry senza doppioni).

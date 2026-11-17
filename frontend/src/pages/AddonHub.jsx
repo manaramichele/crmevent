@@ -36,7 +36,7 @@ export function InfoPage({ info, s }) {
           <div className="font-semibold text-slate-900"><PriceLine info={info} s={s} /></div>
           <div className="text-slate-500" data-testid="addon-info-plan">{info.product === "controlroom" ? `Stato: ${s.module_disabled ? "disattivata" : "non attiva"} per la tua organizzazione · non inclusa negli abbonamenti, si attiva per singolo evento.` : s.included > 0 ? `Il tuo piano include ${info.name} su ${s.included} ${s.included === 1 ? "evento" : "eventi"}: già tutti assegnati.` : `Il tuo piano attuale non include eventi ${info.name}.`}</div>
         </div>
-        <Link to={`/marketplace?servizio=${info.slug}`} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#0ABAB5] px-6 font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="addon-info-marketplace"><Store className="w-4 h-4" />Attiva dal Marketplace</Link>
+        {!s.module_disabled && <Link to={`/marketplace?servizio=${info.slug}`} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#0ABAB5] px-6 font-semibold text-slate-900 hover:bg-[#09A8A3]" data-testid="addon-info-marketplace"><Store className="w-4 h-4" />Attiva dal Marketplace</Link>}
       </div>
     </div>
   );

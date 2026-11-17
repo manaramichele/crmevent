@@ -174,7 +174,7 @@ def build(db, deps):
 
     async def _snapshot(m, user, reason):
         await db.promo_material_versions.insert_one({"id": uuid.uuid4().hex, "slug": m["slug"], "version": m.get("version", 1), "reason": reason,
-                                                     "data": {k: m.get(k) for k in FIELDS + ["status"]}, "created_at": _now(),
+                                                     "data": {k: m.get(k) for k in FIELDS + ["status", "mp4", "webm", "poster"]}, "created_at": _now(),
                                                      "created_by": user.get("email")})
 
     @router.put("/promo-materials/{slug}")
@@ -193,10 +193,16 @@ def build(db, deps):
     async def admin_media(slug: str, body: MediaIn, user: dict = Depends(sa_dep)):
         m = await _get(slug)
         upd = {k: v for k, v in body.model_dump().items() if v}
-        if not upd or any(not re.fullmatch(r"(https://[^\s\"'<>]+|/(api|media)/[A-Za-z0-9._/\-]+)", v) for v in upd.values()):
-            raise HTTPException(status_code=400, detail="File non valido: carica un MP4 o un JPG")
-        if "poster" in upd:
-            upd["preview"] = upd["poster"]
+        ext = {"mp4": (".mp4",), "poster": (".jpg", ".jpeg", ".png")}
+        site = _site(None)
+        def ok(k, v):
+            if ".." in v or not re.fullmatch(r"(https://[^\s\"'<>]+|/(api|media)/[A-Za-z0-9._/\-]+)", v):
+                return False
+            if v.startswith("https://") and not v.startswith(site + "/api/"):
+                return False
+            return not v.startswith("/media/") or v.lower().endswith(ext[k])
+        if not upd or any(not ok(k, v) for k, v in upd.items()):
+            raise HTTPException(status_code=400, detail="File non valido: carica un MP4 per il video e un JPG o PNG per la miniatura")
         await _snapshot(m, user, "media")
         await db.promo_materials.update_one({"slug": slug}, {"$set": {**upd, "webm": None if "mp4" in upd else m.get("webm"), "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
         return await _get(slug)
@@ -221,7 +227,7 @@ def build(db, deps):
         if not v:
             raise HTTPException(status_code=404, detail="Versione non trovata")
         await _snapshot(m, user, "ripristino")
-        await db.promo_materials.update_one({"slug": slug}, {"$set": {**{k: v["data"].get(k) for k in FIELDS}, "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
+        await db.promo_materials.update_one({"slug": slug}, {"$set": {**{k: v["data"].get(k) for k in FIELDS}, **{k: v["data"][k] for k in ("mp4", "webm", "poster") if v["data"].get(k)}, "updated_at": _now(), "updated_by": user.get("email")}, "$inc": {"version": 1}})
         return await _get(slug)
 
     return {"router": router, "ensure": ensure}
