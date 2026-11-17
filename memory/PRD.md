@@ -1065,6 +1065,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Menu: "Organizzatori" → "Lead organizzatori" (2026-11-17)
+- La voce di Marketing & Admin era la ricerca lead (LeadFinder), non un duplicato di Organizzazioni: su richiesta utente solo rinominata. URL /marketing/organizzatori invariato.
+
+
 ## Attivazione gratuita Marketplace: Control Room aggiunto, Planimetrie & Mappe ritirato (2026-11-17)
 - Finestra esistente "Attivazione gratuita" (Piattaforma → Marketplace → Acquisti): Control Room dopo Event Map; scelto Control Room compare il campo Evento (singolo o "Tutti gli eventi attuali"). Backend marketplace admin_grant → modules_hub.grant_cr (controlroom_purchases source superadmin, 0 €, audit), errore se già attiva.
 - Planimetrie & Mappe: seed rimosso, servizio marcato retired/visible=False (migrazione retire_maps_v1), escluso da catalogo admin/org e dalla concessione; nessun dato cancellato.

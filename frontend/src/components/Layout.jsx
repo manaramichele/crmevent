@@ -116,7 +116,7 @@ const PLATFORM_NAV = [
 const PLATFORM_PATHS = ["/piattaforma", "/supporto", "/audit"];
 
 const MARKETING_NAV = [
-  { to: "/marketing/organizzatori", label: "Organizzatori", icon: Building2, id: "organizzatori" },
+  { to: "/marketing/organizzatori", label: "Lead organizzatori", icon: Building2, id: "organizzatori" },
   { to: "/marketing/brevo", label: "Marketing", icon: MailCheck, id: "marketing-brevo" },
   { to: "/marketing/home-page", label: "Home Page", icon: Home, id: "marketing-home-page" },
   { to: "/marketing/social", label: "Social", icon: Megaphone, id: "social" },
