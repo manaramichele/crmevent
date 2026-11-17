@@ -606,6 +606,13 @@ async def _create(coll, data):
     return doc
 
 
+async def _assert_refs_in_org(org_id: str, data: dict):
+    for key, coll, label in (("evento_id", "events", "Evento"), ("persona_id", "persons", "Persona"), ("team_id", "teams", "Team")):
+        v = data.get(key)
+        if v and not await db[coll].find_one({"org_id": org_id, "id": v}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail=f"{label} non trovato in questa organizzazione")
+
+
 async def _list(coll, query=None):
     return await db[coll].find(query or {}, {"_id": 0}).sort("created_at", -1).to_list(5000)
 
@@ -1529,6 +1536,9 @@ def crud_routes(path, coll, model, org_scoped=True):
                 await _assert_event_operational(user["org_id"], data["evento_id"])
             if coll == "staff":
                 await SAAS["check_people"](user["org_id"], data.get("persona_id"))
+                if await db.staff.find_one({"org_id": user["org_id"], "persona_id": data.get("persona_id"), "evento_id": data.get("evento_id"), "categoria": data.get("categoria") or "staff"}, {"_id": 1}):
+                    raise HTTPException(status_code=409, detail="La persona è già associata a questo evento con lo stesso ruolo")
+            await _assert_refs_in_org(user["org_id"], data)
         doc = await _create(coll, data)
         try:
             await BRT["on_created"](user, coll, user["org_id"])
@@ -1553,6 +1563,7 @@ def crud_routes(path, coll, model, org_scoped=True):
         clean["updated_at"] = now_iso()
         await _assert_org_operational(user["org_id"])
         _assert_ev_allowed(user, clean.get("evento_id"))
+        await _assert_refs_in_org(user["org_id"], clean)
         if coll in ("staff", "shifts"):
             _assert_team_allowed(user, clean.get("team_id"))
         if coll == "staff" and "team_id" in clean and not (user.get("perm") or {"admin": True}).get("admin"):

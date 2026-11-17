@@ -39,7 +39,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const [teamFilter, setTeamFilter] = useState("all");
   const [mansFilter, setMansFilter] = useState("all");
   const [provFilter, setProvFilter] = useState("all");
-  const asg = (r) => (r.assegnazioni || []).filter((a) => evFilter === "all" || a.evento_id === evFilter);
+  const TAB_CATS = { staff: ["staff", "collaboratore"], volontari: ["volontario"] }[tab];
+  const asg = (r) => (r.assegnazioni || []).filter((a) => (evFilter === "all" || a.evento_id === evFilter) && (!TAB_CATS || TAB_CATS.includes(a.categoria)));
   const evName = (id) => events.find((e) => e.id === id)?.nome || "—";
   const teamName = (id) => teams.find((t) => t.id === id)?.nome;
   const [bulkRole, setBulkRole] = useState("");
@@ -97,7 +98,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const allSel = displayRows.length > 0 && selectedRows.length === displayRows.length;
   const toggleAll = () => setSel(allSel ? new Set() : new Set(displayRows.map((r) => r.id)));
   const pick = (r) => (onInvite || isStaffTab) && <input type="checkbox" className="accent-tiffany w-4 h-4" checked={sel.has(r.id)} onChange={() => flip(r.id)} onClick={(e) => e.stopPropagation()} aria-label="Seleziona" data-testid={`select-invite-${r.id}`} />;
-  const prefOptions = [...new Set(rows.flatMap((r) => (r.preferenze || []).filter((p) => evFilter === "all" || p.evento_id === evFilter).map((p) => p.preferenza || "Non indicata")))].sort((a, b) => a.localeCompare(b, "it"));
+  const prefOptions = [...new Set(rows.flatMap((r) => prefsOf(r).map((p) => p.preferenza || "Non indicata")))].sort((a, b) => a.localeCompare(b, "it"));
   const eventFor = (r) => {
     if (evFilter !== "all") return evFilter;
     const ps = prefsOf(r);

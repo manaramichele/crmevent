@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -25,7 +25,7 @@ function EventPicker({ value, events, onChange, testid }) {
           <span className={`truncate ${cur ? "text-slate-900" : "text-slate-400"}`}>{cur?.nome || "Seleziona evento…"}</span><ChevronsUpDown className="h-4 w-4 shrink-0 text-slate-400" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] min-w-[240px] p-0" align="start">
+      <PopoverContent className="w-[--radix-popover-trigger-width] min-w-[240px] p-0 z-[200]" align="start">
         <Command>
           <CommandInput placeholder="Cerca evento…" data-testid={`${testid}-search`} />
           <CommandList><CommandEmpty>Nessun evento</CommandEmpty>
@@ -71,11 +71,12 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
       .map((a) => ({ key: a.id, id: a.id, evento_id: a.evento_id, categoria: a.categoria === "collaboratore" ? "staff" : a.categoria, team_id: a.team_id || "", ruolo: a.ruolo || "", preferenza: a.preferenza || "", stato: a.stato, orig: a.categoria })),
   }), [person]); // eslint-disable-line react-hooks/exhaustive-deps
   const [data, setData] = useState(initial.data);
-  const [rows, setRows] = useState(initial.rows);
+  const [rows, setRows] = useState(initial.rows.length || person ? initial.rows : [blankRow(defaultCategoria)]);
+  const created = useRef(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  useEffect(() => { setData(initial.data); setRows(initial.rows); }, [initial]);
-  const dirty = JSON.stringify({ data, rows }) !== JSON.stringify(initial);
+  useEffect(() => { setData(initial.data); setRows(initial.rows.length || person ? initial.rows : [blankRow(defaultCategoria)]); }, [initial]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = JSON.stringify({ data, rows: rows.filter((r) => r.evento_id || r.id) }) !== JSON.stringify(initial);
   const close = () => { if (!dirty || window.confirm("Ci sono modifiche non salvate. Vuoi chiudere senza salvare?")) onClose(); };
   const availPref = (eid) => [...new Set((person?.preferenze || []).filter((p) => p.evento_id === eid).map((p) => p.preferenza).filter(Boolean))].join(", ");
   const prov = person ? (person.provenienza_tipo || "non_determinata") : "manuale";
@@ -89,12 +90,15 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
     setBusy(true);
     try {
       const body = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v === "" ? null : v]));
-      const pid = person ? (await api.put(`/persons/${person.id}`, body), person.id) : (await api.post("/persons", body)).data.id;
+      const pid = person?.id || created.current || (await api.post("/persons", body)).data.id;
+      if (person) await api.put(`/persons/${person.id}`, body);
+      else if (created.current) await api.put(`/persons/${pid}`, body);
+      created.current = pid;
       const keep = new Set(rows.filter((r) => r.id).map((r) => r.id));
       for (const a of initial.rows) if (!keep.has(a.id)) await api.delete(`/staff/${a.id}`);
       for (const r of rows) {
-        const payload = { persona_id: pid, evento_id: r.evento_id, categoria: r.id && r.orig === "collaboratore" && r.categoria === "staff" ? "collaboratore" : r.categoria, team_id: r.team_id || null, ruolo: r.ruolo || null, preferenza: r.preferenza || null };
-        if (!r.id) await api.post("/staff", { ...payload, stato: "da_contattare" });
+        const payload = { persona_id: pid, evento_id: r.evento_id, categoria: r.id && r.orig === "collaboratore" && r.categoria === "staff" ? "collaboratore" : r.categoria, team_id: r.team_id || "", ruolo: r.ruolo || "", preferenza: r.preferenza || "" };
+        if (!r.id) { const { data: s } = await api.post("/staff", { ...payload, stato: "da_contattare" }); setRows((cur) => cur.map((x) => (x.key === r.key ? { ...x, id: s.id } : x))); r.id = s.id; }
         else {
           const o = initial.rows.find((x) => x.id === r.id);
           if (JSON.stringify(o) !== JSON.stringify(r)) await api.put(`/staff/${r.id}`, { ...payload, stato: r.stato });
@@ -107,7 +111,7 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
 
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="w-[96vw] max-w-3xl max-h-[92dvh] p-0 flex flex-col gap-0" data-testid="person-mask" onInteractOutside={(e) => dirty && e.preventDefault()}>
+      <DialogContent className="w-[96vw] max-w-3xl max-h-[92dvh] p-0 flex flex-col gap-0" data-testid="person-mask" onOpenAutoFocus={(e) => e.preventDefault()} onInteractOutside={(e) => dirty && e.preventDefault()}>
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-slate-100">
           <DialogTitle className="font-display" data-testid="person-mask-title">{person ? `Modifica — ${person.cognome || ""} ${person.nome || ""}` : defaultCategoria === "volontario" ? "Nuovo Volontario" : "Nuovo Staff"}</DialogTitle>
           <DialogDescription>Anagrafica, ruolo, preferenza, team, mansione ed eventi in un'unica maschera.</DialogDescription>
