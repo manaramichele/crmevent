@@ -103,7 +103,7 @@ function GrantForm({ org, product, data, packages, onDone }) {
   );
 }
 
-function ProductPanel({ org, product, d, packages, reload }) {
+export function ProductPanel({ org, product, d, packages, reload }) {
   const revoke = async (gid) => {
     try { await api.post(`/platform/addons/grants/${gid}/revoke`); toast.success("Attivazione revocata: i dati restano conservati"); reload(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -151,7 +151,7 @@ export default function AddonAdmin() {
   const list = (rows || []).filter((r) => !q || (r.nome || "").toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="animate-fade-up space-y-6" data-testid="addon-admin-page">
-      <PageHeader title="Event Planner & Event Map" subtitle="Eventi inclusi nei piani, prezzi, pacchetti, omaggi e promozioni per organizzazione." />
+      <PageHeader title="Moduli e Attivazioni · Event Planner & Event Map" subtitle="Configurazione globale: eventi inclusi nei piani, prezzi, offerte video, omaggi e promozioni. La gestione per singola organizzazione è in Organizzazioni → Moduli e Attivazioni." />
       <ConfigCard onSaved={load} />
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca organizzazione" className="max-w-sm" data-testid="addon-admin-search" />
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">

@@ -6,21 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { GoogleCalendarCard } from "@/components/GoogleCalendarCard";
-import OrgUsers from "@/components/OrgUsers";
 import Account from "@/pages/Account";
 import { isOrgAdmin } from "@/lib/perms";
 import MySubscription from "@/components/MySubscription";
 import MyServices from "@/components/MyServices";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Navigate } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function Profile() {
   const { user } = useAuth();
   const isPw = user?.auth_provider === "password";
   const isSuper = user?.role === "superadmin";
-  const actingOrgId = typeof window !== "undefined" ? localStorage.getItem("acting_org_id") : null;
   const canManageUsers = user?.org_role === "admin_org" || isSuper;
-  const manageOrgId = isSuper ? actingOrgId : (user?.active_org_id || user?.org_id);
   const [cur, setCur] = useState(""); const [np, setNp] = useState(""); const [np2, setNp2] = useState("");
 
   const changePw = async (e) => {
@@ -33,28 +30,24 @@ export default function Profile() {
   const saas = !!user?.saas?.enabled;
   const showSub = (isOrgAdmin(user) || !!user?.permissions?.subscription_manage) && !isSuper && saas;
   const [params, setParams] = useSearchParams();
-  const showServices = !isSuper && !!user?.org_id && (isOrgAdmin(user) || !!user?.permissions?.marketplace_purchase);
-  const tabs = ["account", ...(showSub ? ["abbonamento"] : []), ...(showServices ? ["servizi"] : []), ...(canManageUsers ? ["utenti"] : [])];
+  const showServices = !isSuper && !!user?.org_id && !isOrgAdmin(user) && !!user?.permissions?.marketplace_purchase;
+  const tabs = ["account", ...(showSub ? ["abbonamento"] : []), ...(showServices ? ["servizi"] : [])];
   const req = params.get("tab") === "crediti" ? "abbonamento" : params.get("tab");
   const tab = tabs.includes(req) ? req : "account";
+  if (canManageUsers && req === "utenti") return <Navigate to="/organizzazione/utenti" replace />;
+  if (isOrgAdmin(user) && req === "servizi") return <Navigate to="/organizzazione/moduli" replace />;
 
   return (
     <div className="animate-fade-up space-y-6 max-w-6xl">
-      <PageHeader title="Profilo & Account" subtitle="Il tuo account, abbonamento e fatturazione, utenti e permessi" />
+      <PageHeader title="Profilo & Account" subtitle="Il tuo profilo, la sicurezza dell'accesso e le preferenze personali" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
         <TabsList className="mb-4 w-full sm:w-auto overflow-x-auto justify-start h-auto flex-nowrap" data-testid="profile-tabs">
           <TabsTrigger value="account" className="h-9" data-testid="profile-tab-account">Account</TabsTrigger>
           {showSub && <TabsTrigger value="abbonamento" className="h-9" data-testid="profile-tab-abbonamento">Il mio abbonamento</TabsTrigger>}
           {showServices && <TabsTrigger value="servizi" className="h-9" data-testid="profile-tab-servizi">Servizi aggiuntivi</TabsTrigger>}
-          {canManageUsers && <TabsTrigger value="utenti" className="h-9" data-testid="profile-tab-utenti">Utenti e Permessi</TabsTrigger>}
         </TabsList>
         {showSub && <TabsContent value="abbonamento" className="space-y-4"><MySubscription />{isOrgAdmin(user) && <div className="max-w-3xl"><Account embedded hideCredits /></div>}</TabsContent>}
         {showServices && <TabsContent value="servizi"><MyServices /></TabsContent>}
-        {canManageUsers && <TabsContent value="utenti">
-          <SectionCard title="Utenti e Permessi">
-            {manageOrgId ? <OrgUsers orgId={manageOrgId} /> : <p className="text-sm text-slate-500" data-testid="org-users-no-org">Seleziona un'organizzazione per gestire utenti e accessi.</p>}
-          </SectionCard>
-        </TabsContent>}
         <TabsContent value="account" className="space-y-6">
       <SectionCard title="Dati account">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">

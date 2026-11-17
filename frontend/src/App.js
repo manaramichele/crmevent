@@ -79,6 +79,8 @@ import { captureReferral } from "@/lib/referral";
 import { captureAttribution } from "@/lib/attribution";
 import SeoPage from "@/pages/SeoPage";
 import OperatorMobile from "@/pages/OperatorMobile";
+import OrgHub from "@/pages/OrgHub";
+import PlatformIntegrations from "@/pages/PlatformIntegrations";
 
 captureReferral();
 captureAttribution();
@@ -225,6 +227,10 @@ function Shell() {
         <Route path="/marketing/calendario" element={<Protected><AdminOnly><SocialCalendar /></AdminOnly></Protected>} />
         <Route path="/marketing/impostazioni" element={<Protected><AdminOnly><SocialSettings /></AdminOnly></Protected>} />
         <Route path="/marketing/brevo" element={<Protected><SuperAdminOnly><MarketingBrevo /></SuperAdminOnly></Protected>} />
+        <Route path="/marketing/admin" element={<Protected><SuperAdminOnly><PlatformIntegrations /></SuperAdminOnly></Protected>} />
+        <Route path="/organizzazione" element={<Navigate to="/organizzazione/moduli" replace />} />
+        <Route path="/organizzazione/moduli" element={<Protected><Perm s="admin"><OrgHub key="moduli" section="moduli" /></Perm></Protected>} />
+        <Route path="/organizzazione/utenti" element={<Protected><Perm s="admin"><OrgHub key="utenti" section="utenti" /></Perm></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

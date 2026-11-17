@@ -10,6 +10,8 @@ import StaffInviteDialog from "@/components/StaffInviteDialog";
 import { UserProfileEditDialog } from "@/components/UserProfileEditDialog";
 import { usePermMeta } from "@/pages/Permissions";
 import PlanBadge, { BILLING } from "@/components/PlanBadge";
+import OrgModulesAdmin from "@/components/modules/OrgModulesAdmin";
+import { Boxes } from "lucide-react";
 
 const TYPE_LABEL = { cliente: "Cliente", interna: "Interna", test: "Test" };
 const TYPE_COLOR = { cliente: "tiffany", interna: "green", test: "orange" };
@@ -27,13 +29,14 @@ const TABS = [
   { id: "utenti", label: "Utenti", icon: Users },
   { id: "inviti", label: "Inviti", icon: Mail },
   { id: "eventi", label: "Eventi", icon: CalendarDays },
+  { id: "moduli", label: "Moduli e Attivazioni", icon: Boxes },
   { id: "audit", label: "Audit Log", icon: ScrollText },
 ];
 
 export default function OrgDetail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const [tab, setTab] = useState("dati");
+  const [tab, setTab] = useState(() => (TABS.some((t) => t.id === new URLSearchParams(window.location.search).get("tab")) ? new URLSearchParams(window.location.search).get("tab") : "dati"));
   const [org, setOrg] = useState(null);
   const [form, setForm] = useState({ nome: "", type: "cliente", status: "active", formula: "", is_demo_official: false });
   const [members, setMembers] = useState([]);
@@ -323,6 +326,8 @@ export default function OrgDetail() {
           <p className="text-xs text-slate-400 px-4 py-3 border-t border-slate-100">Stato commerciale per singolo evento. I dati legacy di abbonamento restano separati fino alla migrazione Stripe.</p>
         </div>
       )}
+
+      {tab === "moduli" && <OrgModulesAdmin org={org} />}
 
       {tab === "audit" && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden" data-testid="org-audit-tab">

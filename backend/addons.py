@@ -206,7 +206,12 @@ def build(db, deps: dict):
             "code": "addon_required", "product": product, "slug": SLUG[product],
             "message": f"{PRODUCTS[product]} non è attivo per {what}. Attivalo dal Marketplace per continuare: i dati già creati restano conservati."})
 
+    async def _disabled(org_id: str, product: str) -> bool:
+        return bool(await db.organizations.find_one({"id": org_id, "modules_disabled": product}, {"_id": 1}))
+
     async def is_covered(org_id: str, product: str, event_id: str) -> bool:
+        if await _disabled(org_id, product):
+            return False
         if await _unrestricted(org_id):
             return True
         s = await summary(org_id, product)
@@ -277,6 +282,8 @@ def build(db, deps: dict):
         acts = {a["event_id"]: a for a in s["activations"]}
         evs = await db.events.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1, "data_inizio": 1}).sort("data_inizio", -1).to_list(500)
         sub = s.get("org_subscription")
+        if await _disabled(org_id, s["product"]):
+            return [{**e, "active": False, "assigned": e["id"] in acts, "source": None, "expires_at": None, "module_disabled": True} for e in evs]
         return [{**e, "active": bool(sub) or (e["id"] in acts and acts[e["id"]]["covered"]), "assigned": e["id"] in acts,
                  "source": (acts.get(e["id"]) or {}).get("source") or (("subscription" if sub["source"] == "purchase" else sub["source"]) if sub else None), "expires_at": (acts.get(e["id"]) or {}).get("expires_at")} for e in evs]
 
