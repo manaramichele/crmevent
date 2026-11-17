@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, RadioTower, Handshake, Contact,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning, Map as MapIcon, Film, Boxes, ReceiptText,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning, Map as MapIcon, Film, Boxes, ReceiptText, Home,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
@@ -108,7 +108,6 @@ const PLATFORM_NAV = [
   { to: "/piattaforma/privacy-cookie", label: "Privacy e Cookie", icon: Cookie, id: "piattaforma-privacy-cookie" },
   { to: "/piattaforma/calendario-eventi-italia", label: "Calendario Eventi Italia", icon: CalendarDays, id: "piattaforma-calendario-italia" },
   { to: "/piattaforma/preferenze-volontari", label: "Recupero preferenze volontari", icon: CalendarDays, id: "piattaforma-preferenze" },
-  { to: "/piattaforma/event-planner-demo", label: "Event Planner in homepage", icon: Sparkles, id: "piattaforma-planner-demo" },
   { to: "/piattaforma/integrazione-referenti", label: "Integrazione referenti", icon: Building2, id: "piattaforma-referenti" },
   { to: "/supporto", label: "Supporto", icon: LifeBuoy, id: "supporto" },
   { to: "/audit", label: "Audit Log", icon: ScrollText, id: "audit" },
@@ -119,6 +118,7 @@ const PLATFORM_PATHS = ["/piattaforma", "/supporto", "/audit"];
 const MARKETING_NAV = [
   { to: "/marketing/organizzatori", label: "Organizzatori", icon: Building2, id: "organizzatori" },
   { to: "/marketing/brevo", label: "Marketing", icon: MailCheck, id: "marketing-brevo" },
+  { to: "/marketing/home-page", label: "Home Page", icon: Home, id: "marketing-home-page" },
   { to: "/marketing/social", label: "Social", icon: Megaphone, id: "social" },
   { to: "/marketing/calendario", label: "Calendario editoriale", icon: CalendarRange, id: "social-calendario" },
   { to: "/marketing/impostazioni", label: "Impostazioni Social", icon: SlidersHorizontal, id: "social-impostazioni" },

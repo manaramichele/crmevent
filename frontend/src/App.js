@@ -38,6 +38,7 @@ import PrivacyCookieAdmin from "@/pages/PrivacyCookieAdmin";
 import CalendarioItalia from "@/pages/CalendarioItalia";
 import PreferenzeVolontari from "@/pages/PreferenzeVolontari";
 import PlannerDemoAdmin from "@/pages/PlannerDemoAdmin";
+import HomePageAdmin from "@/pages/HomePageAdmin";
 import PlatformReferenti from "@/pages/PlatformReferenti";
 import Iscritti from "@/pages/Iscritti";
 import AuditLog from "@/pages/AuditLog";
@@ -188,7 +189,8 @@ function Shell() {
         <Route path="/piattaforma/privacy-cookie" element={<Protected><SuperAdminOnly><PrivacyCookieAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/calendario-eventi-italia" element={<Protected><SuperAdminOnly><CalendarioItalia /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/integrazione-referenti" element={<Protected><SuperAdminOnly><PlatformReferenti /></SuperAdminOnly></Protected>} />
-        <Route path="/piattaforma/event-planner-demo" element={<Protected><SuperAdminOnly><PlannerDemoAdmin /></SuperAdminOnly></Protected>} />
+        <Route path="/piattaforma/event-planner-demo" element={<Navigate to="/marketing/home-page?tab=sezioni" replace />} />
+        <Route path="/marketing/home-page" element={<Protected><SuperAdminOnly><HomePageAdmin /></SuperAdminOnly></Protected>} />
         <Route path="/piattaforma/preferenze-volontari" element={<Protected><SuperAdminOnly><PreferenzeVolontari /></SuperAdminOnly></Protected>} />
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
         <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />

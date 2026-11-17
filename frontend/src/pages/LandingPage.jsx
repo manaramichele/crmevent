@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import PlansSection from "@/components/PlansSection";
 import PlannerDemoSection from "@/components/landing/PlannerDemoSection";
 import EventMapSection from "@/components/landing/EventMapSection";
+import EventLogosCarousel from "@/components/landing/EventLogosCarousel";
 import { toast } from "sonner";
 import {
   CalendarDays, Building2, Handshake, UserCog, Users2, Clock, Map as MapIcon, Film, RadioTower,
@@ -289,6 +290,7 @@ export default function LandingPage() {
       </Section>
 
       <PlannerDemoSection />
+      <EventLogosCarousel />
       <EventMapSection />
 
       {/* Come funziona */}
