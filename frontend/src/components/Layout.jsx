@@ -64,7 +64,6 @@ const ORGANIZATION_NAV = [
   { to: "/organizzazione/utenti", label: "Utenti e Permessi", icon: Users, id: "org-utenti", perm: "admin" },
   { to: "/impostazioni", label: "Impostazioni", icon: Settings, id: "impostazioni", perm: "admin" },
 ];
-const ACCOUNT_NAV = [{ to: "/profilo", label: "Profilo & Account", icon: CircleUserRound, id: "account", perm: "*" }];
 // Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
 const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", badge: "ticketsUnread" }];
 
@@ -80,7 +79,6 @@ const orgGroups = (u, access, iscrittiOn, isSuper = false) => [
   { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access) },
   { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access) },
   { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access) },
-  { title: "Account", id: "account", items: ACCOUNT_NAV },
 ].filter((g) => g.items.length);
 
 // Moduli Marketplace attivi: voce di menu dopo "Aziende".

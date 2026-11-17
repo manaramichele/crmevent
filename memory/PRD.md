@@ -1065,6 +1065,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Menu: rimossa voce laterale Profilo & Account (2026-11-17)
+- Gruppo "Account" eliminato dal menu laterale; /profilo resta raggiungibile dal menu utente in alto a destra (desktop e mobile). Utenti e Permessi invariato.
+
+
 ## Moduli e Attivazioni come 4ª scheda di Piattaforma CRMEvent (2026-11-17)
 - Platform.jsx: SEZIONI + "moduli" → <ModulesAdmin embedded /> (stesso componente; parametri org/tab mantengono sezione=moduli). Voce laterale rimossa; /piattaforma/moduli e /piattaforma/event-planner-map reindirizzano alla scheda.
 
