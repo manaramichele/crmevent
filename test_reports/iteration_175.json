@@ -1,0 +1,34 @@
+{
+  "summary": "Tested Duplica evento (backend + UI desktop/mobile). Backend: 7/8 pytest pass (tests/test_event_duplicate.py). Full copy of demo_evt_bcr: 7 teams (new ids, responsabile_id None), 3 maps, 22 activities (da_fare, dates shifted +364d, no persona/responsabile), event fields copied, stato pianificato, no entitlement, duplicated_from set, audit event_duplicated logged; shifts/deals/lodgings/meals/videos/tracks/iscritti/availabilities/pipelines/activations/purchases = 0; original event doc and child counts identical before/after. No-copy flags -> counts {}, edizione None, date unchanged. copy_planner copies only non-archived projects with new ids, original unchanged. Cross-org X-Org-Id 404, unauth 401, nonexistent 404, short name 422, bad date format 422, collaborator restricted to assigned events 403, eventi view-only collaborator 403, collaborator with eventi create on all events 200. UI desktop: Altre -> Duplica evento opens dialog prefilled (name 'Bologna City Run 2026', date 2027-10-18, edition 2027, planner unchecked), confirm disabled for empty name, confirm -> toast 'Nuova edizione creata: ...', dialog closes, list reloads with new row 'Ed. 2027 / Pianificato'. Mobile 390px: Azioni -> Duplica evento visible, dialog fits (bottom sheet), checkbox toggles, confirm works. All created data cleaned up (events + teams/maps/activities/planner_projects + TEST users/memberships).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/events/{id}/duplicate", "issue": "data_inizio matching the regex but not a real date (e.g. '2027-13-45') raises ValueError in date.fromisoformat -> HTTP 500 instead of 400/422. Add a Pydantic field_validator calling date.fromisoformat or catch ValueError -> 400."},
+      {"endpoint": "POST /api/events/{id}/duplicate (copy_planner)", "issue": "Planner projects copied without their planner_bom (distinta materiali), whereas the planner's own 'duplica_da' path calls bom_copy. Consider calling planner_bom copy(org, src_pid, new_pid) for each copied project if BOM should follow."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "DuplicateEventDialog", "issues": ["duplicate-date uses native <input type=date> (browser default picker) instead of the shadcn calendar used elsewhere - minor consistency note", "Events list 'Date' column shows 'Evento 18/10' without year, so original 2026 and the new 2027 edition look identical on date; only 'Ed. 2027' distinguishes them"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_event_duplicate.py", "/app/test_reports/pytest/pytest_event_duplicate.xml"],
+  "action_items": [
+    "Validate data_inizio as real calendar date in DuplicateIn (avoid 500 on '2027-13-45')",
+    "Optional: copy planner_bom for duplicated planner projects",
+    "Optional: show year in events list date column to distinguish editions"
+  ],
+  "critical_code_review_comments": [
+    "event_duplicate.py: rollback on exception deletes events by id without org filter (harmless, uuid) - fine; but audit/ check_limit happen correctly before insert",
+    "Inserts are one-by-one (insert_one in loop) - could use insert_many for large events; fine for current sizes",
+    "Frontend canDup gating mirrors backend (eventi create + events==='all')"
+  ],
+  "updated_files": ["/app/backend/tests/test_event_duplicate.py"],
+  "success_rate": {"backend": "87.5% (7/8)", "frontend": "100%"},
+  "seed_data_creation": "Test seeds TEST_ collaborator users user_test_dup_* + memberships in Demo org inside the test and deletes them in teardown. All duplicated events and their copied teams/event_maps/activities/planner_projects deleted by id. Pre-existing 'TEST_Pisa Run' (other org) and 'Pisa Marathon TEST RESP' not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_event_duplicate.py -p no:xdist -o addopts=''. Desktop selectors exist twice (desktop+mobile) - use ':visible'. SA must set acting_org_id localStorage / org-switcher-select to Demo b7f40862230441b9a0bedabefe8dab49."
+}

@@ -55,8 +55,13 @@ def build(db, deps):
             raise HTTPException(status_code=404, detail="Evento non trovato")
         await check_limit(org, "events")
         days = 0
-        if body.data_inizio and src.get("data_inizio"):
-            days = (date.fromisoformat(body.data_inizio) - date.fromisoformat(src["data_inizio"][:10])).days
+        if body.data_inizio:
+            try:
+                new_start = date.fromisoformat(body.data_inizio)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Data di inizio non valida")
+            if src.get("data_inizio"):
+                days = (new_start - date.fromisoformat(src["data_inizio"][:10])).days
         new = {k: v for k, v in src.items() if k not in EVENT_SKIP}
         for f in DATE_FIELDS:
             new[f] = _shift(src.get(f), days)
@@ -85,9 +90,19 @@ def build(db, deps):
                                                    lambda d: {**d, "stato": "da_fare", "data": _shift(d.get("data"), days), "persona_id": None, "responsabile_id": None,
                                                               "calendar_event_id": None, "gcal_event_id": None})
             if body.copy_planner:
-                counts["planner"] = await _copy("planner_projects", {"org_id": org, "evento_id": event_id, "archiviato": {"$ne": True}}, nid, "evento_id",
-                                                lambda d: {**d, "version": 1, "created_by": user.get("email"), "updated_by": user.get("email")})
+                n = 0
+                for p in await db.planner_projects.find({"org_id": org, "evento_id": event_id, "archiviato": {"$ne": True}}, {"_id": 0}).to_list(200):
+                    pid = uuid.uuid4().hex
+                    await db.planner_projects.insert_one({**p, "id": pid, "evento_id": nid, "version": 1, "created_by": user.get("email"), "updated_by": user.get("email"),
+                                                         "created_at": _now(), "updated_at": _now()})
+                    bom = await db.planner_bom.find_one({"org_id": org, "project_id": p["id"]}, {"_id": 0})
+                    if bom:
+                        await db.planner_bom.insert_one({**bom, "project_id": pid, "copied_from": p["id"]})
+                    n += 1
+                counts["planner"] = n
         except Exception:
+            nps = [p["id"] for p in await db.planner_projects.find({"org_id": org, "evento_id": nid}, {"_id": 0, "id": 1}).to_list(200)]
+            await db.planner_bom.delete_many({"org_id": org, "project_id": {"$in": nps}})
             for c in ("teams", "event_maps", "activities", "planner_projects"):
                 await db[c].delete_many({"org_id": org, "evento_id": nid})
             await db.events.delete_one({"id": nid})

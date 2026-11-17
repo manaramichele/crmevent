@@ -1065,6 +1065,13 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Non fatto: import postazioni da Event Planner, uso Briefing in Control Room.
 
 
+## Duplica evento (2026-11-17)
+- Non era mai stato implementato (era in coda). Ora: Eventi → Azioni (Altre su desktop / Azioni su mobile) → "Duplica evento".
+- backend/event_duplicate.py: POST /api/events/{id}/duplicate {nome, edizione, data_inizio, copy_maps, copy_teams, copy_activities, copy_planner}. Copia configurazione evento (date spostate dello stesso intervallo, stato pianificato, senza entitlement/homepage_logo), percorsi/mappe, team senza responsabile, attività "da fare" senza persone, opzionalmente progetti Event Planner + distinta materiali. Mai: staff/turni, iscritti, sponsor, ospitalità, pagamenti, video/tracce Event Map, crediti/attivazioni, pipeline. Rollback in caso di errore; org attiva, permessi e limiti piano rispettati; audit event_duplicated.
+- Frontend: DuplicateEventDialog.jsx; lista ricaricata dopo la duplicazione. Nessuna pagina dettaglio evento esiste nell'app.
+- Test: iteration_175 (backend 7/8 + UI desktop/mobile) + fix data non valida (400) e copia distinta materiali.
+
+
 ## Marketing → Home Page e carosello loghi eventi (2026-11-17)
 - Scelte utente: la pubblicazione la decide il Super Admin (non l'organizzatore); in pubblico solo il logo (nome evento come alt/title).
 - Voce "Event Planner in homepage" rimossa; nuova /marketing/home-page (solo SA) con tab "Sezioni homepage" (PlannerDemoAdmin: visibilità video + statistiche invariate) e "Carosello loghi eventi". Vecchio URL → redirect.
