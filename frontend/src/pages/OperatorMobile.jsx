@@ -124,6 +124,31 @@ function Msgs({ d, token, reload, back }) {
   );
 }
 
+function OpMap({ d, back }) {
+  const box = useRef(null);
+  useEffect(() => {
+    const pts = [d.post?.lng != null && [[d.post.lng, d.post.lat], "#0ABAB5", d.post.nome], ...d.interventions.filter((i) => i.lng != null && !["chiuso", "annullato"].includes(i.stato)).map((i) => [[i.lng, i.lat], PRIORITY[i.priorita][1], i.codice])].filter(Boolean);
+    const m = new maplibregl.Map({ container: box.current, style: OSM, center: pts[0]?.[0] || [12.5, 42], zoom: pts.length ? 15 : 5 });
+    pts.forEach(([c, col, t]) => new maplibregl.Marker({ color: col }).setLngLat(c).setPopup(new maplibregl.Popup().setText(t)).addTo(m));
+    if (pts.length > 1) m.fitBounds(pts.reduce((b, [c]) => b.extend(c), new maplibregl.LngLatBounds(pts[0][0], pts[0][0])), { padding: 50, maxZoom: 17 });
+    return () => m.remove();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="space-y-3" data-testid="op-map">
+      <button type="button" onClick={back} className="flex items-center gap-1 text-sm text-slate-500"><ArrowLeft className="h-4 w-4" />Indietro</button>
+      <h2 className="text-xl font-bold">Mappa</h2>
+      <div ref={box} className="h-[60vh] w-full overflow-hidden rounded-2xl" />
+      <p className="text-xs text-slate-500">In turchese la tua postazione, colorati i tuoi interventi aperti.</p>
+    </div>
+  );
+}
+
+function Contacts({ d }) {
+  const list = [["Responsabile postazione", d.post?.responsabile, d.post?.telefono], ["Responsabile settore", d.sector?.responsabile, d.sector?.telefono]].filter(([, , t]) => t);
+  if (!list.length) return null;
+  return <div className="space-y-2" data-testid="op-contacts">{list.map(([l, n, t]) => <a key={l} href={`tel:${t}`} className="flex items-center gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-200"><Phone className="h-5 w-5 text-emerald-600" /><div><div className="text-xs text-slate-500">{l}</div><b>{n || t}</b></div></a>)}</div>;
+}
+
 export default function OperatorMobile() {
   const { token } = useParams();
   const [d, setD] = useState(null);
@@ -179,6 +204,8 @@ export default function OperatorMobile() {
           <Big onClick={() => setView("report")} className="bg-red-600 text-white" data-testid="op-new-report"><Siren className="h-6 w-6" />INVIA SEGNALAZIONE</Big>
           <Big onClick={() => setView("mine")} className="bg-white text-slate-900 ring-1 ring-slate-200" data-testid="op-mine-btn"><ClipboardList className="h-6 w-6" />I MIEI INTERVENTI{mineOpen > 0 && <span className="rounded-full bg-red-600 px-2 text-sm text-white">{mineOpen}</span>}</Big>
           <Big onClick={() => setView("msgs")} className="bg-white text-slate-900 ring-1 ring-slate-200" data-testid="op-msgs-btn"><MessageSquare className="h-6 w-6" />MESSAGGI</Big>
+          <Big onClick={() => setView("map")} className="bg-white text-slate-900 ring-1 ring-slate-200" data-testid="op-map-btn"><MapPin className="h-6 w-6" />MAPPA</Big>
+          <Contacts d={d} />
           {d.centrale_tel ? <a href={`tel:${d.centrale_tel}`} className="flex min-h-[64px] items-center justify-center gap-3 rounded-2xl bg-slate-900 text-base font-bold text-white" data-testid="op-call-cr"><Phone className="h-6 w-6" />CHIAMA CONTROL ROOM</a>
             : <div className="rounded-2xl bg-white p-4 text-center text-sm text-slate-500" data-testid="op-call-cr-missing">Numero Control Room non indicato: usa la radio</div>}
           <p className="text-center text-[11px] text-slate-400">In caso di emergenza sanitaria chiama sempre il 112. Accesso personale valido fino al {new Date(d.expires_at).toLocaleDateString("it-IT")}.</p>
@@ -186,6 +213,7 @@ export default function OperatorMobile() {
         {view === "report" && <Report d={d} post={d.post} send={send} back={() => setView("home")} />}
         {view === "mine" && <Mine d={d} act={act} upload={upload} back={() => setView("home")} />}
         {view === "msgs" && <Msgs d={d} token={token} reload={load} back={() => setView("home")} />}
+        {view === "map" && <OpMap d={d} back={() => setView("home")} />}
       </div>
     </div>
   );

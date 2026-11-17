@@ -98,7 +98,8 @@ export default function OpsMap({ apiKey, route, data, hidden, highlight, placing
     const cats = Object.fromEntries(data.settings.categories.map((x) => [x.key, x]));
     data.posts.filter((p) => p.lng != null && !hidden.has(`post:${p.categoria}`)).forEach((p) => {
       const cat = cats[p.categoria] || { color: "#64748B", icon: "MapPin" };
-      const node = el(cat.color, svg(cat.icon), `${p.nome} · ${cat.label || ""}`, `cr-post ${p.presidio === "non_presidiata" ? "ring-4 ring-red-400" : ""}`);
+      const node = el(cat.color, svg(cat.icon), `${p.nome} · ${cat.label || ""} · ${p.presenti}/${p.previsti} operatori · ${p.presidio.replace("_", " ").toUpperCase()}`, "cr-post");
+      node.style.boxShadow = `0 0 0 3px ${{ presidiata: "#16A34A", parziale: "#F59E0B", non_presidiata: "#DC2626", in_attesa: "#94A3B8", non_attiva: "#CBD5E1" }[p.presidio] || "#fff"}, 0 2px 6px rgba(15,23,42,.35)`;
       node.dataset.testid = `cr-map-post-${p.id}`;
       node.addEventListener("click", (e) => { e.stopPropagation(); cb.current.onOpen("posts", p.id); });
       const mk = add([p.lng, p.lat], node, { draggable: canEdit });

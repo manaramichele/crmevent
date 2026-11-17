@@ -8,6 +8,7 @@ from fastapi import Body, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
 import controlroom_itv as ITV
+import controlroom_report as REP
 import event_routes as EVR
 import permissions as P
 
@@ -199,6 +200,9 @@ def attach(r, db, deps, require_active):
         await db.cr_settings.update_one(q(u, eid), {"$inc": {"rev": 1}})
         await db.cr_log.insert_one({"id": uuid.uuid4().hex, "org_id": u["org_id"], "event_id": eid, "at": _now(), "by": u.get("name") or u.get("email"),
                                     "action": action, "entity": entity, "entity_id": eid_obj, "label": label})
+        if entity in ("postazione", "risorsa", "settore") or action == "presence":
+            await db.cr_diary.insert_one({"id": uuid.uuid4().hex, "org_id": u["org_id"], "event_id": eid, "at": _now(), "by": u.get("email"), "by_name": u.get("name") or u.get("email"),
+                                          "type": "postazione" if entity == "postazione" else "risorsa" if entity == "risorsa" else "settore", "text": f"{entity} · {action} · {label}"[:300]})
 
     def conflict():
         return HTTPException(status_code=409, detail="Dato modificato nel frattempo da un altro operatore: ricarico la versione più recente")
@@ -260,6 +264,7 @@ def attach(r, db, deps, require_active):
 
     H = {"ctx": ctx, "q": q, "settings": settings, "touch": touch, "external": EXTERNAL_VEHICLES, "ensure_tasks": ENSURE}
     ITV.attach(r, db, deps, require_active, H)
+    REP.attach(r, db, deps, H)
 
     @r.get(base)
     async def state(event_id: str, u: dict = Depends(ops_dep)):
@@ -296,6 +301,9 @@ def attach(r, db, deps, require_active):
         x3 = await H["extra"](u, event_id, pm, s, res, posts)
         mezzi = [x for x in res if x["kind"] == "mezzo"]
         kpi = {"volontari_presenti": sum(1 for x in res if x["kind"] == "persona" and x.get("presente")) + sum(p.get("presenti_manuali") or 0 for p in posts),
+               "postazioni_non_presidiate": sum(1 for p in posts if p["presidio"] in ("non_presidiata", "parziale")),
+               "squadre_disponibili": sum(1 for x in res if x["kind"] != "persona" and x["stato"] == "disponibile"),
+               "squadre_impegnate": sum(1 for x in res if x["kind"] != "persona" and x["stato"] == "impegnato"),
                "postazioni_presidiate": sum(1 for p in posts if p["presidio"] == "presidiata"), "postazioni_attive": sum(1 for p in posts if p["presidio"] != "non_attiva"),
                "ambulanze_disponibili": sum(1 for x in mezzi if x.get("tipologia") == "ambulanza" and x["stato"] == "disponibile"),
                "mezzi_operativi": sum(1 for x in mezzi if x["stato"] in ("disponibile", "impegnato")), "risorse_impegnate": sum(1 for x in res if x["stato"] == "impegnato"),

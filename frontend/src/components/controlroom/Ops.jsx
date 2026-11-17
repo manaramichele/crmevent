@@ -62,7 +62,7 @@ function CriticalBanner({ list, open }) {
   if (!list.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-600/30" data-testid="cr-critical-banner">
-      <Siren className="h-5 w-5 animate-pulse" />{list.length} INTERVENT{list.length > 1 ? "I" : "O"} CRITIC{list.length > 1 ? "I" : "O"}
+      <Siren className="h-5 w-5 animate-pulse" />{list.length} CRITICITÀ ROSS{list.length > 1 ? "E" : "A"} DA GESTIRE
       {list.slice(0, 4).map((i) => <button key={i.id} type="button" onClick={() => open(i.id)} className="rounded-full bg-white/20 px-3 py-0.5 text-xs hover:bg-white/30" data-testid={`cr-critical-${i.codice}`}>{i.codice}</button>)}
     </div>
   );
@@ -99,7 +99,7 @@ export default function Ops({ eventId }) {
     api.get(`${base}/route`, { params: { map_id: d.settings.route_map_id || undefined } }).then((r) => setRoute(r.data.route)).catch(() => setRoute(null));
   }, [routeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (d?.perms.edit) api.get(`${base}/staff`).then((r) => setShifts(r.data.shifts)).catch(() => {}); }, [base, d?.perms.edit]);
-  const critical = useMemo(() => (d ? d.interventions.filter((i) => i.priorita === "critica" && !CLOSED.includes(i.stato)) : []), [d]);
+  const critical = useMemo(() => (d ? d.interventions.filter((i) => ["alta", "critica"].includes(i.priorita) && !CLOSED.includes(i.stato)) : []), [d]);
   useEffect(() => {
     if (!d) return;
     const ids = critical.map((i) => i.id);

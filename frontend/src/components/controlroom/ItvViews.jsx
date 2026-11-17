@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LayoutGrid, List, Download, Send, CheckCheck, Check } from "lucide-react";
 import api from "@/lib/api";
-import { CLOSED, ITV_STATES, PRIORITY, Pill, fmtDT, fmtTime, nameOf } from "./meta";
+import { CLOSED, ITV_STATES, PRIORITY, Pill, Light, fmtDT, fmtTime, nameOf } from "./meta";
 
 const RANK = { critica: 0, alta: 1, media: 2, bassa: 3 };
 const Sel = ({ value, onChange, children, testid }) => <select value={value} onChange={(e) => onChange(e.target.value)} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs" data-testid={testid}>{children}</select>;
@@ -37,7 +37,7 @@ export function ItvList({ d, open }) {
       {cards ? (
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{rows.map((i) => (
           <button key={i.id} type="button" onClick={() => open(i.id)} className={`rounded-xl border bg-white p-3 text-left transition-shadow hover:shadow ${i.priorita === "critica" && !CLOSED.includes(i.stato) ? "border-red-400 ring-2 ring-red-200" : "border-slate-200"}`} data-testid={`cr-itv-card-${i.codice}`}>
-            <div className="flex items-center gap-1.5"><b>{i.codice}</b><Pill c={PRIORITY[i.priorita][2]}>{PRIORITY[i.priorita][0]}</Pill><Pill c={ITV_STATES[i.stato][1]}>{ITV_STATES[i.stato][0]}</Pill>{i.origine === "campo" && i.stato === "segnalato" && <Pill c="bg-sky-600 text-white">DAL CAMPO</Pill>}</div>
+            <div className="flex items-center gap-1.5"><b>{i.codice}</b><Light p={i.priorita} /><Pill c={PRIORITY[i.priorita][2]}>{PRIORITY[i.priorita][0]}</Pill><Pill c={ITV_STATES[i.stato][1]}>{ITV_STATES[i.stato][0]}</Pill>{i.origine === "campo" && i.stato === "segnalato" && <Pill c="bg-sky-600 text-white">DAL CAMPO</Pill>}</div>
             <div className="mt-1 text-xs font-semibold text-slate-600">{types[i.tipologia]?.label} · {fmtTime(i.created_at)}</div>
             <div className="mt-1 line-clamp-2 text-sm">{i.descrizione}</div>
             <div className="mt-1 text-[11px] text-slate-500">{team(i) || <span className="font-semibold text-orange-600">Senza squadra</span>}{i.attesa_conferma && <span className="ml-1 font-semibold text-red-600">· NON CONFERMATA</span>}</div>
@@ -48,7 +48,7 @@ export function ItvList({ d, open }) {
             <tbody>{rows.map((i) => (
               <tr key={i.id} onClick={() => open(i.id)} className={`cursor-pointer border-t border-slate-100 hover:bg-[#0ABAB5]/5 ${i.priorita === "critica" && !CLOSED.includes(i.stato) ? "bg-red-50" : ""}`} data-testid={`cr-itv-row-${i.codice}`}>
                 <td className="px-3 py-2 font-bold">{i.codice}{i.origine === "campo" && i.stato === "segnalato" && <Pill c="ml-1 bg-sky-600 text-white">CAMPO</Pill>}</td><td className="px-3 py-2 font-mono">{fmtTime(i.created_at)}</td><td className="px-3 py-2">{types[i.tipologia]?.label}</td>
-                <td className="px-3 py-2"><Pill c={PRIORITY[i.priorita][2]}>{PRIORITY[i.priorita][0]}</Pill></td><td className="px-3 py-2"><Pill c={ITV_STATES[i.stato][1]}>{ITV_STATES[i.stato][0]}</Pill></td>
+                <td className="px-3 py-2"><Pill c={PRIORITY[i.priorita][2]}>{PRIORITY[i.priorita][0]}</Pill> <Light p={i.priorita} /></td><td className="px-3 py-2"><Pill c={ITV_STATES[i.stato][1]}>{ITV_STATES[i.stato][0]}</Pill></td>
                 <td className="px-3 py-2">{team(i) || <span className="font-semibold text-orange-600">—</span>}{i.attesa_conferma && <span className="ml-1 font-semibold text-red-600">NON CONF.</span>}</td>
                 <td className="px-3 py-2">{[i.km != null && `km ${i.km}`, d.posts.find((p) => p.id === (i.post_id || i.post_vicina_id))?.nome, i.riferimento].filter(Boolean).join(" · ")}{i.da_confermare && <span className="ml-1 text-amber-600">(da confermare)</span>}</td>
               </tr>))}</tbody></table>
@@ -91,22 +91,36 @@ export function Comms({ d, call, preset }) {
   );
 }
 
-const DTYPES = ["segnalazione", "apertura", "cambio_priorita", "assegnazione", "conferma", "rifiuto", "partenza", "arrivo", "aggiornamento", "risoluzione", "chiusura", "annullamento", "riapertura", "comunicazione", "presenza", "allegato", "presa_in_carico", "stato"];
+const DTYPES = ["segnalazione", "apertura", "cambio_priorita", "assegnazione", "conferma", "rifiuto", "partenza", "arrivo", "aggiornamento", "risoluzione", "chiusura", "annullamento", "riapertura", "comunicazione", "presenza", "allegato", "presa_in_carico", "stato", "postazione", "risorsa", "settore"];
+
+async function download(url, name) {
+  const r = await api.get(url, { responseType: "blob" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(r.data); a.download = name; a.click();
+}
 
 export function Diary({ d, base, open }) {
-  const [type, setType] = useState("");
+  const [f, setF] = useState({ type: "", dal: "", al: "", priorita: "", operatore: "" });
   const [rows, setRows] = useState(null);
-  const load = (t) => api.get(`${base}/diary`, { params: { type: t || undefined } }).then((r) => setRows(r.data.rows)).catch(() => setRows([]));
-  if (rows === null) load(type);
-  const exp = async () => {
-    const r = await api.get(`${base}/diary/export`, { responseType: "blob" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(r.data); a.download = "diario-operativo.csv"; a.click();
-  };
+  const [busy, setBusy] = useState("");
+  const iso = (v) => (v ? new Date(v).toISOString() : undefined);
+  const load = (x = f) => api.get(`${base}/diary`, { params: { type: x.type || undefined, dal: iso(x.dal), al: iso(x.al), priorita: x.priorita || undefined, operatore: x.operatore || undefined } }).then((r) => setRows(r.data.rows)).catch(() => setRows([]));
+  if (rows === null) load();
+  const set = (k, v) => { const n = { ...f, [k]: v }; setF(n); if (k !== "operatore") load(n); };
+  const rep = async (ext) => { setBusy(ext); try { await download(`${base}/report.${ext}`, `report-control-room.${ext}`); } finally { setBusy(""); } };
+  const exp = () => download(`${base}/diary/export`, "diario-operativo.csv");
   return (
     <div className="space-y-2" data-testid="cr-diary">
+      {d.perms.role === "responsabile" && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#0ABAB5]/40 bg-[#0ABAB5]/5 p-3" data-testid="cr-report-box">
+        <b className="text-sm">Genera report evento</b><span className="text-xs text-slate-500">riepilogo, postazioni, personale, interventi, tempi, criticità e cronologia</span>
+        <Button size="sm" disabled={!!busy} onClick={() => rep("pdf")} className="ml-auto bg-slate-900 text-white" data-testid="cr-report-pdf">{busy === "pdf" ? "Generazione…" : "PDF"}</Button>
+        <Button size="sm" disabled={!!busy} variant="outline" onClick={() => rep("xlsx")} data-testid="cr-report-xlsx">{busy === "xlsx" ? "Generazione…" : "Excel"}</Button></div>}
       <div className="flex flex-wrap items-center gap-2">
-        <Sel value={type} onChange={(t) => { setType(t); load(t); }} testid="cr-diary-filter"><option value="">Tutte le registrazioni</option>{DTYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</Sel>
-        <Button size="sm" variant="outline" onClick={() => load(type)} data-testid="cr-diary-refresh">Aggiorna</Button>
+        <Sel value={f.type} onChange={(v) => set("type", v)} testid="cr-diary-filter"><option value="">Tutte le categorie</option>{DTYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</Sel>
+        <Sel value={f.priorita} onChange={(v) => set("priorita", v)} testid="cr-diary-prio"><option value="">Tutte le priorità</option>{Object.entries(PRIORITY).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}</Sel>
+        <label className="text-xs text-slate-500">Dal <input type="datetime-local" value={f.dal} onChange={(e) => set("dal", e.target.value)} className="h-9 rounded-md border border-slate-200 px-1 text-xs" data-testid="cr-diary-from" /></label>
+        <label className="text-xs text-slate-500">Al <input type="datetime-local" value={f.al} onChange={(e) => set("al", e.target.value)} className="h-9 rounded-md border border-slate-200 px-1 text-xs" data-testid="cr-diary-to" /></label>
+        <Input value={f.operatore} onChange={(e) => setF({ ...f, operatore: e.target.value })} onBlur={() => load()} placeholder="Operatore" className="h-9 w-32 text-xs" data-testid="cr-diary-operator" />
+        <Button size="sm" variant="outline" onClick={() => load()} data-testid="cr-diary-refresh">Aggiorna</Button>
         {d.perms.role === "responsabile" && <Button size="sm" variant="outline" onClick={exp} data-testid="cr-diary-export"><Download className="mr-1 h-4 w-4" />Esporta CSV</Button>}
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">

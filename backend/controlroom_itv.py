@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import math
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -516,13 +517,20 @@ def attach(r, db, deps, require_active, H):
         return {"ok": True}
 
     @r.get(base + "/diary")
-    async def get_diary(event_id: str, type: Optional[str] = None, intervention_id: Optional[str] = None, limit: int = 500, u: dict = Depends(ops_dep)):
+    async def get_diary(event_id: str, type: Optional[str] = None, intervention_id: Optional[str] = None, dal: Optional[str] = None, al: Optional[str] = None,
+                        priorita: Optional[str] = None, operatore: Optional[str] = None, limit: int = 2000, u: dict = Depends(ops_dep)):
         await ctx(u, event_id)
         f = q(u, event_id)
         if type:
             f["type"] = type
         if intervention_id:
             f["intervention_id"] = intervention_id
+        if dal or al:
+            f["at"] = {k: v for k, v in (("$gte", dal), ("$lte", al)) if v}
+        if operatore:
+            f["by_name"] = {"$regex": re.escape(operatore[:60]), "$options": "i"}
+        if priorita in PRIORITIES:
+            f["intervention_id"] = {"$in": await db.cr_interventions.distinct("id", q(u, event_id, priorita=priorita))}
         return {"rows": await db.cr_diary.find(f, {"_id": 0, "org_id": 0}).sort("at", 1).to_list(min(max(limit, 1), 5000))}
 
     @r.get(base + "/diary/export")
@@ -611,6 +619,7 @@ def attach(r, db, deps, require_active, H):
             i["attesa_conferma"] = any(a["stato"] == "non_confermata" for a in act)
             i["can_manage"] = can_itv(pm, i)
         kpi = {"interventi_aperti": len(opened), "interventi_critici": sum(1 for i in opened if i["priorita"] == "critica"),
+               "segnalazioni_aperte": sum(1 for i in opened if i["stato"] == "segnalato"), "criticita_rosse": sum(1 for i in opened if i["priorita"] in ("alta", "critica")),
                "interventi_senza_squadra": sum(1 for i in opened if i["senza_squadra"]), "interventi_attesa_conferma": sum(1 for i in opened if i["attesa_conferma"]),
                "interventi_in_corso": sum(1 for i in opened if i["stato"] in ("squadra_inviata", "sul_posto")), "interventi_risolti": sum(1 for i in itv if i["stato"] in ("risolto", "chiuso"))}
         alerts = ([{"level": "high", "text": f"{i['codice']} CRITICO: {i['descrizione'][:60]}", "ref": ["interventions", i["id"]]} for i in opened if i["priorita"] == "critica"]

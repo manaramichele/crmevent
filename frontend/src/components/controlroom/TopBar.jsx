@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Siren, Users, ShieldCheck, Ambulance, Truck, Activity, PhoneOff, AlertOctagon, Settings2, Bell, Volume2, VolumeX, KeyRound } from "lucide-react";
 import { EVENT_STATES, label, fmtTime } from "./meta";
 
-const KPI = [["volontari_presenti", "Volontari presenti", Users], ["postazioni_presidiate", "Postazioni presidiate", ShieldCheck], ["ambulanze_disponibili", "Ambulanze disponibili", Ambulance],
-  ["mezzi_operativi", "Mezzi operativi", Truck], ["risorse_impegnate", "Risorse impegnate", Activity], ["non_raggiungibili", "Non raggiungibili", PhoneOff],
-  ["interventi_aperti", "Interventi aperti", Siren], ["interventi_critici", "Interventi critici", AlertOctagon]];
+const KPI = [["postazioni_attive", "Postazioni operative", ShieldCheck], ["postazioni_presidiate", "Presidiate", ShieldCheck], ["postazioni_non_presidiate", "Non presidiate", PhoneOff],
+  ["volontari_presenti", "Staff e volontari in servizio", Users], ["squadre_disponibili", "Squadre disponibili", Truck], ["squadre_impegnate", "Squadre impegnate", Activity],
+  ["segnalazioni_aperte", "Segnalazioni aperte", Siren], ["interventi_in_corso", "Interventi in corso", Activity], ["interventi_risolti", "Interventi conclusi", ShieldCheck],
+  ["criticita_rosse", "Criticità rosse da gestire", AlertOctagon], ["ambulanze_disponibili", "Ambulanze disponibili", Ambulance], ["non_raggiungibili", "Non raggiungibili", PhoneOff]];
 const ROLE = { responsabile: "Responsabile Control Room", coordinatore: "Coordinatore di settore", visualizzatore: "Visualizzatore", operatore: "Operatore" };
 
 function Clock() {
@@ -62,9 +63,9 @@ export function TopBar({ d, onStatus, onNewIntervention, onSettings, onAccess, s
         {resp && <Button variant="outline" size="icon" onClick={onSettings} className="h-10 w-10 rounded-full" title="Impostazioni Control Room" data-testid="cr-settings-btn"><Settings2 className="h-4 w-4" /></Button>}
         {onNewIntervention && <Button onClick={onNewIntervention} className="hidden h-10 rounded-full bg-red-600 px-5 font-bold text-white hover:bg-red-700 lg:inline-flex" data-testid="cr-new-intervention-btn"><Siren className="mr-2 h-4 w-4" />+ NUOVO INTERVENTO</Button>}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-6">
         {KPI.map(([k, l, I]) => {
-          const v = d.kpi[k], warn = (k === "non_raggiungibili" || k === "interventi_critici") && v > 0;
+          const v = d.kpi[k], warn = ["non_raggiungibili", "criticita_rosse", "postazioni_non_presidiate"].includes(k) && v > 0;
           return (
             <div key={k} className={`rounded-xl border px-3 py-2 ${warn ? "border-red-200 bg-red-50" : "border-slate-100 bg-slate-50"}`} data-testid={`cr-kpi-${k}`}>
               <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500"><I className={`h-3.5 w-3.5 ${warn ? "text-red-600" : "text-[#088F8A]"}`} />{l}</div>

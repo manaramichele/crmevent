@@ -39,3 +39,5 @@ export const ASG = { non_confermata: ["NON CONFERMATA", "bg-red-100 text-red-700
 export const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—");
 export const fmtDT = (iso) => (iso ? new Date(iso).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
 export const Pill = ({ c, children, testid }) => <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${c}`} data-testid={testid}>{children}</span>;
+export const LIGHT = { bassa: ["VERDE", "#16A34A"], media: ["GIALLO", "#EAB308"], alta: ["ROSSO", "#DC2626"], critica: ["ROSSO", "#DC2626"] };
+export const Light = ({ p }) => <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600" title="Livello semaforo" data-testid="cr-light"><span className="h-2.5 w-2.5 rounded-full" style={{ background: LIGHT[p][1] }} />{LIGHT[p][0]}</span>;
