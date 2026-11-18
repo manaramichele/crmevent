@@ -9,7 +9,8 @@ import BomPanel from "@/components/planner/BomPanel";
 import { StationDialog, RoutesDialog, AssignPanel, StaffFilter, stationMatch, KIND } from "@/components/planner/StaffTools";
 import PlannerMap from "@/components/planner/PlannerMap";
 import { LibraryPanel, LayersPanel, PropsPanel } from "@/components/planner/Panels";
-import { uid, translate, makeFeature } from "@/components/planner/features";
+import { uid, translate, makeFeature, syncBuoys } from "@/components/planner/features";
+import { WaterPanel } from "@/components/planner/WaterTools";
 import useHistory from "@/components/planner/useHistory";
 import { loadDemoProject, clearDemoProject, trackDemo } from "@/lib/plannerDemo";
 import { boxPolygon } from "@/lib/geo";
@@ -83,7 +84,7 @@ export default function EventPlanner() {
     timer.current = setTimeout(() => persist(h.features, layers), 1500);
     return () => clearTimeout(timer.current);
   }, [h.features, layers, persist]);
-  const change = (next, transient, before) => { dirty.current = true; h.set(next, transient, before); };
+  const change = (next, transient, before) => { dirty.current = true; h.set(syncBuoys(next), transient, before); };
   const setLayers = (l) => { dirty.current = true; setLayersRaw(l); };
   const importDemo = async () => {
     try {
@@ -97,8 +98,12 @@ export default function EventPlanner() {
   const discardDemo = () => { clearDemoProject(); setDemo(null); };
 
   const staffLayerId = (layers.find((l) => l.id === "staff") || layers.find((l) => /^staff/i.test(l.nome || "")))?.id;
+  const NAUTICAL_LAYERS = { Boe: ["Boe e segnaletica nautica", "#F97316"], "Mezzi nautici": ["Mezzi nautici", "#0369A1"], Transizioni: ["Transizioni", "#9333EA"] };
   const create = (spec, c) => {
-    const f = makeFeature(spec, c, layers, linePreset);
+    let lys = layers;
+    const need = NAUTICAL_LAYERS[spec.categoria];
+    if (need && !layers.some((l) => l.nome.toLowerCase().startsWith(spec.categoria.toLowerCase().slice(0, 5)))) { lys = [...layers, { id: uid(), nome: need[0], colore: need[1], visibile: true, bloccato: false, ordine: layers.length }]; setLayers(lys); }
+    const f = makeFeature(spec, c, lys, linePreset);
     change([...h.features, f]); setSel(f.properties.id); setPlacing(null); setLinePreset(null); setMode("select"); if (window.innerWidth >= 1024) setRight(true);
     if (f.properties.layer_id === staffLayerId && f.properties.tipo === "point") setStDlg(f.properties.id);
   };
@@ -118,6 +123,13 @@ export default function EventPlanner() {
   };
   const selected = h.features.find((f) => f.properties.id === sel);
   const patch = (p) => change(h.features.map((f) => (f.properties.id === sel ? { ...f, properties: { ...f.properties, ...p } } : f)));
+  const setGeom = (coords) => change(h.features.map((f) => (f.properties.id === sel ? { ...f, geometry: { ...f.geometry, coordinates: coords } } : f)));
+  const addWater = (coords, extra) => {
+    const lay = layers.find((l) => /percors/i.test(l.nome)) || layers[0];
+    const f = { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: uid(), tipo: "line", nome: extra.nome, categoria: "Percorsi", layer_id: lay.id, colore: "#0284C7", spessore: 4, disciplina: "nuoto", giri: extra.giri, frecce: true } };
+    change([...h.features, f]); setSel(f.properties.id); setRight(true);
+  };
+  const drawWater = () => { setLinePreset({ nome: "Percorso nuoto", categoria: "Percorsi", colore: "#0284C7", extra: { disciplina: "nuoto", giri: 1, frecce: true, spessore: 4 } }); setPlacing(null); setMode("line"); toast.info("Clicca sulla mappa i punti del percorso in acqua, poi premi Termina (o doppio clic)"); };
   const duplicate = () => { const c = translate({ ...selected, properties: { ...selected.properties, id: uid() } }, 0.00005, -0.00003); change([...h.features, c]); setSel(c.properties.id); };
   const remove = () => { change(h.features.filter((f) => f.properties.id !== sel)); setSel(null); };
   const search = async () => {
@@ -175,6 +187,7 @@ export default function EventPlanner() {
               <Button size="icon" variant="outline" onClick={search} data-testid="planner-search-btn"><Search className="h-4 w-4" /></Button></div>
             <div><div className="mb-1 text-xs font-semibold">Livelli</div><LayersPanel layers={layers} setLayers={setLayers} /></div>
             <div><div className="mb-1 text-xs font-semibold">Oggetti e strutture</div><LibraryPanel library={cfg?.library || []} placing={placing} onPick={(x) => { if (x?.tipo === "line") { setLinePreset(x); setPlacing(null); setMode("line"); toast.info(`Disegna la linea di "${x.nome}" sulla mappa, poi premi Termina`); } else { setPlacing(x); setLinePreset(null); setMode("select"); } if (x && window.innerWidth < 1024) setLeft(false); }} /></div>
+            <WaterPanel pid={proj.id} features={h.features} center={proj.center || [12.4964, 41.9028]} onAdd={addWater} onDraw={drawWater} />
           </aside>}
           <main className="relative min-w-0 flex-1">
             <PlannerMap apiKey={cfg?.maptiler_key} stile={stile} center={proj.center} zoom={proj.zoom} features={h.features} layers={layers} selectedId={sel} mode={mode} placing={placing}
@@ -204,7 +217,7 @@ export default function EventPlanner() {
           </main>
           {right && <aside className="absolute inset-x-0 bottom-0 z-20 max-h-[55dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-slate-200 bg-white p-3 shadow-2xl lg:static lg:max-h-none lg:w-80 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none" data-testid="planner-right">
             <div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">Proprietà</span><button type="button" className="p-1 text-xs text-slate-500 lg:hidden" onClick={() => setRight(false)} data-testid="planner-close-right">Chiudi</button></div>
-            <PropsPanel f={selected} layers={layers} onPatch={patch} onDuplicate={duplicate} onDelete={remove} />
+            <PropsPanel f={selected} layers={layers} onPatch={patch} onDuplicate={duplicate} onDelete={remove} features={h.features} onGeom={setGeom} />
           </aside>}
         </div>)}
       <BomPanel open={bom} onClose={() => setBom(false)} proj={proj} eid={id} evName={ev?.nome || "evento"} refresh={save === "salvato" ? ver.current : -1} />

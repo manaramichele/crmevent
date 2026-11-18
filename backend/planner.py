@@ -9,10 +9,12 @@ from pydantic import BaseModel, Field
 
 import planner_bom
 import planner_staff
+import planner_water
 
 MAX_FEATURES = 5000
 MAX_REVISIONS = 30
-DEFAULT_LAYERS = ["Percorsi", "Partenza e arrivo", "Strutture", "Ristori", "Sicurezza", "Viabilità", "Staff e volontari", "Sponsor", "Fornitori", "Aree operative"]
+DEFAULT_LAYERS = ["Percorsi", "Partenza e arrivo", "Strutture", "Ristori", "Sicurezza", "Viabilità", "Staff e volontari", "Sponsor", "Fornitori", "Aree operative",
+                  "Boe e segnaletica nautica", "Mezzi nautici", "Transizioni"]
 COLORS = ["#E11D48", "#0ABAB5", "#2563EB", "#F59E0B", "#DC2626", "#64748B", "#16A34A", "#9333EA", "#EA580C", "#0F766E"]
 # Libreria iniziale: (categoria, nome, larghezza m, lunghezza m, colore, tipo) — tipo: box (in scala) | point | line (con passo m)
 LIBRARY = [
@@ -36,7 +38,36 @@ LIBRARY = [
     ("Sponsor", "Banner (3 m)", 3, 0, "#C026D3", "line"), ("Sponsor", "Arco pubblicitario 8 m", 8, 1, "#7E22CE", "box"),
     ("Staff", "Postazione volontari", 0, 0, "#16A34A", "point"), ("Staff", "Punto controllo percorso", 0, 0, "#22C55E", "point"),
     ("Staff", "Coordinamento", 0, 0, "#15803D", "point"), ("Staff", "Direzione gara", 0, 0, "#166534", "point"),
+    # Nuoto in acque libere, triathlon, aquathlon, swimrun
+    *[("Boe", n, 0, 0, c, "point") for n, c in (
+        ("Boa direzionale", "#F97316"), ("Boa di virata", "#F97316"), ("Boa di percorso", "#EAB308"), ("Boa intermedia", "#EAB308"),
+        ("Boa di partenza", "#16A34A"), ("Boa di arrivo", "#DC2626"), ("Boa di delimitazione", "#EAB308"), ("Boa di sicurezza", "#DC2626"),
+        ("Boa numerata", "#F97316"), ("Boa di riferimento", "#16A34A"), ("Boa di ancoraggio", "#64748B"), ("Boa di segnalazione pericolo", "#DC2626"))],
+    *[("Mezzi nautici", n, 0, 0, c, "point") for n, c in (
+        ("Moto d'acqua", "#0369A1"), ("Moto d'acqua di soccorso", "#DC2626"), ("Gommone", "#0369A1"), ("Gommone di soccorso", "#DC2626"),
+        ("Barca di assistenza", "#0284C7"), ("Barca giudici", "#7C3AED"), ("Barca organizzazione", "#0F766E"), ("Barca medica", "#DC2626"),
+        ("SUP", "#0EA5E9"), ("SUP di soccorso", "#DC2626"), ("Kayak", "#0EA5E9"), ("Canoa", "#0EA5E9"), ("Pattino di salvataggio", "#DC2626"),
+        ("Mezzo Guardia Costiera", "#1E3A8A"), ("Mezzo nautico generico", "#475569"))],
+    *[("Sicurezza", n, 0, 0, c, "point") for n, c in (
+        ("Bagnino", "#DC2626"), ("Assistente bagnanti", "#EF4444"), ("Soccorritore", "#DC2626"), ("Medico", "#B91C1C"),
+        ("Coordinatore sicurezza acqua", "#991B1B"), ("Giudice di gara", "#7C3AED"), ("Cronometrista", "#6D28D9"), ("Operatore radio", "#475569"),
+        ("Punto di osservazione", "#0F766E"), ("Punto recupero atleti", "#EA580C"), ("Punto evacuazione", "#16A34A"), ("Defibrillatore", "#16A34A"),
+        ("Zona pericolosa", "#DC2626"), ("Corrente", "#2563EB"), ("Scogli", "#78350F"), ("Acque basse", "#0EA5E9"), ("Ostacolo", "#B45309"))],
+    ("Sicurezza", "Zona interdetta", 30, 30, "#DC2626", "box"), ("Sicurezza", "Area riservata ai soccorsi", 15, 10, "#EF4444", "box"),
+    ("Sicurezza", "Rotta di navigazione", 0, 0, "#1E3A8A", "line"), ("Sicurezza", "Via di evacuazione", 0, 0, "#16A34A", "line"),
+    *[("Transizioni", n, 0, 0, c, "point") for n, c in (
+        ("Partenza nuoto", "#16A34A"), ("Arrivo nuoto", "#DC2626"), ("Ingresso in acqua", "#0284C7"), ("Uscita dall'acqua", "#0284C7"),
+        ("Bike In", "#2563EB"), ("Bike Out", "#2563EB"), ("Run In", "#EA580C"), ("Run Out", "#EA580C"), ("Distribuzione cuffie", "#0EA5E9"),
+        ("Controllo chip", "#7C3AED"), ("Punto cronometraggio", "#6D28D9"), ("Deposito attrezzature", "#92400E"))],
+    ("Transizioni", "Zona cambio T1", 20, 40, "#9333EA", "box"), ("Transizioni", "Zona cambio T2", 20, 40, "#C026D3", "box"),
+    ("Transizioni", "Corridoio di partenza", 5, 30, "#16A34A", "box"), ("Transizioni", "Corridoio di uscita", 5, 30, "#0284C7", "box"),
+    ("Transizioni", "Area riscaldamento", 30, 20, "#0EA5E9", "box"), ("Transizioni", "Area mezzi di soccorso", 20, 15, "#EF4444", "box"),
 ]
+# Parole chiave per la ricerca nella libreria (stessa libreria per tutte le discipline).
+TAGS = {"Boe": "boa nuoto triathlon acqua nautica swimrun aquathlon", "Mezzi nautici": "mezzi nautici barca sup moto d'acqua soccorso nautico nuoto triathlon",
+        "Transizioni": "triathlon transizione t1 t2 nuoto bike run cambio"}
+WATER_SAFETY = {"Bagnino", "Assistente bagnanti", "Soccorritore", "Coordinatore sicurezza acqua", "Zona pericolosa", "Corrente", "Scogli", "Acque basse", "Ostacolo",
+                "Zona interdetta", "Area riservata ai soccorsi", "Rotta di navigazione", "Via di evacuazione", "Punto recupero atleti", "Punto evacuazione"}
 
 
 def _now():
@@ -89,11 +120,13 @@ def build(db, deps: dict):
 
     bom_copy = planner_bom.attach(r, db, audit, member_dep, admin_dep, project_of, event_of, deps["org_logo"])
     station_cleanup = planner_staff.attach(r, db, audit, member_dep, admin_dep, project_of, event_of, deps["resolve_attachment"], deps["read_file_rec"], deps["org_logo"])
+    planner_water.attach(r, member_dep, project_of)
     @r.get("/config")
     async def config(user: dict = Depends(user_dep)):
         # Chiave pubblica MapTiler (va limitata ai domini CRMEvent nel pannello MapTiler); mai nel codice frontend.
         return {"maptiler_key": os.environ.get("MAPTILER_API_KEY") or None,
-                "library": [{"id": f"lib{i}", "categoria": c, "nome": n, "larghezza": w, "lunghezza": l, "colore": col, "tipo": t}
+                "library": [{"id": f"lib{i}", "categoria": c, "nome": n, "larghezza": w, "lunghezza": l, "colore": col, "tipo": t,
+                             "tags": TAGS.get(c, "") + (" nuoto soccorso nautico" if n in WATER_SAFETY else "")}
                             for i, (c, n, w, l, col, t) in enumerate(LIBRARY)]}
 
     @r.get("/events/{eid}/projects")

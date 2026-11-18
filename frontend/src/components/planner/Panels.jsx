@@ -3,12 +3,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, Lock, Unlock, Plus, Copy, Trash2, Navigation, Link2 } from "lucide-react";
 import { measures, anchorOf } from "./features";
+import { WaterProps } from "./WaterTools";
 import { fmtM, fmtM2 } from "@/lib/geo";
 
 export function LibraryPanel({ library, placing, onPick }) {
   const [q, setQ] = useState("");
   const cats = [...new Set(library.map((x) => x.categoria))];
-  const list = library.filter((x) => !q || x.nome.toLowerCase().includes(q.toLowerCase()));
+  const list = library.filter((x) => !q || `${x.nome} ${x.categoria} ${x.tags || ""}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="space-y-2" data-testid="planner-library">
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca oggetti..." className="h-9" data-testid="planner-lib-search" />
@@ -47,7 +48,7 @@ const Num = ({ label, value, onChange, step = 0.5, testid }) => (
   <label className="block text-[11px] text-slate-500">{label}<Input type="number" step={step} value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : +e.target.value)} className="h-9" data-testid={testid} /></label>
 );
 
-export function PropsPanel({ f, layers, onPatch, onDuplicate, onDelete }) {
+export function PropsPanel({ f, layers, onPatch, onDuplicate, onDelete, features = [], onGeom }) {
   if (!f) return <p className="text-xs text-slate-500" data-testid="planner-props-empty">Seleziona un oggetto sulla mappa per vederne le proprietà.</p>;
   const p = f.properties, m = measures(f), a = anchorOf(f);
   const set = (k) => (v) => onPatch({ [k]: v });
@@ -63,10 +64,11 @@ export function PropsPanel({ f, layers, onPatch, onDuplicate, onDelete }) {
       {p.tipo === "box" && <label className="block text-[11px] text-slate-500">Rotazione {Math.round(p.rotazione || 0)}°<input type="range" min="-180" max="180" value={p.rotazione || 0} onChange={(e) => onPatch({ rotazione: +e.target.value })} className="w-full accent-tiffany" data-testid="planner-prop-rot" /></label>}
       {p.tipo === "line" && p.passo && <Num label="Elemento (m)" value={p.passo} onChange={set("passo")} testid="planner-prop-passo" />}
       <div className="rounded-md bg-slate-50 p-2 text-xs text-slate-600" data-testid="planner-prop-measures">
-        {m.lunghezza != null && <div>Lunghezza: <b>{fmtM(m.lunghezza)}</b>{m.pezzi ? <> · quantità indicativa: <b data-testid="planner-prop-pezzi">{m.pezzi}</b> (senza sovrapposizioni o aperture)</> : null}</div>}
+        {m.lunghezza != null && <div>Lunghezza{m.giri > 1 ? " (giro)" : ""}: <b>{fmtM(m.lunghezza)}</b>{m.giri > 1 && <> · totale {m.giri} giri: <b data-testid="planner-prop-total">{fmtM(m.totale)}</b></>}{m.pezzi ? <> · quantità indicativa: <b data-testid="planner-prop-pezzi">{m.pezzi}</b> (senza sovrapposizioni o aperture)</> : null}</div>}
         {m.area != null && <div>Superficie: <b data-testid="planner-prop-area">{fmtM2(m.area)}</b> · perimetro {fmtM(m.perimetro)}</div>}
         <div>Coordinate: {a[1].toFixed(6)}, {a[0].toFixed(6)}</div>
       </div>
+      {onGeom && (f.geometry?.type === "Point" || f.geometry?.type === "LineString") && <WaterProps f={f} features={features} onPatch={onPatch} onGeom={onGeom} />}
       {p.collegamenti?.length > 0 && <div className="space-y-1 rounded-md border border-tiffany/40 bg-tiffany-light/40 p-2 text-xs" data-testid="planner-prop-links">
         <div className="flex items-center gap-1 font-semibold text-slate-700"><Link2 className="h-3.5 w-3.5" />Collegato in CRMEvent</div>
         {p.collegamenti.map((c) => <div key={c.area + c.testo}><b className="text-slate-700">{c.area}:</b> <span className="text-slate-600">{c.testo}</span></div>)}
