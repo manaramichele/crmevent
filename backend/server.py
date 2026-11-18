@@ -46,6 +46,7 @@ import calendario_italia
 import avail_prefs
 import anagrafica
 import option_lists
+import people_pdf
 import planner
 import addons
 import eventmap
@@ -14056,6 +14057,7 @@ ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_
 app.include_router(ANA["router"])
 OPT = option_lists.build(db, {"require_admin": require_admin, "get_settings": _org_settings, "allows": P.allows, "default_settings": default_settings})
 app.include_router(OPT["router"])
+app.include_router(people_pdf.build(db, {"require_admin": require_admin, "resolve_attachment": _resolve_attachment, "read_file_rec": _read_file_rec, "fallback_logo": _LOGO_PATH})["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})

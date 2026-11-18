@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import ExportPdfButton from "@/components/ExportPdfButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -298,7 +299,10 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
               <DialogTitle className="font-display flex items-center gap-2 text-left"><Users className="w-5 h-5 text-tiffany-active shrink-0" /><span className="break-words" data-testid="team-card-name">{team.nome}</span></DialogTitle>
               <DialogDescription className="text-left" data-testid="team-card-event">{eventName}</DialogDescription>
             </div>
-            {canEdit && onEdit && <TextAction icon={Pencil} onClick={() => onEdit(team)} className="self-start" data-testid="team-card-edit">Modifica dati Team</TextAction>}
+            <div className="flex flex-wrap gap-2 self-start">
+              <ExportPdfButton section="team" eventoId={team.evento_id} eventName={eventName} teamIds={[team.id]} scopeLabel={`solo il Team ${team.nome}`} testid="export-pdf-team-single" />
+              {canEdit && onEdit && <TextAction icon={Pencil} onClick={() => onEdit(team)} className="self-start" data-testid="team-card-edit">Modifica dati Team</TextAction>}
+            </div>
           </div>
         </DialogHeader>
 

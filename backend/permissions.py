@@ -88,6 +88,7 @@ ROUTE_RULES = [
     ("/events/{event_id}/availability/link/deactivate", "staff", "edit"),
     ("/events/{event_id}/availabilit", "staff", None),
     ("/availabilities", "staff", None),
+    ("/staff/export-pdf", "staff", "view"),
     ("/staff", "staff", None),
     ("/teams", "staff", None),
     ("/shifts", "staff", None),
