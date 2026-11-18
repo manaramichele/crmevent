@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the plan recommendation in the 'Attiva abbonamento' dialog (MySubscription PlanPickerDialog) and the new over-limits check in backend /saas/checkout. Backend: 10/10 pytest pass. A fresh org gets 400 billing_missing first. Once billing data is filled in, Bronze checkout with 0 usage returns a Stripe test checkout_url (no payment completed). With 2 events, Bronze returns 400 'Il piano BRONZE non copre il tuo utilizzo attuale: hai 2 eventi (max 1). Scegli un piano superiore.' for both cycles, while Silver is still allowed. Frontend on the fresh trial org test_plan_1795036699: the title is 'Attiva abbonamento'. The default cycle is 12 mesi, which shows the SILVER message and a teal #0ABAB5 badge and card border. 6 mesi shows the GOLD message and a gold #D4AF37 badge and card border. data-recommended and the plan-recommended-* badges are exclusive and correct. Toggling 4+ times updates instantly. Prices and billed totals match /api/saas/plans-public for both cycles (sem 19/49/79, totals 114/294/474; yearly 15,20/39,20/63,20, totals 182,40/470,40/758,40). All three buttons are enabled at 0 usage. Clicking Bronze while GOLD is recommended sent POST /saas/checkout {plan:'bronze', cycle:'semester'} and returned the expected billing_missing toast. Org with 2 events: plan-over-limits-bronze reads 'Non disponibile: hai 2 eventi (max 1).', sub-choose-bronze is disabled, and Silver and Gold are enabled. Responsive at 768 and 390: no horizontal overflow (scrollWidth equals the viewport) and all buttons can be reached by scrolling inside the dialog. Super Admin assistance mode (POST /platform/impersonate on the test org): same dialog, same recommendation logic and same over-limits state.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/saas/checkout vs frontend fitsUsage", "issue": "The backend applies per-org Super Admin limit overrides (org.saas.admin max_events/max_users) in the over-limits check, but the frontend fitsUsage/overText uses only the catalog limits (p.max_events/p.max_users). For an org with custom limits, a card can look choosable and then fail with 400, or look disabled when the backend would accept it. Suggest exposing the effective per-plan limits in /saas/me, or reusing s.limits."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CookieBanner over PlanPickerDialog (pre-existing, not part of this feature)", "issue": "When the dialog opens via ?upgrade=1 before cookie consent, the cookie banner (z-10000) is drawn over the dialog, but Radix sets body pointer-events:none, so 'Accept all', 'Reject non-essential' and 'Customise' cannot be clicked (computed pointer-events: none). On mobile 390 the banner hides the lower half of the dialog. The user has to close the dialog to dismiss it. Fix: add pointer-events:auto on the banner, or render it outside the Radix modal scope. The banner also defaults to EN in an Italian app.", "selector": "[data-testid=cookie-accept-all]", "priority": "MEDIUM"},
+      {"component": "Demo popup ('Scopri CRMEvent con una demo gratuita', pre-existing)", "issue": "On an org with events, a demo-request modal opens automatically on top of the open plan picker dialog and blocks it until 'Non ora' is clicked. Stacking modals on a purchase flow is poor UX: suppress the demo popup while the plan picker or upgrade=1 is open.", "selector": "button 'Non ora'", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Plan picker", "issues": ["The SILVER plan label colour #A3A3A3 on a white or light-teal card has low contrast (pre-existing catalog colour).", "When the recommended plan is incompatible with usage (e.g. yearly with more than 5 events, so SILVER is excluded), there is no recommendation at all and only an empty <p>. You may want to fall back to GOLD."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_plan_recommendation_checkout.py", "/app/test_reports/pytest/pytest_plan_reco.xml"],
+  "action_items": [
+    "(Optional) Align the frontend fitsUsage with the backend effective limits, including the Super Admin overrides in org.saas.admin.",
+    "(Pre-existing) Make the cookie banner clickable while a Radix dialog is open (pointer-events:auto), and suppress the auto demo popup while the plan picker is open."
+  ],
+  "critical_code_review_comments": [
+    "MySubscription.jsx: recP requires the recommended plan to be shown, not current, and fitting usage. This is correct and never auto-selects anything. No recommendation is shown if the plan does not fit.",
+    "The backend over-limits message uses body.plan.upper() and not the plan label. This is fine for bronze/silver/gold.",
+    "The checkout over-limits check runs after billing_missing and after _live_sub. The order matches the request."
+  ],
+  "updated_files": ["/app/backend/tests/test_plan_recommendation_checkout.py"],
+  "success_rate": {"backend": "100%", "frontend": "100% for the feature (2 pre-existing modal-overlap UX issues)"},
+  "seed_data_creation": "Created org 'TEST_PLAN API 1795036822' (user test_plan_api_1795036822@example.com), 2 events, billing data and 2 Stripe TEST checkout sessions that were never paid. All of it was deleted by org_id/user_id afterwards (events, memberships, saas_usage, saas_checkouts, audit_logs including the SA impersonation entries, support_sessions, brevo logs, org, user). A Stripe test customer may remain in Stripe test mode. I did not delete the pre-existing org from the main agent: TEST_PLAN Org (id 5dc08574ae834239905db757b0e5b228, user test_plan_1795036699@example.com), which still has 0 events and no billing data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Plans endpoint: /api/saas/plans-public. Impersonation: POST /api/platform/impersonate {user_id} as the SA; stop with /api/platform/impersonate/stop. pytest.ini uses xdist; run with -n 0 for module-scoped fixtures. The cookie banner and the demo popup can overlay the dialog: dismiss the demo with 'Non ora', and use force clicks."
+}

@@ -124,6 +124,8 @@ const COMMERCIAL = {
   yearly: { key: "silver", color: "#0ABAB5", msg: "il miglior equilibrio tra funzionalità e convenienza." },
 };
 // Il piano contiene l'utilizzo reale (eventi creati + persone Staff/Volontari)?
+// Limiti effettivi: eventuali deroghe del Super Admin sull'organizzazione prevalgono sul catalogo (come nel backend).
+const effLimits = (p, adm) => ({ ...p, max_events: adm?.max_events ?? p.max_events, max_users: adm?.max_users ?? p.max_users });
 const fitsUsage = (p, usage) => !usage || ((p.max_events < 0 || usage.events <= p.max_events) && (p.max_users < 0 || (usage.people ?? 0) <= p.max_users));
 const overText = (p, u) => [p.max_events >= 0 && u.events > p.max_events && `${u.events} eventi (max ${p.max_events})`,
   p.max_users >= 0 && (u.people ?? 0) > p.max_users && `${u.people} persone Staff e Volontari (max ${p.max_users})`].filter(Boolean).join(" e ");
@@ -136,11 +138,11 @@ function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, cho
   const shown = plans.plans.filter((p) => !curKey || RANK.indexOf(p.key) >= RANK.indexOf(curKey));
   const isCurrent = (k) => isCur(k) || k === curKey;
   const com = COMMERCIAL[cycle];
-  const recP = com && shown.find((p) => p.key === com.key && !isCurrent(p.key) && fitsUsage(p, s.usage));
+  const recP = com && shown.find((p) => p.key === com.key && !isCurrent(p.key) && fitsUsage(effLimits(p, s.admin), s.usage));
   const recColor = recP && (com.color || recP.color);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" data-testid="plan-picker-dialog">
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" onPointerDownOutside={(e) => { if (e.target?.closest?.("[data-testid=cookie-banner]")) e.preventDefault(); }} data-testid="plan-picker-dialog">
         <DialogHeader><DialogTitle>{title || "Passa a un piano superiore"}</DialogTitle>
           <DialogDescription>{requestMode ? "La tua formula è assegnata dall'amministrazione CRMEvent: invia una richiesta, nessun addebito automatico." : "Prezzi del catalogo attuale. Il nuovo piano si applica solo dopo la tua conferma."} I tuoi dati restano invariati.</DialogDescription></DialogHeader>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -156,13 +158,13 @@ function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, cho
         <div className="grid gap-5 pt-3 lg:grid-cols-3">
           {shown.map((p) => {
             const isRec = recP?.key === p.key;
-            const fits = isCurrent(p.key) || fitsUsage(p, s.usage);
+            const fits = isCurrent(p.key) || fitsUsage(effLimits(p, s.admin), s.usage);
             return (
               <div key={p.key} className="relative flex flex-col" data-testid={`plan-wrap-${p.key}`} data-recommended={isRec ? "true" : "false"}>
                 {isRec && <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-900 shadow-sm" style={{ background: recColor }} data-testid={`plan-recommended-${p.key}`}>Consigliato</span>}
                 <PlanCard p={p} cycle={cycle} features={plans.features} current={isCurrent(p.key)} highlight={isRec ? recColor : null}
                   cta={<>
-                    {!fits && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mb-2" data-testid={`plan-over-limits-${p.key}`}>Non disponibile: hai {overText(p, s.usage)}.</p>}
+                    {!fits && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mb-2" data-testid={`plan-over-limits-${p.key}`}>Non disponibile: hai {overText(effLimits(p, s.admin), s.usage)}.</p>}
                     <Button disabled={busy || isCurrent(p.key) || !fits || (needsAck && !ack)} onClick={() => (requestMode ? onRequest(p.key) : choose(p.key))} data-testid={`sub-choose-${p.key}`}
                       className="w-full h-10 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold">{isCurrent(p.key) ? "Piano attuale" : requestMode ? `Richiedi ${p.label}` : `Passa a ${p.label}`}</Button></>} />
               </div>

@@ -116,7 +116,8 @@ export default function WelcomeDemo() {
   const [mine, setMine] = useState([]);
   const support = !!user?.support;
   const eligible = user && !!user.org_id && (support || user.role !== "superadmin");
-  const autoOpen = eligible && !support && user.welcome_demo === "pending" && !loadDemoProject();
+  const inPurchase = /[?&](upgrade=1|checkout=)/.test(window.location.search);
+  const autoOpen = eligible && !support && !inPurchase && user.welcome_demo === "pending" && !loadDemoProject();
 
   const start = useCallback(async () => {
     if (support) { setDone(false); setOpen(true); return; }

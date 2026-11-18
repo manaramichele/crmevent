@@ -1281,3 +1281,10 @@ Task 2 — Creatività manuale:
 - Frontend: /associazione (6 tab, ?tab=), voce sidebar "Gestione Associazione Sportiva" solo se /asd/status active, pulsante Marketplace "Apri Gestione Associazione Sportiva".
 - Marketplace invariato (servizio coming_soon, acquisto spento). iteration_186: frontend 100%, backend 16/17 → fix CF duplicato in modifica (400) + upload sicuro; ricontrollato.
 
+
+## 2026-11-18 — Attiva abbonamento: raccomandazione commerciale per durata
+- MySubscription PlanPickerDialog: 6 mesi → GOLD consigliato (oro), 12 mesi → SILVER (verde acqua #0ABAB5); Bronze mai consigliato; rimosso il vecchio consiglio "piano minimo per utilizzo". Nessuna selezione automatica.
+- Piani che non coprono l'utilizzo (eventi / Staff e Volontari, con deroghe Super Admin) disabilitati con spiegazione; nuovo controllo anche nel backend POST /saas/checkout (400).
+- PlanCard: prop `highlight` (bordo + sfondo). Cookie banner cliccabile sopra i dialog; popup demo non si apre durante upgrade=1/checkout.
+- iteration_187: backend 10/10, frontend 100%.
+
