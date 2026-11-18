@@ -41,7 +41,7 @@ export function CycleToggle({ cycle, setCycle }) {
   );
 }
 
-export function PlanCard({ p, cycle, features, cta, current }) {
+export function PlanCard({ p, cycle, features, cta, current, highlight }) {
   const yearly = cycle === "yearly";
   const perMonth = yearly ? p.yearly / 12 : p.monthly;
   const total = yearly ? p.yearly : p.semester ?? p.monthly * 6;
@@ -49,8 +49,8 @@ export function PlanCard({ p, cycle, features, cta, current }) {
   const sup = supportLabel(p);
   const lim = limitsLabel(p);
   return (
-    <div className={`relative flex flex-col rounded-2xl bg-white p-6 border transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-lg ${current ? "border-[#0ABAB5] ring-2 ring-[#0ABAB5]/30" : "border-slate-200 shadow-sm"}`}
-      style={{ borderTop: `6px solid ${p.color}` }} data-testid={`plan-card-${p.key}`}>
+    <div className={`relative flex flex-col flex-1 rounded-2xl bg-white p-6 border transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-lg ${current ? "border-[#0ABAB5] ring-2 ring-[#0ABAB5]/30" : highlight ? "border-2 shadow-md" : "border-slate-200 shadow-sm"}`}
+      style={{ borderTop: `6px solid ${p.color}`, ...(highlight && !current ? { borderColor: highlight, borderTopColor: p.color, background: `linear-gradient(180deg, ${highlight}12, #ffffff 55%)` } : {}) }} data-testid={`plan-card-${p.key}`}>
       {current && <span className="absolute -top-3 right-4 rounded-full bg-[#0ABAB5] px-3 py-1 text-[11px] font-bold text-slate-900">Piano attuale</span>}
       <div className="font-display text-2xl font-extrabold tracking-wide" style={{ color: p.color }}>{p.label}</div>
       <p className="text-sm text-slate-500 mt-1 min-h-[40px]">{p.tagline}</p>

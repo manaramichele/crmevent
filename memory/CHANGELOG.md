@@ -1281,3 +1281,50 @@ Task 2 — Creatività manuale:
 - Frontend: /associazione (6 tab, ?tab=), voce sidebar "Gestione Associazione Sportiva" solo se /asd/status active, pulsante Marketplace "Apri Gestione Associazione Sportiva".
 - Marketplace invariato (servizio coming_soon, acquisto spento). iteration_186: frontend 100%, backend 16/17 → fix CF duplicato in modifica (400) + upload sicuro; ricontrollato.
 
+
+## 2026-11-18 — Attiva abbonamento: raccomandazione commerciale per durata
+- MySubscription PlanPickerDialog: 6 mesi → GOLD consigliato (oro), 12 mesi → SILVER (verde acqua #0ABAB5); Bronze mai consigliato; rimosso il vecchio consiglio "piano minimo per utilizzo". Nessuna selezione automatica.
+- Piani che non coprono l'utilizzo (eventi / Staff e Volontari, con deroghe Super Admin) disabilitati con spiegazione; nuovo controllo anche nel backend POST /saas/checkout (400).
+- PlanCard: prop `highlight` (bordo + sfondo). Cookie banner cliccabile sopra i dialog; popup demo non si apre durante upgrade=1/checkout.
+- iteration_187: backend 10/10, frontend 100%.
+
+
+## 2026-11-18 — Super Admin: contesto org dalla tendina "Org attiva"
+- Causa ASD non visibile per Trio Events: Layout forzava iscritti/asd a false per il Super Admin e asd.py escludeva il ruolo superadmin.
+- Ora: Super Admin opera col proprio ruolo (org_role superadmin via X-Org-Id) anche in ASD (incl. eliminazioni); menu ricostruito per org selezionata (moduli Marketplace attivi, lucchetti piano da /saas/me, gruppi piattaforma sempre visibili); cambio org senza ricaricare la pagina (solo Super Admin), redirect a /app se la pagina non esiste nella nuova org.
+- record_audit risolve org_name se mancante; accesso file certificato tracciato.
+- iteration_188: backend 11/11; corretti full reload e redirect per utenti normali (ora vedono la pagina "non attivo").
+
+
+## 2026-11-18 — Novità automatiche, icona, avviso Dashboard
+- Causa radice: is_production() richiedeva CRMEVENT_ENV=production, mai impostato nei secrets di produzione → nessuna bozza; registro releases.json fermo al 2026-10-08.
+- Ora produzione = CRMEVENT_ENV oppure APP_URL non di anteprima; ogni controllo registrato in news_checks (pannello Super Admin + "Controlla ora"); errori per rilascio salvati e mostrati; simulazione una sola volta per rilascio (409).
+- Bozze "Da completare" se mancano informazioni (pubblicazione bloccata); destinatari (tutti / solo Super Admin / piani / modulo Marketplace) modificabili; creazione manuale.
+- Lettura per singola novità (read_ids, compatibile con seen_at), avviso Dashboard (org + /piattaforma) chiudibile; icona campanella+scintilla per tutti incl. Super Admin; aggiornamento a cambio pagina/focus/evento, nessun polling.
+- releases.json: aggiunto 2026-11-18-associazione-abbonamenti. iteration_189: backend 17/17, fix race StrictMode su /novita.
+
+
+## 2026-11-18 — Event Planner: nuoto, triathlon, aquathlon, swimrun
+- Stessa libreria (planner.py LIBRARY): categorie Boe (12), Mezzi nautici (15), Transizioni (T1/T2, Bike/Run In-Out, corridoi, aree), Sicurezza ampliata (bagnino, defibrillatore, zone pericolose, correnti, scogli, acque basse, rotte e vie di evacuazione); ricerca per parole chiave (TAGS). Nuovi progetti con livelli Boe e segnaletica nautica / Mezzi nautici / Transizioni; nei progetti esistenti il livello si crea al primo inserimento. COLORS esteso a 13.
+- Percorso in acqua (WaterTools.jsx): forme lineare/triangolo/rettangolo/anello al centro mappa con distanze suggerite 400–3.800 m, giri, frecce, chiudi circuito, inverti, editor coordinate con distanze per segmento; disegno a clic senza routing. Disciplina per percorso (nuoto/ciclismo/corsa/transizione) con riepilogo multidisciplina.
+- Boe: numero, dimensione, colori preset, responsabile, collegamento a un punto del percorso (syncBuoys: il punto segue la boa) o indipendenti. Mezzi: responsabile, cellulare, funzione, area, ID GPS (nessuna posizione reale simulata). Flag "riservato".
+- Esportazioni planner_water.py: GPX, KML, elenco boe PDF/Excel (distanze geodetiche), PNG mappa; versione pubblica senza riservati/livelli nascosti. Control Room: posizione "pianificata", gps_reale null, suggerimenti per elementi nautici.
+- NON fatto: condivisione in Event Map, PDF planimetria (c'è PNG). iteration_190/191: tutto passato dopo i fix.
+
+
+## 2026-11-18 — Anagrafica unica ASD ↔ Staff / Volontari
+- Dati anagrafici condivisi (nome, cognome, CF, nascita, sesso, email, cellulare, indirizzo, CAP, comune, provincia, nazione, taglia) solo in db.persons; asd_soci contiene persona_id + dati associativi (tipo, qualifica, stato, n. socio, iscrizione, note). Indice unico (org_id, persona_id).
+- Migrazione controllata dei soci esistenti (preview: 0): collega solo con corrispondenza univoca (CF, oppure email+nome+cognome), altrimenti crea la persona; dati originali in anagrafica_originale.
+- Nuove API: GET /asd/anagrafica (ricerca su tutta l'anagrafica dell'org), GET /asd/soci/{id}/staff, GET /asd/persona/{pid}. POST /asd/soci con persona_id collega; senza: 409 "duplicati" su CF/email/cellulare (CF bloccante, altrimenti conferma_nuova). Aggiornamento parziale: solo i campi inviati.
+- UI: pannello Ricerca anagrafica e selezione prima di Nuovo socio, finestra duplicati, sezione Staff e Volontari nella scheda socio (apre la scheda generale), sezione Associazione Sportiva in PersonMask/PersonDetailDialog, badge Socio nell'elenco, provenienza "Gestione Associazione Sportiva". Un socio non viene classificato come Staff o Volontario: senza assegnazioni compare tra «Da classificare», come ogni persona non classificata.
+- Persona con storico associativo: eliminazione = archiviazione. Test: iteration_192 + tests/test_asd_anagrafica_unica.py (21/21 con -n 0).
+
+## 2026-11-18 — Rinomina "Gestione Società" + Enti e Federazioni
+- Denominazione visibile "Gestione Società" ovunque (menu, pagina, tab Dashboard Società, Marketplace, sezioni persona, messaggi API, releases.json). Chiave tecnica gestione-societa, ID, Stripe e prezzo 99 €/anno invariati.
+- Migrazione plan_addons.rename() (schema_meta rename_gestione_societa_v1 con backup): 1 record marketplace_services aggiornato, 0 acquisti; audit_logs storici non toccati.
+- Enti e Federazioni: elenco per organizzazione in settings.enti_federazioni (26 predefiniti), API /asd/enti (GET/POST/PUT/stato/order/DELETE), tesseramenti con ente_id + etichetta; testo libero legacy collegato all'inizializzazione. EnteSelect ricercabile con «+ Aggiungi ente o federazione»; gruppo «Gestione Società» in Gestione menu a tendina solo con modulo attivo. PUT /settings ignora enti_federazioni.
+- Test: iteration_193, tests/test_asd_enti_rename.py + test_asd_anagrafica_unica.py 31/31 (-n 0).
+- Stripe: plan_addons.rename_stripe_product() all'avvio rinomina solo il prodotto della modalità attiva in "CRMEvent · Gestione Società" (schema_meta rename_stripe_gestione_societa_{mode} con vecchio nome). Test: prod_VeSX9laxHCktGY rinominato; live verrà rinominato al primo avvio in produzione dopo la pubblicazione. Prezzi/abbonamenti non toccati.
+
+
+

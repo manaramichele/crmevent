@@ -137,7 +137,7 @@ class TestSoci:
 class TestLinked:
     def test_tesseramento_states(self, sa, created):
         s = mk_socio(sa, created)
-        base = {"socio_id": s["id"], "stagione": "2025/2026", "ente": "TEST_FIDAL"}
+        base = {"socio_id": s["id"], "stagione": "2025/2026", "ente_id": "fidal"}
         ids = {k: add(sa, created, "tesseramenti", {**base, **v}).json()["id"] for k, v in {
             "valido": {"data_scadenza": D(90)}, "in_scadenza": {"data_scadenza": D(10)}, "scaduto": {"data_scadenza": D(-1)},
             "annullato": {"data_scadenza": D(90), "annullato": True}}.items()}
@@ -193,7 +193,7 @@ class TestLinked:
 
     def test_invalid_socio(self, sa, created):
         add(sa, created, "quote", {"socio_id": "nonexistent", "descrizione": "TEST", "importo": 1}, 400)
-        add(sa, created, "tesseramenti", {"socio_id": "nonexistent", "stagione": "x", "ente": "y"}, 400)
+        add(sa, created, "tesseramenti", {"socio_id": "nonexistent", "stagione": "x", "ente_id": "fidal"}, 400)
         add(sa, created, "certificati", {"socio_id": "nonexistent", "data_scadenza": D(5)}, 400)
 
 

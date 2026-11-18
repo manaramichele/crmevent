@@ -41,7 +41,9 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
     if (!apiKey || !box.current) return undefined;
     const m = new maplibregl.Map({ container: box.current, style: `https://api.maptiler.com/maps/${STYLES[stile] || STYLES.strade}/style.json?key=${apiKey}`,
       center: center || [12.4964, 41.9028], zoom: zoom || (center ? 16 : 5), attributionControl: { compact: true }, doubleClickZoom: false,
-      maxBounds: bounds, minZoom: minZoom || 0, cooperativeGestures: cooperative });
+      maxBounds: bounds, minZoom: minZoom || 0, cooperativeGestures: cooperative, preserveDrawingBuffer: true });
+    window.__plannerExportPng = () => m.getCanvas().toDataURL("image/png");
+    window.__plannerGetCenter = () => [m.getCenter().lng, m.getCenter().lat];
     map.current = m;
     if (window.__PLANNER_RECORDING) window.__plannerMap = m;
     let loaded = false;
@@ -54,7 +56,10 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
       m.addSource("draft", { type: "geojson", data: EMPTY });
       m.addLayer({ id: "f-fill", type: "fill", source: "feat", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": ["get", "colore"], "fill-opacity": ["case", ["==", ["get", "sel"], 1], 0.55, 0.35] } });
       m.addLayer({ id: "f-line", type: "line", source: "feat", filter: ["!=", ["geometry-type"], "Point"], paint: { "line-color": ["case", ["==", ["get", "sel"], 1], "#0f172a", ["get", "colore"]], "line-width": ["case", ["==", ["get", "sel"], 1], ["+", ["get", "spessore"], 1], ["get", "spessore"]] } });
-      m.addLayer({ id: "f-pt", type: "circle", source: "feat", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": ["case", ["==", ["get", "sel"], 1], 9, 7], "circle-color": ["get", "colore"], "circle-stroke-width": 2, "circle-stroke-color": ["case", ["==", ["get", "sel"], 1], "#0f172a", "#ffffff"] } });
+      m.addLayer({ id: "f-pt", type: "circle", source: "feat", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": ["*", ["get", "dim"], ["case", ["==", ["get", "sel"], 1], 9, 7]], "circle-color": ["get", "colore"], "circle-stroke-width": 2, "circle-stroke-color": ["case", ["==", ["get", "sel"], 1], "#0f172a", "#ffffff"] } });
+      m.addLayer({ id: "f-arrow", type: "symbol", source: "feat", filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "frecce"], 1]],
+        layout: { "symbol-placement": "line", "symbol-spacing": 70, "text-field": ">", "text-size": 18, "text-keep-upright": false, "text-rotation-alignment": "map", "text-allow-overlap": true },
+        paint: { "text-color": ["get", "colore"], "text-halo-color": "#fff", "text-halo-width": 1.5 } });
       m.addLayer({ id: "f-lbl", type: "symbol", source: "feat", layout: { "text-field": ["get", "etichetta"], "text-size": 11, "text-offset": [0, 1.2], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#0f172a", "text-halo-color": "#fff", "text-halo-width": 1.5 }, minzoom: 15 });
       m.addLayer({ id: "d-line", type: "line", source: "draft", paint: { "line-color": "#0f172a", "line-width": 2, "line-dasharray": [2, 2] } });
       m.addLayer({ id: "d-pt", type: "circle", source: "draft", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 4, "circle-color": "#0f172a" } });

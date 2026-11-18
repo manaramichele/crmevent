@@ -15,8 +15,9 @@ import { calcAge } from "@/components/crm";
 import SettingSelect from "@/components/SettingSelect";
 import { ADD_OPTION } from "@/lib/optionLists";
 import InlineAddOption from "@/components/InlineAddOption";
+import { AsdPersonSection } from "@/components/asd/AsdPeople";
 
-export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", non_determinata: "Non determinata" };
+export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", associazione: "Gestione Società", non_determinata: "Non determinata" };
 const CATS = [["staff", "Staff"], ["volontario", "Volontario"]];
 const ADDR = ["indirizzo", "cap", "citta", "provincia", "regione", "nazione"];
 const dm = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "");
@@ -185,6 +186,7 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
             {rows.map((r, i) => <AssignRow key={r.key} r={r} i={i} events={events} ruoli={ruoli} availPref={availPref(r.evento_id)} onChange={(n) => setRows(rows.map((x) => (x.key === r.key ? n : x)))} onRemove={() => setRows(rows.filter((x) => x.key !== r.key))} />)}
             <Button type="button" variant="outline" onClick={() => setRows([...rows, blankRow(rows[rows.length - 1]?.categoria || defaultCategoria)])} data-testid="mask-add-event"><Plus className="h-4 w-4 mr-1.5" />Aggiungi evento</Button>
           </Section>
+          {person?.id && <AsdPersonSection personId={person.id} />}
         </div>
         <div className="border-t border-slate-100 px-5 py-3 flex flex-col-reverse sm:flex-row sm:items-center gap-2 bg-white rounded-b-lg">
           {err && <p className="text-sm text-red-600 sm:flex-1" role="alert" data-testid="person-mask-error">{err}</p>}

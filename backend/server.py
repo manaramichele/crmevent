@@ -1480,7 +1480,7 @@ def _opt(model):
 
 async def _person_has_history(org_id: str, pid: str) -> bool:
     for coll, field in (("staff", "persona_id"), ("availabilities", "persona_id"), ("shifts", "persona_id"), ("person_companies", "person_id"),
-                        ("deals", "referente_id"), ("activities", "persona_id"), ("followups", "persona_id"), ("memberships", "persona_id")):
+                        ("deals", "referente_id"), ("activities", "persona_id"), ("followups", "persona_id"), ("memberships", "persona_id"), ("asd_soci", "persona_id")):
         if await db[coll].find_one({"org_id": org_id, field: pid}, {"_id": 1}):
             return True
     return False
@@ -2011,6 +2011,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
     for p in pres:
         pres_by[p["persona_id"]].append(p)
     prefs = await AVP["prefs_for"](admin["org_id"])
+    soci = await ASD["soci_map"](admin)
     out = []
     for p in persons:
         pid = p["id"]
@@ -2039,6 +2040,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "is_volontario": "volontario" in cats,
                     "is_team": "team" in cats,
                     "is_da_classificare": "da_classificare" in cats,
+                    "is_socio": pid in soci, "socio_stato": soci.get(pid),
                     "aziende_nomi": aziende,
                     "teams_nomi": teams_nomi,
                     "eventi_nomi": eventi_nomi,
@@ -2916,6 +2918,7 @@ async def get_settings(admin: dict = Depends(require_admin)):
 @api.put("/settings")
 async def update_settings(body: dict, admin: dict = Depends(require_admin)):
     body.pop("_id", None)
+    body.pop(asd.ENTI_KEY, None)
     body["id"] = admin["org_id"]
     await db.settings.update_one({"id": admin["org_id"]}, {"$set": body}, upsert=True)
     return await db.settings.find_one({"id": admin["org_id"]}, {"_id": 0})
@@ -6794,6 +6797,7 @@ AUDIT_ACTION_LABELS = {
     "news_withdrawn": "Novità ritirata",
     "news_deleted": "Novità eliminata",
     "news_simulated": "Simulazione rilascio (test)",
+    "news_created": "Novità creata manualmente",
     "brevo_org_lists_toggle": "Liste Brevo per organizzazione",
     "brevo_org_lists_sync": "Sincronizzazione liste Brevo organizzazione",
 }
@@ -6803,6 +6807,8 @@ async def record_audit(actor: dict, action: str, org_id: Optional[str] = None,
                         org_name: Optional[str] = None, meta: Optional[dict] = None,
                         target_email: Optional[str] = None, target_name: Optional[str] = None,
                         detail: Optional[str] = None) -> dict:
+    if org_id and not org_name and org_id != PLATFORM_ORG_ID:
+        org_name = ((await db.organizations.find_one({"id": org_id}, {"_id": 0, "nome": 1})) or {}).get("nome")
     doc = {"id": new_id(), "created_at": now_iso(),
            "actor_user_id": actor.get("user_id"), "actor_email": actor.get("email"),
            "actor_name": actor.get("name"), "actor_role": actor.get("role"),
@@ -14126,7 +14132,8 @@ ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_su
 press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
 app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
-ASD = asd.build(db, {"require_member": require_org_member, "record_audit": record_audit, "cf_valid": _cf_valid})
+ASD = asd.build(db, {"require_member": require_org_member, "record_audit": record_audit, "cf_valid": _cf_valid, "normalize": TN.normalize_fields, "org_settings": _org_settings,
+                     "person_scope": _person_scope, "link_visible": _link_visible, "prefs_for": lambda *a: AVP["prefs_for"](*a)})
 app.include_router(ASD["router"])
 app.add_event_handler("startup", ASD["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
@@ -14250,7 +14257,16 @@ MKT.update(marketplace.build(db, {
 PLAN_ADDONS = plan_addons.build(db, {"require_admin": require_admin, "record_audit": record_audit, "billing_missing": _billing_missing, "stripe_mode": STRIPE_MODE})
 app.include_router(PLAN_ADDONS["router"])
 app.include_router(MKT["router"])
-app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
+async def _news_org_context(org_id: str) -> dict:
+    """Piano effettivo e moduli Marketplace attivi dell'org (per i destinatari delle Novità)."""
+    plan = (await SAAS["state_for"](org_id)).get("plan") if SAAS else None
+    sids = await db.marketplace_purchases.distinct("service_id", {"org_id": org_id, "status": {"$in": ["active", "past_due"]}})
+    keys = set(await db.marketplace_services.distinct("key", {"id": {"$in": sids}})) if sids else set()
+    keys |= set(await db.org_services.distinct("service", {"org_id": org_id, "active": True}))
+    return {"plan": plan, "services": keys}
+
+
+app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit, _news_org_context))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
     "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,
     "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}, SAAS))

@@ -17,28 +17,8 @@ import WelcomeDemo from "@/components/WelcomeDemo";
 import { CalendarReturnHandler } from "@/components/GoogleCalendarCard";
 import SupportButton from "@/components/SupportButton";
 import { TutorialHint } from "@/components/Onboarding";
-import { NEWS_READ_EVENT } from "@/pages/News";
+import { NewsButton } from "@/components/NewsWidgets";
 
-function NewsButton() {
-  const [count, setCount] = useState(0);
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  useEffect(() => {
-    const load = () => api.get("/news/unread-count").then(({ data }) => setCount(data.count || 0)).catch(() => {});
-    load();
-    const reset = () => setCount(0);
-    window.addEventListener(NEWS_READ_EVENT, reset);
-    return () => window.removeEventListener(NEWS_READ_EVENT, reset);
-  }, [pathname]);
-  return (
-    <button type="button" onClick={() => navigate("/novita")} data-testid="header-news-button" title="Novità" aria-label={count ? `Novità, ${count} non lette` : "Novità"}
-      className="relative h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-700 transition-colors">
-      <Sparkles className="w-5 h-5 text-tiffany-active" />
-      <span className="sr-only">Novità</span>
-      {count > 0 && <span className="absolute top-1 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-tiffany text-slate-900 text-[10px] font-bold flex items-center justify-center" data-testid="header-news-count">{count}</span>}
-    </button>
-  );
-}
 
 const MODULE_PATHS = ["/marketplace", "/control-room", "/event-planner", "/event-map", "/organizzazione"];
 const isVolUser = (u) => u && (u.role === "staff" || u.role === "volunteer");
@@ -70,23 +50,24 @@ const PROFILE_ORG_NAV = [
 // Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
 const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", badge: "ticketsUnread" }];
 
-const navFor = (u, items, access) => items.flatMap((n) => {
+const navFor = (u, items, access, superPlan = false) => items.flatMap((n) => {
   const off = n.module && access && access[n.module] === false;
   const m = off ? { ...n, locked: true, lockTitle: "Modulo non attivo: aprilo per attivarlo" } : n;
   if (n.perm === "*") return [m];
-  if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...m, locked: true }];
+  // Super Admin: lucchetto sulle sezioni non incluse nel piano dell'org selezionata (resta comunque apribile).
+  if (n.perm !== "admin" && (superPlan ? planBlocks({ ...u, role: "viewer" }, n.perm) : planBlocks(u, n.perm))) return [{ ...m, locked: true, lockTitle: "Non incluso nel piano dell'organizzazione" }];
   return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [m] : [];
 });
-const orgGroups = (u, access, iscrittiOn, isSuper = false, asdOn = false) => [
-  { items: withIscritti(navFor(u, ORG_NAV, access), iscrittiOn, asdOn) },
-  { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access) },
-  { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access) },
-  { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access) },
+const orgGroups = (u, access, iscrittiOn, isSuper = false, asdOn = false, superPlan = false) => [
+  { items: withIscritti(navFor(u, ORG_NAV, access, superPlan), iscrittiOn, asdOn) },
+  { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access, superPlan) },
+  { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access, superPlan) },
+  { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access, superPlan) },
 ].filter((g) => g.items.length);
 
 // Moduli Marketplace attivi: voce di menu dopo "Aziende".
 const ISCRITTI_NAV = { to: "/iscritti", label: "Elenco Iscritti", icon: Contact, id: "iscritti", perm: "*" };
-const ASD_NAV = { to: "/associazione", label: "Gestione Associazione Sportiva", icon: Trophy, id: "associazione", perm: "*" };
+const ASD_NAV = { to: "/associazione", label: "Gestione Società", icon: Trophy, id: "associazione", perm: "*" };
 const withIscritti = (items, on, asdOn) => {
   const extra = [on && ISCRITTI_NAV, asdOn && ASD_NAV].filter(Boolean);
   if (!extra.length) return items;
@@ -291,16 +272,29 @@ export default function Layout({ children }) {
   }, []);
 
   const isSuper = user?.role === "superadmin";
+  // Contesto operativo: org dell'utente oppure org selezionata dal Super Admin nella tendina "Org attiva".
+  const superOrg = isSuper && !!actingOrgId && localStorage.getItem("acting_org_id") === actingOrgId ? actingOrgId : null;
+  const ctxOrg = isSuper ? superOrg : user?.org_id;
   const [iscrittiOn, setIscrittiOn] = useState(false);
-  useEffect(() => {
-    if (isSuper || !user?.org_id) { setIscrittiOn(false); return; }
-    api.get("/iscritti/status").then(({ data }) => setIscrittiOn(!!data.active)).catch(() => setIscrittiOn(false));
-  }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
   const [asdOn, setAsdOn] = useState(false);
+  const [superSaas, setSuperSaas] = useState(null);
+  // Se la pagina corrente non esiste nella nuova org, torna alla dashboard operativa.
+  const leaveIf = (prefix, on) => { if (isSuper && !on && window.location.pathname.startsWith(prefix)) navigate("/app", { replace: true }); };
   useEffect(() => {
-    if (isSuper || !user?.org_id || isVolUser(user)) { setAsdOn(false); return; }
-    api.get("/asd/status").then(({ data }) => setAsdOn(!!data.active)).catch(() => setAsdOn(false));
-  }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!ctxOrg) { setIscrittiOn(false); return; }
+    setIscrittiOn(false);
+    api.get("/iscritti/status").then(({ data }) => { setIscrittiOn(!!data.active); leaveIf("/iscritti", !!data.active); }).catch(() => setIscrittiOn(false));
+  }, [ctxOrg, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!ctxOrg || isVolUser(user)) { setAsdOn(false); return; }
+    setAsdOn(false);
+    api.get("/asd/status").then(({ data }) => { setAsdOn(!!data.active); leaveIf("/associazione", !!data.active); }).catch(() => setAsdOn(false));
+  }, [ctxOrg, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!superOrg) { setSuperSaas(null); return; }
+    setSuperSaas(null);
+    api.get("/saas/me").then(({ data }) => setSuperSaas(data)).catch(() => setSuperSaas(null));
+  }, [superOrg]);
   const [counts, setCounts] = useState({});
   const [access, setAccess] = useState(null);
   useEffect(() => {
@@ -387,7 +381,7 @@ export default function Layout({ children }) {
   }, [mobileOpen]);
 
   const navGroups = isSuper
-    ? [...orgGroups(user, access, false, true), { title: "Dashboard piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
+    ? [...orgGroups(superSaas?.enabled ? { ...user, saas: { ...superSaas, enabled: true } } : user, access, iscrittiOn, true, asdOn, !!superSaas?.enabled), { title: "Dashboard piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
     : orgGroups(user, access, iscrittiOn, false, asdOn);
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
@@ -443,7 +437,7 @@ export default function Layout({ children }) {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} data-testid="mobile-drawer-overlay" />
           <aside className="absolute left-0 top-0 h-[100dvh] max-h-[100dvh] w-64 bg-white shadow-xl flex flex-col" data-testid="mobile-drawer">
             <div className="h-14 flex items-center justify-between px-3 shrink-0 border-b border-slate-100"><button onClick={() => { setMobileOpen(false); navigate("/"); }} data-testid="mobile-logo-home" className="flex items-center"><Logo /></button><button onClick={() => setMobileOpen(false)} data-testid="mobile-menu-close"><X className="w-6 h-6" /></button></div>
-            {showSwitcher && <div className="sm:hidden px-3 pt-3 [&_select]:max-w-[150px]" data-testid="mobile-org-switcher"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => { setActingOrg(id, true, actingOrgId); setMobileOpen(false); }} /></div>}
+            {showSwitcher && <div className="sm:hidden px-3 pt-3 [&_select]:max-w-[150px]" data-testid="mobile-org-switcher"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => { setActingOrg(id, !isSuper, actingOrgId); setMobileOpen(false); }} /></div>}
             <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-3 py-3 space-y-1 pb-[calc(env(safe-area-inset-bottom)+24px)]" data-testid="mobile-drawer-nav">
               {navGroups.map((g, gi) => (
                 <div key={gi} className={gi > 0 ? "pt-3 mt-2 border-t border-slate-100" : ""}>
@@ -461,7 +455,7 @@ export default function Layout({ children }) {
         {user?.support && <SupportBanner />}
         <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-4 lg:px-6" data-testid="app-header">
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><span className="relative"><Menu className="w-5 h-5" />{counts.ticketsUnread > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white" data-testid="mobile-menu-unread-dot" />}</span></button>
-          {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
+          {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, !isSuper, actingOrgId)} /></div>}
           {!isSuper && <TrialButton saas={user?.saas} />}
           <div className="flex-1 min-w-0" />
           {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}
@@ -472,7 +466,7 @@ export default function Layout({ children }) {
             </button>
           ) : (
           <SupportButton user={user} />)}
-          {!isSuper && <div className="shrink-0"><NewsButton /></div>}
+          <div className="shrink-0"><NewsButton /></div>
           {!isVolUser(user) && <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
             className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>}
           <div className="relative shrink-0">

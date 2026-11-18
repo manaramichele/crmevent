@@ -10,6 +10,7 @@ import PlatformUsers from "@/pages/PlatformUsers";
 import SaasAdmin from "@/pages/SaasAdmin";
 import ModulesAdmin from "@/pages/ModulesAdmin";
 import NormalizePreview from "@/components/NormalizePreview";
+import { NewsBanner } from "@/components/NewsWidgets";
 
 const SEZIONI = [["organizzazioni", "Organizzazioni"], ["utenti", "Utenti"], ["abbonamenti", "Abbonamenti"], ["moduli", "Moduli e Attivazioni"]];
 
@@ -95,6 +96,7 @@ export default function Platform() {
 
   return (
     <div className="animate-fade-up" data-testid="platform-page">
+      <div className="mb-4"><NewsBanner /></div>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="font-display text-3xl font-bold text-slate-900">Piattaforma CRMEvent</h1>

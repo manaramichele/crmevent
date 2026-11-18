@@ -118,45 +118,58 @@ function ChangeDialog({ pv, onClose, onConfirm, busy }) {
 }
 
 const RANK = ["bronze", "silver", "gold"];
-// Piano minimo che contiene l'utilizzo reale (eventi creati + persone Staff/Volontari).
-export function recommendPlan(plans, usage) {
-  if (!usage) return null;
-  const fits = (p) => (p.max_events < 0 || usage.events <= p.max_events) && (p.max_users < 0 || (usage.people ?? 0) <= p.max_users);
-  return [...plans].sort((a, b) => RANK.indexOf(a.key) - RANK.indexOf(b.key)).find(fits) || null;
-}
+// Raccomandazione commerciale per durata (non seleziona né acquista nulla).
+const COMMERCIAL = {
+  semester: { key: "gold", color: null, msg: "la soluzione più completa per gestire eventi, team e collaborazioni." },
+  yearly: { key: "silver", color: "#0ABAB5", msg: "il miglior equilibrio tra funzionalità e convenienza." },
+};
+// Il piano contiene l'utilizzo reale (eventi creati + persone Staff/Volontari)?
+// Limiti effettivi: eventuali deroghe del Super Admin sull'organizzazione prevalgono sul catalogo (come nel backend).
+const effLimits = (p, adm) => ({ ...p, max_events: adm?.max_events ?? p.max_events, max_users: adm?.max_users ?? p.max_users });
+const fitsUsage = (p, usage) => !usage || ((p.max_events < 0 || usage.events <= p.max_events) && (p.max_users < 0 || (usage.people ?? 0) <= p.max_users));
+const overText = (p, u) => [p.max_events >= 0 && u.events > p.max_events && `${u.events} eventi (max ${p.max_events})`,
+  p.max_users >= 0 && (u.people ?? 0) > p.max_users && `${u.people} persone Staff e Volontari (max ${p.max_users})`].filter(Boolean).join(" e ");
 
 function PlanPickerDialog({ open, onClose, s, plans, cycle, setCycle, isCur, choose, busy, requestMode, onRequest, live, title }) {
   const [ack, setAck] = useState(false);
-  const rec = recommendPlan(plans.plans, s.usage);
   const curKey = requestMode ? s.paid_plan || s.plan || s.assigned_plan : live ? s.paid_plan : null;
   const needsAck = !requestMode && s.billing === "free";
   // Solo il piano attuale (evidenziato) e i piani superiori.
   const shown = plans.plans.filter((p) => !curKey || RANK.indexOf(p.key) >= RANK.indexOf(curKey));
   const isCurrent = (k) => isCur(k) || k === curKey;
+  const com = COMMERCIAL[cycle];
+  const recP = com && shown.find((p) => p.key === com.key && !isCurrent(p.key) && fitsUsage(effLimits(p, s.admin), s.usage));
+  const recColor = recP && (com.color || recP.color);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" data-testid="plan-picker-dialog">
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" onPointerDownOutside={(e) => { if (e.target?.closest?.("[data-testid=cookie-banner]")) e.preventDefault(); }} data-testid="plan-picker-dialog">
         <DialogHeader><DialogTitle>{title || "Passa a un piano superiore"}</DialogTitle>
           <DialogDescription>{requestMode ? "La tua formula è assegnata dall'amministrazione CRMEvent: invia una richiesta, nessun addebito automatico." : "Prezzi del catalogo attuale. Il nuovo piano si applica solo dopo la tua conferma."} I tuoi dati restano invariati.</DialogDescription></DialogHeader>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {rec && rec.key !== curKey
-            ? <p className="text-sm rounded-lg bg-[#0ABAB5]/10 text-slate-800 px-3 py-2" data-testid="plan-recommendation">Ti consigliamo <b>{rec.label}</b>: è il piano che supporta tutti i tuoi eventi e collaboratori attuali.</p>
-            : <p className="text-sm text-slate-500" data-testid="plan-recommendation">{rec ? "Il tuo piano attuale copre già eventi e collaboratori." : ""}</p>}
+          {recP
+            ? <p className="text-sm rounded-lg text-slate-800 px-3 py-2 border" style={{ background: `${recColor}14`, borderColor: `${recColor}55` }} data-testid="plan-recommendation">Ti consigliamo <b>{recP.label}</b>: {com.msg}</p>
+            : <p className="text-sm text-slate-500" data-testid="plan-recommendation" />}
           <CycleToggle cycle={cycle} setCycle={setCycle} />
         </div>
         {needsAck && <label className="flex items-start gap-2 text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-900 p-3" data-testid="plan-free-warning">
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-[#0ABAB5]" data-testid="plan-free-ack" />
           <span>La tua organizzazione usa una formula gratuita concessa da CRMEvent. Scegliendo un piano passerai a un <b>abbonamento a pagamento</b>: confermo di voler procedere.</span></label>}
         {s.upgrade_request && <p className="text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2" data-testid="plan-upgrade-pending">Richiesta di upgrade a <b>{s.upgrade_request.plan.toUpperCase()}</b> inviata il {d(s.upgrade_request.at)}: ti contatteremo a breve.</p>}
-        <div className="grid gap-4 lg:grid-cols-3">
-          {shown.map((p) => (
-            <div key={p.key} className="relative">
-              {rec?.key === p.key && !isCurrent(p.key) && <span className="absolute -top-2.5 right-3 z-10 rounded-full bg-[#0ABAB5] text-slate-900 text-[11px] font-bold px-2 py-0.5" data-testid={`plan-recommended-${p.key}`}>Consigliato</span>}
-              <PlanCard p={p} cycle={cycle} features={plans.features} current={isCurrent(p.key)}
-                cta={<Button disabled={busy || isCurrent(p.key) || (needsAck && !ack)} onClick={() => (requestMode ? onRequest(p.key) : choose(p.key))} data-testid={`sub-choose-${p.key}`}
-                  className="w-full h-10 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold">{isCurrent(p.key) ? "Piano attuale" : requestMode ? `Richiedi ${p.label}` : `Passa a ${p.label}`}</Button>} />
-            </div>
-          ))}
+        <div className="grid gap-5 pt-3 lg:grid-cols-3">
+          {shown.map((p) => {
+            const isRec = recP?.key === p.key;
+            const fits = isCurrent(p.key) || fitsUsage(effLimits(p, s.admin), s.usage);
+            return (
+              <div key={p.key} className="relative flex flex-col" data-testid={`plan-wrap-${p.key}`} data-recommended={isRec ? "true" : "false"}>
+                {isRec && <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-900 shadow-sm" style={{ background: recColor }} data-testid={`plan-recommended-${p.key}`}>Consigliato</span>}
+                <PlanCard p={p} cycle={cycle} features={plans.features} current={isCurrent(p.key)} highlight={isRec ? recColor : null}
+                  cta={<>
+                    {!fits && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mb-2" data-testid={`plan-over-limits-${p.key}`}>Non disponibile: hai {overText(effLimits(p, s.admin), s.usage)}.</p>}
+                    <Button disabled={busy || isCurrent(p.key) || !fits || (needsAck && !ack)} onClick={() => (requestMode ? onRequest(p.key) : choose(p.key))} data-testid={`sub-choose-${p.key}`}
+                      className="w-full h-10 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold">{isCurrent(p.key) ? "Piano attuale" : requestMode ? `Richiedi ${p.label}` : `Passa a ${p.label}`}</Button></>} />
+              </div>
+            );
+          })}
         </div>
       </DialogContent>
     </Dialog>

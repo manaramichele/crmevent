@@ -287,6 +287,7 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
       </div>
     );
   }
+  if (field.type === "custom") return field.render(value, (v) => onChange(field.name, v), form);
   if (field.type === "textarea") {
     return <Textarea {...common} value={value || ""} onChange={(e) => onChange(field.name, e.target.value)} placeholder={field.placeholder} />;
   }

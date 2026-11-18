@@ -12,8 +12,9 @@ from controlroom_itv import _dist
 # Mappatura deterministica dai nomi della libreria Event Planner alle categorie iniziali Control Room
 NAME_MAP = {"ristoro": "ristoro", "punto acqua": "ristoro", "ambulanza": "ambulanza", "area medica": "sanitario", "primo soccorso": "sanitario",
             "postazione volontari": "volontari", "coordinamento": "volontari", "direzione gara": "volontari", "segreteria": "volontari",
-            "punto controllo percorso": "controllo", "postazione di controllo": "controllo", "chiusura stradale": "chiusura", "estintore": "vigili_fuoco"}
-CAT_MAP = {"viabilità": "viabilita", "sicurezza": "controllo", "staff": "volontari"}
+            "punto controllo percorso": "controllo", "postazione di controllo": "controllo", "chiusura stradale": "chiusura", "estintore": "vigili_fuoco",
+            "soccorso": "sanitario", "barca medica": "sanitario", "bagnino": "sanitario", "medico": "sanitario", "defibrillatore": "sanitario", "pattino": "sanitario"}
+CAT_MAP = {"viabilità": "viabilita", "sicurezza": "controllo", "staff": "volontari", "mezzi nautici": "controllo", "boe": "controllo", "transizioni": "controllo"}
 
 
 class ImportIn(BaseModel):
@@ -89,7 +90,9 @@ def attach(r, db, deps, H):
                 if not c or not p.get("id"):
                     continue
                 feats.append({"id": p["id"], "nome": p.get("nome") or "Elemento", "categoria": p.get("categoria"), "livello": layers.get(p.get("layer_id")), "lng": c[0], "lat": c[1],
-                              "persone": staff.get(p["id"], 0), "suggested": _guess(p, keys), "imported_post_id": done.get(p["id"])})
+                              "persone": staff.get(p["id"], 0), "suggested": _guess(p, keys), "imported_post_id": done.get(p["id"]),
+                              "disciplina": p.get("disciplina"), "riservato": bool(p.get("riservato")), "posizione": "pianificata",
+                              "gps_device": p.get("gps_device"), "gps_reale": None, "gps_ultimo_aggiornamento": None})
             out.append({"id": pr["id"], "nome": pr["nome"], "features": feats})
         return {"projects": out}
 

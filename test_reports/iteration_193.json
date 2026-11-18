@@ -1,0 +1,43 @@
+{
+  "summary": "Tested the Gestione Società rename and the Enti e Federazioni feature end to end, on both the backend and the frontend. Backend: new suite test_asd_enti_rename.py (10 tests) plus the regression suite test_asd_anagrafica_unica.py (21 tests). After updating the old free-text 'ente' payloads to ente_id, all 31 pass with -n 0. Frontend (Playwright, 1920x1080): rename text, the searchable Ente dropdown, quick-add form, Settings group, disabled-ente behaviour, Marketplace card/detail and inactive-org hiding all work. No critical bugs found; 2 minor issues.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/asd/persona/{pid}", "issue": "tesseramento.ente returns the stored label snapshot (t.ente), not the current label. After renaming an ente, the person section (person-asd-tess) still shows the old name, while GET /api/asd/tesseramenti ente_nome is correct. Reproduced: renamed TEST_UIF to TEST_UIR and persona_link still returned 'TEST_UIF – TEST Federazione UI'. Fix: resolve the label via ente_id from enti(org), as list_tess does."},
+      {"endpoint": "enti read-modify-write (POST/PUT/stato/order/delete /api/asd/enti)", "issue": "The whole list is read, changed in Python and saved back with $set. Two admins saving at the same moment can overwrite each other's changes (last write wins). The duplicate check also has a race. Low risk but worth noting. A positional $push/$set update or a version check would avoid it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EnteSelect (edit tesseramento)", "issue": "Every EnteSelect mount calls GET /asd/enti again. While it loads, an edit dialog briefly shows the placeholder 'Cerca per sigla o denominazione…' instead of the saved ente. The label appears about 1s later. Cosmetic only; saving works.", "selector": "[data-testid='asd-ente-select']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Tesseramento dialog", "issues": ["Data emissione/Data scadenza use the browser's native date input (mm/dd/yyyy) instead of the shadcn calendar. This is an existing pattern in the app."]},
+      {"screen": "AsdTesseramenti delete confirm", "issues": ["The delete confirmation text uses r.ente (snapshot) rather than r.ente_nome, so after a rename it can show a stale label."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_asd_enti_rename.py", "/app/backend/tests/test_asd_anagrafica_unica.py", "/app/backend/tests/test_asd_module.py", "/app/backend/tests/ui_seed_enti.py", "/app/test_reports/pytest/pytest_asd_regression.xml"],
+  "action_items": [
+    "persona_link (asd.py ~line 644): return the current ente label (via ente_id) instead of the t.ente snapshot",
+    "Optional: use r.ente_nome in the AsdTesseramenti delete confirm message",
+    "Optional: share the enti fetch (context/cache) so the edit dialog does not flash the placeholder",
+    "Optional: make enti list updates atomic to avoid lost updates under concurrent edits"
+  ],
+  "critical_code_review_comments": [
+    "enti() lazy init depends on _org_settings creating the settings doc; save_enti uses update_one without upsert. This works today because _org_settings inserts the doc first.",
+    "POST /api/asd/enti is allowed for any module member (org_role user too), while edit/toggle/order/delete require admin_org/superadmin. This looks intentional for the quick-add from tesseramenti; please confirm it matches the product rules.",
+    "Rename migration verified: marketplace_services name='Gestione Società', price 99 yearly, stripe_prices.test unchanged; schema_meta rename_gestione_societa_v1 holds a backup of the old name; 0 purchases with the old service_name."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_asd_enti_rename.py (new)",
+    "/app/backend/tests/ui_seed_enti.py (new helper to create/clean up the UI test org)",
+    "/app/backend/tests/test_asd_anagrafica_unica.py (ente -> ente_id 'fidal', expects the FIDAL label, cleanup also deletes the org settings doc)",
+    "/app/backend/tests/test_asd_module.py (ente -> ente_id 'fidal'; its tests still skip because the fixed accounts test_asd_a/b_1795022688 do not exist)"
+  ],
+  "success_rate": {"backend": "100% (31/31 run, 15 legacy test_asd_module tests skipped because their accounts are missing)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Created TEST_ENTI_* orgs via register-organization with org_services gestione-societa. All of them (users, orgs, settings, soci, persons, tesseramenti, org_services) were deleted afterwards by their ids.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest backend/tests/test_asd_enti_rename.py backend/tests/test_asd_anagrafica_unica.py -n 0. Default ente ids are slugs of the sigla (csi, fidal, msp-italia, us-acli). UI: a demo-booking modal ('Non ora') and the cookie banner ('Accept all') must be dismissed before clicking. Socio select options are option-socio_id-{id}. For UI tests, use ui_seed_enti.py create/cleanup <email>."
+}

@@ -699,6 +699,12 @@ def build(db, deps: dict):
                                                          "message": "Completa i dati di fatturazione: " + ", ".join(missing)})
         if await _live_sub(org):
             raise HTTPException(status_code=400, detail="Hai già un abbonamento attivo: usa Cambia piano")
+        adm = org["saas"].get("admin") or {}
+        lim = {k: int(adm[k]) if adm.get(k) is not None else v for k, v in plan_limits(cfg, body.plan).items()}
+        us = await usage(org["id"])
+        over = [f"{n} {lbl} (max {lim[f'max_{k}']})" for k, n, lbl in (("events", us["events"], "eventi"), ("users", us["people"], "persone Staff e Volontari")) if 0 <= lim[f"max_{k}"] < n]
+        if over:
+            raise HTTPException(status_code=400, detail=f"Il piano {body.plan.upper()} non copre il tuo utilizzo attuale: hai {' e '.join(over)}. Scegli un piano superiore.")
         price_id = await ensure_price(cfg, body.plan, body.cycle)
         cust = await deps["ensure_customer"](org, user)
         md = {"kind": "saas", "org_id": org["id"], "plan": body.plan, "cycle": body.cycle}
@@ -779,7 +785,7 @@ def build(db, deps: dict):
         if kind == "same":
             raise HTTPException(status_code=400, detail="È già il tuo piano attuale")
         if body.cycle != "yearly" and await db.marketplace_purchases.find_one({"org_id": org["id"], "source": "plan_addon", "status": {"$in": ["active", "past_due"]}, "renew": {"$ne": False}}, {"_id": 1}):
-            raise HTTPException(status_code=400, detail="Hai un modulo annuale attivo (Gestione Associazione Sportiva): per passare al semestrale disattiva prima il suo rinnovo automatico.")
+            raise HTTPException(status_code=400, detail="Hai un modulo annuale attivo (Gestione Società): per passare al semestrale disattiva prima il suo rinnovo automatico.")
         price_id = await ensure_price(cfg, body.plan, body.cycle)
         md = {"kind": "saas", "org_id": org["id"], "plan": body.plan, "cycle": body.cycle}
         trialing = sub.get("status") == "trialing"
