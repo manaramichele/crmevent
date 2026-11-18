@@ -2340,6 +2340,7 @@ async def put_company_referenti(company_id: str, body: ReferentiIn, admin: dict 
 class InviteIn(BaseModel):
     role: Optional[str] = None
     force: bool = False
+    evento_id: Optional[str] = None
 
 
 class BulkInviteIn(BaseModel):
@@ -2382,7 +2383,7 @@ async def _invite_roles_for(user: dict, person: dict) -> set:
     return roles
 
 
-async def _send_person_invite(user: dict, person: dict, role: Optional[str], force: bool) -> dict:
+async def _send_person_invite(user: dict, person: dict, role: Optional[str], force: bool, evento_id: Optional[str] = None) -> dict:
     """Invito area personale (template/link esistenti) con controllo accesso destinatario e anti-doppione."""
     if not person.get("email"):
         raise HTTPException(status_code=400, detail="La persona non ha un'email")
@@ -2410,14 +2411,43 @@ async def _send_person_invite(user: dict, person: dict, role: Optional[str], for
                                     "message": f"Invito già inviato il {dt.astimezone(ZoneInfo('Europe/Rome')).strftime('%d/%m/%Y alle %H:%M')}"})
         except ValueError:
             pass
-    return await _do_person_invite(user, person, role, email)
+    return await _do_person_invite(user, person, role, email, evento_id)
 
 
-async def _do_person_invite(admin: dict, person: dict, role: str, email: str) -> dict:
+def _fmt_event_dates(ev: dict) -> str:
+    def f(s):
+        try:
+            return datetime.strptime((s or "")[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            return ""
+    a, b = f(ev.get("data_inizio")), f(ev.get("data_fine"))
+    return f"{a} – {b}" if a and b and a != b else a
+
+
+async def _staff_mail_event(org_id: str, person_id: str, evento_id: Optional[str]) -> Optional[dict]:
+    """Evento a cui si riferisce la comunicazione: quello indicato (se la persona vi è associata) o il più recente."""
+    links = await db.staff.find({"org_id": org_id, "persona_id": person_id}, {"_id": 0, "evento_id": 1}).to_list(1000)
+    eids = [x["evento_id"] for x in links if x.get("evento_id")]
+    if evento_id and evento_id in eids:
+        eids = [evento_id]
+    evs = await db.events.find({"org_id": org_id, "id": {"$in": eids}}, {"_id": 0}).to_list(1000)
+    return max(evs, key=lambda e: e.get("data_inizio") or "") if evs else None
+
+
+def _staff_mail(kind: str, ev: Optional[dict], name: str, role: str, url: Optional[str]):
+    ev = ev or {}
+    return email_utils.staff_event_email(kind=kind, event_name=ev.get("nome") or "CRMEvent", event_date=_fmt_event_dates(ev),
+                                         logo_url=_event_logo_url(ev) if ev.get("logo_url") else None, name=name, role=role, cta_url=url)
+
+
+async def _do_person_invite(admin: dict, person: dict, role: str, email: str, evento_id: Optional[str] = None) -> dict:
     person_id = person["id"]
     token = secrets.token_urlsafe(32)
     existing = await db.users.find_one({"email": email})
-    if existing:
+    activated = bool(existing and existing.get("password_hash") and existing.get("active", True) and existing.get("role") in ("staff", "volunteer"))
+    if activated:
+        await db.users.update_one({"email": email}, {"$set": {"person_id": person_id, "role": role, "org_id": admin["org_id"]}})
+    elif existing:
         await db.users.update_one({"email": email}, {"$set": {"person_id": person_id, "role": role, "org_id": admin["org_id"],
                                                               "activation_token": token, "active": True,
                                                               "activation_expires": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()}})
@@ -2428,25 +2458,36 @@ async def _do_person_invite(admin: dict, person: dict, role: str, email: str) ->
                                    "picture": person.get("foto_url", ""), "activation_token": token,
                                    "activation_expires": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
                                    "created_at": now_iso()})
-    link = f"{APP_URL}/attiva?token={token}"
+    link = f"{APP_URL}/login" if activated else f"{APP_URL}/attiva?token={token}"
     sent = True
     try:
-        await email_utils.send_email(to=email, subject="Il tuo accesso a CRMEvent",
-                                     html=email_utils.link_email(name=person["nome"],
-                                                                 intro="Sei stato invitato ad accedere alla tua area personale su CRMEvent. Attiva l'account e imposta la tua password.",
-                                                                 cta_label="Attiva il mio account", url=link,
-                                                                 footer_note="L'invito scade tra 7 giorni."))
+        subject, html, from_name = _staff_mail("esistente" if activated else "nuovo", await _staff_mail_event(admin["org_id"], person_id, evento_id),
+                                               person["nome"], role, link)
+        await email_utils.send_email(to=email, subject=subject, html=html, from_name=from_name)
     except Exception as e:
         logger.error(f"invite email failed: {e}")
         sent = False
     ts = now_iso()
-    await db.persons.update_one(oq(admin, id=person_id), {"$set": {"invite_status": "invito_inviato", "user_role": role,
-                                                                  "last_invite_at": ts, "last_invite_by": admin.get("name") or admin.get("email")},
-                                                         "$inc": {"invite_count": 1}})
+    st = {"user_role": role, "last_invite_at": ts, "last_invite_by": admin.get("name") or admin.get("email")}
+    if not activated:
+        st["invite_status"] = "invito_inviato"
+    await db.persons.update_one(oq(admin, id=person_id), {"$set": st, "$inc": {"invite_count": 1}})
     await record_audit(admin, "person_invite_sent", org_id=admin["org_id"], target_email=email,
                        target_name=f"{person.get('cognome') or ''} {person.get('nome') or ''}".strip(),
-                       detail=f"Ruolo: {'Staff' if role == 'staff' else 'Volontario'}" + ("" if sent else " · email non inviata"))
-    return {"ok": True, "email_sent": sent, "last_invite_at": ts, "role": role}
+                       detail=f"Ruolo: {'Staff' if role == 'staff' else 'Volontario'}" + (" · account già attivo" if activated else "") + ("" if sent else " · email non inviata"))
+    return {"ok": True, "email_sent": sent, "last_invite_at": ts, "role": role, "existing_account": activated}
+
+
+@api.get("/events/{event_id}/staff-email-preview")
+async def staff_email_preview(event_id: str, kind: str = "nuovo", role: str = "staff", admin: dict = Depends(require_admin)):
+    if kind not in email_utils.STAFF_KINDS or role not in ("staff", "volunteer"):
+        raise HTTPException(status_code=400, detail="Tipo di anteprima non valido")
+    ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    url = {"nuovo": f"{APP_URL}/attiva?token=ANTEPRIMA", "esistente": f"{APP_URL}/login"}.get(kind)
+    subject, html, from_name = _staff_mail(kind, ev, admin.get("name") or "Mario", role, url)
+    return {"subject": subject, "from_name": from_name, "html": html}
 
 
 @api.post("/persons/{person_id}/invite")
@@ -2455,7 +2496,7 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
     person = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0})
     if not person:
         raise HTTPException(status_code=404, detail="Persona non trovata")
-    return await _send_person_invite(admin, person, body.role, body.force)
+    return await _send_person_invite(admin, person, body.role, body.force, body.evento_id)
 
 
 @api.post("/person-invites/bulk")
@@ -3211,8 +3252,14 @@ class ChatIn(BaseModel):
     request_id: Optional[str] = None  # idempotenza consumo crediti (UUID lato client, riusato sui retry)
 
 
+def _deny_ai_for_staff(user: dict):
+    if user.get("role") in ("staff", "volunteer"):
+        raise HTTPException(status_code=403, detail="Assistente AI non disponibile per Staff e Volontari")
+
+
 @api.post("/support/chat")
 async def support_chat(body: ChatIn, request: Request, user: dict = Depends(get_current_user)):
+    _deny_ai_for_staff(user)
     org = DEFAULT_ORG
     if body.conversation_id:
         conv = await db.support_conversations.find_one({"id": body.conversation_id}, {"_id": 0})
@@ -3290,6 +3337,7 @@ class FeedbackIn(BaseModel):
 
 @api.post("/support/feedback")
 async def support_feedback(body: FeedbackIn, user: dict = Depends(get_current_user)):
+    _deny_ai_for_staff(user)
     m = await db.support_messages.find_one({"id": body.message_id}, {"_id": 0})
     if not m:
         raise HTTPException(status_code=404, detail="Messaggio non trovato")
