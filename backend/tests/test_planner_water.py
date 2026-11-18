@@ -110,6 +110,11 @@ def test_exports_with_data(ctx):
                       "numero": i + 1, "layer_id": lb, "link_route": "r1", "link_idx": i, "colore": "#F97316", "responsabile": "Mario"}})
     feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [12.002, 44.001]}, "properties": {"id": "b9", "tipo": "point", "nome": "Boa segreta", "categoria": "Boe",
                   "numero": 9, "layer_id": lb, "riservato": True}})
+    feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [12.004, 44.003]}, "properties": {"id": "bi", "tipo": "point", "nome": "Boa indipendente", "categoria": "Boe",
+                  "numero": 20, "layer_id": lb}})
+    feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [12.0012, 44.0012]}, "properties": {"id": "bag", "tipo": "point", "nome": "Bagnino", "categoria": "Mezzi nautici", "layer_id": lm}})
+    feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [12.0013, 44.0013]}, "properties": {"id": "def", "tipo": "point", "nome": "Defibrillatore", "categoria": "Sicurezza", "layer_id": lm}})
+    feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [12.0014, 44.0014]}, "properties": {"id": "sup", "tipo": "point", "nome": "SUP", "categoria": "Mezzi nautici", "layer_id": lm}})
     feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [12.001, 44.001]}, "properties": {"id": "m1", "tipo": "point", "nome": "Gommone di soccorso", "categoria": "Mezzi nautici",
                   "layer_id": lm, "responsabile": "Luca", "gps_device": "X1"}})
     _save(ctx, feats)
@@ -131,14 +136,19 @@ def test_exports_with_data(ctx):
     rows = list(ws.iter_rows(values_only=True))
     assert rows[0][0] == "N."
     body = rows[1:]
-    assert len(body) == 4
+    print(body)
+    assert len(body) == 5
     nums = [x[0] for x in body]
+    # independent buoys: own count (first has empty da_precedente, progressive 0)
+    ind = [x for x in body if x[1] in ("Boa indipendente", "Boa segreta")]
+    assert ind[0][6] in (None, "") and ind[0][7] == 0, ind
+    assert ind[1][7] == ind[1][6] and ind[1][6] > 0, ind
     assert nums[:3] == [1, 2, 3]
     assert body[1][6] == round(d(pts[0], pts[1]))
     assert body[2][7] == round(d(pts[0], pts[1]) + d(pts[1], pts[2]))
     r = s.get(f"{API}/planner/projects/{pid}/export/boe.xlsx", params={"pubblico": "true"})
     rows = list(load_workbook(io.BytesIO(r.content)).active.iter_rows(values_only=True))
-    assert len(rows) == 4 and all(x[1] != "Boa segreta" for x in rows)
+    assert len(rows) == 5 and all(x[1] != "Boa segreta" for x in rows)
     # PDF
     r = s.get(f"{API}/planner/projects/{pid}/export/boe.pdf", params={"pubblico": "false"})
     assert r.status_code == 200 and r.content[:4] == b"%PDF"
@@ -158,6 +168,14 @@ def test_controlroom_planner_list(ctx):
     assert "gps_reale" in m and m["gps_reale"] is None
     b = next(f for f in pr["features"] if f["id"] == "b0")
     assert b.get("posizione") == "pianificata"
+    for f in pr["features"]:
+        assert f["posizione"] == "pianificata" and f["gps_reale"] is None and f["gps_ultimo_aggiornamento"] is None and "gps_device" in f
+    assert m["gps_device"] == "X1"
+    sug = {f["id"]: f["suggested"] for f in pr["features"]}
+    print(sug)
+    for k in ("m1", "bag", "def"):
+        assert sug[k] == "sanitario", (k, sug)
+    assert sug["b0"] == "controllo" and sug["sup"] == "controllo", sug
 
 
 def test_export_cross_org_forbidden(ctx):

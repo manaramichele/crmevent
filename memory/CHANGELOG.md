@@ -1303,3 +1303,11 @@ Task 2 — Creatività manuale:
 - Lettura per singola novità (read_ids, compatibile con seen_at), avviso Dashboard (org + /piattaforma) chiudibile; icona campanella+scintilla per tutti incl. Super Admin; aggiornamento a cambio pagina/focus/evento, nessun polling.
 - releases.json: aggiunto 2026-11-18-associazione-abbonamenti. iteration_189: backend 17/17, fix race StrictMode su /novita.
 
+
+## 2026-11-18 — Event Planner: nuoto, triathlon, aquathlon, swimrun
+- Stessa libreria (planner.py LIBRARY): categorie Boe (12), Mezzi nautici (15), Transizioni (T1/T2, Bike/Run In-Out, corridoi, aree), Sicurezza ampliata (bagnino, defibrillatore, zone pericolose, correnti, scogli, acque basse, rotte e vie di evacuazione); ricerca per parole chiave (TAGS). Nuovi progetti con livelli Boe e segnaletica nautica / Mezzi nautici / Transizioni; nei progetti esistenti il livello si crea al primo inserimento. COLORS esteso a 13.
+- Percorso in acqua (WaterTools.jsx): forme lineare/triangolo/rettangolo/anello al centro mappa con distanze suggerite 400–3.800 m, giri, frecce, chiudi circuito, inverti, editor coordinate con distanze per segmento; disegno a clic senza routing. Disciplina per percorso (nuoto/ciclismo/corsa/transizione) con riepilogo multidisciplina.
+- Boe: numero, dimensione, colori preset, responsabile, collegamento a un punto del percorso (syncBuoys: il punto segue la boa) o indipendenti. Mezzi: responsabile, cellulare, funzione, area, ID GPS (nessuna posizione reale simulata). Flag "riservato".
+- Esportazioni planner_water.py: GPX, KML, elenco boe PDF/Excel (distanze geodetiche), PNG mappa; versione pubblica senza riservati/livelli nascosti. Control Room: posizione "pianificata", gps_reale null, suggerimenti per elementi nautici.
+- NON fatto: condivisione in Event Map, PDF planimetria (c'è PNG). iteration_190/191: tutto passato dopo i fix.
+

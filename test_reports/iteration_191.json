@@ -1,0 +1,17 @@
+{
+  "summary": "Retested the fixes from iteration_190. All 6 work. Backend: test_planner_water.py has 6/6 passing, with new assertions added. In the Control Room planner list, every feature has posizione 'pianificata', gps_reale null, gps_ultimo_aggiornamento null and the gps_device key (m1 gps_device X1 is kept). Gommone di soccorso, Bagnino and Defibrillatore are suggested 'sanitario'. Boa di virata and SUP (Mezzi nautici) are suggested 'controllo'. In the buoy report, independent buoys now start their own count: the first has an empty da_precedente and progressive 0, and the second's progressive equals its da_precedente. Project creation returns 200/201 and includes the Boe e segnaletica nautica, Mezzi nautici and Transizioni layers. UI (Playwright, with MapTiler swapped for an OSM raster style inside Playwright only): the project was created from the UI. water-create, after jumping the map to 43.53/8.10, placed the route at 43.5294/8.0985, so at the visible centre and not Rome. Duplica on a buoy linked to vertex 1 creates a copy with link_route, link_idx and numero all null, and route vertex 1 stays at the original buoy. Inverti direzione reverses the coordinates exactly and remaps link_idx 0,1,2 to 3,2,1. water-pt-del-1 unlinks the buoy on point 1, shifts later indexes down (3 to 2) and removes the point. All changes autosaved ('Salvato') and were checked through the API.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_planner_water.py", "/app/backend/tests/water_ui_helper.py", "/app/backend/tests/setup_water_ui.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Low: when a closed circuit is reversed, the first buoy (idx 0) is remapped to idx n-1, the closing vertex. It is in the same position, but its progressive in the buoy report becomes the full lap length. This is acceptable, but consider mapping 0 to 0 for closed loops.",
+    "Low (still open from iteration_190): changing water-disciplina keeps the swim colour; buoy label separator is ' · '."
+  ],
+  "updated_files": ["/app/backend/tests/test_planner_water.py", "/app/backend/tests/water_ui_helper.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "TEST_NUOTO org/event/project created and deleted (org deletion cascaded; verified 0 remaining).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use setup_water_ui.py to create a TEST_ org (gold + planner add-on) and `setup_water_ui.py cleanup <oid> <email>` to remove it. water_ui_helper.py seed links 3 buoys to the TEST_NUOTO route through the API. In Playwright: route **/api.maptiler.com/maps/** to an OSM raster style, add_init_script window.__PLANNER_RECORDING=true, and use window.__plannerMap.project() to click on features. pytest needs no -p no:xdist (pytest.ini already uses xdist)."
+}
