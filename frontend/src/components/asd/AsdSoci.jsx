@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { Plus, UserPlus, Users } from "lucide-react";
 import api from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -67,7 +68,11 @@ export function AsdSoci({ status, onChanged }) {
   const o = status.options;
   const done = () => { reload(); onChanged(); };
   const addPerson = async (pid, base = NEW) => {
-    try { const { data } = await api.get(`/persons/${pid}`); setPicker(false); setDup(null); setEdit({ ...base, ...sharedOf(data), persona_id: pid }); } catch (e) { apiErr(e); }
+    try {
+      const { data: link } = await api.get(`/asd/persona/${pid}`);
+      if (link.socio) { await openSocio(link.socio.id); toast.info("La persona è già socio: ho aperto la sua scheda"); return; }
+      const { data } = await api.get(`/persons/${pid}`); setPicker(false); setDup(null); setEdit({ ...base, ...sharedOf(data), persona_id: pid });
+    } catch (e) { apiErr(e); }
   };
   const openSocio = (sid) => api.get("/asd/soci").then(({ data }) => { const s = data.find((x) => x.id === sid); setPicker(false); if (s) setEdit(s); }).catch(apiErr);
   useEffect(() => {

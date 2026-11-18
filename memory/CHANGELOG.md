@@ -1311,3 +1311,11 @@ Task 2 — Creatività manuale:
 - Esportazioni planner_water.py: GPX, KML, elenco boe PDF/Excel (distanze geodetiche), PNG mappa; versione pubblica senza riservati/livelli nascosti. Control Room: posizione "pianificata", gps_reale null, suggerimenti per elementi nautici.
 - NON fatto: condivisione in Event Map, PDF planimetria (c'è PNG). iteration_190/191: tutto passato dopo i fix.
 
+
+## 2026-11-18 — Anagrafica unica ASD ↔ Staff / Volontari
+- Dati anagrafici condivisi (nome, cognome, CF, nascita, sesso, email, cellulare, indirizzo, CAP, comune, provincia, nazione, taglia) solo in db.persons; asd_soci contiene persona_id + dati associativi (tipo, qualifica, stato, n. socio, iscrizione, note). Indice unico (org_id, persona_id).
+- Migrazione controllata dei soci esistenti (preview: 0): collega solo con corrispondenza univoca (CF, oppure email+nome+cognome), altrimenti crea la persona; dati originali in anagrafica_originale.
+- Nuove API: GET /asd/anagrafica (ricerca su tutta l'anagrafica dell'org), GET /asd/soci/{id}/staff, GET /asd/persona/{pid}. POST /asd/soci con persona_id collega; senza: 409 "duplicati" su CF/email/cellulare (CF bloccante, altrimenti conferma_nuova). Aggiornamento parziale: solo i campi inviati.
+- UI: pannello Ricerca anagrafica e selezione prima di Nuovo socio, finestra duplicati, sezione Staff e Volontari nella scheda socio (apre la scheda generale), sezione Associazione Sportiva in PersonMask/PersonDetailDialog, badge Socio nell'elenco, provenienza "Gestione Associazione Sportiva". Un socio non viene classificato come Staff o Volontario: senza assegnazioni compare tra «Da classificare», come ogni persona non classificata.
+- Persona con storico associativo: eliminazione = archiviazione. Test: iteration_192 + tests/test_asd_anagrafica_unica.py (21/21 con -n 0).
+

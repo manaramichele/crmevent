@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the shared person registry between ASD and Staff/Volontari, backend and frontend. Backend: new pytest suite test_asd_anagrafica_unica.py with 21 tests, 20 passed. It uses its own TEST_ orgs (A and B with the module active, C with it inactive). Covered: /asd/anagrafica search by surname, 'nome cognome' and 'cognome nome', CF (upper and lower case), email, partial cellulare digits and numero socio. Linking with persona_id creates no new person, a second link returns 409, email/cellulare duplicates return 409 'duplicati' and conferma_nuova=true then creates a new person, a CF match always returns 409 with cf=true. Socio edit to cellulare shows up in persons and persons-enriched; person edit to address shows up in asd/soci. A person created from ASD has is_socio true, no staff/volontario flag, provenienza 'associazione', and stays a single person when linked to an event. Also covered: /soci/{id}/staff, /persona/{pid} (no certificate data; active:false when the module is inactive), socio_nome joined from persons for tesseramenti/quote/certificati, delete socio keeps the person, deleting a person with a socio is archived instead, delete socio with history returns 409, tenant isolation, Super Admin via X-Org-Id. The one failure: linking with a partial body erases shared fields. Frontend: all requested flows worked end to end in Playwright (soci tab search panel, prefilled 'Aggiungi come socio', Nuovo socio picker, duplicates dialog and link, Staff e Volontari dialog opening the person detail, socio badge, person-asd-add and person-asd-open navigation, sync from socio edit to the Staff list). No duplicate persons were created.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/asd/soci (with persona_id) and PUT /api/asd/soci/{id}", "issue": "save_person() runs $set with every SHARED key from clean_socio(), including None for fields not in the payload. Linking an existing person with only {nome, cognome, persona_id} erased indirizzo/citta (and any other shared field such as taglia or data_nascita) already stored in db.persons. The current UI sends the full prefilled form, so it is not hit in normal use, but any API or other caller that sends a partial body loses data. PUT /api/persons strips None, so the two sides behave differently. Fix: build the $set from body.model_dump(exclude_unset=True) so only fields actually sent are written (and only explicitly sent nulls clear a value)."},
+      {"endpoint": "matches() in asd.py", "issue": "Cellulare duplicate check is an exact string match, so '+39 333 1234567' and '3331234567' are not seen as the same person. The search endpoint does match on digits. Consider comparing on the normalized digits."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Deep link /associazione?tab=soci&persona={pid} for a person who is already a socio", "issue": "addPerson() opens 'Aggiungi come socio' without checking; saving then returns 409 field=persona_id, which is shown only as a generic error toast. Better: if the person is already a socio, open the existing scheda. Found in code review, not run.", "affected_selectors": ["asd-socio-dialog"]}
+    ],
+    "design_issues": [
+      {"screen": "Socio form (asd-socio-dialog)", "issues": ["Taglia is a free-text input, while PersonMask uses a select with fixed sizes. Values typed in the ASD form can fall outside the Staff taglia filter options.", "Data di nascita and Data iscrizione use the browser's native date picker instead of the shadcn calendar (same pattern as the rest of the app)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_asd_anagrafica_unica.py", "/app/test_reports/pytest/pytest_asd_anagrafica.xml"],
+  "action_items": [
+    "asd.py create_socio/update_socio: write only fields actually sent (exclude_unset) to db.persons so a partial payload cannot erase shared fields",
+    "Optional: normalize cellulare (digits) in matches() for duplicate detection",
+    "Optional: on the ?persona= deep link, open the existing socio when the person is already a socio",
+    "Update or retire backend/tests/test_asd_module.py: its hardcoded A/B users no longer exist, so 15 of 17 tests skip; the new suite covers the shared-person model"
+  ],
+  "critical_code_review_comments": [
+    "save_person() overwrites every shared field (including with None) when a socio is created via link or updated",
+    "In crud update/insert, the DuplicateKeyError handlers still say 'Esiste già un socio con questo codice fiscale' for tesseramenti/quote/certificati. This is left over from the old model and misleading if it is ever hit",
+    "names() loads all soci and persons on every list call (tesseramenti/quote/certificati/scadenze). Fine for now, but O(n) per request"
+  ],
+  "updated_files": ["/app/backend/tests/test_asd_anagrafica_unica.py"],
+  "success_rate": {"backend": "95% (20/21)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "TEST_ orgs were created through register-organization, with the ASD module turned on directly in db.org_services. All of them (pytest orgs A/B/C, the UI org TEST_ASDUI, and 2 orgs left over from an earlier aborted run) were deleted together with their persons, staff, events, soci and related records, by org_id/email. No real org data was touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest tests/test_asd_anagrafica_unica.py -n 0. Use -n 0 because the classes share module state. The suite creates and cleans up its own orgs; it uses pymongo with MONGO_URL/DB_NAME from backend/.env. test_link_partial_body_keeps_address is expected to fail until the save_person fix lands. In the UI, the 'Scopri CRMEvent con una demo' popup ('Non ora') and the cookie banner ('Accept all') must be dismissed after login. Staff route is /staff-volontari."
+}

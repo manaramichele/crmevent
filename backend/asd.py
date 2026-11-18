@@ -234,7 +234,7 @@ def build(db, deps: dict):
         a = dict(tipo=_choice("tipo", b.tipo, TIPI_SOCIO, "Tipo", "socio"),
                  qualifica=_choice("qualifica", _s(b.qualifica, 40), QUALIFICHE, "Qualifica"), stato=_choice("stato", b.stato, STATI_SOCIO, "Stato", "attivo"),
                  data_iscrizione=_date("data_iscrizione", b.data_iscrizione, "Data iscrizione"), numero_socio=_s(b.numero_socio, 40), note=_s(b.note, 2000))
-        return normalize("persons", d), a
+        return normalize("persons", {k: v for k, v in d.items() if k in b.model_fields_set or k in ("nome", "cognome")}), a
 
     def brief(p: dict) -> dict:
         return {k: p.get(k) for k in ("id", "nome", "cognome", "codice_fiscale", "email", "cellulare", "data_nascita")}
@@ -246,6 +246,11 @@ def build(db, deps: dict):
             if not d.get(k):
                 continue
             q = {"org_id": org_id, "archiviato": {"$ne": True}, k: {"$regex": f"^{re.escape(d[k])}$", "$options": "i"} if k == "email" else d[k]}
+            if k == "cellulare":
+                dg = re.sub(r"\D", "", d[k])[-9:]
+                if len(dg) < 6:
+                    continue
+                q[k] = {"$regex": r"\D*".join(dg) + r"\D*$"}
             if exclude:
                 q["id"] = {"$ne": exclude}
             for p in await db.persons.find(q, {"_id": 0}).to_list(5):
