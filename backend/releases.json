@@ -72,5 +72,28 @@
         "fallback_text": "Da oggi puoi prenotare una sessione di assistenza dedicata direttamente da CRMEvent. Scegli giorno e orario, conferma il costo in crediti e collegati tramite Google Meet. Durante la sessione potrai condividere lo schermo per ricevere supporto nell'utilizzo della piattaforma."
       }
     ]
+  },
+  {
+    "id": "2026-11-18-associazione-abbonamenti",
+    "date": "2026-11-18",
+    "changes": [
+      {
+        "area": "Gestione Associazione Sportiva",
+        "kind": "funzionalita",
+        "audience": {"type": "service", "service": "gestione-societa"},
+        "note": "Nuovo modulo Gestione Associazione Sportiva per le organizzazioni che lo hanno attivato: dashboard dell'associazione, soci e tesserati, tesseramenti per stagione ed ente, registro di quote e pagamenti, certificati medici con scadenze e allegati privati, elenco unico delle scadenze e degli adempimenti."
+      },
+      {
+        "area": "Abbonamento",
+        "kind": "funzionalita",
+        "note": "Nella scelta dell'abbonamento il piano consigliato cambia con la durata: GOLD per 6 mesi, SILVER per 12 mesi. I piani che non coprono gli eventi o le persone Staff e Volontari gi\u00e0 presenti vengono segnalati e non sono selezionabili."
+      },
+      {
+        "area": "Super Admin",
+        "kind": "funzionalita",
+        "audience": {"type": "superadmin"},
+        "note": "Il Super Admin, selezionando un'organizzazione dalla tendina Org attiva, vede il menu di quell'organizzazione con i moduli attivi e pu\u00f2 usarne le funzioni con il proprio ruolo, senza ricaricare la pagina e senza accedere come utente."
+      }
+    ]
   }
 ]

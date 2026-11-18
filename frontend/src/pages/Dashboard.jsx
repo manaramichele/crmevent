@@ -2,6 +2,7 @@ import OrgMessagesBanner from "@/components/OrgMessagesBanner";
 import TodoPanel from "@/components/TodoPanel";
 import NotesPanel from "@/components/NotesPanel";
 import SubscriptionExpiryBanner from "@/components/SubscriptionExpiryBanner";
+import { NewsBanner } from "@/components/NewsWidgets";
 
 export default function Dashboard() {
   return (
@@ -11,6 +12,7 @@ export default function Dashboard() {
         <p className="text-sm text-slate-500 mt-1">Panoramica delle sezioni a cui hai accesso</p>
       </div>
       <SubscriptionExpiryBanner />
+      <NewsBanner />
       <OrgMessagesBanner />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5" data-testid="dashboard-columns">
         <TodoPanel />

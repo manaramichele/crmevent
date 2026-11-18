@@ -17,28 +17,8 @@ import WelcomeDemo from "@/components/WelcomeDemo";
 import { CalendarReturnHandler } from "@/components/GoogleCalendarCard";
 import SupportButton from "@/components/SupportButton";
 import { TutorialHint } from "@/components/Onboarding";
-import { NEWS_READ_EVENT } from "@/pages/News";
+import { NewsButton } from "@/components/NewsWidgets";
 
-function NewsButton() {
-  const [count, setCount] = useState(0);
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  useEffect(() => {
-    const load = () => api.get("/news/unread-count").then(({ data }) => setCount(data.count || 0)).catch(() => {});
-    load();
-    const reset = () => setCount(0);
-    window.addEventListener(NEWS_READ_EVENT, reset);
-    return () => window.removeEventListener(NEWS_READ_EVENT, reset);
-  }, [pathname]);
-  return (
-    <button type="button" onClick={() => navigate("/novita")} data-testid="header-news-button" title="Novità" aria-label={count ? `Novità, ${count} non lette` : "Novità"}
-      className="relative h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-700 transition-colors">
-      <Sparkles className="w-5 h-5 text-tiffany-active" />
-      <span className="sr-only">Novità</span>
-      {count > 0 && <span className="absolute top-1 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-tiffany text-slate-900 text-[10px] font-bold flex items-center justify-center" data-testid="header-news-count">{count}</span>}
-    </button>
-  );
-}
 
 const MODULE_PATHS = ["/marketplace", "/control-room", "/event-planner", "/event-map", "/organizzazione"];
 const isVolUser = (u) => u && (u.role === "staff" || u.role === "volunteer");
@@ -486,7 +466,7 @@ export default function Layout({ children }) {
             </button>
           ) : (
           <SupportButton user={user} />)}
-          {!isSuper && <div className="shrink-0"><NewsButton /></div>}
+          <div className="shrink-0"><NewsButton /></div>
           {!isVolUser(user) && <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
             className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>}
           <div className="relative shrink-0">

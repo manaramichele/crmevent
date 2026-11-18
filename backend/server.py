@@ -6794,6 +6794,7 @@ AUDIT_ACTION_LABELS = {
     "news_withdrawn": "Novità ritirata",
     "news_deleted": "Novità eliminata",
     "news_simulated": "Simulazione rilascio (test)",
+    "news_created": "Novità creata manualmente",
     "brevo_org_lists_toggle": "Liste Brevo per organizzazione",
     "brevo_org_lists_sync": "Sincronizzazione liste Brevo organizzazione",
 }
@@ -14252,7 +14253,16 @@ MKT.update(marketplace.build(db, {
 PLAN_ADDONS = plan_addons.build(db, {"require_admin": require_admin, "record_audit": record_audit, "billing_missing": _billing_missing, "stripe_mode": STRIPE_MODE})
 app.include_router(PLAN_ADDONS["router"])
 app.include_router(MKT["router"])
-app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
+async def _news_org_context(org_id: str) -> dict:
+    """Piano effettivo e moduli Marketplace attivi dell'org (per i destinatari delle Novità)."""
+    plan = (await SAAS["state_for"](org_id)).get("plan") if SAAS else None
+    sids = await db.marketplace_purchases.distinct("service_id", {"org_id": org_id, "status": {"$in": ["active", "past_due"]}})
+    keys = set(await db.marketplace_services.distinct("key", {"id": {"$in": sids}})) if sids else set()
+    keys |= set(await db.org_services.distinct("service", {"org_id": org_id, "active": True}))
+    return {"plan": plan, "services": keys}
+
+
+app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit, _news_org_context))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
     "reserve": _credits_reserve, "settle": _credits_settle, "release": _credits_release,
     "ensure_setup": _ensure_credits_setup, "ensure_org": _ensure_org_credits}, SAAS))
