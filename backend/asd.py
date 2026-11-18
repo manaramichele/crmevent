@@ -139,7 +139,10 @@ def build(db, deps: dict):
         return bool(svc and await db.marketplace_purchases.find_one({"org_id": org_id, "service_id": svc["id"], "status": {"$in": ["active", "past_due"]}}, {"_id": 1}))
 
     def allowed_role(user: dict) -> bool:
-        return user.get("role") not in ("staff", "volunteer", "superadmin") and user.get("org_role") in ("admin_org", "user")
+        # Super Admin: opera con il proprio ruolo nell'org selezionata (X-Org-Id), senza impersonare utenti.
+        if user.get("role") == "superadmin":
+            return user.get("org_role") == "superadmin"
+        return user.get("role") not in ("staff", "volunteer") and user.get("org_role") in ("admin_org", "user")
 
     async def member(user: dict = Depends(require_member)) -> dict:
         if not user.get("org_id") or not allowed_role(user):
@@ -149,7 +152,7 @@ def build(db, deps: dict):
         return user
 
     async def admin(user: dict = Depends(member)) -> dict:
-        if user.get("org_role") != "admin_org":
+        if user.get("org_role") not in ("admin_org", "superadmin"):
             raise HTTPException(status_code=403, detail="Eliminazione riservata agli amministratori dell'organizzazione")
         return user
 
@@ -237,7 +240,7 @@ def build(db, deps: dict):
     @r.get("/status")
     async def status(user: dict = Depends(require_member)):
         ok_role = bool(user.get("org_id")) and allowed_role(user)
-        return {"active": ok_role and await is_active(user["org_id"]), "can_delete": user.get("org_role") == "admin_org",
+        return {"active": ok_role and await is_active(user["org_id"]), "can_delete": user.get("org_role") in ("admin_org", "superadmin"),
                 "options": {"tipi_socio": TIPI_SOCIO, "qualifiche": QUALIFICHE, "stati_socio": STATI_SOCIO, "tipi_cert": TIPI_CERT, "metodi": METODI}, "soon_days": SOON_DAYS}
 
     # ---------- CRUD generico ----------
@@ -394,6 +397,7 @@ def build(db, deps: dict):
         if not c or not c.get("file_path"):
             raise HTTPException(status_code=404, detail="File non presente")
         data, ct = storage_utils.read(c["file_path"], c.get("file_backend"), c.get("file_type"))
+        await record_audit(user, "asd_certificato_file_view", org_id=user["org_id"], detail=iid)
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", c.get("file_name") or "certificato")
         return Response(content=data, media_type=c.get("file_type") or ct, headers={"Content-Disposition": f'inline; filename="{safe}"', "Cache-Control": "no-store",
                                                                                  "X-Content-Type-Options": "nosniff"})

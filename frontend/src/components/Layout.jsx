@@ -70,18 +70,19 @@ const PROFILE_ORG_NAV = [
 // Voce di supporto fissata in fondo alla sidebar: sempre visibile a tutti i membri, indipendente da piano e permessi.
 const FOOTER_NAV = [{ to: "/segnalazioni", label: "Segnalazioni e richieste", icon: MessageSquareWarning, id: "segnalazioni", badge: "ticketsUnread" }];
 
-const navFor = (u, items, access) => items.flatMap((n) => {
+const navFor = (u, items, access, superPlan = false) => items.flatMap((n) => {
   const off = n.module && access && access[n.module] === false;
   const m = off ? { ...n, locked: true, lockTitle: "Modulo non attivo: aprilo per attivarlo" } : n;
   if (n.perm === "*") return [m];
-  if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...m, locked: true }];
+  // Super Admin: lucchetto sulle sezioni non incluse nel piano dell'org selezionata (resta comunque apribile).
+  if (n.perm !== "admin" && (superPlan ? planBlocks({ ...u, role: "viewer" }, n.perm) : planBlocks(u, n.perm))) return [{ ...m, locked: true, lockTitle: "Non incluso nel piano dell'organizzazione" }];
   return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [m] : [];
 });
-const orgGroups = (u, access, iscrittiOn, isSuper = false, asdOn = false) => [
-  { items: withIscritti(navFor(u, ORG_NAV, access), iscrittiOn, asdOn) },
-  { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access) },
-  { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access) },
-  { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access) },
+const orgGroups = (u, access, iscrittiOn, isSuper = false, asdOn = false, superPlan = false) => [
+  { items: withIscritti(navFor(u, ORG_NAV, access, superPlan), iscrittiOn, asdOn) },
+  { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access, superPlan) },
+  { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access, superPlan) },
+  { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access, superPlan) },
 ].filter((g) => g.items.length);
 
 // Moduli Marketplace attivi: voce di menu dopo "Aziende".
@@ -291,16 +292,29 @@ export default function Layout({ children }) {
   }, []);
 
   const isSuper = user?.role === "superadmin";
+  // Contesto operativo: org dell'utente oppure org selezionata dal Super Admin nella tendina "Org attiva".
+  const superOrg = isSuper && !!actingOrgId && localStorage.getItem("acting_org_id") === actingOrgId ? actingOrgId : null;
+  const ctxOrg = isSuper ? superOrg : user?.org_id;
   const [iscrittiOn, setIscrittiOn] = useState(false);
-  useEffect(() => {
-    if (isSuper || !user?.org_id) { setIscrittiOn(false); return; }
-    api.get("/iscritti/status").then(({ data }) => setIscrittiOn(!!data.active)).catch(() => setIscrittiOn(false));
-  }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
   const [asdOn, setAsdOn] = useState(false);
+  const [superSaas, setSuperSaas] = useState(null);
+  // Se la pagina corrente non esiste nella nuova org, torna alla dashboard operativa.
+  const leaveIf = (prefix, on) => { if (!on && window.location.pathname.startsWith(prefix)) navigate("/app", { replace: true }); };
   useEffect(() => {
-    if (isSuper || !user?.org_id || isVolUser(user)) { setAsdOn(false); return; }
-    api.get("/asd/status").then(({ data }) => setAsdOn(!!data.active)).catch(() => setAsdOn(false));
-  }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!ctxOrg) { setIscrittiOn(false); return; }
+    setIscrittiOn(false);
+    api.get("/iscritti/status").then(({ data }) => { setIscrittiOn(!!data.active); leaveIf("/iscritti", !!data.active); }).catch(() => setIscrittiOn(false));
+  }, [ctxOrg, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!ctxOrg || isVolUser(user)) { setAsdOn(false); return; }
+    setAsdOn(false);
+    api.get("/asd/status").then(({ data }) => { setAsdOn(!!data.active); leaveIf("/associazione", !!data.active); }).catch(() => setAsdOn(false));
+  }, [ctxOrg, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!superOrg) { setSuperSaas(null); return; }
+    setSuperSaas(null);
+    api.get("/saas/me").then(({ data }) => setSuperSaas(data)).catch(() => setSuperSaas(null));
+  }, [superOrg]);
   const [counts, setCounts] = useState({});
   const [access, setAccess] = useState(null);
   useEffect(() => {
@@ -387,7 +401,7 @@ export default function Layout({ children }) {
   }, [mobileOpen]);
 
   const navGroups = isSuper
-    ? [...orgGroups(user, access, false, true), { title: "Dashboard piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
+    ? [...orgGroups(superSaas?.enabled ? { ...user, saas: { ...superSaas, enabled: true } } : user, access, iscrittiOn, true, asdOn, !!superSaas?.enabled), { title: "Dashboard piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
     : orgGroups(user, access, iscrittiOn, false, asdOn);
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
