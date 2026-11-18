@@ -27,6 +27,7 @@ import { useTeams, invalidateTeams } from "@/lib/teamsStore";
 import { usePeople } from "@/lib/peopleStore";
 import { PERSON_RULES } from "@/lib/textCase";
 import PersonMask, { PROVENIENZA } from "@/components/PersonMask";
+import ExportPdfButton from "@/components/ExportPdfButton";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
@@ -206,6 +207,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         {isStaffTab && <select className={fsel} value={mansFilter} onChange={(e) => setMansFilter(e.target.value)} data-testid="people-mansione-filter"><option value="all">Tutte le mansioni</option><option value="none">Senza mansione</option>{mansOpts.map((m) => <option key={m} value={m}>{m}</option>)}</select>}
         {isStaffTab && <select className={fsel} value={provFilter} onChange={(e) => setProvFilter(e.target.value)} data-testid="people-provenienza-filter"><option value="all">Tutte le provenienze</option>{Object.entries(PROVENIENZA).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {isStaffTab && <select className="h-10 w-full sm:w-36 rounded-md border border-slate-200 bg-white px-2 text-sm" value={tagliaFilter} onChange={(e) => setTagliaFilter(e.target.value)} data-testid="people-taglia-filter"><option value="all">Tutte le taglie</option><option value="none">Senza taglia</option>{tagliaOpts.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
+        {(tab === "staff" || tab === "volontari") && <ExportPdfButton section={tab} eventoId={evFilter !== "all" ? evFilter : null} eventName={evFilter !== "all" ? evName(evFilter) : ""} personIds={displayRows.map((r) => r.id)} scopeLabel={`${displayRows.length} persone con i filtri attuali`} />}
       </div>
       {isStaffTab && selectedRows.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-tiffany/40 bg-tiffany-light/40 px-3 py-2 text-sm" data-testid="bulk-mansione-bar">
@@ -490,7 +492,10 @@ export default function Persons({ mode = "anagrafiche" }) {
               fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="teams" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
               extraActions={(r, { update }) => <TeamNoteButton team={r} canEdit={canEditStaff} onSave={saveNote(update, r.id)} />}
               mobileCard={teamMobileCard}
-              belowFilters={(fv) => <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={fv.evento_id || "all"} />}
+              belowFilters={(fv) => (<>
+                <div className="mb-3 flex justify-end"><ExportPdfButton section="team" eventoId={fv.evento_id && fv.evento_id !== "all" ? fv.evento_id : null} eventName={events.find((e) => e.id === fv.evento_id)?.nome || ""} scopeLabel="tutti i Team dell'evento" /></div>
+                <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={fv.evento_id || "all"} />
+              </>)}
               renderDetail={(team, { close, edit, update }) => (
                 <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
                   onReloadStaff={reload} onEdit={edit} canEdit={canEditMembers} onSaveNote={saveNote(update, team.id)}
