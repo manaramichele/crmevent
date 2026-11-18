@@ -1,4 +1,4 @@
-"""Gestione Associazione Sportiva (Marketplace "gestione-societa"): soci e tesserati, tesseramenti, quote, certificati medici, scadenze.
+"""Gestione Società (Marketplace "gestione-societa"): soci e tesserati, tesseramenti, quote, certificati medici, scadenze, enti e federazioni.
 Accesso: solo Admin e utenti dell'organizzazione con il modulo attivo (acquisto o attivazione gratuita). Dati sempre filtrati per org_id."""
 import re
 import uuid
@@ -27,6 +27,23 @@ EMAIL_RX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Anagrafica unica: questi campi vivono solo in db.persons (condivisi con Staff / Volontari); asd_soci tiene i dati associativi.
 SHARED = ("nome", "cognome", "codice_fiscale", "data_nascita", "luogo_nascita", "sesso", "email", "cellulare", "indirizzo", "cap", "citta", "provincia", "nazione", "taglia")
 ASSOC = ("tipo", "qualifica", "stato", "data_iscrizione", "numero_socio", "note")
+TIPI_ENTE = {"federazione": "Federazione", "eps": "Ente di promozione sportiva", "altro": "Altro organismo"}
+ENTI_KEY = "enti_federazioni"  # elenco per organizzazione nel documento settings (Gestione menu a tendina)
+ENTI_DEFAULT = [("eps", s, n) for s, n in (
+    ("CSI", "Centro Sportivo Italiano"), ("UISP", "Unione Italiana Sport Per tutti"), ("AICS", "Associazione Italiana Cultura Sport"),
+    ("ACSI", "Associazione di Cultura Sport e Tempo Libero"), ("ASC", "Attività Sportive Confederate"), ("ASI", "Associazioni Sportive e Sociali Italiane"),
+    ("CSEN", "Centro Sportivo Educativo Nazionale"), ("CSAIN", "Centri Sportivi Aziendali e Industriali"), ("ENDAS", "Ente Nazionale Democratico di Azione Sociale"),
+    ("MSP Italia", "Movimento Sportivo Popolare Italia"), ("OPES", "Organizzazione Per l'Educazione allo Sport"), ("PGS", "Polisportive Giovanili Salesiane"),
+    ("US ACLI", "Unione Sportiva ACLI"))] + [("federazione", s, n) for s, n in (
+    ("FIDAL", "Federazione Italiana di Atletica Leggera"), ("FITRI", "Federazione Italiana Triathlon"), ("FIN", "Federazione Italiana Nuoto"),
+    ("FCI", "Federazione Ciclistica Italiana"), ("FITP", "Federazione Italiana Tennis e Padel"), ("FIGC", "Federazione Italiana Giuoco Calcio"),
+    ("FIP", "Federazione Italiana Pallacanestro"), ("FIPAV", "Federazione Italiana Pallavolo"), ("FISI", "Federazione Italiana Sport Invernali"),
+    ("FIS", "Federazione Italiana Scherma"), ("FGI", "Federazione Ginnastica d'Italia"), ("FICK", "Federazione Italiana Canoa Kayak"),
+    ("FIC", "Federazione Italiana Canottaggio"))]
+
+
+def ente_label(e: dict) -> str:
+    return f"{e['sigla']} – {e['nome']}" if e.get("nome") else e["sigla"]
 
 
 def _now() -> str:
@@ -101,7 +118,8 @@ class SocioIn(BaseModel):
 class TesseramentoIn(BaseModel):
     socio_id: str
     stagione: str
-    ente: str
+    ente: Optional[str] = None
+    ente_id: Optional[str] = None
     numero_tessera: Optional[str] = None
     categoria: Optional[str] = None
     data_emissione: Optional[str] = None
@@ -131,6 +149,20 @@ class CertificatoIn(BaseModel):
     note: Optional[str] = None
 
 
+class EnteIn(BaseModel):
+    sigla: str
+    nome: Optional[str] = None
+    tipo: str = "altro"
+
+
+class EnteStateIn(BaseModel):
+    active: bool
+
+
+class EnteOrderIn(BaseModel):
+    ids: list[str]
+
+
 class AdempimentoIn(BaseModel):
     titolo: str
     data_scadenza: str
@@ -142,6 +174,7 @@ def build(db, deps: dict):
     r = APIRouter(prefix="/api/asd")
     require_member, record_audit, cf_valid = deps["require_member"], deps["record_audit"], deps["cf_valid"]
     normalize, person_scope, link_visible, prefs_for = deps["normalize"], deps["person_scope"], deps["link_visible"], deps["prefs_for"]
+    org_settings = deps["org_settings"]
 
     async def is_active(org_id: str) -> bool:
         if await db.org_services.find_one({"org_id": org_id, "service": SERVICE_KEY, "active": True}, {"_id": 1}):
@@ -157,9 +190,9 @@ def build(db, deps: dict):
 
     async def member(user: dict = Depends(require_member)) -> dict:
         if not user.get("org_id") or not allowed_role(user):
-            raise HTTPException(status_code=403, detail="Gestione Associazione Sportiva è riservata agli Admin e agli utenti dell'organizzazione")
+            raise HTTPException(status_code=403, detail="Gestione Società è riservata agli Admin e agli utenti dell'organizzazione")
         if not await is_active(user["org_id"]):
-            raise HTTPException(status_code=403, detail="Il modulo Gestione Associazione Sportiva non è attivo per questa organizzazione")
+            raise HTTPException(status_code=403, detail="Il modulo Gestione Società non è attivo per questa organizzazione")
         return user
 
     async def admin(user: dict = Depends(member)) -> dict:
@@ -266,12 +299,113 @@ def build(db, deps: dict):
             _bad(k, f"{lab} già presente nell'anagrafica di {conflict[0]['cognome'] or ''} {conflict[0]['nome'] or ''}".strip() + ": modifica il valore per evitare un duplicato")
         await db.persons.update_one({"org_id": org_id, "id": pid}, {"$set": {**d, "updated_at": _now()}})
 
+    # ---------- enti e federazioni (settings dell'organizzazione) ----------
+    async def enti(org: str) -> list:
+        doc = await org_settings({"org_id": org})
+        if ENTI_KEY in doc:
+            return doc[ENTI_KEY]
+        items = [{"id": re.sub(r"[^a-z0-9]+", "-", s.lower()), "sigla": s, "nome": n, "tipo": t, "active": True, "default": True} for t, s, n in ENTI_DEFAULT]
+        # tesseramenti precedenti con ente a testo libero: collega per sigla/denominazione, altrimenti crea la voce (testo originale invariato)
+        for txt in await db.asd_tesseramenti.distinct("ente", {"org_id": org, "ente_id": {"$exists": False}}):
+            k = (txt or "").strip().lower()
+            hit = next((e for e in items if k in (e["sigla"].lower(), e["nome"].lower(), ente_label(e).lower()) or k.split(" ")[0] == e["sigla"].lower()), None)
+            if not hit and k:
+                hit = {"id": uuid.uuid4().hex[:12], "sigla": txt.strip()[:40], "nome": None, "tipo": "altro", "active": True}
+                items.append(hit)
+            if hit:
+                await db.asd_tesseramenti.update_many({"org_id": org, "ente": txt, "ente_id": {"$exists": False}}, {"$set": {"ente_id": hit["id"]}})
+        await db.settings.update_one({"id": org, ENTI_KEY: {"$exists": False}}, {"$set": {ENTI_KEY: items, "updated_at": _now()}})
+        return (await db.settings.find_one({"id": org}, {"_id": 0, ENTI_KEY: 1}))[ENTI_KEY]
+
+    async def save_enti(org: str, items: list):
+        await db.settings.update_one({"id": org}, {"$set": {ENTI_KEY: items, "updated_at": _now()}})
+
+    def is_manager(user: dict) -> bool:
+        return user.get("org_role") in ("admin_org", "superadmin")
+
+    def clean_ente(b: EnteIn, items: list, own: Optional[str] = None) -> dict:
+        sigla, nome = _s(b.sigla, 40), _s(b.nome, 160)
+        if not sigla:
+            _bad("sigla", "Sigla: campo obbligatorio")
+        tipo = _choice("tipo", b.tipo, TIPI_ENTE, "Tipologia", "altro")
+        for e in items:
+            if e["id"] == own:
+                continue
+            if e["sigla"].lower() == sigla.lower():
+                _bad("sigla", f"La sigla {sigla} è già presente ({ente_label(e)})")
+            if nome and (e.get("nome") or "").lower() == nome.lower():
+                _bad("nome", f"Denominazione già presente ({ente_label(e)})")
+        return {"sigla": sigla, "nome": nome, "tipo": tipo}
+
+    @r.get("/enti")
+    async def list_enti(user: dict = Depends(member)):
+        items = await enti(user["org_id"])
+        use = {x["_id"]: x["n"] for x in await db.asd_tesseramenti.aggregate([{"$match": {"org_id": user["org_id"]}}, {"$group": {"_id": "$ente_id", "n": {"$sum": 1}}}]).to_list(1000)}
+        return {"items": [{**e, "label": ente_label(e), "usage": use.get(e["id"], 0)} for e in items], "tipi": TIPI_ENTE, "can_manage": is_manager(user)}
+
+    @r.post("/enti")
+    async def add_ente(body: EnteIn, user: dict = Depends(member)):
+        items = await enti(user["org_id"])
+        e = {"id": uuid.uuid4().hex[:12], **clean_ente(body, items), "active": True}
+        await save_enti(user["org_id"], items + [e])
+        await record_audit(user, "asd_ente_create", org_id=user["org_id"], detail=ente_label(e))
+        return {**e, "label": ente_label(e), "usage": 0}
+
+    async def manage_ente(user: dict, eid: str):
+        if not is_manager(user):
+            raise HTTPException(status_code=403, detail="Solo l'Admin Organizzazione può modificare l'elenco enti e federazioni")
+        items = await enti(user["org_id"])
+        i = next((n for n, e in enumerate(items) if e["id"] == eid), None)
+        if i is None:
+            raise HTTPException(status_code=404, detail="Voce non trovata")
+        return items, i
+
+    @r.put("/enti/order")
+    async def order_enti(body: EnteOrderIn, user: dict = Depends(member)):
+        if not is_manager(user):
+            raise HTTPException(status_code=403, detail="Solo l'Admin Organizzazione può ordinare l'elenco")
+        items = await enti(user["org_id"])
+        pos = {eid: n for n, eid in enumerate(body.ids)}
+        await save_enti(user["org_id"], sorted(items, key=lambda e: pos.get(e["id"], len(pos))))
+        return {"ok": True}
+
+    @r.put("/enti/{eid}")
+    async def update_ente(eid: str, body: EnteIn, user: dict = Depends(member)):
+        items, i = await manage_ente(user, eid)
+        items[i] = {**items[i], **clean_ente(body, items, own=eid)}
+        await save_enti(user["org_id"], items)
+        await record_audit(user, "asd_ente_update", org_id=user["org_id"], detail=ente_label(items[i]))
+        return {**items[i], "label": ente_label(items[i])}
+
+    @r.post("/enti/{eid}/stato")
+    async def toggle_ente(eid: str, body: EnteStateIn, user: dict = Depends(member)):
+        items, i = await manage_ente(user, eid)
+        items[i]["active"] = body.active
+        await save_enti(user["org_id"], items)
+        return {"ok": True}
+
+    @r.delete("/enti/{eid}")
+    async def delete_ente(eid: str, user: dict = Depends(member)):
+        items, i = await manage_ente(user, eid)
+        if await db.asd_tesseramenti.count_documents({"org_id": user["org_id"], "ente_id": eid}):
+            raise HTTPException(status_code=409, detail="Voce usata nei tesseramenti: puoi solo disattivarla")
+        await save_enti(user["org_id"], items[:i] + items[i + 1:])
+        return {"ok": True}
+
+    async def resolve_ente(org: str, b: TesseramentoIn, current: Optional[str]) -> dict:
+        if not b.ente_id:
+            _bad("ente_id", "Ente o federazione: campo obbligatorio")
+        e = next((x for x in await enti(org) if x["id"] == b.ente_id), None)
+        if not e:
+            _bad("ente_id", "Ente o federazione non trovato nell'elenco")
+        if not e.get("active") and b.ente_id != current:
+            _bad("ente_id", f"{ente_label(e)} è disattivato: scegli un'altra voce o riattivalo nelle Impostazioni")
+        return {"ente_id": e["id"], "ente": ente_label(e)}
+
     def clean_tess(b: TesseramentoIn) -> dict:
-        d = {"socio_id": b.socio_id, "stagione": _s(b.stagione, 20), "ente": _s(b.ente, 120)}
+        d = {"socio_id": b.socio_id, "stagione": _s(b.stagione, 20)}
         if not d["stagione"]:
             _bad("stagione", "Stagione: campo obbligatorio (es. 2026/2027)")
-        if not d["ente"]:
-            _bad("ente", "Ente o federazione: campo obbligatorio")
         d.update(numero_tessera=_s(b.numero_tessera, 60), categoria=_s(b.categoria, 80), data_emissione=_date("data_emissione", b.data_emissione, "Data emissione"),
                  data_scadenza=_date("data_scadenza", b.data_scadenza, "Data scadenza"), annullato=bool(b.annullato), note=_s(b.note, 2000))
         if d["data_emissione"] and d["data_scadenza"] and d["data_scadenza"] < d["data_emissione"]:
@@ -362,7 +496,37 @@ def build(db, deps: dict):
         except DuplicateKeyError:
             _bad("codice_fiscale", "Esiste già un socio con questo codice fiscale")
 
-    crud("/tesseramenti", "asd_tesseramenti", TesseramentoIn, clean_tess, "tesseramento")
+
+    @r.post("/tesseramenti")
+    async def create_tess(body: TesseramentoIn, user: dict = Depends(member)):
+        d = {**clean_tess(body), **await resolve_ente(user["org_id"], body, None)}
+        await socio_or_400(user["org_id"], d["socio_id"])
+        doc = {**d, "id": uuid.uuid4().hex, "org_id": user["org_id"], "created_at": _now(), "updated_at": _now(), "created_by": user.get("email")}
+        await insert("asd_tesseramenti", doc)
+        await record_audit(user, "asd_tesseramento_create", org_id=user["org_id"], detail=doc["id"])
+        return pub(doc)
+
+    @r.put("/tesseramenti/{iid}")
+    async def update_tess(iid: str, body: TesseramentoIn, user: dict = Depends(member)):
+        cur = await db.asd_tesseramenti.find_one({"org_id": user["org_id"], "id": iid}, {"_id": 0, "ente_id": 1})
+        if not cur:
+            raise HTTPException(status_code=404, detail="Elemento non trovato")
+        d = clean_tess(body)
+        await socio_or_400(user["org_id"], d["socio_id"])
+        if body.ente_id != cur.get("ente_id"):
+            d.update(await resolve_ente(user["org_id"], body, cur.get("ente_id")))
+        res = await db.asd_tesseramenti.find_one_and_update({"org_id": user["org_id"], "id": iid}, {"$set": {**d, "updated_at": _now(), "updated_by": user.get("email")}},
+                                                            projection={"_id": 0}, return_document=True)
+        await record_audit(user, "asd_tesseramento_update", org_id=user["org_id"], detail=iid)
+        return pub(res)
+
+    @r.delete("/tesseramenti/{iid}")
+    async def delete_tess(iid: str, user: dict = Depends(admin)):
+        if not await db.asd_tesseramenti.find_one_and_delete({"org_id": user["org_id"], "id": iid}):
+            raise HTTPException(status_code=404, detail="Elemento non trovato")
+        await record_audit(user, "asd_tesseramento_delete", org_id=user["org_id"], detail=iid)
+        return {"ok": True}
+
     crud("/quote", "asd_quote", QuotaIn, clean_quota, "quota")
     crud("/certificati", "asd_certificati", CertificatoIn, clean_cert, "certificato")
     crud("/adempimenti", "asd_adempimenti", AdempimentoIn,
@@ -469,7 +633,7 @@ def build(db, deps: dict):
 
     @r.get("/persona/{pid}")
     async def persona_link(pid: str, user: dict = Depends(require_member)):
-        """Sezione Associazione Sportiva nella scheda Staff / Volontari. Nessun dato sanitario esposto."""
+        """Sezione Gestione Società nella scheda Staff / Volontari. Nessun dato sanitario esposto."""
         if not (user.get("org_id") and allowed_role(user) and await is_active(user["org_id"])):
             return {"active": False}
         org = user["org_id"]
@@ -544,8 +708,11 @@ def build(db, deps: dict):
     async def list_tess(socio_id: Optional[str] = None, stagione: Optional[str] = None, user: dict = Depends(member)):
         rows = await linked_list("asd_tesseramenti", user, socio_id, {"stagione": stagione} if stagione else {}, [("stagione", -1), ("data_scadenza", 1)])
         today = date.today()
+        labels = {e["id"]: (ente_label(e), e.get("active")) for e in await enti(user["org_id"])}
         for t in rows:
             t["stato"] = tess_state(t, today)
+            lab = labels.get(t.get("ente_id"))
+            t["ente_nome"], t["ente_attivo"] = (lab[0], bool(lab[1])) if lab else (t.get("ente"), True)
         return rows
 
     @r.get("/quote")

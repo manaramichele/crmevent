@@ -1,4 +1,4 @@
-"""Moduli annuali aggiunti all'abbonamento principale (es. Gestione Associazione Sportiva): stessa sottoscrizione Stripe, prorata, rinnovo unico."""
+"""Moduli annuali aggiunti all'abbonamento principale (es. Gestione Società): stessa sottoscrizione Stripe, prorata, rinnovo unico."""
 import logging
 import math
 import uuid
@@ -11,7 +11,8 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 ADDON_KEY = "gestione-societa"
-ADDON_NAME = "Gestione Associazione Sportiva"
+ADDON_NAME = "Gestione Società"
+OLD_NAMES = ("Gestione Associazione Sportiva",)
 ADDON_NOTE = ("L'importo del primo acquisto viene calcolato automaticamente in base alla scadenza del tuo abbonamento CRMEvent. "
               "Al rinnovo pagherai il prezzo annuale completo insieme al tuo piano principale.")
 LIVE = ("active", "past_due")
@@ -200,12 +201,28 @@ def build(db, deps: dict):
             await db.marketplace_purchases.update_one({"id": p["id"]}, {"$set": upd})
             await _expire(p["org_id"])
 
-    async def seed() -> None:
-        if await db.schema_meta.find_one({"id": "plan_addon_asd_v1"}):
+    async def rename() -> None:
+        """Solo denominazione visualizzata: chiave tecnica gestione-societa, ID e Stripe invariati. Backup degli ID per eventuale ripristino."""
+        if await db.schema_meta.find_one({"id": "rename_gestione_societa_v1"}):
             return
-        await db.marketplace_services.update_one({"key": ADDON_KEY}, {"$set": {
-            "name": ADDON_NAME, "price": 99.0, "price_type": "yearly", "billing_method": "plan_addon", "purchasable": False, "billing_note": ADDON_NOTE}})
-        await db.schema_meta.insert_one({"id": "plan_addon_asd_v1", "applied_at": _now().isoformat()})
+        svc = await db.marketplace_services.find_one({"key": ADDON_KEY}, {"_id": 0, "id": 1, "name": 1})
+        backup = {"marketplace_services": [], "marketplace_purchases": []}
+        if svc and svc.get("name") in OLD_NAMES:
+            backup["marketplace_services"] = [{"id": svc["id"], "name": svc["name"]}]
+            await db.marketplace_services.update_one({"id": svc["id"]}, {"$set": {"name": ADDON_NAME}})
+        if svc:
+            q = {"service_id": svc["id"], "service_name": {"$in": list(OLD_NAMES)}}
+            backup["marketplace_purchases"] = [{"id": p["id"], "service_name": p["service_name"]} for p in await db.marketplace_purchases.find(q, {"_id": 0, "id": 1, "service_name": 1}).to_list(10000)]
+            await db.marketplace_purchases.update_many(q, {"$set": {"service_name": ADDON_NAME}})
+        await db.schema_meta.insert_one({"id": "rename_gestione_societa_v1", "applied_at": _now().isoformat(), "new": ADDON_NAME, "backup": backup})
+        logger.info(f"rename gestione-societa: services={len(backup['marketplace_services'])} purchases={len(backup['marketplace_purchases'])}")
+
+    async def seed() -> None:
+        if not await db.schema_meta.find_one({"id": "plan_addon_asd_v1"}):
+            await db.marketplace_services.update_one({"key": ADDON_KEY}, {"$set": {
+                "name": ADDON_NAME, "price": 99.0, "price_type": "yearly", "billing_method": "plan_addon", "purchasable": False, "billing_note": ADDON_NOTE}})
+            await db.schema_meta.insert_one({"id": "plan_addon_asd_v1", "applied_at": _now().isoformat()})
+        await rename()
 
     async def has_active_addon(org_id: str) -> bool:
         return bool(await db.marketplace_purchases.find_one({"org_id": org_id, "source": "plan_addon", "status": {"$in": list(LIVE)}, "renew": {"$ne": False}}, {"_id": 1}))

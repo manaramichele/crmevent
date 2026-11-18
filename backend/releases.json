@@ -78,10 +78,10 @@
     "date": "2026-11-18",
     "changes": [
       {
-        "area": "Gestione Associazione Sportiva",
+        "area": "Gestione Società",
         "kind": "funzionalita",
         "audience": {"type": "service", "service": "gestione-societa"},
-        "note": "Nuovo modulo Gestione Associazione Sportiva per le organizzazioni che lo hanno attivato: dashboard dell'associazione, soci e tesserati, tesseramenti per stagione ed ente, registro di quote e pagamenti, certificati medici con scadenze e allegati privati, elenco unico delle scadenze e degli adempimenti."
+        "note": "Nuovo modulo Gestione Società per le organizzazioni che lo hanno attivato: dashboard della società, soci e tesserati, tesseramenti per stagione ed ente, registro di quote e pagamenti, certificati medici con scadenze e allegati privati, elenco unico delle scadenze e degli adempimenti."
       },
       {
         "area": "Abbonamento",

@@ -36,10 +36,10 @@ export function AsdScadenze({ status, onChanged }) {
   return (
     <div className="space-y-5">
       <SectionCard title="Scadenze" action={<select className={SEL} value={giorni} onChange={(e) => setGiorni(Number(e.target.value))} data-testid="asd-scadenze-range">{[30, 60, 90, 180, 365].map((g) => <option key={g} value={g}>Scadute e prossimi {g} giorni</option>)}</select>}>
-        <p className="text-xs text-slate-500 mb-2">Certificati medici, tesseramenti e quote non pagate con scadenza, più gli adempimenti dell'associazione non completati.</p>
+        <p className="text-xs text-slate-500 mb-2">Certificati medici, tesseramenti e quote non pagate con scadenza, più gli adempimenti della società non completati.</p>
         {dl.loading ? <p className="text-sm text-slate-500">Caricamento…</p> : <DeadlineList rows={dl.rows} testid="asd-scadenze-list" />}
       </SectionCard>
-      <SectionCard title="Adempimenti dell'associazione" action={<PrimaryButton onClick={() => setEdit({ completato: "no" })} data-testid="asd-adempimento-new"><Plus className="w-4 h-4 mr-1" />Nuovo adempimento</PrimaryButton>}>
+      <SectionCard title="Adempimenti della società" action={<PrimaryButton onClick={() => setEdit({ completato: "no" })} data-testid="asd-adempimento-new"><Plus className="w-4 h-4 mr-1" />Nuovo adempimento</PrimaryButton>}>
         <AsdTable cols={cols} rows={ad.rows} loading={ad.loading} testid="asd-adempimenti" onEdit={(r) => setEdit({ ...r, completato: r.completato ? "si" : "no" })} canDelete={status.can_delete}
           onDelete={(r) => deleteItem("/asd/adempimenti", r, `«${r.titolo}»`, done)} empty="Nessun adempimento. Aggiungi ad esempio il rinnovo dell'affiliazione o l'assemblea annuale." />
         {edit && <EntityDialog open onOpenChange={(v) => !v && setEdit(null)} title={edit.id ? "Modifica adempimento" : "Nuovo adempimento"} fields={fields} initial={edit} testid="asd-adempimento"

@@ -2918,6 +2918,7 @@ async def get_settings(admin: dict = Depends(require_admin)):
 @api.put("/settings")
 async def update_settings(body: dict, admin: dict = Depends(require_admin)):
     body.pop("_id", None)
+    body.pop(asd.ENTI_KEY, None)
     body["id"] = admin["org_id"]
     await db.settings.update_one({"id": admin["org_id"]}, {"$set": body}, upsert=True)
     return await db.settings.find_one({"id": admin["org_id"]}, {"_id": 0})
@@ -14131,7 +14132,7 @@ ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_su
 press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
 app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
-ASD = asd.build(db, {"require_member": require_org_member, "record_audit": record_audit, "cf_valid": _cf_valid, "normalize": TN.normalize_fields,
+ASD = asd.build(db, {"require_member": require_org_member, "record_audit": record_audit, "cf_valid": _cf_valid, "normalize": TN.normalize_fields, "org_settings": _org_settings,
                      "person_scope": _person_scope, "link_visible": _link_visible, "prefs_for": lambda *a: AVP["prefs_for"](*a)})
 app.include_router(ASD["router"])
 app.add_event_handler("startup", ASD["ensure_indexes"])

@@ -17,7 +17,7 @@ import { ADD_OPTION } from "@/lib/optionLists";
 import InlineAddOption from "@/components/InlineAddOption";
 import { AsdPersonSection } from "@/components/asd/AsdPeople";
 
-export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", associazione: "Gestione Associazione Sportiva", non_determinata: "Non determinata" };
+export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", associazione: "Gestione Società", non_determinata: "Non determinata" };
 const CATS = [["staff", "Staff"], ["volontario", "Volontario"]];
 const ADDR = ["indirizzo", "cap", "citta", "provincia", "regione", "nazione"];
 const dm = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "");

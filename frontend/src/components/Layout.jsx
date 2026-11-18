@@ -67,7 +67,7 @@ const orgGroups = (u, access, iscrittiOn, isSuper = false, asdOn = false, superP
 
 // Moduli Marketplace attivi: voce di menu dopo "Aziende".
 const ISCRITTI_NAV = { to: "/iscritti", label: "Elenco Iscritti", icon: Contact, id: "iscritti", perm: "*" };
-const ASD_NAV = { to: "/associazione", label: "Gestione Associazione Sportiva", icon: Trophy, id: "associazione", perm: "*" };
+const ASD_NAV = { to: "/associazione", label: "Gestione Società", icon: Trophy, id: "associazione", perm: "*" };
 const withIscritti = (items, on, asdOn) => {
   const extra = [on && ISCRITTI_NAV, asdOn && ASD_NAV].filter(Boolean);
   if (!extra.length) return items;

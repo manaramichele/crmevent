@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, ArrowDown, Pencil, Trash2, Check, X, Plus, EyeOff, Eye, ListChecks } from "lucide-react";
 import { toast } from "sonner";
+import { EntiSettings } from "@/components/asd/AsdEnti";
 
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 
@@ -67,6 +68,8 @@ function ListCard({ list, params, canManage, reload }) {
 
 export default function OptionListsManager({ platform = false }) {
   const [d, setD] = useState(null);
+  const [asdOn, setAsdOn] = useState(false);
+  useEffect(() => { if (!platform) { api.get("/asd/status").then(({ data }) => setAsdOn(!!data.active)).catch(() => setAsdOn(false)); } }, [platform]);
   const params = platform ? { scope: "platform" } : undefined;
   const reload = useCallback(() => api.get("/settings/lists", { params: platform ? { scope: "platform" } : undefined }).then(({ data }) => setD(data)).catch(err), [platform]);
   useEffect(() => { reload(); }, [reload]);
@@ -82,6 +85,10 @@ export default function OptionListsManager({ platform = false }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">{d.lists.filter((l) => l.group === g).map((l) => <ListCard key={l.key} list={l} params={params} canManage={d.can_manage} reload={reload} />)}</div>
           </div>
         ))}
+        {asdOn && <div data-testid="optgroup-gestione-societa">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Gestione Società</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3"><EntiSettings /></div>
+        </div>}
         {!platform && <div><h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Altre sezioni</h3>
           <ul className="text-sm text-slate-500 space-y-1" data-testid="optlists-technical">{Object.entries(d.technical).map(([s, t]) => <li key={s}><b className="font-medium text-slate-700">{s}:</b> {t}</li>)}</ul></div>}
       </div>

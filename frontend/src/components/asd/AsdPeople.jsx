@@ -41,7 +41,7 @@ export function AsdPeopleResults({ q, onAdd, onOpen, testid = "asd-people" }) {
   );
 }
 
-// Sezione "Associazione Sportiva" nella scheda Staff / Volontari (visibile solo se il modulo è attivo e il profilo è abilitato).
+// Sezione "Gestione Società" nella scheda Staff / Volontari (visibile solo se il modulo è attivo e il profilo è abilitato).
 export function AsdPersonSection({ personId }) {
   const nav = useNavigate();
   const [d, setD] = useState(null);
@@ -50,7 +50,7 @@ export function AsdPersonSection({ personId }) {
   const s = d.socio, t = d.tesseramento;
   return (
     <section className="rounded-lg border border-slate-200 p-3 space-y-2" data-testid="person-asd-section">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />Associazione Sportiva</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />Gestione Società</h3>
       {s ? (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div className="flex-1 text-sm text-slate-700 space-y-1">
@@ -61,7 +61,7 @@ export function AsdPersonSection({ personId }) {
         </div>
       ) : (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <p className="flex-1 text-sm text-slate-500">Non è ancora socio dell'associazione.</p>
+          <p className="flex-1 text-sm text-slate-500">Non è ancora socio della società.</p>
           <Button type="button" size="sm" variant="outline" onClick={() => nav(`/associazione?tab=soci&persona=${personId}`)} data-testid="person-asd-add"><UserPlus className="w-4 h-4 mr-1" />Aggiungi come socio</Button>
         </div>
       )}

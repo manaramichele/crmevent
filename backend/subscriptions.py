@@ -785,7 +785,7 @@ def build(db, deps: dict):
         if kind == "same":
             raise HTTPException(status_code=400, detail="È già il tuo piano attuale")
         if body.cycle != "yearly" and await db.marketplace_purchases.find_one({"org_id": org["id"], "source": "plan_addon", "status": {"$in": ["active", "past_due"]}, "renew": {"$ne": False}}, {"_id": 1}):
-            raise HTTPException(status_code=400, detail="Hai un modulo annuale attivo (Gestione Associazione Sportiva): per passare al semestrale disattiva prima il suo rinnovo automatico.")
+            raise HTTPException(status_code=400, detail="Hai un modulo annuale attivo (Gestione Società): per passare al semestrale disattiva prima il suo rinnovo automatico.")
         price_id = await ensure_price(cfg, body.plan, body.cycle)
         md = {"kind": "saas", "org_id": org["id"], "plan": body.plan, "cycle": body.cycle}
         trialing = sub.get("status") == "trialing"
