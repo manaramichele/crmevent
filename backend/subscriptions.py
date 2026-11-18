@@ -699,6 +699,12 @@ def build(db, deps: dict):
                                                          "message": "Completa i dati di fatturazione: " + ", ".join(missing)})
         if await _live_sub(org):
             raise HTTPException(status_code=400, detail="Hai già un abbonamento attivo: usa Cambia piano")
+        adm = org["saas"].get("admin") or {}
+        lim = {k: int(adm[k]) if adm.get(k) is not None else v for k, v in plan_limits(cfg, body.plan).items()}
+        us = await usage(org["id"])
+        over = [f"{n} {lbl} (max {lim[f'max_{k}']})" for k, n, lbl in (("events", us["events"], "eventi"), ("users", us["people"], "persone Staff e Volontari")) if 0 <= lim[f"max_{k}"] < n]
+        if over:
+            raise HTTPException(status_code=400, detail=f"Il piano {body.plan.upper()} non copre il tuo utilizzo attuale: hai {' e '.join(over)}. Scegli un piano superiore.")
         price_id = await ensure_price(cfg, body.plan, body.cycle)
         cust = await deps["ensure_customer"](org, user)
         md = {"kind": "saas", "org_id": org["id"], "plan": body.plan, "cycle": body.cycle}
