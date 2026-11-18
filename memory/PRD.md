@@ -1160,3 +1160,6 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Test: iteration_180, 181 (backend 15/15, frontend 100%; Event Planner/Control Room verificati solo da codice perché bloccati per org di prova).
 - Aperto: tipi_postazione conta/rinomina solo i turni creati dalle postazioni, non la tipologia salvata nelle postazioni senza persone.
 
+
+## Rimossa voce Organizzazioni dal menu laterale (2026-11-18)
+- Layout.jsx PLATFORM_NAV: eliminata la voce "Organizzazioni" (/piattaforma?sezione=organizzazioni); accesso solo da Dashboard piattaforma → scheda Organizzazioni. Dashboard resta evidenziata anche su /piattaforma/org/*.
