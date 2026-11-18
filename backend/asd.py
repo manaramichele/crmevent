@@ -643,6 +643,9 @@ def build(db, deps: dict):
         today = date.today()
         ts = await db.asd_tesseramenti.find({"org_id": org, "socio_id": s["id"]}, {"_id": 0}).sort([("stagione", -1), ("data_scadenza", -1)]).to_list(1)
         t = ts[0] if ts else None
+        if t:
+            cur = next((e for e in await enti(org) if e["id"] == t.get("ente_id")), None)
+            t["ente"] = ente_label(cur) if cur else t.get("ente")
         return {"active": True, "socio": {k: s.get(k) for k in ("id", "stato", "tipo", "numero_socio", "data_iscrizione")},
                 "tesseramento": {**{k: t.get(k) for k in ("stagione", "ente", "numero_tessera", "data_scadenza")}, "stato": tess_state(t, today)} if t else None}
 

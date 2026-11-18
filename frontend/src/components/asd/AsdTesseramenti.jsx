@@ -31,7 +31,7 @@ export function AsdTesseramenti({ status, soci, onChanged }) {
         <Input placeholder="Filtra per stagione (es. 2026/2027)" value={f.stagione} onChange={(e) => setF({ ...f, stagione: e.target.value })} data-testid="asd-tess-filter-stagione" />
       </div>
       <AsdTable cols={cols} rows={rows} loading={loading} testid="asd-tess" onEdit={(r) => setEdit({ ...r, annullato: r.annullato ? "si" : "no" })} canDelete={status.can_delete}
-        onDelete={(r) => deleteItem("/asd/tesseramenti", r, `il tesseramento ${r.ente} ${r.stagione} di ${r.socio_nome}`, done)}
+        onDelete={(r) => deleteItem("/asd/tesseramenti", r, `il tesseramento ${r.ente_nome} ${r.stagione} di ${r.socio_nome}`, done)}
         empty={soci.length ? "Nessun tesseramento registrato." : "Aggiungi prima un socio in «Soci e Tesserati»."} />
       {edit && <EntityDialog open onOpenChange={(v) => !v && setEdit(null)} title={edit.id ? "Modifica tesseramento" : "Nuovo tesseramento"} fields={fields(soci)} initial={edit} testid="asd-tess" size="large"
         onSubmit={async (form) => { const { ente, ente_nome, ente_attivo, ...rest } = form; await saveItem("/asd/tesseramenti", edit, { ...rest, annullato: form.annullato === "si" }); done(); }} />}

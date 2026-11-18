@@ -1319,3 +1319,10 @@ Task 2 — Creatività manuale:
 - UI: pannello Ricerca anagrafica e selezione prima di Nuovo socio, finestra duplicati, sezione Staff e Volontari nella scheda socio (apre la scheda generale), sezione Associazione Sportiva in PersonMask/PersonDetailDialog, badge Socio nell'elenco, provenienza "Gestione Associazione Sportiva". Un socio non viene classificato come Staff o Volontario: senza assegnazioni compare tra «Da classificare», come ogni persona non classificata.
 - Persona con storico associativo: eliminazione = archiviazione. Test: iteration_192 + tests/test_asd_anagrafica_unica.py (21/21 con -n 0).
 
+## 2026-11-18 — Rinomina "Gestione Società" + Enti e Federazioni
+- Denominazione visibile "Gestione Società" ovunque (menu, pagina, tab Dashboard Società, Marketplace, sezioni persona, messaggi API, releases.json). Chiave tecnica gestione-societa, ID, Stripe e prezzo 99 €/anno invariati.
+- Migrazione plan_addons.rename() (schema_meta rename_gestione_societa_v1 con backup): 1 record marketplace_services aggiornato, 0 acquisti; audit_logs storici non toccati.
+- Enti e Federazioni: elenco per organizzazione in settings.enti_federazioni (26 predefiniti), API /asd/enti (GET/POST/PUT/stato/order/DELETE), tesseramenti con ente_id + etichetta; testo libero legacy collegato all'inizializzazione. EnteSelect ricercabile con «+ Aggiungi ente o federazione»; gruppo «Gestione Società» in Gestione menu a tendina solo con modulo attivo. PUT /settings ignora enti_federazioni.
+- Test: iteration_193, tests/test_asd_enti_rename.py + test_asd_anagrafica_unica.py 31/31 (-n 0).
+
+

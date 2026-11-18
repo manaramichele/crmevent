@@ -79,6 +79,7 @@ def cleanup():
     for org, email in ORGS:
         for c in ("persons", "staff", "events", "teams", "asd_soci", "asd_tesseramenti", "asd_quote", "asd_certificati", "asd_adempimenti",
                   "org_services", "memberships", "availability_prefs", "subscriptions"):
+            MDB.settings.delete_one({"id": org})
             MDB[c].delete_many({"org_id": org})
         MDB.organizations.delete_one({"id": org})
         MDB.users.delete_many({"email": email})
@@ -235,14 +236,14 @@ class TestSections:
     def test_persona_link_and_no_cert(self, A, staff_person):
         s = A["s"]
         sid = staff_person["socio_id"]
-        t = s.post(f"{BASE_URL}/api/asd/tesseramenti", json={"socio_id": sid, "stagione": "2026/2027", "ente": "TEST_FIDAL", "data_scadenza": (date.today() + timedelta(days=200)).isoformat()})
+        t = s.post(f"{BASE_URL}/api/asd/tesseramenti", json={"socio_id": sid, "stagione": "2026/2027", "ente_id": "fidal", "data_scadenza": (date.today() + timedelta(days=200)).isoformat()})
         assert t.status_code == 200, t.text
         c = s.post(f"{BASE_URL}/api/asd/certificati", json={"socio_id": sid, "data_scadenza": (date.today() + timedelta(days=100)).isoformat(), "medico": "TEST_Dr"})
         assert c.status_code == 200, c.text
         q = s.post(f"{BASE_URL}/api/asd/quote", json={"socio_id": sid, "descrizione": "TEST_Quota", "importo": 30})
         assert q.status_code == 200, q.text
         d = s.get(f"{BASE_URL}/api/asd/persona/{staff_person['id']}").json()
-        assert d["active"] is True and d["socio"]["id"] == sid and d["tesseramento"]["ente"] == "TEST_FIDAL" and d["tesseramento"]["stato"] == "valido"
+        assert d["active"] is True and d["socio"]["id"] == sid and d["tesseramento"]["ente"] == "FIDAL – Federazione Italiana di Atletica Leggera" and d["tesseramento"]["stato"] == "valido"
         assert "cert" not in str(d).lower() and "TEST_Dr" not in str(d)
         exp = f"{staff_person['sur']} TEST_Luigi"
         for path in ("tesseramenti", "quote", "certificati"):
