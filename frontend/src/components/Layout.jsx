@@ -299,7 +299,7 @@ export default function Layout({ children }) {
   const [asdOn, setAsdOn] = useState(false);
   const [superSaas, setSuperSaas] = useState(null);
   // Se la pagina corrente non esiste nella nuova org, torna alla dashboard operativa.
-  const leaveIf = (prefix, on) => { if (!on && window.location.pathname.startsWith(prefix)) navigate("/app", { replace: true }); };
+  const leaveIf = (prefix, on) => { if (isSuper && !on && window.location.pathname.startsWith(prefix)) navigate("/app", { replace: true }); };
   useEffect(() => {
     if (!ctxOrg) { setIscrittiOn(false); return; }
     setIscrittiOn(false);
@@ -457,7 +457,7 @@ export default function Layout({ children }) {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} data-testid="mobile-drawer-overlay" />
           <aside className="absolute left-0 top-0 h-[100dvh] max-h-[100dvh] w-64 bg-white shadow-xl flex flex-col" data-testid="mobile-drawer">
             <div className="h-14 flex items-center justify-between px-3 shrink-0 border-b border-slate-100"><button onClick={() => { setMobileOpen(false); navigate("/"); }} data-testid="mobile-logo-home" className="flex items-center"><Logo /></button><button onClick={() => setMobileOpen(false)} data-testid="mobile-menu-close"><X className="w-6 h-6" /></button></div>
-            {showSwitcher && <div className="sm:hidden px-3 pt-3 [&_select]:max-w-[150px]" data-testid="mobile-org-switcher"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => { setActingOrg(id, true, actingOrgId); setMobileOpen(false); }} /></div>}
+            {showSwitcher && <div className="sm:hidden px-3 pt-3 [&_select]:max-w-[150px]" data-testid="mobile-org-switcher"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => { setActingOrg(id, !isSuper, actingOrgId); setMobileOpen(false); }} /></div>}
             <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-3 py-3 space-y-1 pb-[calc(env(safe-area-inset-bottom)+24px)]" data-testid="mobile-drawer-nav">
               {navGroups.map((g, gi) => (
                 <div key={gi} className={gi > 0 ? "pt-3 mt-2 border-t border-slate-100" : ""}>
@@ -475,7 +475,7 @@ export default function Layout({ children }) {
         {user?.support && <SupportBanner />}
         <header className="min-h-[4.5rem] py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] relative bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-4 lg:px-6" data-testid="app-header">
           <button className="lg:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100" onClick={() => setMobileOpen(true)} data-testid="mobile-menu-button" aria-label="Menu"><span className="relative"><Menu className="w-5 h-5" />{counts.ticketsUnread > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white" data-testid="mobile-menu-unread-dot" />}</span></button>
-          {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, true, actingOrgId)} /></div>}
+          {showSwitcher && <div className="hidden sm:block"><OrgSwitcher orgs={orgs} actingOrgId={actingOrgId || user?.active_org_id || user?.org_id} onChange={(id) => setActingOrg(id, !isSuper, actingOrgId)} /></div>}
           {!isSuper && <TrialButton saas={user?.saas} />}
           <div className="flex-1 min-w-0" />
           {!isSuper && user?.saas?.mode === "past_due" && <TrialChip s={user?.saas} onCta={() => navigate("/profilo?tab=abbonamento")} />}

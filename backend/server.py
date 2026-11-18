@@ -6803,6 +6803,8 @@ async def record_audit(actor: dict, action: str, org_id: Optional[str] = None,
                         org_name: Optional[str] = None, meta: Optional[dict] = None,
                         target_email: Optional[str] = None, target_name: Optional[str] = None,
                         detail: Optional[str] = None) -> dict:
+    if org_id and not org_name and org_id != PLATFORM_ORG_ID:
+        org_name = ((await db.organizations.find_one({"id": org_id}, {"_id": 0, "nome": 1})) or {}).get("nome")
     doc = {"id": new_id(), "created_at": now_iso(),
            "actor_user_id": actor.get("user_id"), "actor_email": actor.get("email"),
            "actor_name": actor.get("name"), "actor_role": actor.get("role"),

@@ -1288,3 +1288,10 @@ Task 2 — Creatività manuale:
 - PlanCard: prop `highlight` (bordo + sfondo). Cookie banner cliccabile sopra i dialog; popup demo non si apre durante upgrade=1/checkout.
 - iteration_187: backend 10/10, frontend 100%.
 
+
+## 2026-11-18 — Super Admin: contesto org dalla tendina "Org attiva"
+- Causa ASD non visibile per Trio Events: Layout forzava iscritti/asd a false per il Super Admin e asd.py escludeva il ruolo superadmin.
+- Ora: Super Admin opera col proprio ruolo (org_role superadmin via X-Org-Id) anche in ASD (incl. eliminazioni); menu ricostruito per org selezionata (moduli Marketplace attivi, lucchetti piano da /saas/me, gruppi piattaforma sempre visibili); cambio org senza ricaricare la pagina (solo Super Admin), redirect a /app se la pagina non esiste nella nuova org.
+- record_audit risolve org_name se mancante; accesso file certificato tracciato.
+- iteration_188: backend 11/11; corretti full reload e redirect per utenti normali (ora vedono la pagina "non attivo").
+

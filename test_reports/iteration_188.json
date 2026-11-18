@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the Super Admin working inside a selected org (X-Org-Id) for the ASD module, sidebar rebuild, data isolation, platform groups, persistence and a normal org user. Backend: 11/11 pytest pass. In the UI almost everything works: the Nova Events sidebar shows Gestione Associazione Sportiva; /associazione shows 6 tabs; the Super Admin created a socio and a quota; KPIs updated (Soci attivi 1, Da incassare 40,00 EUR); delete is visible; switching to Demo while on /associazione redirects to /app and removes the link; no Nova data in Demo; GET /api/asd/soci with Demo returns 403; Eventi Milano has no link; back in Nova the socio is present; F5 keeps org, page and menu; logout/login in the same browser restores Nova; platform groups always visible; /piattaforma and /audit open; 'Accedi come' exists (32 buttons in /piattaforma > Utenti). Two problems: (1) switching org does a FULL PAGE RELOAD (AuthContext.setActingOrg calls window.location.reload()), but the request said the sidebar must rebuild without a reload; (2) a normal org user opening /associazione (module inactive) is redirected to /app instead of seeing the asd-inactive message. Plan locks for the Super Admin could NOT be checked with data: every SaaS org in preview, including a new trial, has all plan sections, and the only locks seen were module locks (event-planner/event-map/control-room). The lock logic was only reviewed in code.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "record_audit for asd_* actions", "issue": "In the Audit Log the Organizzazione column shows '—' for asd_socio_create / asd_quota_create done by the Super Admin, even though org_id is passed (org name not resolved). The 'Accesso organizzazione' entries show the org name correctly."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Layout.jsx leaveIf (asd/iscritti status effects)", "issue": "leaveIf runs for ALL users, so a normal org admin without the module who opens /associazione (or /iscritti) is redirected to /app and never sees the asd-inactive / 'go to marketplace' page. The request expected the inactive message for normal users. Fix: apply leaveIf only when isSuper (or only after an org switch).", "selector": "[data-testid=asd-inactive]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Super Admin org switch", "issue": "Changing the org in OrgSwitcher calls setActingOrg(id, true, ...), which does window.location.reload(). The result is correct (link appears/disappears, redirect to /app), but it is a full reload, not an in-place sidebar rebuild as the request asked. The no-reload code paths in Layout (key={actingOrgId}, ctxOrg effects, leaveIf) are never used by the header switcher. Fix: pass reload=false in both OrgSwitcher onChange calls (header and mobile), then re-test that no data from the previous org stays in page state.", "affected_selectors": ["[data-testid=org-switcher-select]"]}
+    ],
+    "design_issues": [
+      {"screen": "ASD Quota/Socio dialogs", "issues": ["Date fields (Scadenza pagamento, Data pagamento, Data iscrizione) use the browser's native mm/dd/yyyy date picker instead of the shadcn calendar, and the format is not Italian."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_superadmin_org_context.py", "/app/backend/tests/cleanup_sac.py", "/app/test_reports/pytest/pytest_sac.xml"],
+  "action_items": [
+    "Decide on no-reload org switching: OrgSwitcher onChange -> setActingOrg(id, false, actingOrgId) (header and mobile), then make sure the page content remounts (the key={actingOrgId} already exists).",
+    "Limit the leaveIf redirect in Layout.jsx to the Super Admin so normal users still see the asd-inactive / iscritti-inactive page.",
+    "Optional: show the org name in the Audit Log for asd_* actions.",
+    "Optional: for plan-lock QA, provide a preview org on a lower plan (Bronze/Silver) so sidebar-lock-* for plan sections can be checked for the Super Admin."
+  ],
+  "critical_code_review_comments": [
+    "AuthContext.setActingOrg reloads by default, which makes the new superOrg/ctxOrg reactive logic in Layout unused for the switch itself.",
+    "Layout.jsx leaveIf uses window.location.pathname inside async callbacks with no stale-response guard. If the org is switched quickly without a reload (after the fix), a late /asd/status response for the old org can set asdOn=true for the new org. Add a cancel flag or AbortController in each effect.",
+    "The selected org lives only in localStorage (acting_org_id plus last_org:<user_id>). On a new browser or device the Super Admin falls back to the first org (UG View Org). Acceptable, but it is not stored on the server.",
+    "asd.py /status returns can_delete=true even when active=false. Harmless.",
+    "Deleting an org (DELETE /platform/organizations/{id}) leaves its admin account without an org. The test now also deletes that user."
+  ],
+  "updated_files": ["/app/backend/tests/test_superadmin_org_context.py", "/app/backend/tests/cleanup_sac.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "~85% (2 requirement deviations: full reload on switch, normal-user inactive page replaced by a redirect; plan locks not checked with data)"},
+  "seed_data_creation": "None kept. Created and then deleted: socio TEST_SACUI and quota TEST_SAC in Nova Events (UI), plus a socio and 2 quote in Nova (pytest), 2 TEST_SAC orgs and their admin users test_sac_*@example.com. All removed; the Nova ASD soci list is empty again.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Nova Events id d91c8d145b8b454ca09962d9d43fcc12 has ASD active; Demo b7f40862230441b9a0bedabefe8dab49 and Eventi Milano 50cae9fa307445f3b21ff4ce74c54b29 do not. To detect a reload, set window.__noreload=1 before select_option on org-switcher-select. All SaaS orgs in preview have the full 13 features, so a lower-plan org is needed to check plan locks. 'Accedi come' buttons are at /piattaforma -> platform-section-utenti (impersonate-*), not on /piattaforma/org/:id. Run /app/backend/tests/test_superadmin_org_context.py; it cleans up after itself."
+}
