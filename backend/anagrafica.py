@@ -126,15 +126,22 @@ def build(db, deps: dict):
     async def ensure_link(org_id: str, person_id: str, evento_id: str, av: dict) -> None:
         """Inserisce la persona nell'elenco Staff/Volontari dell'evento come Da classificare (idempotente)."""
         cur = await db.staff.find_one({"org_id": org_id, "persona_id": person_id, "evento_id": evento_id}, {"_id": 0, "id": 1, "categoria": 1})
+        team = None
+        if av.get("ristoro_team_id"):
+            team = await db.teams.find_one({"org_id": org_id, "evento_id": evento_id, "id": av["ristoro_team_id"]}, {"_id": 0, "id": 1, "nome": 1})
+        team_set = {"team_id": team["id"], "ruolo": team["nome"], "mansione_auto": True} if team else {}
         if cur:
+            upd = dict(team_set)
             if cur.get("categoria") == "da_classificare":
-                await db.staff.update_one({"org_id": org_id, "id": cur["id"]}, {"$set": {"preferenza": pref_label(av) or "", "updated_at": _now()}})
+                upd["preferenza"] = pref_label(av) or ""
+            if upd:
+                await db.staff.update_one({"org_id": org_id, "id": cur["id"]}, {"$set": {**upd, "updated_at": _now()}})
             return
         cat = av.get("ruolo_evento") if av.get("ruolo_evento") in ("staff", "volontario") else "da_classificare"
         await db.staff.insert_one({"id": str(uuid.uuid4()), "org_id": org_id, "persona_id": person_id, "evento_id": evento_id,
                                    "categoria": cat, "stato": "confermato" if av.get("stato") == "confermata" else "da_contattare",
                                    "preferenza": pref_label(av) or "", "origine": "link_disponibilita", "availability_id": av.get("id"),
-                                   "created_at": _now()})
+                                   **team_set, "created_at": _now()})
 
     async def migrate() -> dict:
         if await db.schema_meta.find_one({"id": "avail_to_staff_v1"}):

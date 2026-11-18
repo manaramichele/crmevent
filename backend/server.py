@@ -633,6 +633,8 @@ async def _update(coll, _id, data):
     res = await db[coll].update_one({"id": _id}, {"$set": clean})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Elemento non trovato")
+    if coll == "teams" and clean.get("nome"):
+        await db.staff.update_many({"team_id": _id, "mansione_auto": True}, {"$set": {"ruolo": clean["nome"]}})
     return await _get(coll, _id)
 
 
@@ -1180,6 +1182,7 @@ class Presence(BaseModel):  # collection: staff (Persona <-> Evento)
     area: Optional[str] = None
     ruolo: Optional[str] = None
     team_id: Optional[str] = None
+    mansione_auto: Optional[bool] = None
     responsabile: Optional[str] = None
     punto_ritrovo: Optional[str] = None
     luogo_operativo: Optional[str] = None
@@ -1481,6 +1484,16 @@ async def _person_has_history(org_id: str, pid: str) -> bool:
         if await db[coll].find_one({"org_id": org_id, field: pid}, {"_id": 1}):
             return True
     return False
+
+
+def _is_ristoro_pref(p) -> bool:
+    return "ristoro" in (p or "").lower()
+
+
+async def _ristoro_teams(org_id: str, evento_id: str) -> list:
+    rx = {"$regex": "ristoro", "$options": "i"}
+    teams = await db.teams.find({"org_id": org_id, "evento_id": evento_id, "$or": [{"area": rx}, {"nome": rx}]}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)
+    return sorted(teams, key=lambda t: (t.get("nome") or "").lower())
 
 
 def crud_routes(path, coll, model, org_scoped=True):
@@ -2031,7 +2044,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "eventi_count": len({x["evento_id"] for x in prs}),
                     "preferenze": prefs.get(pid, []),
                     "provenienza_tipo": (p.get("provenienza") or {}).get("tipo") or "non_determinata",
-                    "assegnazioni": [{k: x.get(k) for k in ("id", "evento_id", "categoria", "team_id", "ruolo", "preferenza", "stato")} for x in prs],
+                    "assegnazioni": [{k: x.get(k) for k in ("id", "evento_id", "categoria", "team_id", "ruolo", "preferenza", "stato", "mansione_auto")} for x in prs],
                     "mansioni": [{"evento_id": x["evento_id"], "ruolo": x.get("ruolo")} for x in prs]})
     return out
 
@@ -11040,6 +11053,7 @@ async def pub_avail_info(code: str):
     off_t = set((settings.get("disattivati") or {}).get("taglie") or [])
     taglie = [t for t in (settings.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]
     return {"active": True, "event": base, "days": _avail_days(event), "taglie_options": taglie,
+            "ristoro_teams": await _ristoro_teams(link["org_id"], event["id"]),
             "has_allestimento": bool(event.get("data_inizio_allestimento")),
             "has_disallestimento": bool(event.get("data_fine_disallestimento")),
             "attivita_options": attivita}
@@ -11072,6 +11086,7 @@ class PubAvailIn(BaseModel):
     preferenza_attivita: Optional[str] = None
     preferenza_altro: Optional[str] = None
     taglia: Optional[str] = Field(default=None, max_length=20)
+    ristoro_team_id: Optional[str] = Field(default=None, max_length=64)
     privacy: bool = False
     marketing_consent: bool = False
     lang: Optional[str] = None
@@ -11135,6 +11150,13 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         off_t = set((st.get("disattivati") or {}).get("taglie") or [])
         if submitted["taglia"] not in [t for t in (st.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]:
             raise HTTPException(status_code=400, detail="Taglia non valida")
+    ristoro_tid = None
+    if _is_ristoro_pref(body.preferenza_attivita):
+        rteams = await _ristoro_teams(org_id, event["id"])
+        if rteams:
+            if body.ristoro_team_id not in {t["id"] for t in rteams}:
+                raise HTTPException(status_code=400, detail="Seleziona il Team Ristoro")
+            ristoro_tid = body.ristoro_team_id
     person = await db.persons.find_one({"org_id": org_id, "email": email}, {"_id": 0}) if email else None
     if not person and cell:
         person = await db.persons.find_one({"org_id": org_id, "cellulare": cell}, {"_id": 0})
@@ -11200,6 +11222,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
             "compilation_lang": lang,
             "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
+    await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"ristoro_team_id": ristoro_tid}})
     await ANA["ensure_link"](org_id, pid, event["id"], await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0}))
     # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
     try:
