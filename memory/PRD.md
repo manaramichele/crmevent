@@ -1169,3 +1169,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - ensure_link: team_id + ruolo (Mansione) = nome team, mansione_auto=true; su link esistente aggiorna solo se mansione_auto o Mansione vuota.
 - PersonMask: cambio Team aggiorna Mansione se automatica; modifica manuale → mansione_auto=false. Rinomina team (PUT org-scoped) aggiorna Mansione dei link automatici.
 - Test: iteration_183 + verifiche curl delle 2 correzioni.
+
+## Assistente AI nascosto a Staff/Volontari + email Staff/Volontari con logo evento (2026-11-18)
+- AI: VolunteerLayout senza SupportChat; Layout nasconde pulsante/chat per role staff/volunteer; /api/support/chat e /feedback → 403 per staff/volunteer.
+- Email: email_utils.staff_event_email (logo evento via /api/public/event-logo/{id} o iniziali, nome+data evento, CTA, footer piccolo CRMEvent), oggetto "<Evento> – ...", mittente "<Evento> | CRMEvent" (from_name su tutti i provider, caratteri speciali rimossi). Invito: account già attivo (password presente) → nessun nuovo token, email "Sei stato associato" con link login; nuovo → attivazione. Evento: evento_id dell invito o il più recente della persona. Anteprima: GET /api/events/{id}/staff-email-preview, pulsanti nel dialog Raccolta disponibilità.
+- Nota: la conferma disponibilità resta sul flusso Brevo esistente (template già con logo evento); il nuovo template "disponibilita" è usato solo in anteprima.
+- Test: iteration_184 (backend 15/15, frontend ok; corretti logo footer e nome mittente).

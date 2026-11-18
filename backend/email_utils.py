@@ -267,7 +267,7 @@ def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: 
 
 
 
-FOOTER_LOGO_URL = (os.environ.get("PUBLIC_SITE_URL") or "https://crmevent.it").rstrip("/") + "/logo-crmevent-dark.png?v=5"
+FOOTER_LOGO_URL = (os.environ.get("PUBLIC_SITE_URL") or "https://crmevent.it").rstrip("/") + "/logo-crmevent.png"
 STAFF_KINDS = {
     "nuovo": ("Attiva il tuo account Staff e Volontari", "Attiva il mio account",
               "sei stato registrato come {ruolo} per <b>{evento}</b>. Per accedere alla tua area personale attiva l'account e scegli la tua password.",
@@ -323,4 +323,4 @@ def staff_event_email(*, kind: str, event_name: str, event_date: str, logo_url: 
         '<a href="https://crmevent.it" style="color:#9aa4b2;text-decoration:underline">crmevent.it</a></p>'
         '</td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr></table>'
     )
-    return f"{event_name or 'Evento'} – {subj}", html, f"{(event_name or 'Evento')[:60]} | CRMEvent"
+    return f"{event_name or 'Evento'} – {subj}", html, re.sub(r'[\\"<>,;:@()\[\]\r\n]+', " ", f"{(event_name or 'Evento')[:60]} | CRMEvent").strip()
