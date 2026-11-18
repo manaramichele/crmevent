@@ -1268,3 +1268,10 @@ Task 2 — Creatività manuale:
 - iteration_152/153: backend 14/14, frontend 100%. Trio Events è su Aruba: migrazione da eseguire lì dal pannello Super Admin.
 
 
+
+## 2026-11-18 — Marketplace admin: fix "Valori non validi" al salvataggio
+- Causa: `_clean` accettava solo billing_method="stripe" e price_type in (one_time, monthly, yearly, usage). Gestione Associazione Sportiva (billing_method=plan_addon) e Control Room (price_type=per_event) non si potevano mai salvare.
+- Fix: tipi fissati da moduli dedicati preservati dal record esistente (per_event: prezzo e tipo bloccati; plan_addon: yearly + plan_addon); Price ID manuale bloccato per questi due servizi.
+- Errori di validazione ora `{field, message}` (400) o 422 Pydantic → il frontend evidenzia il campo con un messaggio preciso (data-testid `mkt-admin-error-<campo>`).
+- Verifica: PUT invariato su tutti i 14 servizi = 200, stripe_prices invariati; 12 casi di errore con campo corretto; UI: salvataggio Control Room e GAS OK.
+

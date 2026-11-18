@@ -17,8 +17,18 @@ import { MarketplaceInterests } from "@/components/MarketplaceInterests";
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 const EMPTY = { name: "", description: "", icon: "Package", image: null, category: "Altro", price: null, price_type: "one_time", usage_unit: "", usage_limits: "", terms: "", status: "coming_soon", visible: true, purchasable: false, tech_ready: false, billing_method: "stripe", scope: "org", sort: 100, video_url: "", video_title: "", stripe_price_id: "" };
 const d = (s) => (s ? new Date(s).toLocaleDateString("it-IT") : "—");
-const Sel = ({ value, onChange, opts, testid }) => <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid} className="w-full h-10 rounded-md border border-slate-200 px-2 text-sm">{Object.entries(opts).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>;
+const Sel = ({ value, onChange, opts, testid, className = "" }) => <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid} className={`w-full h-10 rounded-md border border-slate-200 px-2 text-sm ${className}`}>{Object.entries(opts).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>;
 const Chk = ({ label, value, onChange, testid }) => <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} data-testid={testid} />{label}</label>;
+
+const LABELS = { name: "Nome", price: "Prezzo", price_type: "Tipo di prezzo", status: "Stato commerciale", scope: "Ambito", billing_method: "Addebito", sort: "Ordine", usage_unit: "Unità di consumo", video_url: "URL video YouTube", image: "Immagine", purchasable: "Acquisto abilitato", stripe_price_id: "Price ID Stripe" };
+// Errori di validazione dell'API → { campo: messaggio } (400 {field,message} o 422 Pydantic).
+const fieldErrors = (detail) => {
+  if (detail?.field) return { [detail.field]: detail.message };
+  if (Array.isArray(detail)) return Object.fromEntries(detail.map((x) => { const k = x.loc?.[x.loc.length - 1]; return [k, `${LABELS[k] || k}: valore non valido (${x.msg})`]; }));
+  return null;
+};
+const FieldError = ({ errors, k }) => (errors[k] ? <span className="block text-red-600 mt-1" data-testid={`mkt-admin-error-${k}`}>{errors[k]}</span> : null);
+const bad = (errors, k) => (errors[k] ? "border-red-500 ring-1 ring-red-500" : "");
 
 const CYCLES = [["semester", "Semestrale", 6], ["yearly", "Annuale", 12]];
 
@@ -37,7 +47,7 @@ function PlannerPricing({ f, set }) {
   );
 }
 
-function StripeBox({ f, set, svc, mode }) {
+function StripeBox({ f, set, svc, mode, errors }) {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState(svc?.stripe || null);
   const sync = async () => {
@@ -49,7 +59,7 @@ function StripeBox({ f, set, svc, mode }) {
   return (
     <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 space-y-2" data-testid="mkt-admin-stripe">
       <div className="font-semibold text-slate-700">Stripe ({mode === "live" ? "LIVE" : "TEST"})</div>
-      <label className="block">Price ID Stripe (opzionale: se vuoto viene creato in automatico al primo acquisto)<Input value={f.stripe_price_id || ""} onChange={(e) => set("stripe_price_id")(e.target.value.trim())} placeholder="price_..." data-testid="mkt-admin-stripe-price" /></label>
+      <label className="block">Price ID Stripe (opzionale: se vuoto viene creato in automatico al primo acquisto)<Input value={f.stripe_price_id || ""} onChange={(e) => set("stripe_price_id")(e.target.value.trim())} placeholder="price_..." disabled={f.billing_method === "plan_addon" || f.price_type === "per_event"} className={bad(errors, "stripe_price_id")} data-testid="mkt-admin-stripe-price" /><FieldError errors={errors} k="stripe_price_id" /></label>
       {info?.price_id && <div className="text-slate-500" data-testid="mkt-admin-stripe-info">Prodotto {info.product_id} · Prezzo {info.price_id} · {(info.amount_cents / 100).toFixed(2)} € {info.interval ? `/ ${info.interval === "month" ? "mese" : "anno"}` : "una tantum"} · {info.source === "manual" ? "inserito manualmente" : "creato da CRMEvent"}</div>}
       {svc?.id && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={sync} data-testid="mkt-admin-stripe-sync"><RefreshCw className="w-3.5 h-3.5 mr-1" />{busy ? "Sincronizzazione..." : "Crea/aggiorna su Stripe"}</Button>}
       <p className="text-slate-400">Salva prima il prezzo. Se cambi prezzo o modalità, CRMEvent crea un nuovo prezzo Stripe: gli abbonamenti già attivi mantengono il prezzo originale.</p>
@@ -57,12 +67,12 @@ function StripeBox({ f, set, svc, mode }) {
   );
 }
 
-function VideoBox({ f, set }) {
+function VideoBox({ f, set, errors }) {
   const id = youtubeId(f.video_url);
   return (
     <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 space-y-2" data-testid="mkt-admin-video">
       <div className="font-semibold text-slate-700">Video tutorial YouTube (opzionale)</div>
-      <label className="block">URL video YouTube<Input value={f.video_url || ""} onChange={(e) => set("video_url")(e.target.value)} placeholder="https://www.youtube.com/watch?v=... · youtu.be/... · /shorts/..." data-testid="mkt-admin-video-url" /></label>
+      <label className="block">URL video YouTube<Input value={f.video_url || ""} onChange={(e) => set("video_url")(e.target.value)} placeholder="https://www.youtube.com/watch?v=... · youtu.be/... · /shorts/..." className={bad(errors, "video_url")} data-testid="mkt-admin-video-url" /><FieldError errors={errors} k="video_url" /></label>
       <label className="block">Titolo video<Input value={f.video_title || ""} onChange={(e) => set("video_title")(e.target.value)} data-testid="mkt-admin-video-title" /></label>
       {f.video_url && !id && <p className="text-red-600" data-testid="mkt-admin-video-invalid">Link YouTube non riconosciuto</p>}
       {id && <div className="max-w-sm"><YouTubeTutorial id={id} title={f.video_title} heading="Anteprima" testid="mkt-admin-video-preview" /></div>}
@@ -73,41 +83,52 @@ function VideoBox({ f, set }) {
 
 function Editor({ svc, cats, mode, onClose, onSaved }) {
   const [f, setF] = useState({ ...EMPTY, ...svc, stripe_price_id: svc?.stripe?.price_id || "", video_url: svc?.video_url || "", video_title: svc?.video_title || "" });
-  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+  const [errors, setErrors] = useState({});
+  const set = (k) => (v) => { setF((s) => ({ ...s, [k]: v })); setErrors((e) => ({ ...e, [k]: undefined })); };
+  const fixed = f.price_type === "per_event" ? "Per evento (gestito dalla Control Room)" : f.billing_method === "plan_addon" ? "Annuale, rinnovo con il piano" : null;
   const img = (e) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 300000) { toast.error("Immagine max 300 KB"); return; } const r = new FileReader(); r.onload = () => set("image")(r.result); r.readAsDataURL(file); };
   const save = async () => {
     const body = { ...f, price: f.price === "" || f.price == null ? null : Number(f.price), sort: Number(f.sort) || 100 };
     ["id", "key", "created_at", "updated_at", "active_count", "interest_count", "purchasable_now", "brevo_attribute", "stripe", "stripe_prices", "video_id"].forEach((k) => delete body[k]);
+    if (!body.name.trim()) { setErrors({ name: "Il nome del servizio è obbligatorio" }); return; }
+    if (body.price != null && (Number.isNaN(body.price) || body.price < 0)) { setErrors({ price: "Inserisci un prezzo valido, uguale o maggiore di 0" }); return; }
+    setErrors({});
     try { if (svc?.id) await api.put(`/platform/marketplace/services/${svc.id}`, body); else await api.post("/platform/marketplace/services", body); toast.success("Servizio salvato"); onSaved(); }
-    catch (e) { err(e); }
+    catch (e) {
+      const fe = fieldErrors(e.response?.data?.detail);
+      if (!fe) return err(e);
+      setErrors(fe);
+      toast.error(`Controlla il campo evidenziato: ${Object.entries(fe).map(([k, m]) => `${LABELS[k] || k} – ${m}`).join("; ")}`);
+    }
   };
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto" data-testid="mkt-admin-editor">
         <DialogTitle>{svc?.id ? "Modifica servizio" : "Nuovo servizio"}</DialogTitle>
         <div className="grid sm:grid-cols-2 gap-3 text-xs">
-          <label className="sm:col-span-2">Nome<Input value={f.name} onChange={(e) => set("name")(e.target.value)} data-testid="mkt-admin-name" /></label>
+          <label className="sm:col-span-2">Nome<Input value={f.name} onChange={(e) => set("name")(e.target.value)} className={bad(errors, "name")} data-testid="mkt-admin-name" /><FieldError errors={errors} k="name" /></label>
           <label className="sm:col-span-2">Descrizione<Textarea rows={3} value={f.description} onChange={(e) => set("description")(e.target.value)} data-testid="mkt-admin-desc" /></label>
           <label>Categoria<Sel value={f.category} onChange={set("category")} opts={Object.fromEntries(cats.map((c) => [c, c]))} testid="mkt-admin-category" /></label>
           <label>Icona<Sel value={f.icon} onChange={set("icon")} opts={Object.fromEntries(Object.keys(MKT_ICONS).map((k) => [k, k]))} testid="mkt-admin-icon" /></label>
-          <label>Immagine (opzionale, max 300 KB)<input type="file" accept="image/*" onChange={img} className="block text-xs mt-1" data-testid="mkt-admin-image" />{f.image && <button type="button" className="text-red-600 mt-1" onClick={() => set("image")(null)}>Rimuovi immagine</button>}</label>
-          <label>Ambito<Sel value={f.scope} onChange={set("scope")} opts={{ org: "Organizzazione", event: "Singolo evento" }} testid="mkt-admin-scope" /></label>
+          <label>Immagine (opzionale, max 300 KB)<input type="file" accept="image/*" onChange={img} className="block text-xs mt-1" data-testid="mkt-admin-image" /><FieldError errors={errors} k="image" />{f.image && <button type="button" className="text-red-600 mt-1" onClick={() => set("image")(null)}>Rimuovi immagine</button>}</label>
+          <label>Ambito<Sel value={f.scope} onChange={set("scope")} opts={{ org: "Organizzazione", event: "Singolo evento" }} className={bad(errors, "scope")} testid="mkt-admin-scope" /><FieldError errors={errors} k="scope" /></label>
           {f.key === "event-planner" ? <PlannerPricing f={f} set={set} /> : <>
-          <label>Prezzo €<Input type="number" step="0.01" value={f.price ?? ""} onChange={(e) => set("price")(e.target.value)} data-testid="mkt-admin-price" /></label>
-          <label>Tipo di prezzo<Sel value={f.price_type} onChange={set("price_type")} opts={PRICE_TYPES} testid="mkt-admin-price-type" /></label></>}
-          {f.price_type === "usage" && <label>Unità di consumo<Input value={f.usage_unit || ""} onChange={(e) => set("usage_unit")(e.target.value)} placeholder="es. messaggio" /></label>}
-          <label>Addebito<Sel value={f.billing_method} onChange={set("billing_method")} opts={{ stripe: "Stripe" }} testid="mkt-admin-billing" /></label>
+          <label>Prezzo €<Input type="number" step="0.01" min={0} value={f.price ?? ""} disabled={f.price_type === "per_event"} onChange={(e) => set("price")(e.target.value)} className={bad(errors, "price")} data-testid="mkt-admin-price" /><FieldError errors={errors} k="price" /></label>
+          <label>Tipo di prezzo{fixed ? <Input value={fixed} disabled data-testid="mkt-admin-price-type-fixed" /> : <Sel value={f.price_type} onChange={set("price_type")} opts={PRICE_TYPES} className={bad(errors, "price_type")} testid="mkt-admin-price-type" />}<FieldError errors={errors} k="price_type" /></label></>}
+          {f.price_type === "usage" && <label>Unità di consumo<Input value={f.usage_unit || ""} onChange={(e) => set("usage_unit")(e.target.value)} placeholder="es. messaggio" className={bad(errors, "usage_unit")} data-testid="mkt-admin-usage-unit" /><FieldError errors={errors} k="usage_unit" /></label>}
+          <label>Addebito{f.billing_method === "plan_addon" ? <Input value="Stripe · nell'abbonamento del piano annuale" disabled data-testid="mkt-admin-billing-fixed" /> : <Sel value={f.billing_method} onChange={set("billing_method")} opts={{ stripe: "Stripe" }} className={bad(errors, "billing_method")} testid="mkt-admin-billing" />}<FieldError errors={errors} k="billing_method" /></label>
           <label className="sm:col-span-2">Limiti di utilizzo<Input value={f.usage_limits || ""} onChange={(e) => set("usage_limits")(e.target.value)} data-testid="mkt-admin-limits" /></label>
           <label className="sm:col-span-2">Condizioni e durata<Input value={f.terms || ""} onChange={(e) => set("terms")(e.target.value)} data-testid="mkt-admin-terms" /></label>
-          <label>Stato commerciale<Sel value={f.status} onChange={set("status")} opts={{ coming_soon: "Prossimamente", available: "Disponibile", suspended: "Sospeso" }} testid="mkt-admin-status" /></label>
-          <label>Ordine<Input type="number" value={f.sort} onChange={(e) => set("sort")(e.target.value)} /></label>
-          {f.key !== "event-planner" && <StripeBox f={f} set={set} svc={svc} mode={mode} />}
-          <VideoBox f={f} set={set} />
+          <label>Stato commerciale<Sel value={f.status} onChange={set("status")} opts={{ coming_soon: "Prossimamente", available: "Disponibile", suspended: "Sospeso" }} className={bad(errors, "status")} testid="mkt-admin-status" /><FieldError errors={errors} k="status" /></label>
+          <label>Ordine<Input type="number" min={0} step={1} value={f.sort} onChange={(e) => set("sort")(e.target.value)} className={bad(errors, "sort")} data-testid="mkt-admin-sort" /><FieldError errors={errors} k="sort" /></label>
+          {f.key !== "event-planner" && <StripeBox f={f} set={set} svc={svc} mode={mode} errors={errors} />}
+          <VideoBox f={f} set={set} errors={errors} />
         </div>
         <div className="flex flex-wrap gap-4 rounded-lg bg-slate-50 p-3">
           <Chk label="Pubblicato (visibile)" value={f.visible} onChange={set("visible")} testid="mkt-admin-visible" />
           <Chk label="Modulo tecnicamente pronto" value={f.tech_ready} onChange={(v) => setF((s) => ({ ...s, tech_ready: v, purchasable: v ? s.purchasable : false }))} testid="mkt-admin-tech" />
           <Chk label="Acquisto abilitato" value={f.purchasable} onChange={set("purchasable")} testid="mkt-admin-purchasable" />
+          <FieldError errors={errors} k="purchasable" />
         </div>
         <p className="text-xs text-slate-500">Un servizio è acquistabile solo se pubblicato, "Disponibile", tecnicamente pronto, con acquisto abilitato e prezzo configurato (0 € = attivazione gratuita senza Stripe). I servizi a consumo non sono acquistabili finché il sistema di addebito non è approvato.</p>
         <Button onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-admin-save">Salva</Button>
