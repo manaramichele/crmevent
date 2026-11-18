@@ -8,13 +8,46 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Check, Pencil, Trash2, Undo2, FlaskConical, Rocket, Plus, RefreshCw } from "lucide-react";
+import { Check, Pencil, Trash2, Undo2, FlaskConical, Rocket, Plus, RefreshCw, ChevronsUpDown, Store, X } from "lucide-react";
 import { NEWS_READ_EVENT } from "@/pages/News";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { NewsProductButton } from "@/components/news/NewsProductButton";
 
 const fmt = (iso) => { try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return "—"; } };
 const STATUS = { bozza: ["orange", "Bozza da approvare"], pubblicata: ["green", "Pubblicata"], ritirata: ["gray", "Ritirata"] };
 const SEL = "w-full h-10 rounded-md border border-slate-200 px-2 text-sm bg-white";
-const audLabel = (a) => (!a || a.type === "all" ? "Tutte le organizzazioni" : a.type === "superadmin" ? "Solo Super Admin" : a.type === "plans" ? `Piani: ${(a.plans || []).join(", ").toUpperCase()}` : `Modulo: ${a.service}`);
+const audLabel = (a, svcs = []) => { const nm = (svcs.find((s) => s.key === a?.service) || {}).name || a?.service; return (!a || a.type === "all" ? "Tutte le organizzazioni" : a.type === "superadmin" ? "Solo Super Admin" : a.type === "plans" ? `Piani: ${(a.plans || []).join(", ").toUpperCase()}` : a.type === "service_missing" ? `Senza modulo: ${nm}` : `Modulo: ${nm}`); };
+const MKT_STATUS = { available: "Disponibile", coming_soon: "Prossimamente", suspended: "Sospeso" };
+
+function ProductPicker({ value, onChange, services }) {
+  const [open, setOpen] = useState(false);
+  const cur = services.find((s) => s.id === value);
+  const list = services.filter((s) => !s.retired);
+  return (
+    <div className="space-y-1.5">
+      <Label>Collega prodotto Marketplace <span className="font-normal text-slate-400">(facoltativo)</span></Label>
+      <div className="flex gap-2">
+        <Popover open={open} onOpenChange={setOpen} modal>
+          <PopoverTrigger asChild>
+            <button type="button" className={`${SEL} flex items-center justify-between text-left`} data-testid="news-product-select">
+              <span className={`truncate ${cur ? "text-slate-900" : "text-slate-400"}`}>{cur ? cur.name : "Nessun prodotto collegato"}</span><ChevronsUpDown className="h-4 w-4 shrink-0 text-slate-400" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[--radix-popover-trigger-width] min-w-[260px] p-0 z-[200]" align="start">
+            <Command><CommandInput placeholder="Cerca nel catalogo Marketplace…" data-testid="news-product-search" />
+              <CommandList><CommandEmpty>Nessun prodotto trovato</CommandEmpty><CommandGroup>
+                {list.map((s) => <CommandItem key={s.id} value={`${s.name} ${s.key}`} onSelect={() => { onChange(s.id); setOpen(false); }} data-testid={`news-product-opt-${s.key}`}>
+                  {value === s.id && <Check className="w-4 h-4 mr-1" />}<span className="flex-1">{s.name}</span><span className="text-[11px] text-slate-400">{MKT_STATUS[s.status] || s.status}</span></CommandItem>)}
+              </CommandGroup></CommandList></Command>
+          </PopoverContent>
+        </Popover>
+        {cur && <Button type="button" variant="outline" size="icon" onClick={() => onChange(null)} title="Rimuovi collegamento" data-testid="news-product-clear"><X className="w-4 h-4" /></Button>}
+      </div>
+      {cur && <p className="text-xs text-slate-500">La notizia mostrerà «Scopri il modulo» o «Scopri e acquista» verso la scheda {cur.name}; chi ha già il modulo vedrà «Apri modulo».</p>}
+    </div>
+  );
+}
 
 function AudienceFields({ a, setA, services }) {
   const togglePlan = (p) => setA({ ...a, plans: a.plans.includes(p) ? a.plans.filter((x) => x !== p) : [...a.plans, p] });
@@ -22,10 +55,10 @@ function AudienceFields({ a, setA, services }) {
     <div className="space-y-2">
       <Label>Destinatari</Label>
       <select className={SEL} value={a.type} onChange={(e) => setA({ ...a, type: e.target.value })} data-testid="news-audience-type">
-        <option value="all">Tutte le organizzazioni</option><option value="superadmin">Solo Super Admin</option><option value="plans">Solo alcuni piani</option><option value="service">Organizzazioni con un modulo Marketplace attivo</option>
+        <option value="all">Tutte le organizzazioni</option><option value="superadmin">Solo Super Admin</option><option value="plans">Solo alcuni piani</option><option value="service">Organizzazioni con un modulo Marketplace attivo</option><option value="service_missing">Organizzazioni che non hanno ancora un modulo (promozione)</option>
       </select>
       {a.type === "plans" && <div className="flex gap-3 text-sm">{["bronze", "silver", "gold"].map((p) => <label key={p} className="flex items-center gap-1.5"><input type="checkbox" checked={a.plans.includes(p)} onChange={() => togglePlan(p)} data-testid={`news-audience-plan-${p}`} />{p.toUpperCase()}</label>)}</div>}
-      {a.type === "service" && <select className={SEL} value={a.service || ""} onChange={(e) => setA({ ...a, service: e.target.value })} data-testid="news-audience-service"><option value="">Scegli il modulo…</option>{services.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}</select>}
+      {(a.type === "service" || a.type === "service_missing") && <select className={SEL} value={a.service || ""} onChange={(e) => setA({ ...a, service: e.target.value })} data-testid="news-audience-service"><option value="">Scegli il modulo…</option>{services.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}</select>}
     </div>
   );
 }
@@ -36,10 +69,12 @@ function EditDialog({ item, onClose, onSaved, services }) {
   const [d, setD] = useState(item.descrizione || "");
   const [area, setArea] = useState(item.area || "Generale");
   const [a, setA] = useState({ type: "all", plans: [], service: null, ...(item.audience || {}) });
+  const [productId, setProductId] = useState(item.product_id || null);
+  const [kind, setKind] = useState(item.kind || "funzionale");
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
-    const body = { titolo: t, descrizione: d, area, audience: a };
+    const body = { titolo: t, descrizione: d, area, audience: a, product_id: productId, kind };
     try { if (isNew) await api.post("/platform/news", body); else await api.put(`/platform/news/${item.id}`, body); toast.success(isNew ? "Bozza creata" : "Bozza aggiornata"); onSaved(); onClose(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
@@ -51,7 +86,13 @@ function EditDialog({ item, onClose, onSaved, services }) {
           <div className="space-y-1.5"><Label>Titolo</Label><Input value={t} onChange={(e) => setT(e.target.value)} data-testid="news-edit-title" /></div>
           <div className="space-y-1.5"><Label>Descrizione</Label><Textarea rows={5} value={d} onChange={(e) => setD(e.target.value)} data-testid="news-edit-text" /></div>
           <div className="space-y-1.5"><Label>Categoria</Label><Input value={area} onChange={(e) => setArea(e.target.value)} placeholder="es. Eventi, Staff e Volontari" data-testid="news-edit-area" /></div>
+          <div className="space-y-1.5"><Label>Tipo di novità</Label>
+            <select className={SEL} value={kind} onChange={(e) => { setKind(e.target.value); if (e.target.value === "commerciale" && a.type === "service") setA({ ...a, type: "service_missing" }); }} data-testid="news-kind">
+              <option value="funzionale">Funzionale – per chi usa già il modulo</option><option value="commerciale">Commerciale – per chi potrebbe acquistarlo</option>
+            </select></div>
+          <ProductPicker value={productId} onChange={setProductId} services={services} />
           <AudienceFields a={a} setA={setA} services={services} />
+          {kind === "commerciale" && a.type === "service" && <p className="text-xs text-amber-700" data-testid="news-kind-warning">Attenzione: con questi destinatari la promozione arriva solo a chi ha già il modulo.</p>}
           {!isNew && item.generated_descrizione && item.generated_descrizione !== d && <p className="text-xs text-slate-400">Testo generato originale: {item.generated_descrizione}</p>}
         </div>
         <DialogFooter><Button variant="outline" onClick={onClose}>Annulla</Button>
@@ -61,7 +102,7 @@ function EditDialog({ item, onClose, onSaved, services }) {
   );
 }
 
-function NewsCard({ n, act, onEdit }) {
+function NewsCard({ n, act, onEdit, services }) {
   const [c, l] = STATUS[n.status] || STATUS.bozza;
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-5" data-testid={`admin-news-${n.id}`}>
@@ -70,11 +111,15 @@ function NewsCard({ n, act, onEdit }) {
         {n.area && <StatusBadge color="tiffany">{n.area}</StatusBadge>}
         {n.simulated && <StatusBadge color="red">TEST · simulazione</StatusBadge>}
         {n.needs_completion && <StatusBadge color="orange" data-testid={`admin-news-incomplete-${n.id}`}>Da completare</StatusBadge>}
-        <StatusBadge color="gray" data-testid={`admin-news-audience-${n.id}`}>{audLabel(n.audience)}</StatusBadge>
+        <StatusBadge color="gray" data-testid={`admin-news-audience-${n.id}`}>{audLabel(n.audience, services)}</StatusBadge>
+        {n.kind === "commerciale" && <StatusBadge color="blue" data-testid={`admin-news-kind-${n.id}`}>Commerciale</StatusBadge>}
+        {n.version > 1 && <StatusBadge color="gray" data-testid={`admin-news-version-${n.id}`}>Pubblicazione n. {n.version}</StatusBadge>}
         <span className="text-xs text-slate-400">{n.status === "bozza" ? `Bozza del ${fmt(n.created_at)}` : `Pubblicata il ${fmt(n.published_at)}`}</span>
       </div>
       <h3 className="mt-2 text-base font-bold text-slate-900 font-display">{n.titolo}</h3>
       <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">{n.descrizione}</p>
+      {n.product_id && (n.product ? <div className="mt-1" data-testid={`admin-news-product-${n.id}`}><span className="text-xs text-slate-500 inline-flex items-center gap-1 mt-2"><Store className="w-3.5 h-3.5" />Anteprima collegamento · {n.product.name}</span><br /><NewsProductButton product={n.product} testid={`admin-news-product-btn-${n.id}`} /></div>
+        : <p className="mt-2 text-xs text-red-600" data-testid={`admin-news-product-missing-${n.id}`}>Prodotto collegato non più visibile nel Marketplace: il pulsante non viene mostrato.</p>)}
       <details className="mt-2 text-xs text-slate-500">
         <summary className="cursor-pointer py-1">Tracciabilità</summary>
         <div className="mt-1 space-y-0.5">
@@ -82,6 +127,7 @@ function NewsCard({ n, act, onEdit }) {
           {n.edited && <div>Testo generato: {n.generated_titolo} — {n.generated_descrizione}</div>}
           {n.approved_by && <div>Approvata da {n.approved_by.name || n.approved_by.email} il {fmt(n.published_at)}</div>}
           {n.withdrawn_at && <div>Ritirata da {n.withdrawn_by?.name || n.withdrawn_by?.email} il {fmt(n.withdrawn_at)}</div>}
+          {(n.publications || []).length > 1 && <div data-testid={`admin-news-history-${n.id}`}>Storico pubblicazioni: {n.publications.map((p) => `n. ${p.version} il ${fmt(p.published_at)}${p.withdrawn_at ? ` (ritirata ${fmt(p.withdrawn_at)})` : ""}`).join(" · ")}</div>}
           {(n.source_notes || []).length > 0 && <div>Note interne: {n.source_notes.join(" · ")}</div>}
         </div>
       </details>
@@ -90,7 +136,8 @@ function NewsCard({ n, act, onEdit }) {
           <Button size="sm" onClick={() => act(n, "publish")} className="h-8 text-xs bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid={`news-publish-${n.id}`}><Check />Approva e pubblica</Button>
           <TextAction icon={Pencil} onClick={() => onEdit(n)} data-testid={`news-edit-${n.id}`}>Modifica</TextAction>
         </>}
-        {n.status === "ritirata" && <TextAction icon={Check} onClick={() => act(n, "publish")} data-testid={`news-republish-${n.id}`}>Ripubblica</TextAction>}
+        {n.status === "ritirata" && <><TextAction icon={Check} onClick={() => act(n, "publish")} data-testid={`news-republish-${n.id}`}>Ripubblica</TextAction>
+          <TextAction icon={Pencil} onClick={() => onEdit(n)} data-testid={`news-edit-${n.id}`}>Modifica</TextAction></>}
         {n.status === "pubblicata" && <TextAction icon={Undo2} danger onClick={() => act(n, "withdraw")} data-testid={`news-withdraw-${n.id}`}>Ritira</TextAction>}
         {n.status !== "pubblicata" && <DeleteConfirm onConfirm={() => act(n, "delete")} testid={`news-confirm-delete-${n.id}`}><TextAction icon={Trash2} danger data-testid={`news-delete-${n.id}`}>Elimina</TextAction></DeleteConfirm>}
       </div>
@@ -155,14 +202,14 @@ export default function PlatformNews() {
   const act = async (n, action) => {
     try {
       if (action === "delete") await api.delete(`/platform/news/${n.id}`); else await api.post(`/platform/news/${n.id}/${action}`);
-      toast.success({ publish: "Novità pubblicata", withdraw: "Novità ritirata", delete: "Bozza eliminata" }[action]); refresh();
+      toast.success({ publish: n.status === "ritirata" ? "Novità ripubblicata: torna visibile anche a chi l'aveva letta" : "Novità pubblicata", withdraw: "Novità ritirata", delete: "Bozza eliminata" }[action]); refresh();
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const drafts = items.filter((n) => n.status === "bozza");
   const published = items.filter((n) => n.status !== "bozza").sort((a, b) => (b.published_at || "").localeCompare(a.published_at || ""));
   const list = (arr, empty, tid) => arr.length === 0
     ? <p className="text-sm text-slate-400 py-8 text-center" data-testid={tid}>{empty}</p>
-    : <div className="space-y-3">{arr.map((n) => <NewsCard key={n.id} n={n} act={act} onEdit={setEditing} />)}</div>;
+    : <div className="space-y-3">{arr.map((n) => <NewsCard key={n.id} n={n} act={act} onEdit={setEditing} services={services} />)}</div>;
   return (
     <div className="animate-fade-up max-w-3xl" data-testid="platform-news-page">
       <PageHeader title="Novità" subtitle="Comunicazioni preparate automaticamente da CRMEvent per ogni rilascio in produzione" action={<Button onClick={() => setEditing({})} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="news-create"><Plus className="w-4 h-4 mr-1" />Nuova novità</Button>} />

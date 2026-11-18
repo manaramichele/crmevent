@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { BellRing, Sparkles, X } from "lucide-react";
 import api from "@/lib/api";
 import { NEWS_READ_EVENT } from "@/pages/News";
+import { NewsProductButton } from "@/components/news/NewsProductButton";
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" }); } catch { return ""; } };
 
@@ -48,7 +49,10 @@ export function NewsBanner() {
         <div className="text-sm text-slate-800 mt-0.5"><b data-testid="news-banner-title">{latest.titolo}</b> <span className="text-xs text-slate-500" data-testid="news-banner-date">· {fmtDate(latest.published_at)}</span></div>
         <p className="text-sm text-slate-600 mt-0.5 line-clamp-2" data-testid="news-banner-text">{latest.descrizione}</p>
       </div>
-      <button type="button" onClick={() => navigate("/novita")} className="h-9 px-4 rounded-full bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 text-sm font-semibold shrink-0 self-start sm:self-center" data-testid="news-banner-open">Scopri le novità</button>
+      <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-center">
+        <button type="button" onClick={() => navigate(`/novita#${latest.id}`)} className="h-9 px-4 rounded-full bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 text-sm font-semibold" data-testid="news-banner-open">Leggi la novità</button>
+        <NewsProductButton product={latest.product} compact testid="news-banner-product" />
+      </div>
       <button type="button" onClick={close} className="absolute top-2 right-2 p-1.5 text-slate-500 hover:text-slate-900" aria-label="Chiudi avviso" data-testid="news-banner-close"><X className="w-4 h-4" /></button>
     </div>
   );

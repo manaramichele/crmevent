@@ -37,7 +37,7 @@ def is_production() -> bool:
     return bool(url) and not any(x in url for x in ("preview.emergentagent.com", "localhost", "127.0.0.1"))
 
 
-AUDIENCE_TYPES = ("all", "superadmin", "plans", "service")
+AUDIENCE_TYPES = ("all", "superadmin", "plans", "service", "service_missing")
 PLANS = ("bronze", "silver", "gold")
 
 
@@ -162,6 +162,18 @@ class NewsEdit(BaseModel):
     descrizione: str
     area: Optional[str] = None
     audience: Optional[Audience] = None
+    product_id: Optional[str] = None
+    kind: Optional[str] = None
+
+
+KINDS = ("funzionale", "commerciale")
+
+
+def _purchasable(s: dict) -> bool:
+    from marketplace import can_buy
+    if not s.get("visible") or s.get("status") != "available" or s.get("retired"):
+        return False
+    return s.get("activation") in ("addon", "controlroom") or (s.get("activation") != "superadmin" and can_buy(s) is None)
 
 
 class SimulateIn(BaseModel):
@@ -170,7 +182,8 @@ class SimulateIn(BaseModel):
 
 ADMIN_FIELDS = ("id", "release_id", "release_date", "area", "status", "titolo", "descrizione", "generated_titolo",
                 "generated_descrizione", "generator", "edited", "source_notes", "simulated", "created_at",
-                "approved_by", "published_at", "withdrawn_at", "withdrawn_by", "audience", "needs_completion")
+                "approved_by", "published_at", "withdrawn_at", "withdrawn_by", "audience", "needs_completion",
+                "product_id", "kind", "version", "publications")
 
 
 def build_router(db, get_current_user, require_superadmin, record_audit, org_context=None) -> APIRouter:
@@ -183,9 +196,25 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
         plans = [p for p in a.plans if p in PLANS]
         if a.type == "plans" and not plans:
             raise HTTPException(status_code=400, detail={"field": "audience", "message": "Seleziona almeno un piano (Bronze, Silver o Gold)"})
-        if a.type == "service" and not (a.service or "").strip():
+        if a.type in ("service", "service_missing") and not (a.service or "").strip():
             raise HTTPException(status_code=400, detail={"field": "audience", "message": "Seleziona il modulo Marketplace dei destinatari"})
-        return {"type": a.type, "plans": plans if a.type == "plans" else [], "service": a.service if a.type == "service" else None}
+        return {"type": a.type, "plans": plans if a.type == "plans" else [], "service": a.service if a.type in ("service", "service_missing") else None}
+
+    async def _clean_product(pid: Optional[str]) -> Optional[str]:
+        """Riferimento stabile all'ID del prodotto Marketplace (il nome si legge sempre dal catalogo)."""
+        if not pid:
+            return None
+        if not await db.marketplace_services.find_one({"id": pid}, {"_id": 0, "id": 1}):
+            raise HTTPException(status_code=400, detail={"field": "product_id", "message": "Prodotto Marketplace non trovato"})
+        return pid
+
+    def _kind(k: Optional[str]) -> str:
+        return k if k in KINDS else "funzionale"
+
+    async def _products(ids: set) -> dict:
+        if not ids:
+            return {}
+        return {s["id"]: s for s in await db.marketplace_services.find({"id": {"$in": list(ids)}}, {"_id": 0}).to_list(len(ids))}
 
     async def _get(nid):
         doc = await db.news_items.find_one({"id": nid}, {"_id": 0})
@@ -203,7 +232,8 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
     @r.get("/platform/news")
     async def admin_list(admin: dict = Depends(require_superadmin)):
         rows = await db.news_items.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
-        return [{k: x.get(k) for k in ADMIN_FIELDS} for x in rows]
+        prods = await _products({x["product_id"] for x in rows if x.get("product_id")})
+        return [{**{k: x.get(k) for k in ADMIN_FIELDS}, "product": _prod_pub(prods.get(x.get("product_id")), set())} for x in rows]
 
     @r.get("/platform/news/env")
     async def admin_env(admin: dict = Depends(require_superadmin)):
@@ -227,7 +257,8 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
         doc = {"id": uuid.uuid4().hex, "release_id": None, "release_date": None, "area": (body.area or "Generale").strip()[:60] or "Generale",
                "status": "bozza", "titolo": t, "descrizione": d, "generated_titolo": t, "generated_descrizione": d, "generator": "manual",
                "edited": False, "needs_completion": False, "source_notes": [], "simulated": False, "audience": _clean_audience(body.audience),
-               "requires_service": None, "created_at": _now(), "created_by": _actor(admin), "approved_by": None, "published_at": None}
+               "requires_service": None, "created_at": _now(), "created_by": _actor(admin), "approved_by": None, "published_at": None,
+               "product_id": await _clean_product(body.product_id), "kind": _kind(body.kind), "version": 0, "publications": []}
         await db.news_items.insert_one({**doc})
         await _audit(admin, "news_created", doc)
         return {k: doc.get(k) for k in ADMIN_FIELDS}
@@ -248,8 +279,8 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
     @r.put("/platform/news/{nid}")
     async def admin_edit(nid: str, body: NewsEdit, admin: dict = Depends(require_superadmin)):
         doc = await _get(nid)
-        if doc["status"] != "bozza":
-            raise HTTPException(status_code=400, detail="Puoi modificare solo le bozze da approvare")
+        if doc["status"] not in ("bozza", "ritirata"):
+            raise HTTPException(status_code=400, detail="Ritira la Novità prima di modificarla")
         t, d = body.titolo.strip(), body.descrizione.strip()
         if not t or not d:
             raise HTTPException(status_code=400, detail="Titolo e descrizione sono obbligatori")
@@ -258,6 +289,10 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
             upd["area"] = body.area.strip()[:60]
         if body.audience is not None:
             upd["audience"] = _clean_audience(body.audience)
+        if "product_id" in body.model_fields_set:
+            upd["product_id"] = await _clean_product(body.product_id)
+        if body.kind is not None:
+            upd["kind"] = _kind(body.kind)
         await db.news_items.update_one({"id": nid}, {"$set": upd})
         await _audit(admin, "news_edited", {**doc, **upd})
         return {**{k: doc.get(k) for k in ADMIN_FIELDS}, **upd}
@@ -273,17 +308,28 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
             svc = await db.credit_services.find_one({"key": doc["requires_service"]}, {"_id": 0, "active": 1, "consumo_active": 1})
             if not (svc and svc.get("active") and svc.get("consumo_active")):
                 raise HTTPException(status_code=400, detail="La funzione descritta non è ancora attiva: attivala prima di pubblicare la Novità")
-        upd = {"status": "pubblicata", "approved_by": _actor(admin), "published_at": _now(), "withdrawn_at": None, "withdrawn_by": None}
-        await db.news_items.update_one({"id": nid}, {"$set": upd})
-        await _audit(admin, "news_published", doc)
-        return {"ok": True}
+        # ogni pubblicazione (anche da "ritirata") è una nuova versione: stesso ID, nuova data, letture precedenti restano nello storico
+        version = (doc.get("version") or (1 if doc.get("published_at") else 0)) + 1
+        hist = list(doc.get("publications") or [])
+        if doc.get("published_at") and not any(p.get("version") == version - 1 for p in hist):
+            hist.append({"version": version - 1, "published_at": doc["published_at"], "withdrawn_at": doc.get("withdrawn_at"), "approved_by": doc.get("approved_by")})
+        now = _now()
+        upd = {"status": "pubblicata", "approved_by": _actor(admin), "published_at": now, "withdrawn_at": None, "withdrawn_by": None, "version": version,
+               "publications": hist + [{"version": version, "published_at": now, "withdrawn_at": None, "approved_by": _actor(admin)}]}
+        res = await db.news_items.update_one({"id": nid, "status": doc["status"]}, {"$set": upd})
+        if not res.modified_count:
+            raise HTTPException(status_code=409, detail="Stato della Novità cambiato nel frattempo: ricarica la pagina")
+        await _audit(admin, "news_published", doc, {"version": version, "republished": doc["status"] == "ritirata"})
+        return {"ok": True, "version": version}
 
     @r.post("/platform/news/{nid}/withdraw")
     async def admin_withdraw(nid: str, admin: dict = Depends(require_superadmin)):
         doc = await _get(nid)
         if doc["status"] != "pubblicata":
             raise HTTPException(status_code=400, detail="Solo le Novità pubblicate possono essere ritirate")
-        await db.news_items.update_one({"id": nid}, {"$set": {"status": "ritirata", "withdrawn_at": _now(), "withdrawn_by": _actor(admin)}})
+        now = _now()
+        hist = [{**p, "withdrawn_at": now} if p.get("version") == doc.get("version") and not p.get("withdrawn_at") else p for p in (doc.get("publications") or [])]
+        await db.news_items.update_one({"id": nid}, {"$set": {"status": "ritirata", "withdrawn_at": now, "withdrawn_by": _actor(admin), "publications": hist}})
         await _audit(admin, "news_withdrawn", doc)
         return {"ok": True}
 
@@ -296,24 +342,47 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
         await _audit(admin, "news_deleted", doc, {"testo": doc.get("descrizione")})
         return {"ok": True}
 
+    MODULE_ROUTES = {"gestione-societa": "/associazione", "comunicati-stampa": "/comunicati-stampa", "archivio-iscritti": "/iscritti",
+                     "control-room": "/control-room", "event-planner": "/event-planner", "event-map": "/event-map"}
+
+    def _prod_pub(s: Optional[dict], active: set) -> Optional[dict]:
+        if not s or s.get("retired") or not s.get("visible"):
+            return None
+        on = s.get("key") in active
+        return {"id": s["id"], "key": s.get("key"), "name": s.get("name"), "status": s.get("status"), "active": on,
+                "purchasable": _purchasable(s), "route": MODULE_ROUTES.get(s.get("key")) if on else None}
+
     async def _visible(user: dict) -> list:
-        rows = await db.news_items.find({"status": "pubblicata"}, {"_id": 0, "id": 1, "titolo": 1, "descrizione": 1, "area": 1, "published_at": 1, "audience": 1}) \
+        rows = await db.news_items.find({"status": "pubblicata"}, {"_id": 0, "id": 1, "titolo": 1, "descrizione": 1, "area": 1, "published_at": 1, "audience": 1,
+                                                                  "version": 1, "product_id": 1, "kind": 1}) \
             .sort("published_at", -1).to_list(500)
+        for n in rows:
+            n["version"] = n.get("version") or 1
+        org = user.get("org_id")
+        ctx = await org_context(org) if (org_context and org) else {"plan": None, "services": set()}
+        prods = await _products({n["product_id"] for n in rows if n.get("product_id")})
+        for n in rows:
+            n["product"] = _prod_pub(prods.get(n.pop("product_id", None)), ctx["services"])
         if user.get("role") == "superadmin":
             return rows
-        ctx = await org_context(user.get("org_id")) if (org_context and user.get("org_id")) else {"plan": None, "services": set()}
 
         def ok(n):
             a = n.get("audience") or {"type": "all"}
             t = a.get("type", "all")
-            return t == "all" or (t == "plans" and ctx["plan"] in (a.get("plans") or [])) or (t == "service" and a.get("service") in ctx["services"])
+            return (t == "all" or (t == "plans" and ctx["plan"] in (a.get("plans") or [])) or (t == "service" and a.get("service") in ctx["services"])
+                    or (t == "service_missing" and a.get("service") not in ctx["services"]))
         return [n for n in rows if ok(n)]
 
     async def _reads(user: dict) -> dict:
         return await db.news_reads.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
 
     def _is_read(n: dict, rd: dict) -> bool:
-        return n["id"] in (rd.get("read_ids") or []) or bool(rd.get("seen_at") and (n.get("published_at") or "") <= rd["seen_at"])
+        """Lettura legata a utente + notizia + versione. read_ids (storico senza versione) vale solo per la versione 1."""
+        if f"{n['id']}:{n['version']}" in (rd.get("read_keys") or []):
+            return True
+        if n["version"] == 1 and n["id"] in (rd.get("read_ids") or []):
+            return True
+        return bool(rd.get("seen_at") and (n.get("published_at") or "") <= rd["seen_at"])
 
     @r.get("/news")
     async def user_list(user: dict = Depends(get_current_user)):
@@ -326,16 +395,18 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
         unread = [n for n in await _visible(user) if not _is_read(n, rd)]
         latest = unread[0] if unread else None
         banner = bool(latest) and (not rd.get("dismissed_at") or latest["published_at"] > rd["dismissed_at"])
-        return {"count": len(unread), "latest": {k: latest.get(k) for k in ("id", "titolo", "descrizione", "area", "published_at")} if latest else None, "banner": banner}
+        return {"count": len(unread), "latest": {k: latest.get(k) for k in ("id", "titolo", "descrizione", "area", "published_at", "version", "product", "kind")} if latest else None, "banner": banner}
 
     class ReadIn(BaseModel):
         ids: Optional[list] = None
 
     @r.post("/news/mark-read")
     async def user_mark_read(body: Optional[ReadIn] = None, user: dict = Depends(get_current_user)):
-        ids = [n["id"] for n in await _visible(user)] if not (body and body.ids) else [str(i) for i in body.ids][:500]
-        await db.news_reads.update_one({"user_id": user["user_id"]}, {"$addToSet": {"read_ids": {"$each": ids}}, "$set": {"read_at": _now()}}, upsert=True)
-        return {"ok": True, "read": len(ids)}
+        vis = await _visible(user)
+        want = None if not (body and body.ids) else {str(i) for i in body.ids[:500]}
+        keys = [f"{n['id']}:{n['version']}" for n in vis if want is None or n["id"] in want]
+        await db.news_reads.update_one({"user_id": user["user_id"]}, {"$addToSet": {"read_keys": {"$each": keys}}, "$set": {"read_at": _now()}}, upsert=True)
+        return {"ok": True, "read": len(keys)}
 
     @r.post("/news/dismiss-banner")
     async def user_dismiss(user: dict = Depends(get_current_user)):

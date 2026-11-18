@@ -203,7 +203,7 @@ export default function Marketplace() {
       {!data ? <p className="text-sm text-slate-400">Caricamento...</p> : !list.length ? <div className="text-center py-16 text-slate-500" data-testid="mkt-empty"><Store className="w-8 h-8 mx-auto mb-2 text-slate-300" />Nessun servizio trovato</div> : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{list.map((s) => <Card key={s.id} s={s} onOpen={setOpen} onToggle={toggle} />)}</div>
       )}
-      <Detail s={open} canPurchase={data?.can_purchase} onClose={() => setOpen(null)} onToggle={toggle} onChanged={load} />
+      <Detail s={open} canPurchase={data?.can_purchase} onClose={() => { setOpen(null); if (params.get("servizio")) setParams({}, { replace: true }); }} onToggle={toggle} onChanged={load} />
       <span className="hidden">{STATUS.active}</span>
     </div>
   );

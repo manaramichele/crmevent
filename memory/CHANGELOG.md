@@ -1328,3 +1328,12 @@ Task 2 — Creatività manuale:
 
 
 
+
+## 2026-11-18 — Novità: collegamento Marketplace + ripubblicazione versionata
+- Causa bug: letture salvate solo per ID notizia (news_reads.read_ids) → dopo ritiro e ripubblicazione chi l'aveva letta la vedeva sempre come letta (niente avviso/contatore).
+- Ora: news_items.version (+1 a ogni pubblicazione, stesso ID), publications[] storico, published_at aggiornato; letture in news_reads.read_keys "id:versione" (read_ids storico valido solo per v1, non cancellato). Pubblicazione atomica su stato.
+- product_id (ID marketplace_services, nome letto dal catalogo), kind funzionale/commerciale, destinatari service_missing (org senza il modulo). Le ritirate si possono modificare.
+- UI: ProductPicker ricercabile in PlatformNews, anteprima pulsante, badge versione e storico; pulsante NewsProductButton (Scopri il modulo / Scopri e acquista / Apri modulo) in Novità e banner Dashboard (Leggi la novità). Marketplace: ?servizio rimosso alla chiusura.
+- _news_org_context ora considera anche Control Room attive e addon_grants planner/eventmap.
+- Test: iteration_194 + test_news_product_republish.py e test_news_audience.py 28/28.
+
