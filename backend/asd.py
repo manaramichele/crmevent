@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 
 import storage_utils
 
@@ -20,6 +21,8 @@ STATI_SOCIO = {"attivo": "Attivo", "sospeso": "Sospeso", "cessato": "Cessato"}
 TIPI_CERT = {"agonistico": "Agonistico", "non_agonistico": "Non agonistico", "altro": "Altro"}
 METODI = {"contanti": "Contanti", "bonifico": "Bonifico", "carta": "Carta", "pos": "POS", "altro": "Altro"}
 DATE_RX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MAGIC = [(b"%PDF-", "pdf", "application/pdf"), (b"\xff\xd8\xff", "jpg", "image/jpeg"), (b"\x89PNG\r\n\x1a\n", "png", "image/png"),
+         (b"GIF8", "gif", "image/gif"), (b"RIFF", "webp", "image/webp")]
 EMAIL_RX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -252,8 +255,11 @@ def build(db, deps: dict):
             d = clean(body)
             if linked:
                 await socio_or_400(user["org_id"], d["socio_id"])
-            res = await db[coll].find_one_and_update({"org_id": user["org_id"], "id": iid}, {"$set": {**d, "updated_at": _now(), "updated_by": user.get("email")}},
-                                                     projection={"_id": 0}, return_document=True)
+            try:
+                res = await db[coll].find_one_and_update({"org_id": user["org_id"], "id": iid}, {"$set": {**d, "updated_at": _now(), "updated_by": user.get("email")}},
+                                                         projection={"_id": 0}, return_document=True)
+            except DuplicateKeyError:
+                _bad("codice_fiscale", "Esiste già un socio con questo codice fiscale")
             if not res:
                 raise HTTPException(status_code=404, detail="Elemento non trovato")
             await record_audit(user, f"asd_{label}_update", org_id=user["org_id"], detail=iid)
@@ -274,10 +280,8 @@ def build(db, deps: dict):
     async def insert(coll: str, doc: dict):
         try:
             await db[coll].insert_one({**doc})
-        except Exception as e:
-            if "duplicate key" in str(e) and coll == "asd_soci":
-                _bad("codice_fiscale", "Esiste già un socio con questo codice fiscale")
-            raise
+        except DuplicateKeyError:
+            _bad("codice_fiscale", "Esiste già un socio con questo codice fiscale")
 
     crud("/soci", "asd_soci", SocioIn, clean_socio, "socio", linked=False)
     crud("/tesseramenti", "asd_tesseramenti", TesseramentoIn, clean_tess, "tesseramento")
@@ -373,13 +377,10 @@ def build(db, deps: dict):
         data = await file.read(MAX_FILE + 1)
         if len(data) > MAX_FILE:
             _bad("file", "File troppo grande (max 10 MB)")
-        try:
-            kind, ext = storage_utils.classify_and_validate(file.filename or "", file.content_type or "", len(data))
-        except ValueError:
-            kind = ext = None
-        if kind not in ("pdf", "image"):
-            _bad("file", "Formato non supportato: carica un PDF o un'immagine")
-        ct = "application/pdf" if kind == "pdf" else (file.content_type or "image/jpeg")
+        sig = next(((e, c) for m, e, c in MAGIC if data.startswith(m) and (e != "webp" or data[8:12] == b"WEBP")), None)
+        if not sig:
+            _bad("file", "Formato non supportato: carica un PDF o un'immagine JPG, PNG, WEBP o GIF")
+        ext, ct = sig
         saved = storage_utils.save(f"asd/{user['org_id']}/certificati/{iid}_{uuid.uuid4().hex[:8]}.{ext}", data, ct)
         await db.asd_certificati.update_one({"org_id": user["org_id"], "id": iid}, {"$set": {
             "file_path": saved["path"], "file_backend": saved.get("backend"), "file_name": (file.filename or f"certificato.{ext}")[:200], "file_type": ct,
@@ -394,7 +395,8 @@ def build(db, deps: dict):
             raise HTTPException(status_code=404, detail="File non presente")
         data, ct = storage_utils.read(c["file_path"], c.get("file_backend"), c.get("file_type"))
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", c.get("file_name") or "certificato")
-        return Response(content=data, media_type=c.get("file_type") or ct, headers={"Content-Disposition": f'inline; filename="{safe}"', "Cache-Control": "no-store"})
+        return Response(content=data, media_type=c.get("file_type") or ct, headers={"Content-Disposition": f'inline; filename="{safe}"', "Cache-Control": "no-store",
+                                                                                 "X-Content-Type-Options": "nosniff"})
 
     @r.delete("/certificati/{iid}")
     async def delete_cert(iid: str, user: dict = Depends(admin)):

@@ -13,7 +13,7 @@ export const StatoBadge = ({ s, testid }) => <StatusBadge color={(STATO[s] || []
 export const toOpts = (o) => Object.entries(o || {}).map(([value, label]) => ({ value, label }));
 export const fmtDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
 export const fmtEur = (n) => `${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
-export const today = () => new Date().toISOString().slice(0, 10);
+export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 export const apiErr = (e) => toast.error(formatApiError(e.response?.data?.detail));
 export const SEL = "h-10 rounded-md border border-slate-200 px-3 text-sm bg-white min-w-0";
 
