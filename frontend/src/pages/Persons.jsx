@@ -77,7 +77,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (mansFilter !== "all" && !asg(r).some((a) => (mansFilter === "none" ? !a.ruolo : a.ruolo === mansFilter))) return false;
     if (provFilter !== "all" && (r.provenienza_tipo || "non_determinata") !== provFilter) return false;
     if (tagliaFilter !== "all" && (tagliaFilter === "none" ? !!r.taglia : r.taglia !== tagliaFilter)) return false;
-    if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
+    if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.codice_fiscale || ""} ${r.cellulare || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
   const { sort, toggle } = useSort({ key: "cognome", dir: "asc" });
@@ -152,6 +152,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         {leaderIds.has(r.id) && <Crown className="w-3.5 h-3.5 text-[#D4AF37]" aria-label="Team Leader" data-testid={`leader-crown-${r.id}`} />}
         {st && <StatusBadge color="blue">Staff</StatusBadge>}{vo && <StatusBadge color="green">Volontario</StatusBadge>}
         {r.is_referente && !isStaffTab && <StatusBadge color="tiffany">Referente</StatusBadge>}
+        {r.is_socio && <StatusBadge color="gray" data-testid={`socio-badge-${r.id}`}>Socio</StatusBadge>}
         {(isStaffTab ? asg(r).some((a) => a.categoria === "da_classificare") : r.is_da_classificare) && <StatusBadge color="orange">Da classificare</StatusBadge>}
         {!st && !vo && !(r.is_referente && !isStaffTab) && !r.is_da_classificare && <span className="text-slate-400">—</span>}
       </div>

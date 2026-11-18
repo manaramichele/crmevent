@@ -1480,7 +1480,7 @@ def _opt(model):
 
 async def _person_has_history(org_id: str, pid: str) -> bool:
     for coll, field in (("staff", "persona_id"), ("availabilities", "persona_id"), ("shifts", "persona_id"), ("person_companies", "person_id"),
-                        ("deals", "referente_id"), ("activities", "persona_id"), ("followups", "persona_id"), ("memberships", "persona_id")):
+                        ("deals", "referente_id"), ("activities", "persona_id"), ("followups", "persona_id"), ("memberships", "persona_id"), ("asd_soci", "persona_id")):
         if await db[coll].find_one({"org_id": org_id, field: pid}, {"_id": 1}):
             return True
     return False
@@ -2011,6 +2011,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
     for p in pres:
         pres_by[p["persona_id"]].append(p)
     prefs = await AVP["prefs_for"](admin["org_id"])
+    soci = await ASD["soci_map"](admin)
     out = []
     for p in persons:
         pid = p["id"]
@@ -2039,6 +2040,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "is_volontario": "volontario" in cats,
                     "is_team": "team" in cats,
                     "is_da_classificare": "da_classificare" in cats,
+                    "is_socio": pid in soci, "socio_stato": soci.get(pid),
                     "aziende_nomi": aziende,
                     "teams_nomi": teams_nomi,
                     "eventi_nomi": eventi_nomi,
@@ -14129,7 +14131,8 @@ ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_su
 press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
 app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
-ASD = asd.build(db, {"require_member": require_org_member, "record_audit": record_audit, "cf_valid": _cf_valid})
+ASD = asd.build(db, {"require_member": require_org_member, "record_audit": record_audit, "cf_valid": _cf_valid, "normalize": TN.normalize_fields,
+                     "person_scope": _person_scope, "link_visible": _link_visible, "prefs_for": lambda *a: AVP["prefs_for"](*a)})
 app.include_router(ASD["router"])
 app.add_event_handler("startup", ASD["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})

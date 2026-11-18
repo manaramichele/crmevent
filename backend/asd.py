@@ -24,6 +24,9 @@ DATE_RX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAGIC = [(b"%PDF-", "pdf", "application/pdf"), (b"\xff\xd8\xff", "jpg", "image/jpeg"), (b"\x89PNG\r\n\x1a\n", "png", "image/png"),
          (b"GIF8", "gif", "image/gif"), (b"RIFF", "webp", "image/webp")]
 EMAIL_RX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Anagrafica unica: questi campi vivono solo in db.persons (condivisi con Staff / Volontari); asd_soci tiene i dati associativi.
+SHARED = ("nome", "cognome", "codice_fiscale", "data_nascita", "luogo_nascita", "sesso", "email", "cellulare", "indirizzo", "cap", "citta", "provincia", "nazione", "taglia")
+ASSOC = ("tipo", "qualifica", "stato", "data_iscrizione", "numero_socio", "note")
 
 
 def _now() -> str:
@@ -80,6 +83,13 @@ class SocioIn(BaseModel):
     email: Optional[str] = None
     cellulare: Optional[str] = None
     indirizzo: Optional[str] = None
+    cap: Optional[str] = None
+    citta: Optional[str] = None
+    provincia: Optional[str] = None
+    nazione: Optional[str] = None
+    taglia: Optional[str] = None
+    persona_id: Optional[str] = None
+    conferma_nuova: bool = False
     tipo: str = "socio"
     qualifica: Optional[str] = None
     stato: str = "attivo"
@@ -131,6 +141,7 @@ class AdempimentoIn(BaseModel):
 def build(db, deps: dict):
     r = APIRouter(prefix="/api/asd")
     require_member, record_audit, cf_valid = deps["require_member"], deps["record_audit"], deps["cf_valid"]
+    normalize, person_scope, link_visible, prefs_for = deps["normalize"], deps["person_scope"], deps["link_visible"], deps["prefs_for"]
 
     async def is_active(org_id: str) -> bool:
         if await db.org_services.find_one({"org_id": org_id, "service": SERVICE_KEY, "active": True}, {"_id": 1}):
@@ -162,16 +173,49 @@ def build(db, deps: dict):
             _bad("socio_id", "Socio non trovato in questa organizzazione")
         return s
 
+    async def persons_by_id(org_id: str, ids: list) -> dict:
+        return {p["id"]: p for p in await db.persons.find({"org_id": org_id, "id": {"$in": ids}}, {"_id": 0}).to_list(len(ids) + 1)}
+
+    def merge(s: dict, p: Optional[dict]) -> dict:
+        p = p or {}
+        return {**{k: s.get(k) for k in ("id", "org_id", "persona_id", "created_at", "updated_at", *ASSOC)}, **{k: p.get(k) for k in SHARED}}
+
     async def names(org_id: str) -> dict:
-        return {s["id"]: f"{s['cognome']} {s['nome']}" for s in await db.asd_soci.find({"org_id": org_id}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1}).to_list(20000)}
+        soci = await db.asd_soci.find({"org_id": org_id}, {"_id": 0, "id": 1, "persona_id": 1}).to_list(20000)
+        ps = await persons_by_id(org_id, [s["persona_id"] for s in soci])
+        return {s["id"]: f"{(ps.get(s['persona_id']) or {}).get('cognome') or ''} {(ps.get(s['persona_id']) or {}).get('nome') or ''}".strip() or "—" for s in soci}
+
+    async def migrate_soci():
+        """Soci creati prima dell'anagrafica unica: collega a una persona esistente solo se univoca, altrimenti crea la persona. Dati originali conservati."""
+        async for s in db.asd_soci.find({"persona_id": {"$exists": False}}, {"_id": 0}):
+            org, orig = s["org_id"], {k: s.get(k) for k in SHARED if s.get(k) is not None}
+            cand = []
+            if orig.get("codice_fiscale"):
+                cand = await db.persons.find({"org_id": org, "codice_fiscale": orig["codice_fiscale"]}, {"_id": 0}).to_list(3)
+            if not cand and orig.get("email"):
+                same = lambda p, k: (p.get(k) or "").strip().lower() == (orig.get(k) or "").strip().lower()  # noqa: E731
+                cand = [p for p in await db.persons.find({"org_id": org, "email": {"$regex": f"^{re.escape(orig['email'])}$", "$options": "i"}}, {"_id": 0}).to_list(5)
+                        if same(p, "nome") and same(p, "cognome")]
+            if len(cand) == 1:
+                pid, how = cand[0]["id"], "collegata"
+                fill = {k: v for k, v in orig.items() if not cand[0].get(k)}
+                if fill:
+                    await db.persons.update_one({"org_id": org, "id": pid}, {"$set": {**fill, "updated_at": _now()}})
+            else:
+                pid, how = uuid.uuid4().hex, "creata"
+                await db.persons.insert_one(normalize("persons", {"id": pid, "org_id": org, **orig, "created_at": s.get("created_at") or _now(),
+                                                                  "provenienza": {"tipo": "associazione", "at": _now(), "by": "migrazione"}}))
+            await db.asd_soci.update_one({"org_id": org, "id": s["id"]}, {"$set": {"persona_id": pid, "anagrafica_originale": orig, "migrazione": {"at": _now(), "persona": how}},
+                                                                          "$unset": {k: "" for k in SHARED}})
 
     async def ensure_indexes():
         for c in ("asd_soci", "asd_tesseramenti", "asd_quote", "asd_certificati", "asd_adempimenti"):
             await db[c].create_index([("org_id", 1), ("id", 1)], unique=True)
-        await db.asd_soci.create_index([("org_id", 1), ("codice_fiscale", 1)], unique=True, partialFilterExpression={"codice_fiscale": {"$type": "string"}})
+        await migrate_soci()
+        await db.asd_soci.create_index([("org_id", 1), ("persona_id", 1)], unique=True, partialFilterExpression={"persona_id": {"$type": "string"}})
 
     # ---------- validazione ----------
-    def clean_socio(b: SocioIn) -> dict:
+    def clean_socio(b: SocioIn) -> tuple:
         d = {"nome": _s(b.nome, 80), "cognome": _s(b.cognome, 80)}
         if not d["nome"]:
             _bad("nome", "Nome: campo obbligatorio")
@@ -185,10 +229,37 @@ def build(db, deps: dict):
             _bad("email", "Email non valida")
         d.update(codice_fiscale=cf, email=email, data_nascita=_date("data_nascita", b.data_nascita, "Data di nascita"),
                  luogo_nascita=_s(b.luogo_nascita, 120), sesso=_choice("sesso", _s(b.sesso, 1), {"M": "M", "F": "F"}, "Sesso"),
-                 cellulare=_s(b.cellulare, 40), indirizzo=_s(b.indirizzo, 300), tipo=_choice("tipo", b.tipo, TIPI_SOCIO, "Tipo", "socio"),
+                 cellulare=_s(b.cellulare, 40), indirizzo=_s(b.indirizzo, 300), cap=_s(b.cap, 10), citta=_s(b.citta, 120), provincia=_s(b.provincia, 40),
+                 nazione=_s(b.nazione, 80), taglia=_s(b.taglia, 20))
+        a = dict(tipo=_choice("tipo", b.tipo, TIPI_SOCIO, "Tipo", "socio"),
                  qualifica=_choice("qualifica", _s(b.qualifica, 40), QUALIFICHE, "Qualifica"), stato=_choice("stato", b.stato, STATI_SOCIO, "Stato", "attivo"),
                  data_iscrizione=_date("data_iscrizione", b.data_iscrizione, "Data iscrizione"), numero_socio=_s(b.numero_socio, 40), note=_s(b.note, 2000))
-        return d
+        return normalize("persons", d), a
+
+    def brief(p: dict) -> dict:
+        return {k: p.get(k) for k in ("id", "nome", "cognome", "codice_fiscale", "email", "cellulare", "data_nascita")}
+
+    async def matches(org_id: str, d: dict, exclude: Optional[str] = None) -> list:
+        """Persone dell'organizzazione con stesso codice fiscale, email o cellulare (nessuna unione automatica)."""
+        out = {}
+        for k in ("codice_fiscale", "email", "cellulare"):
+            if not d.get(k):
+                continue
+            q = {"org_id": org_id, "archiviato": {"$ne": True}, k: {"$regex": f"^{re.escape(d[k])}$", "$options": "i"} if k == "email" else d[k]}
+            if exclude:
+                q["id"] = {"$ne": exclude}
+            for p in await db.persons.find(q, {"_id": 0}).to_list(5):
+                out.setdefault(p["id"], {**brief(p), "campi": []})["campi"].append(k)
+        soci = {s["persona_id"]: s["id"] for s in await db.asd_soci.find({"org_id": org_id, "persona_id": {"$in": list(out)}}, {"_id": 0, "id": 1, "persona_id": 1}).to_list(20)}
+        return [{**m, "socio_id": soci.get(m["id"])} for m in out.values()]
+
+    async def save_person(org_id: str, pid: str, d: dict):
+        conflict = await matches(org_id, d, exclude=pid)
+        if conflict:
+            k = conflict[0]["campi"][0]
+            lab = {"codice_fiscale": "Codice fiscale", "email": "Email", "cellulare": "Cellulare"}[k]
+            _bad(k, f"{lab} già presente nell'anagrafica di {conflict[0]['cognome'] or ''} {conflict[0]['nome'] or ''}".strip() + ": modifica il valore per evitare un duplicato")
+        await db.persons.update_one({"org_id": org_id, "id": pid}, {"$set": {**d, "updated_at": _now()}})
 
     def clean_tess(b: TesseramentoIn) -> dict:
         d = {"socio_id": b.socio_id, "stagione": _s(b.stagione, 20), "ente": _s(b.ente, 120)}
@@ -286,7 +357,6 @@ def build(db, deps: dict):
         except DuplicateKeyError:
             _bad("codice_fiscale", "Esiste già un socio con questo codice fiscale")
 
-    crud("/soci", "asd_soci", SocioIn, clean_socio, "socio", linked=False)
     crud("/tesseramenti", "asd_tesseramenti", TesseramentoIn, clean_tess, "tesseramento")
     crud("/quote", "asd_quote", QuotaIn, clean_quota, "quota")
     crud("/certificati", "asd_certificati", CertificatoIn, clean_cert, "certificato")
@@ -295,7 +365,123 @@ def build(db, deps: dict):
                     "data_scadenza": _date("data_scadenza", b.data_scadenza, "Data scadenza", True), "completato": bool(b.completato), "note": _s(b.note, 2000)},
          "adempimento", linked=False)
 
-    # ---------- soci ----------
+    # ---------- soci (anagrafica in db.persons) ----------
+    async def scoped_person(user: dict, pid: str) -> dict:
+        scope = await person_scope(user)
+        p = await db.persons.find_one({"org_id": user["org_id"], "id": pid, "archiviato": {"$ne": True}}, {"_id": 0})
+        if not p or (scope is not None and pid not in scope):
+            _bad("persona_id", "Persona non trovata in questa organizzazione")
+        return p
+
+    @r.post("/soci")
+    async def create_socio(body: SocioIn, user: dict = Depends(member)):
+        org = user["org_id"]
+        d, a = clean_socio(body)
+        if body.persona_id:
+            await scoped_person(user, body.persona_id)
+            ex = await db.asd_soci.find_one({"org_id": org, "persona_id": body.persona_id}, {"_id": 0, "id": 1})
+            if ex:
+                raise HTTPException(status_code=409, detail={"field": "persona_id", "message": "Questa persona è già registrata come socio", "socio_id": ex["id"]})
+            await save_person(org, body.persona_id, d)
+            pid, how = body.persona_id, "collegata"
+        else:
+            m = await matches(org, d)
+            if any("codice_fiscale" in x["campi"] for x in m):
+                raise HTTPException(status_code=409, detail={"field": "duplicati", "message": "Esiste già una persona con questo codice fiscale: collegala invece di crearne una nuova", "matches": m, "cf": True})
+            if m and not body.conferma_nuova:
+                raise HTTPException(status_code=409, detail={"field": "duplicati", "message": "Esistono persone con gli stessi dati: verifica se collegarne una", "matches": m, "cf": False})
+            pid, how = uuid.uuid4().hex, "creata"
+            await db.persons.insert_one({**d, "id": pid, "org_id": org, "created_at": _now(), "provenienza": {"tipo": "associazione", "at": _now(), "by": user.get("email")}})
+        doc = {**a, "id": uuid.uuid4().hex, "org_id": org, "persona_id": pid, "created_at": _now(), "updated_at": _now(), "created_by": user.get("email")}
+        try:
+            await db.asd_soci.insert_one({**doc})
+        except DuplicateKeyError:
+            raise HTTPException(status_code=409, detail={"field": "persona_id", "message": "Questa persona è già registrata come socio"})
+        await record_audit(user, "asd_socio_create", org_id=org, detail=doc["id"], meta={"persona_id": pid, "persona": how})
+        return merge(doc, await db.persons.find_one({"org_id": org, "id": pid}, {"_id": 0}))
+
+    @r.put("/soci/{iid}")
+    async def update_socio(iid: str, body: SocioIn, user: dict = Depends(member)):
+        org = user["org_id"]
+        s = await db.asd_soci.find_one({"org_id": org, "id": iid}, {"_id": 0})
+        if not s:
+            raise HTTPException(status_code=404, detail="Socio non trovato")
+        d, a = clean_socio(body)
+        await save_person(org, s["persona_id"], d)
+        res = await db.asd_soci.find_one_and_update({"org_id": org, "id": iid}, {"$set": {**a, "updated_at": _now(), "updated_by": user.get("email")}}, projection={"_id": 0}, return_document=True)
+        await record_audit(user, "asd_socio_update", org_id=org, detail=iid)
+        return merge(res, await db.persons.find_one({"org_id": org, "id": s["persona_id"]}, {"_id": 0}))
+
+    @r.get("/anagrafica")
+    async def search_people(q: str, user: dict = Depends(member)):
+        """Ricerca su tutta l'anagrafica dell'organizzazione (Staff, Volontari, Da classificare, soci), indipendente dai filtri dell'elenco soci."""
+        org, q = user["org_id"], (q or "").strip()[:80]
+        if len(q) < 2:
+            return []
+        toks = [re.escape(t) for t in q.split() if t]
+        digits = re.sub(r"\D", "", q)
+        ors = [{"codice_fiscale": {"$regex": re.escape(q.replace(" ", "")), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}},
+               {"$and": [{"$or": [{"nome": {"$regex": t, "$options": "i"}}, {"cognome": {"$regex": t, "$options": "i"}}]} for t in toks]}]
+        if len(digits) >= 4:
+            ors.append({"cellulare": {"$regex": r"\D*".join(digits)}})
+        by_num = await db.asd_soci.distinct("persona_id", {"org_id": org, "numero_socio": {"$regex": re.escape(q), "$options": "i"}})
+        if by_num:
+            ors.append({"id": {"$in": by_num}})
+        f = {"org_id": org, "archiviato": {"$ne": True}, "$or": ors}
+        scope = await person_scope(user)
+        if scope is not None:
+            f["id"] = {"$in": list(scope)}
+        people = await db.persons.find(f, {"_id": 0}).sort([("cognome", 1), ("nome", 1)]).to_list(30)
+        ids = [p["id"] for p in people]
+        soci = {s["persona_id"]: s for s in await db.asd_soci.find({"org_id": org, "persona_id": {"$in": ids}}, {"_id": 0}).to_list(30)}
+        cats = {}
+        for x in await db.staff.find({"org_id": org, "persona_id": {"$in": ids}}, {"_id": 0, "persona_id": 1, "categoria": 1}).to_list(3000):
+            cats.setdefault(x["persona_id"], set()).add("staff" if x.get("categoria") == "collaboratore" else x.get("categoria"))
+        out = []
+        for p in people:
+            s = soci.get(p["id"])
+            c = cats.get(p["id"], set())
+            out.append({**brief(p), "classificazione": [k for k in ("staff", "volontario", "da_classificare") if k in c],
+                        "socio": {k: s.get(k) for k in ("id", "stato", "tipo", "numero_socio")} if s else None})
+        return out
+
+    @r.get("/soci/{iid}/staff")
+    async def socio_staff(iid: str, user: dict = Depends(member)):
+        """Sezione Staff e Volontari della scheda socio: classificazione, eventi, team, mansioni e disponibilità (dati operativi, solo lettura)."""
+        org = user["org_id"]
+        s = await db.asd_soci.find_one({"org_id": org, "id": iid}, {"_id": 0, "persona_id": 1})
+        if not s:
+            raise HTTPException(status_code=404, detail="Socio non trovato")
+        pid = s["persona_id"]
+        links = [x for x in await db.staff.find({"org_id": org, "persona_id": pid}, {"_id": 0}).to_list(500) if link_visible(user, x)]
+        evs = {e["id"]: e.get("nome") for e in await db.events.find({"org_id": org, "id": {"$in": [x["evento_id"] for x in links]}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)}
+        tms = {t["id"]: t.get("nome") for t in await db.teams.find({"org_id": org, "id": {"$in": [x.get("team_id") for x in links if x.get("team_id")]}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)}
+        cats = {"staff" if x.get("categoria") == "collaboratore" else x.get("categoria") for x in links}
+        prefs = (await prefs_for(org, [pid])).get(pid, [])
+        return {"persona_id": pid, "classificazione": [k for k in ("staff", "volontario", "da_classificare") if k in cats],
+                "eventi": [{"evento_nome": evs.get(x["evento_id"], "—"), "categoria": x.get("categoria"), "team": tms.get(x.get("team_id")), "mansione": x.get("ruolo")} for x in links],
+                "disponibilita": [{"evento_nome": p.get("evento_nome"), "preferenza": p.get("preferenza"), "giorni": [d.get("date") for d in (p.get("days") or [])]} for p in prefs]}
+
+    @r.get("/persona/{pid}")
+    async def persona_link(pid: str, user: dict = Depends(require_member)):
+        """Sezione Associazione Sportiva nella scheda Staff / Volontari. Nessun dato sanitario esposto."""
+        if not (user.get("org_id") and allowed_role(user) and await is_active(user["org_id"])):
+            return {"active": False}
+        org = user["org_id"]
+        s = await db.asd_soci.find_one({"org_id": org, "persona_id": pid}, {"_id": 0})
+        if not s:
+            return {"active": True, "socio": None}
+        today = date.today()
+        ts = await db.asd_tesseramenti.find({"org_id": org, "socio_id": s["id"]}, {"_id": 0}).sort([("stagione", -1), ("data_scadenza", -1)]).to_list(1)
+        t = ts[0] if ts else None
+        return {"active": True, "socio": {k: s.get(k) for k in ("id", "stato", "tipo", "numero_socio", "data_iscrizione")},
+                "tesseramento": {**{k: t.get(k) for k in ("stagione", "ente", "numero_tessera", "data_scadenza")}, "stato": tess_state(t, today)} if t else None}
+
+    async def soci_map(user: dict) -> dict:
+        if not (user.get("org_id") and allowed_role(user) and await is_active(user["org_id"])):
+            return {}
+        return {s["persona_id"]: s.get("stato") for s in await db.asd_soci.find({"org_id": user["org_id"]}, {"_id": 0, "persona_id": 1, "stato": 1}).to_list(20000)}
+
     @r.get("/soci")
     async def list_soci(q: Optional[str] = None, stato: Optional[str] = None, tipo: Optional[str] = None, user: dict = Depends(member)):
         f = {"org_id": user["org_id"]}
@@ -303,10 +489,16 @@ def build(db, deps: dict):
             f["stato"] = stato
         if tipo:
             f["tipo"] = tipo
+        soci = await db.asd_soci.find(f, {"_id": 0}).to_list(20000)
+        ps = await persons_by_id(user["org_id"], [s["persona_id"] for s in soci])
+        rows = [merge(s, ps.get(s["persona_id"])) for s in soci]
         if q:
-            rx = {"$regex": re.escape(q.strip()[:80]), "$options": "i"}
-            f["$or"] = [{"nome": rx}, {"cognome": rx}, {"codice_fiscale": rx}, {"email": rx}, {"numero_socio": rx}]
-        rows = await db.asd_soci.find(f, {"_id": 0}).sort([("cognome", 1), ("nome", 1)]).to_list(20000)
+            needle, digits = q.strip().lower()[:80], re.sub(r"\D", "", q)
+            def hit(s):
+                txt = " ".join(str(s.get(k) or "") for k in ("nome", "cognome", "codice_fiscale", "email", "numero_socio")).lower()
+                return all(t in txt for t in needle.split()) or (len(digits) >= 4 and digits in re.sub(r"\D", "", s.get("cellulare") or ""))
+            rows = [s for s in rows if hit(s)]
+        rows.sort(key=lambda s: ((s.get("cognome") or "").lower(), (s.get("nome") or "").lower()))
         today = date.today()
         ids = [s["id"] for s in rows]
         certs = {}
@@ -458,4 +650,4 @@ def build(db, deps: dict):
             "prossime_scadenze": dl[:12],
         }
 
-    return {"router": r, "ensure_indexes": ensure_indexes, "is_active": is_active}
+    return {"router": r, "ensure_indexes": ensure_indexes, "is_active": is_active, "soci_map": soci_map}

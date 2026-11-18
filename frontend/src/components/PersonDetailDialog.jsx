@@ -14,6 +14,7 @@ import { useTeams } from "@/lib/teamsStore";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { toast } from "sonner";
+import { AsdPersonSection } from "@/components/asd/AsdPeople";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const INV = { non_invitato: "gray", invito_inviato: "orange", account_attivato: "green", accesso_disabilitato: "red" };
@@ -225,6 +226,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                         <span className="flex flex-wrap gap-1.5">{(p.esigenze_alimentari || []).map((e) => <StatusBadge key={e} color="blue">{e}</StatusBadge>)}</span>
                         {p.esigenze_note && <p className="text-sm text-slate-600 mt-1">{p.esigenze_note}</p>}</div>
                     ) : null}
+                    <div className="mt-4"><AsdPersonSection personId={p.id} /></div>
                   </>
                 )}
               </TabsContent>
