@@ -1,0 +1,26 @@
+{
+  "summary": "Tested the PDF export for Staff, Volontari and Team (POST /api/staff/export-pdf and the ExportPdfButton UI in /staff-volontari, plus the single-team button in TeamMembersDialog). Backend: 12/12 pytest pass. Checked: content-type and %PDF bytes, filename, X-Export-Count, Staff/Volontari filtered by categoria even when all person_ids are sent, person_ids subset, empty list gives the 'Nessuna persona' PDF, Team export grouped alphabetically, team_ids for a single team, landscape at 6+ columns and portrait at 4, 400 for a bad section, 404 for an unknown event, 401 without auth, 404 for another org (cross-org via a TEST org), and data unchanged before/after. Frontend at 1920 and 390px: buttons export-pdf-staff, -volontari, -team and -team-single are present. With 'Tutti gli eventi' the dialog asks to pick an event and confirm is disabled. With the event chosen it shows locked Cognome/Nome/Ruolo and 5 checkboxes (default telefono+team). Download works with the filename CRMEvent_Staff|Volontari|Team_MezzaMaratonaDiProva_YYYY-MM-DD.pdf. Column choices are saved in sessionStorage per section and survive close/reopen and tab switches. Search 'Rossi' sends 1 person_id. The Volontari team filter (Ristoro) sends 2 ids and the response count is 2. Team export of all teams returned 5 people. Single Ristoro export sends team_ids [Ristoro], returns 2, and the team dialog stays open. On mobile the dialog is a bottom sheet and is usable; the download worked; the Aggiungi Staff dialog still opens. At the end I deleted TEST_Pdf Org and my cross-org TEST_PdfX org: all their docs in every collection, plus users and organizations.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Export dialog description", "issues": ["Grammar: '1 persone con i filtri attuali' should be '1 persona' when the count is 1 (ExportPdfButton scopeLabel in Persons.jsx line 210)"]},
+      {"screen": "Team tab", "issues": ["The Esporta PDF button sits on its own row, right-aligned, under the search/Evento filters, so it is visually apart from the filter bar. On mobile it is compact and right-aligned, while the Staff/Volontari button is full width. Small inconsistency."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_people_pdf_export.py", "/app/backend/tests/cleanup_pdf_orgs.py", "/app/test_reports/pytest/pytest_people_pdf.xml"],
+  "action_items": ["Optional: use the singular 'persona' when the count is 1 in the export dialog scope label", "Optional: align the Team tab Esporta PDF button with the filter row"],
+  "critical_code_review_comments": [
+    "people_pdf.py: if team_ids is an empty list [], 'not body.team_ids' is True, so ALL teams are exported. Prefer 'body.team_ids is None' so an empty selection exports nothing, as person_ids already does.",
+    "people_pdf.py: the search box in the Team tab (EntityManager searchKeys) is ignored by the Team export, which always exports every team of the event. This matches the spec ('all teams of the event'), but users might expect the search to apply.",
+    "people_pdf.py: the data_inizio/data_fine fallback uses _d(), which returns an empty string on bad input. Fine. Bodies are capped by to_list(20000); acceptable.",
+    "The endpoint is mounted on require_admin, and the permission rule ('/staff/export-pdf','staff','view') is declared before '/staff', so the rule order is correct. A member account with staff view permission was NOT tested (no such account seeded)."
+  ],
+  "updated_files": ["/app/backend/tests/test_people_pdf_export.py", "/app/backend/tests/cleanup_pdf_orgs.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created 1 cross-org TEST org (TEST_PdfX 1794985668) through register-organization. It was deleted together with TEST_Pdf Org (id 4081951563e7415f9b38f9ff48e50bc0), as requested: docs with their org_id in every collection, users and organizations. The test credentials test_pdf_1794985461@example.com NO LONGER EXIST.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_people_pdf_export.py needs the TEST_Pdf Org seed, which has been DELETED. Re-seed a similar org (event with 2 staff Rossi/Verdi, 48 volunteers, teams Accoglienza/Ristoro) and update EMAIL/EV in the test before rerunning. Run with '-n 0'. PDF text is parsed with pymupdf (fitz); pypdf is not installed. UI: dismiss the 'Non ora' demo popup and the 'Accept all' cookie banner after login. Open a team card with edit-team-{id}."
+}
