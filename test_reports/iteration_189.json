@@ -1,0 +1,37 @@
+{
+  "summary": "Novità feature end-to-end (backend + UI). Backend: 17/17 pytest passed (preview check logging, simulate 3 drafts with correct audiences, re-simulate 409 + no duplicates, 404 unknown release, drafts hidden from org users / unread-count unaffected, admin endpoints forbidden for org, edit validation (plans empty / service empty / empty title -> 400), edit+publish, audience visibility (org sees 'all' and plan-matching, NOT superadmin/service), needs_completion publish -> 400, manual create (generator manual) + plans=[gold] visible to gold trial org, plans=[bronze,silver] NOT visible, mark-read/unread-count, dismiss-banner then newer news reappears, withdraw hides, simulate a different release creates its own 3 drafts). UI: checks panel 'Anteprima' + last check updates on 'Controlla ora'; simulate button -> 'Già simulato' disabled; edit dialog (title/area/audience plans gold) saves; publish; manual create via dialog + publish; org Dashboard banner with title/date + '2 novità da leggere' badge, header count 2; 'Scopri le novità' -> /novita with 'Nuova' badges; category filter and 'Solo non lette' work; count 0 and banner gone after reading; close banner hides it, reload keeps hidden, newer publish shows it again without logout; SA header icon on /piattaforma and after org switch, NewsBanner on /piattaforma, SA /novita sees superadmin+service news; mobile 390px header icon/banner/news page usable (no horizontal overflow). One flaky UI issue found on the News page (Nuova badges lost).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/platform/organizations/{id}", "issue": "Pre-existing: deleting an org leaves its admin user orphaned (org_id=null, active=true); had to delete users separately via DELETE /api/platform/users/{id}."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "pages/News.jsx useEffect", "issue": "Race: the effect does GET /news then POST /news/mark-read. Under React.StrictMode (index.js) the effect runs twice; the second GET /news can resolve after mark-read so items arrive with read=true and the 'Nuova' badges / teal borders disappear right after the page opens. Reproduced on the 390px run (backend log order: GET /api/news, POST /api/news/mark-read, GET /api/news). Desktop runs showed badges correctly, so it's intermittent. Fix: add a cancelled flag in the effect (let alive=true; ... if(!alive) return; return () => { alive=false }) or a ref guard so only one fetch+mark-read runs, and/or keep the first unread snapshot.", "selector": "[data-testid^=news-new-]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/novita (org user)", "issues": ["Org users see the targeting chip 'Piani: GOLD' / 'Modulo: x' on cards. This exposes internal targeting and may confuse users. Consider showing it only to the Super Admin."]},
+      {"screen": "/app first login of new org", "issues": ["The 'Scopri CRMEvent con una demo gratuita' modal appears on top of the Novità banner on first login. This is expected behaviour, not a bug, but the banner can't be clicked until the modal is closed."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_news_audience.py", "/app/test_reports/pytest/news_audience.xml"],
+  "action_items": [
+    "Fix News.jsx double fetch/mark-read race so 'Nuova' badges stay visible for the items that were unread when the page opened.",
+    "Optional: hide audience chips on /novita for non-superadmin users."
+  ],
+  "critical_code_review_comments": [
+    "news.py _is_read checks rd.seen_at, but nothing ever writes seen_at. It is dead code: remove it or implement it.",
+    "news_reads.read_ids grows without limit ($addToSet) and keeps ids of deleted news. Consider pruning it, or use a seen_at watermark.",
+    "_visible loads up to 500 published items and filters them in Python for every unread-count call (this runs on every route change). Fine for now; consider a Mongo-side audience filter and an index on status+published_at.",
+    "NewsBanner keeps its 'hidden' state locally after close; it only resets on remount. This is OK because the server's dismissed_at is the source of truth.",
+    "The old tests/test_news.py has a hardcoded default BASE_URL (violates the env-only rule)."
+  ],
+  "updated_files": ["/app/backend/tests/test_news_audience.py"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "95% (1 intermittent badge race)"},
+  "seed_data_creation": "Created and then fully cleaned up: 2 TEST_NEWS orgs + their admin users (test_news_*@example.com) and their news_reads; news simulated from 2026-11-18-associazione-abbonamenti (twice: pytest + UI) and 2026-10-08-novita (pytest); manual TEST_NEWS items; 1 direct-DB needs_completion test draft. All withdrawn and deleted by id. The remaining news_items are the 2 pre-existing drafts from 2026-10-07-team-mobile, which were not mine and were left untouched. A few news_checks log entries and audit entries remain. No emails were sent by the test flows (registration may trigger registered-user sync).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest tests/test_news_audience.py -n 0. It creates and cleans up its own data. New trial orgs get plan 'gold' from /api/saas/me. A new org's first login shows a demo modal ('Non ora' closes it) plus a cookie banner ('Accept all'). The SA org switcher state lives in localStorage and defaults to the newest org."
+}

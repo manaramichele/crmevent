@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/crm";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
@@ -13,11 +14,16 @@ export default function News() {
   const [items, setItems] = useState(null);
   const [area, setArea] = useState("");
   const [onlyUnread, setOnlyUnread] = useState(false);
+  const { user } = useAuth();
+  const isSuper = user?.role === "superadmin";
   useEffect(() => {
+    let alive = true;
     api.get("/news").then(({ data }) => {
+      if (!alive) return;
       setItems(data);
       if (data.some((n) => !n.read)) api.post("/news/mark-read", { ids: data.filter((n) => !n.read).map((n) => n.id) }).then(() => window.dispatchEvent(new Event(NEWS_READ_EVENT))).catch(() => {});
-    }).catch((e) => { setItems([]); toast.error(formatApiError(e.response?.data?.detail)); });
+    }).catch((e) => { if (alive) { setItems([]); toast.error(formatApiError(e.response?.data?.detail)); } });
+    return () => { alive = false; };
   }, []);
   const areas = [...new Set((items || []).map((n) => n.area).filter(Boolean))];
   const shown = (items || []).filter((n) => (!area || n.area === area) && (!onlyUnread || !n.read));
@@ -43,7 +49,7 @@ export default function News() {
                 <div className="flex flex-wrap items-center gap-2">
                   <time className="text-xs font-medium text-slate-400" data-testid={`news-date-${n.id}`}>{fmtDate(n.published_at)}</time>
                   {!n.read && <span className="rounded-full bg-[#0ABAB5] text-slate-900 px-2 py-0.5 text-[11px] font-bold" data-testid={`news-new-${n.id}`}>Nuova</span>}
-                  {AUD[n.audience?.type] && <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-0.5 text-[11px]" data-testid={`news-audience-${n.id}`}>{AUD[n.audience.type]}{n.audience.type === "plans" ? `: ${n.audience.plans.join(", ").toUpperCase()}` : n.audience.type === "service" ? `: ${n.audience.service}` : ""}</span>}
+                  {isSuper && AUD[n.audience?.type] && <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-0.5 text-[11px]" data-testid={`news-audience-${n.id}`}>{AUD[n.audience.type]}{n.audience.type === "plans" ? `: ${n.audience.plans.join(", ").toUpperCase()}` : n.audience.type === "service" ? `: ${n.audience.service}` : ""}</span>}
                 </div>
                 <h2 className="mt-1 text-lg font-bold text-slate-900 font-display leading-snug" data-testid={`news-title-${n.id}`}>{n.titolo}</h2>
                 <p className="mt-1.5 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap" data-testid={`news-text-${n.id}`}>{n.descrizione}</p>

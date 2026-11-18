@@ -1295,3 +1295,11 @@ Task 2 — Creatività manuale:
 - record_audit risolve org_name se mancante; accesso file certificato tracciato.
 - iteration_188: backend 11/11; corretti full reload e redirect per utenti normali (ora vedono la pagina "non attivo").
 
+
+## 2026-11-18 — Novità automatiche, icona, avviso Dashboard
+- Causa radice: is_production() richiedeva CRMEVENT_ENV=production, mai impostato nei secrets di produzione → nessuna bozza; registro releases.json fermo al 2026-10-08.
+- Ora produzione = CRMEVENT_ENV oppure APP_URL non di anteprima; ogni controllo registrato in news_checks (pannello Super Admin + "Controlla ora"); errori per rilascio salvati e mostrati; simulazione una sola volta per rilascio (409).
+- Bozze "Da completare" se mancano informazioni (pubblicazione bloccata); destinatari (tutti / solo Super Admin / piani / modulo Marketplace) modificabili; creazione manuale.
+- Lettura per singola novità (read_ids, compatibile con seen_at), avviso Dashboard (org + /piattaforma) chiudibile; icona campanella+scintilla per tutti incl. Super Admin; aggiornamento a cambio pagina/focus/evento, nessun polling.
+- releases.json: aggiunto 2026-11-18-associazione-abbonamenti. iteration_189: backend 17/17, fix race StrictMode su /novita.
+
