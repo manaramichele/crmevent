@@ -228,7 +228,7 @@ def build(db, deps: dict):
         why = can_buy(s, demo)
         return {**{k: s.get(k) for k in ("id", "key", "name", "description", "icon", "image", "category", "price", "price_type",
                                           "usage_unit", "usage_limits", "terms", "status", "scope", "activation", "features", "notify_label", "notified_label", "service_code",
-                                          "video_url", "video_id", "video_title", "billing_cycles", "sort")},
+                                          "video_url", "video_id", "video_title", "billing_cycles", "billing_method", "sort")},
                 "free": s.get("price") is not None and float(s["price"]) == 0,
                 "demo_free": demo, "purchasable_now": why is None, "reason": "Attivazione a cura del team CRMEvent" if s.get("activation") == "superadmin" else why,
                 "active": any(p["status"] in ACTIVE for p in mine) or s.get("key") in org_active, "purchases": mine, "notify_me": s["id"] in notify_ids}
@@ -712,7 +712,9 @@ def build(db, deps: dict):
     @r.put("/platform/marketplace/services/{sid}")
     async def admin_update(sid: str, body: ServiceIn, admin: dict = Depends(deps["require_superadmin"])):
         d = _clean(body)
-        prev = await db.marketplace_services.find_one({"id": sid}, {"_id": 0, "status": 1})
+        prev = await db.marketplace_services.find_one({"id": sid}, {"_id": 0, "status": 1, "billing_method": 1})
+        if (prev or {}).get("billing_method") == "plan_addon":
+            d.update(billing_method="plan_addon", price_type="yearly")
         res = await db.marketplace_services.update_one({"id": sid}, {"$set": {**d, "updated_at": _now()}})
         if not res.matched_count:
             raise HTTPException(status_code=404, detail="Servizio non trovato")
