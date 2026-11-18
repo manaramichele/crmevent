@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the Gestione Associazione Sportiva module (backend /api/asd and frontend /associazione) using Org A (active through a free grant), Org B (not active) and Super Admin. Backend: 16 of 17 pytest tests pass. One bug: changing a socio's codice fiscale to one that another socio in the same org already has returns HTTP 500 instead of 400. Frontend: all requested flows work on desktop and on mobile at 390px. These are: the sidebar item, the Marketplace 'Apri Gestione Associazione Sportiva' button, the 6 tabs with ?tab= in the URL, Soci create/edit/search, the invalid CF error toast, Quote create and payment, Certificati create and PDF upload/open, Scadenze range and Adempimenti, the KPI cards, the 409 toast when deleting a linked socio, data still there after logging out and back in, and the inactive state for Org B. The marketplace service 'gestione-societa' still has status coming_soon, and no other ASD service exists.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/asd/soci/{id}", "issue": "If the update sets a codice_fiscale that another socio in the same org already has, the endpoint returns 500 (pymongo DuplicateKeyError from find_one_and_update, seen in backend.err.log). The insert() helper catches this error only on create. Fix: in crud.update, wrap find_one_and_update in try/except DuplicateKeyError and call _bad('codice_fiscale','Esiste già un socio con questo codice fiscale').", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST/GET /api/asd/certificati/{id}/file", "issue": "The file type comes from the client's filename and content_type, and the file content is never checked. For images, the client's content_type is saved and sent back inline (e.g. image/svg+xml with a .png name), so an SVG could run in the app's origin. Suggested fix: derive file_type from the extension or the file's magic bytes (allowlist pdf/jpeg/png/webp/gif) and add the 'X-Content-Type-Options: nosniff' header."},
+      {"endpoint": "POST /api/asd/certificati/{id}/file", "issue": "The image size limit comes from storage_utils MAX_IMAGE, which may differ from the 10MB the UI promises. The 10MB+ PDF rejection was checked; the image limit was not."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "asdShared today()", "issue": "Uses new Date().toISOString().slice(0,10), which is the UTC date. Between 00:00 and 01:00/02:00 Italian time, 'Registra pagamento' fills in yesterday's date. Use the local date instead.", "selector": "[data-testid^=asd-quota-pay-]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ASD dialogs", "issues": ["Date fields use the browser's native date input instead of the shadcn calendar (same as the rest of the app)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_asd_module.py", "/app/test_reports/pytest/asd_results.xml"],
+  "action_items": [
+    "HIGH: Catch DuplicateKeyError on PUT /api/asd/soci/{id} and return 400 with {field:'codice_fiscale', message}.",
+    "Harden the certificate file Content-Type: allowlist based on extension or magic bytes, and add the nosniff header.",
+    "Use the local date in asdShared today()."
+  ],
+  "critical_code_review_comments": [
+    "asd.py crud.update: no duplicate-key handling (this is the 500 bug above).",
+    "A tesseramento without data_scadenza counts as 'valido' in the tesserati_validi KPI (state senza_scadenza). Confirm this is intended.",
+    "Layout calls /api/asd/status for every user. For Super Admin without an X-Org-Id header it returns 428; the frontend catches this, so the sidebar item stays hidden, which is correct."
+  ],
+  "updated_files": ["/app/backend/tests/test_asd_module.py"],
+  "success_rate": {"backend": "94% (16/17)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "None. All TEST_ soci, quote, certificati, tesseramenti and adempimenti created in Org A were deleted afterwards; Org A's ASD lists are empty again.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... pytest tests/test_asd_module.py (xdist is on via pytest.ini). The container clock reads Nov 2026. On Org B, the WelcomeDemo dialog and cookie banner cover the page after login, so close them before clicking anything in the Marketplace. The Org B Marketplace card label shows 'Prossimamente'; I did not open the Org B card detail because the WelcomeDemo dialog blocked the click. Staff/volunteer and org 'user' role accounts were not tested because there are no credentials for them (the role logic is in allowed_role).",
+  "rca of the issue": "PUT /api/asd/soci duplicate CF -> 500. Cause: there is a unique partial index on (org_id, codice_fiscale), and the update path calls db.asd_soci.find_one_and_update directly instead of going through insert(), which is the only place that catches the duplicate-key error. To reproduce: create socio A with CF X, create socio B, then PUT B with codice_fiscale X. Fix: try/except pymongo.errors.DuplicateKeyError around the update and raise the 400 _bad error."
+}

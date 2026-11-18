@@ -1275,3 +1275,9 @@ Task 2 — Creatività manuale:
 - Errori di validazione ora `{field, message}` (400) o 422 Pydantic → il frontend evidenzia il campo con un messaggio preciso (data-testid `mkt-admin-error-<campo>`).
 - Verifica: PUT invariato su tutti i 14 servizi = 200, stripe_prices invariati; 12 casi di errore con campo corretto; UI: salvataggio Control Room e GAS OK.
 
+
+## 2026-11-18 — Gestione Associazione Sportiva: modulo operativo + collegamenti
+- Backend `asd.py` (/api/asd): status, dashboard, soci, tesseramenti, quote (registro interno), certificati medici (file privati, magic bytes, nosniff), scadenze aggregate + adempimenti. Accesso: modulo attivo (acquisto o attivazione gratuita) + org_role admin_org/user; staff/volontari/superadmin esclusi; eliminazioni solo admin; dati per org_id; CF unico per org.
+- Frontend: /associazione (6 tab, ?tab=), voce sidebar "Gestione Associazione Sportiva" solo se /asd/status active, pulsante Marketplace "Apri Gestione Associazione Sportiva".
+- Marketplace invariato (servizio coming_soon, acquisto spento). iteration_186: frontend 100%, backend 16/17 → fix CF duplicato in modifica (400) + upload sicuro; ricontrollato.
+

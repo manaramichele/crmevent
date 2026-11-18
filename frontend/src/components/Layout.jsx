@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   LayoutDashboard, Headset, Lock, Zap, Store, Video, CalendarDays, Building2, Users, UserCog, RadioTower, Handshake, Contact,
-  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning, Map as MapIcon, Film, Boxes, ReceiptText, Home,
+  ListChecks, BellRing, Settings, ChevronLeft, Search, LogOut, Menu, X, CircleUserRound, Inbox, LifeBuoy, BedDouble, CreditCard, Sparkles, AlertTriangle, ShieldCheck, ScrollText, Megaphone, CalendarRange, SlidersHorizontal, BadgeEuro, Coins, MailCheck, LayoutTemplate, HelpCircle, Cookie, MessageSquareWarning, Map as MapIcon, Film, Boxes, ReceiptText, Home, Trophy,
 } from "lucide-react";
 import { can, isOrgAdmin, planBlocks } from "@/lib/perms";
 import { StatusBadge } from "@/components/crm";
@@ -77,8 +77,8 @@ const navFor = (u, items, access) => items.flatMap((n) => {
   if (n.perm !== "admin" && planBlocks(u, n.perm)) return [{ ...m, locked: true }];
   return (n.perm === "admin" ? isOrgAdmin(u) : can(u, n.perm, "view")) ? [m] : [];
 });
-const orgGroups = (u, access, iscrittiOn, isSuper = false) => [
-  { items: withIscritti(navFor(u, ORG_NAV, access), iscrittiOn) },
+const orgGroups = (u, access, iscrittiOn, isSuper = false, asdOn = false) => [
+  { items: withIscritti(navFor(u, ORG_NAV, access), iscrittiOn, asdOn) },
   { title: "Event Planner & Event Map", id: "planner", items: navFor(u, PLANNER_NAV, access) },
   { title: "Control Room", id: "controlroom", items: navFor(u, CR_NAV, access) },
   { title: "Organizzazione", id: "organizzazione", items: navFor(u, isSuper ? ORGANIZATION_NAV.filter((n) => n.id !== "org-moduli") : ORGANIZATION_NAV, access) },
@@ -86,10 +86,12 @@ const orgGroups = (u, access, iscrittiOn, isSuper = false) => [
 
 // Moduli Marketplace attivi: voce di menu dopo "Aziende".
 const ISCRITTI_NAV = { to: "/iscritti", label: "Elenco Iscritti", icon: Contact, id: "iscritti", perm: "*" };
-const withIscritti = (items, on) => {
-  if (!on) return items;
+const ASD_NAV = { to: "/associazione", label: "Gestione Associazione Sportiva", icon: Trophy, id: "associazione", perm: "*" };
+const withIscritti = (items, on, asdOn) => {
+  const extra = [on && ISCRITTI_NAV, asdOn && ASD_NAV].filter(Boolean);
+  if (!extra.length) return items;
   const i = items.findIndex((n) => n.id === "aziende");
-  return i < 0 ? [...items, ISCRITTI_NAV] : [...items.slice(0, i + 1), ISCRITTI_NAV, ...items.slice(i + 1)];
+  return i < 0 ? [...items, ...extra] : [...items.slice(0, i + 1), ...extra, ...items.slice(i + 1)];
 };
 
 // Extra platform-administration group, only for Super Admin.
@@ -294,6 +296,11 @@ export default function Layout({ children }) {
     if (isSuper || !user?.org_id) { setIscrittiOn(false); return; }
     api.get("/iscritti/status").then(({ data }) => setIscrittiOn(!!data.active)).catch(() => setIscrittiOn(false));
   }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [asdOn, setAsdOn] = useState(false);
+  useEffect(() => {
+    if (isSuper || !user?.org_id || isVolUser(user)) { setAsdOn(false); return; }
+    api.get("/asd/status").then(({ data }) => setAsdOn(!!data.active)).catch(() => setAsdOn(false));
+  }, [isSuper, user?.org_id, location.pathname === "/marketplace"]); // eslint-disable-line react-hooks/exhaustive-deps
   const [counts, setCounts] = useState({});
   const [access, setAccess] = useState(null);
   useEffect(() => {
@@ -381,7 +388,7 @@ export default function Layout({ children }) {
 
   const navGroups = isSuper
     ? [...orgGroups(user, access, false, true), { title: "Dashboard piattaforma", id: "platform", items: PLATFORM_NAV }, { title: "Marketing & Admin", id: "marketing-admin", items: MARKETING_NAV }]
-    : orgGroups(user, access, iscrittiOn);
+    : orgGroups(user, access, iscrittiOn, false, asdOn);
 
   const isPlatformRoute = PLATFORM_PATHS.some((p) => location.pathname.startsWith(p));
   const gateForOrg = isSuper && !isPlatformRoute && (!orgsLoaded || !validActing);
