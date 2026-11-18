@@ -110,8 +110,8 @@ def _assert_safe_email(subject: str, html: str) -> None:
                 raise ValueError(f"Anchor text {m.group(1)!r} != real link host {real!r} (G3)")
 
 
-async def _send_via_resend(to: str, subject: str, html: str) -> str | None:
-    sender = f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDRESS}>"
+async def _send_via_resend(to: str, subject: str, html: str, from_name: str | None = None) -> str | None:
+    sender = f"{from_name or EMAIL_FROM_NAME} <{EMAIL_FROM_ADDRESS}>"
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{RESEND_BASE_URL}/emails",
@@ -122,10 +122,10 @@ async def _send_via_resend(to: str, subject: str, html: str) -> str | None:
     return resp.json().get("id")
 
 
-async def _send_via_brevo(to: str, subject: str, html: str) -> str | None:
+async def _send_via_brevo(to: str, subject: str, html: str, from_name: str | None = None) -> str | None:
     # Transactional only — no contact/list mutation. Sender is the verified CRMEvent mailbox.
     payload = {
-        "sender": {"name": EMAIL_FROM_NAME, "email": EMAIL_FROM_ADDRESS},
+        "sender": {"name": from_name or EMAIL_FROM_NAME, "email": EMAIL_FROM_ADDRESS},
         "to": [{"email": to}],
         "subject": subject,
         "htmlContent": html,
@@ -140,8 +140,8 @@ async def _send_via_brevo(to: str, subject: str, html: str) -> str | None:
     return (resp.json() or {}).get("messageId")
 
 
-async def _send_via_managed(to: str, subject: str, html: str) -> str | None:
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+async def _send_via_managed(to: str, subject: str, html: str, from_name: str | None = None) -> str | None:
+    payload = {"to": [to], "subject": subject, "html": html, "from_name": from_name or EMAIL_FROM_NAME}
     if EMAIL_REPLY_TO:
         payload["contact_email"] = EMAIL_REPLY_TO
     async with httpx.AsyncClient(timeout=30) as client:
@@ -183,7 +183,7 @@ def _mask_email(addr: str) -> str:
         return "***"
 
 
-async def send_email(*, to: str, subject: str, html: str) -> str | None:
+async def send_email(*, to: str, subject: str, html: str, from_name: str | None = None) -> str | None:
     """Send a transactional email through the configured provider with fallback.
     Tracking logs record provider, template (inline), timestamp, outcome and error —
     never the API key, the recipient's full address, the full HTML, or invite tokens."""
@@ -195,7 +195,7 @@ async def send_email(*, to: str, subject: str, html: str) -> str | None:
             continue
         tried.append(provider)
         try:
-            message_id = await _SENDERS[provider](to, subject, html)
+            message_id = await _SENDERS[provider](to, subject, html, from_name)
             logger.info("email_sent provider=%s template=inline to=%s subject=%r message_id=%s status=ok",
                         provider, _mask_email(to), subject, message_id)
             return message_id
@@ -264,3 +264,63 @@ def link_email(*, name: str, intro: str, cta_label: str, url: str, footer_note: 
         f'<p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0">{escape(footer_note)}</p>'
     )
     return _shell(content)
+
+
+
+FOOTER_LOGO_URL = (os.environ.get("PUBLIC_SITE_URL") or "https://crmevent.it").rstrip("/") + "/logo-crmevent.png"
+STAFF_KINDS = {
+    "nuovo": ("Attiva il tuo account Staff e Volontari", "Attiva il mio account",
+              "sei stato registrato come {ruolo} per <b>{evento}</b>. Per accedere alla tua area personale attiva l'account e scegli la tua password.",
+              "Il link di attivazione è personale e scade tra 7 giorni. Dopo l'attivazione potrai accedere con la tua email e la password scelta."),
+    "esistente": ("Sei stato associato all'evento", "Accedi a CRMEvent",
+                  "sei stato associato a <b>{evento}</b> come {ruolo}. Il tuo account CRMEvent è già attivo: non serve una nuova registrazione.",
+                  "Accedi con l'email e la password che usi già. Nella tua area trovi questo evento insieme agli altri a cui partecipi."),
+    "disponibilita": ("Abbiamo ricevuto la tua disponibilità", None,
+                      "grazie per aver dato la tua disponibilità per <b>{evento}</b>. Abbiamo ricevuto i tuoi dati e le giornate indicate.",
+                      "L'organizzazione ti contatterà per confermare la partecipazione e comunicarti le informazioni operative."),
+}
+
+
+def staff_event_email(*, kind: str, event_name: str, event_date: str, logo_url: str | None, name: str, role: str, cta_url: str | None):
+    """Email Staff/Volontari con l'evento in primo piano. Ritorna (oggetto, html, nome mittente)."""
+    subj, cta_label, body, hint = STAFF_KINDS[kind]
+    ev = escape(event_name or "Evento")
+    ruolo = "Volontario" if role == "volunteer" else "Staff"
+    if logo_url:
+        head = (f'<img src="{escape(logo_url)}" alt="{ev}" width="180" style="display:block;width:180px;max-width:60%;height:auto;'
+                'max-height:120px;border:0;margin:0 auto 14px;outline:none;text-decoration:none" />')
+    else:
+        initials = escape("".join(w[0] for w in ([x for x in (event_name or "E").split() if len(x) > 2][:2] or ["E"])).upper())
+        head = ('<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 14px"><tr>'
+                f'<td align="center" bgcolor="#0ABAB5" width="64" height="64" style="width:64px;height:64px;border-radius:32px;color:#ffffff;'
+                f'font-size:24px;font-weight:700;font-family:Arial,Helvetica,sans-serif">{initials}</td></tr></table>')
+    cta = ""
+    if cta_url and cta_label:
+        u = escape(cta_url)
+        cta = ('<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:6px auto 20px">'
+               '<tr><td align="center" bgcolor="#0ABAB5" style="border-radius:8px">'
+               f'<a href="{u}" style="display:inline-block;padding:14px 30px;font-family:Arial,Helvetica,sans-serif;font-size:15px;'
+               f'font-weight:700;color:#0f172a;text-decoration:none;border-radius:8px">{escape(cta_label)}</a></td></tr></table>'
+               '<p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0 0 4px">Se il pulsante non funziona, copia questo link nel browser:</p>'
+               f'<p style="margin:0 0 16px;word-break:break-all"><span style="color:#088F8A;font-size:12px">{u}</span></p>')
+    html = (
+        '<!--[if mso]><style>body,table,td,a{font-family:Arial,Helvetica,sans-serif !important}</style><![endif]-->'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f6f8;margin:0;padding:24px 12px">'
+        '<tr><td align="center"><!--[if mso]><table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e6eaef;border-radius:14px">'
+        f'<tr><td align="center" style="padding:32px 28px 18px;border-bottom:4px solid #0ABAB5;font-family:Arial,Helvetica,sans-serif">{head}'
+        f'<h1 style="margin:0;color:#0f172a;font-size:22px;line-height:1.3;font-weight:700">{ev}</h1>'
+        + (f'<p style="margin:6px 0 0;color:#64748b;font-size:14px">{escape(event_date)}</p>' if event_date else "") +
+        '</td></tr>'
+        '<tr><td style="padding:24px 32px 8px;font-family:Arial,Helvetica,sans-serif">'
+        + greeting_html(name) +
+        f'<p style="color:#334155;font-size:15px;line-height:1.7;margin:0 0 20px">{body.format(evento=ev, ruolo=ruolo)}</p>'
+        f'{cta}<p style="color:#64748b;font-size:13px;line-height:1.6;margin:0 0 18px">{escape(hint)}</p></td></tr>'
+        '<tr><td align="center" style="padding:14px 32px 22px;border-top:1px solid #eef1f5;font-family:Arial,Helvetica,sans-serif">'
+        f'<img src="{FOOTER_LOGO_URL}" alt="CRMEvent" width="72" style="display:block;width:72px;height:auto;border:0;margin:0 auto 6px;opacity:0.8" />'
+        '<p style="color:#9aa4b2;font-size:11px;line-height:1.6;margin:0">Gestione Staff e Volontari tramite CRMEvent · '
+        '<a href="https://crmevent.it" style="color:#9aa4b2;text-decoration:underline">crmevent.it</a></p>'
+        '</td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr></table>'
+    )
+    return f"{event_name or 'Evento'} – {subj}", html, re.sub(r'[\\"<>,;:@()\[\]\r\n]+', " ", f"{(event_name or 'Evento')[:60]} | CRMEvent").strip()

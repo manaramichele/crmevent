@@ -1,0 +1,37 @@
+{
+  "summary": "Tested (A) AI Assistant hidden/denied for staff/volunteer and (B) event-branded Staff/Volunteer emails (preview API + AvailabilityDialog preview UI + invite existing/new paths). Backend 15/15 pytest pass. Frontend: volunteer & staff in /app (VolunteerLayout) have no header-assistant-button, no support-fab, and dispatching 'support-chat:open' opens nothing, at 1920 and 390px. Org admin sees header-assistant-button and the chat panel opens (no question sent). Events -> Disponibilità -> availability-dialog shows staff-email-preview with 4 buttons; each shows correct email-preview-meta (Da: 'Maratona di Pisa | CRMEvent', correct subjects) and iframe with MP initials header, event name, 14/03/2027, greeting, body, CTA (nuovo->/attiva?token=ANTEPRIMA, esistente->/login, disponibilita no CTA) and CRMEvent footer. One visual bug: the footer CRMEvent logo uses the white-text variant so 'CRM' is invisible on the white footer.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "email_utils.staff_event_email (FOOTER_LOGO_URL)", "issue": "The footer loads /logo-crmevent-dark.png, which has white 'CRM' text for dark backgrounds. On the white email footer only the icon and 'Event' show. It is also a 359KB PNG shown at 72px. Use logo-crmevent.png (dark text) or a small optimised light-background variant."},
+      {"endpoint": "email_utils._send_via_resend from_name", "issue": "The sender is built as f\"{from_name} <addr>\" with no RFC5322 quoting. An event name with a comma, quotes, '<' or ';' (e.g. 'Maratona, Pisa') can produce an invalid From header, and the provider may reject the send. Quote and escape the display name, or strip special characters."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Email preview footer (iframe)", "issue": "The CRMEvent footer logo shows only 'Event' because the white 'CRM' text is invisible on white (backend asset choice).", "selector": "[data-testid='email-preview-frame']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Events table", "issues": ["data-testid availability-{id} appears twice (one hidden, for responsive layout). Tests must use :visible. Consider unique testids."]},
+      {"screen": "VolunteerLayout I miei eventi", "issues": ["Event date shows the raw ISO '2027-03-14' instead of dd/mm/yyyy (existing issue, minor)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_staff_ai_and_event_emails.py", "/app/test_reports/pytest/pytest_results_184.xml"],
+  "action_items": [
+    "Change FOOTER_LOGO_URL in email_utils.py to a logo with dark text on a light background (e.g. logo-crmevent.png or an optimised small PNG)",
+    "Quote and escape from_name in the Resend sender string (and check the Brevo/managed senders) so event names with commas or special characters can't break the From header"
+  ],
+  "critical_code_review_comments": [
+    "_do_person_invite 'activated' branch: if the email belongs to an already-active staff/volunteer user of ANOTHER org, an admin invite overwrites that user's org_id and role. The user silently moves tenants (cross-tenant takeover; admins skip the 409 membership check in _send_person_invite). The 'elif existing' branch can also downgrade an existing admin/superadmin user to staff/volunteer and reset their activation token. Consider rejecting or warning when the existing user has a different org_id or a non staff/volunteer role. This path seems to predate this change, but the new existing-account flow makes it easier to hit.",
+    "staff_email_preview uses the admin's own name ('Ciao Test,'). That's fine, but a neutral placeholder like 'Mario' would make the preview clearer.",
+    "_staff_mail_event falls back to the most recent event when evento_id isn't linked to the person. Good. Without any link it falls back to 'CRMEvent' as the event name, giving the subject 'CRMEvent – Attiva...' and the from name 'CRMEvent | CRMEvent'. Use a nicer fallback, e.g. the org name."
+  ],
+  "updated_files": ["/app/backend/tests/test_staff_ai_and_event_emails.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "95% (all flows pass; footer logo visual bug)"},
+  "test_credentials": "Used the TEST_Ai Org credentials from the review request. To reach /app, I set telefono on test_ai_volunteer/test_ai_staff (needs_phone redirected them to /completa-profilo).",
+  "seed_data_creation": "Created one temporary TEST_Nuovo person and user test_ai_new_<hex>@example.com via quick-add + invite, deleted in the test's finally block. Invite emails went only to @example.com. At the end, as requested, I deleted all docs with org_id cb4f315678b24a72b20e18ba254456fa (events, persons, staff, memberships, audit_logs, consent_records, saas_*, brevo logs, users), the users matching test_ai_*@example.com, and the organization.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The test file hardcodes the TEST_Ai Org/event ids, which are now DELETED. Recreate the fixtures (org admin, volunteer with a person linked to an event, staff) and update the constants before rerunning. Support chat body field is 'question'. On Events, use [data-testid=availability-{id}]:visible. Dismiss the demo popup ('Non ora') and the cookie banner after admin login. Staff/volunteer users need a telefono, or they get redirected to /completa-profilo."
+}

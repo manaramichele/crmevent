@@ -43,6 +43,8 @@ const T = {
     from: "Dalle", to: "Alle",
     prefLabel: "Che attività preferiresti svolgere?", prefPlaceholder: "Seleziona un'attività",
     taglia: "Taglia", tagliaPlaceholder: "Seleziona la taglia (facoltativo)",
+    ristoroLabel: "Team Ristoro", ristoroPlaceholder: "Seleziona il punto ristoro", errRistoro: "Seleziona il Team Ristoro",
+    ristoroNone: "Non ci sono ancora punti ristoro configurati: l'organizzazione ti assegnerà in seguito.",
     errEventDay: "Seleziona almeno un giorno dell'evento.",
     errPref: "Seleziona almeno un'attività che preferiresti svolgere.", errPrefAltro: "Descrivi brevemente l'attività che preferiresti svolgere.",
     prefNone: "Nessuna preferenza", prefOther: "Altro", prefOtherPlaceholder: "Descrivi brevemente",
@@ -81,6 +83,8 @@ const T = {
     from: "From", to: "To",
     prefLabel: "What activity would you prefer to do?", prefPlaceholder: "Select an activity",
     taglia: "Size", tagliaPlaceholder: "Select your size (optional)",
+    ristoroLabel: "Refreshment team", ristoroPlaceholder: "Select the refreshment point", errRistoro: "Select the refreshment team",
+    ristoroNone: "No refreshment points are configured yet: the organisers will assign you later.",
     errEventDay: "Please select at least one event day.",
     errPref: "Please select at least one activity you would prefer to do.", errPrefAltro: "Please briefly describe the activity you would prefer to do.",
     prefNone: "No preference", prefOther: "Other", prefOtherPlaceholder: "Briefly describe",
@@ -130,6 +134,8 @@ export default function Partecipa() {
   const daysRef = useRef(null);
   const prefRef = useRef(null);
   const [prefAltro, setPrefAltro] = useState("");
+  const [ristoroTeam, setRistoroTeam] = useState("");
+  const [ristoroErr, setRistoroErr] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [marketing, setMarketing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -171,6 +177,8 @@ export default function Partecipa() {
     const selDays = Object.entries(days).filter(([, v]) => v.disponibile).map(([date, v]) => ({ date, disponibile: true, dalle: v.dalle || "", alle: v.alle || "" }));
     if (!hasEventDay) { fail("errEventDay", daysRef); return; }
     if (!prefOk) { fail(pref === ALTRO ? "errPrefAltro" : "errPref", prefRef); return; }
+    const isRistoro = /ristoro/i.test(pref || "");
+    if (isRistoro && (info?.ristoro_teams || []).length && !ristoroTeam) { setRistoroErr(true); fail("errRistoro", prefRef); return; }
     if (!privacy) { toast.error(t("errPrivacy")); return; }
     setSubmitting(true);
     try {
@@ -184,6 +192,7 @@ export default function Partecipa() {
         preferenza_attivita: pref,
         preferenza_altro: pref === ALTRO ? prefAltro : null,
         taglia: form.taglia || null,
+        ristoro_team_id: isRistoro ? ristoroTeam || null : null,
         privacy: true,
         marketing_consent: marketing,
         lang,
@@ -300,7 +309,7 @@ export default function Partecipa() {
 
         <div ref={prefRef} className={`scroll-mt-24 rounded-xl transition-colors space-y-2 ${prefErr ? "ring-2 ring-red-400 bg-red-50/40 p-3 -mx-1" : ""}`} data-testid="pf-pref-section" aria-invalid={prefErr || undefined}>
         <F label={t("prefLabel")} req>
-          <Select value={pref} onValueChange={(v) => { setPref(v); if (v !== ALTRO) setPrefErr(false); }}>
+          <Select value={pref} onValueChange={(v) => { setPref(v); setRistoroTeam(""); setRistoroErr(false); if (v !== ALTRO) setPrefErr(false); }}>
             <SelectTrigger data-testid="pf-pref" className={prefErr ? "border-red-400" : ""}><SelectValue placeholder={t("prefPlaceholder")} /></SelectTrigger>
             <SelectContent>
               {[...(info.attivita_options || [])].sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" })).map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
@@ -309,6 +318,16 @@ export default function Partecipa() {
           </Select>
         </F>
         {pref === ALTRO && <Input placeholder={t("prefOtherPlaceholder")} value={prefAltro} onChange={(e) => { setPrefAltro(e.target.value); if (e.target.value.trim()) setPrefErr(false); }} data-testid="pf-pref-altro" />}
+        {/ristoro/i.test(pref || "") && ((info.ristoro_teams || []).length ? (
+          <div className="space-y-1" data-testid="pf-ristoro-section">
+            <label className="text-sm font-medium text-slate-700">{t("ristoroLabel")} <span className="text-red-500">*</span></label>
+            <Select value={ristoroTeam} onValueChange={(v) => { setRistoroTeam(v); setRistoroErr(false); }}>
+              <SelectTrigger data-testid="pf-ristoro-team" className={ristoroErr ? "border-red-400" : ""}><SelectValue placeholder={t("ristoroPlaceholder")} /></SelectTrigger>
+              <SelectContent>{info.ristoro_teams.map((tm) => <SelectItem key={tm.id} value={tm.id} data-testid={`pf-ristoro-opt-${tm.id}`}>{tm.nome}</SelectItem>)}</SelectContent>
+            </Select>
+            {ristoroErr && <p role="alert" className="text-sm font-medium text-red-600" data-testid="pf-ristoro-error">{t("errRistoro")}</p>}
+          </div>
+        ) : <p className="text-sm text-slate-500 bg-slate-50 rounded-md px-3 py-2" data-testid="pf-ristoro-none">{t("ristoroNone")}</p>)}
         {prefErr && <p role="alert" className="text-sm font-medium text-red-600" data-testid="pf-pref-error">{t(pref === ALTRO ? "errPrefAltro" : "errPref")}</p>}
         </div>
 

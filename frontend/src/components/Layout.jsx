@@ -466,8 +466,8 @@ export default function Layout({ children }) {
           ) : (
           <SupportButton user={user} />)}
           {!isSuper && <div className="shrink-0"><NewsButton /></div>}
-          <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
-            className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>
+          {!isVolUser(user) && <button type="button" onClick={() => window.dispatchEvent(new Event("support-chat:open"))} data-testid="header-assistant-button" title="Assistente CRMEvent" aria-label="Apri assistente CRMEvent"
+            className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><HelpCircle className="w-5 h-5" /></button>}
           <div className="relative shrink-0">
             <button data-testid="profile-button" onClick={() => setMenuOpen((o) => !o)} aria-label="Profilo" aria-expanded={menuOpen} className="flex items-center gap-1.5 h-9 min-w-9 px-1.5 rounded-lg hover:bg-slate-100 transition-colors">
               {user?.picture ? <img src={user.picture} alt="" className="w-6 h-6 rounded-full object-cover" /> : <CircleUserRound className="w-5 h-5 text-slate-600" />}
@@ -530,7 +530,7 @@ export default function Layout({ children }) {
           ) : <div key={actingOrgId || "default"} className="contents">{children}</div>}
         </main>
       </div>
-      <SupportChat fab={false} />
+      {!isVolUser(user) && <SupportChat fab={false} />}
       <PlanLimitDialog />
       <WelcomeDemo />
       <CalendarReturnHandler />

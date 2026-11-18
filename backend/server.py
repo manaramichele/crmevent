@@ -1180,6 +1180,7 @@ class Presence(BaseModel):  # collection: staff (Persona <-> Evento)
     area: Optional[str] = None
     ruolo: Optional[str] = None
     team_id: Optional[str] = None
+    mansione_auto: Optional[bool] = None
     responsabile: Optional[str] = None
     punto_ritrovo: Optional[str] = None
     luogo_operativo: Optional[str] = None
@@ -1483,6 +1484,16 @@ async def _person_has_history(org_id: str, pid: str) -> bool:
     return False
 
 
+def _is_ristoro_pref(p) -> bool:
+    return "ristoro" in (p or "").lower()
+
+
+async def _ristoro_teams(org_id: str, evento_id: str) -> list:
+    rx = {"$regex": "ristoro", "$options": "i"}
+    teams = await db.teams.find({"org_id": org_id, "evento_id": evento_id, "$or": [{"area": rx}, {"nome": rx}]}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)
+    return sorted(teams, key=lambda t: (t.get("nome") or "").lower())
+
+
 def crud_routes(path, coll, model, org_scoped=True):
     upd_model = _opt(model)
 
@@ -1608,6 +1619,8 @@ def crud_routes(path, coll, model, org_scoped=True):
         res = await db[coll].update_one(oq(user, id=item_id), {"$set": clean})
         if res.matched_count == 0:
             raise HTTPException(status_code=404, detail="Elemento non trovato")
+        if coll == "teams" and clean.get("nome"):
+            await db.staff.update_many(oq(user, team_id=item_id, mansione_auto=True), {"$set": {"ruolo": clean["nome"]}})
         if coll == "events" and old_ev and ("data_inizio" in clean or "data_fine" in clean):
             new_di = clean.get("data_inizio", old_ev.get("data_inizio"))
             new_df = clean.get("data_fine", old_ev.get("data_fine"))
@@ -2031,7 +2044,7 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "eventi_count": len({x["evento_id"] for x in prs}),
                     "preferenze": prefs.get(pid, []),
                     "provenienza_tipo": (p.get("provenienza") or {}).get("tipo") or "non_determinata",
-                    "assegnazioni": [{k: x.get(k) for k in ("id", "evento_id", "categoria", "team_id", "ruolo", "preferenza", "stato")} for x in prs],
+                    "assegnazioni": [{k: x.get(k) for k in ("id", "evento_id", "categoria", "team_id", "ruolo", "preferenza", "stato", "mansione_auto")} for x in prs],
                     "mansioni": [{"evento_id": x["evento_id"], "ruolo": x.get("ruolo")} for x in prs]})
     return out
 
@@ -2327,6 +2340,7 @@ async def put_company_referenti(company_id: str, body: ReferentiIn, admin: dict 
 class InviteIn(BaseModel):
     role: Optional[str] = None
     force: bool = False
+    evento_id: Optional[str] = None
 
 
 class BulkInviteIn(BaseModel):
@@ -2369,7 +2383,7 @@ async def _invite_roles_for(user: dict, person: dict) -> set:
     return roles
 
 
-async def _send_person_invite(user: dict, person: dict, role: Optional[str], force: bool) -> dict:
+async def _send_person_invite(user: dict, person: dict, role: Optional[str], force: bool, evento_id: Optional[str] = None) -> dict:
     """Invito area personale (template/link esistenti) con controllo accesso destinatario e anti-doppione."""
     if not person.get("email"):
         raise HTTPException(status_code=400, detail="La persona non ha un'email")
@@ -2397,14 +2411,43 @@ async def _send_person_invite(user: dict, person: dict, role: Optional[str], for
                                     "message": f"Invito già inviato il {dt.astimezone(ZoneInfo('Europe/Rome')).strftime('%d/%m/%Y alle %H:%M')}"})
         except ValueError:
             pass
-    return await _do_person_invite(user, person, role, email)
+    return await _do_person_invite(user, person, role, email, evento_id)
 
 
-async def _do_person_invite(admin: dict, person: dict, role: str, email: str) -> dict:
+def _fmt_event_dates(ev: dict) -> str:
+    def f(s):
+        try:
+            return datetime.strptime((s or "")[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            return ""
+    a, b = f(ev.get("data_inizio")), f(ev.get("data_fine"))
+    return f"{a} – {b}" if a and b and a != b else a
+
+
+async def _staff_mail_event(org_id: str, person_id: str, evento_id: Optional[str]) -> Optional[dict]:
+    """Evento a cui si riferisce la comunicazione: quello indicato (se la persona vi è associata) o il più recente."""
+    links = await db.staff.find({"org_id": org_id, "persona_id": person_id}, {"_id": 0, "evento_id": 1}).to_list(1000)
+    eids = [x["evento_id"] for x in links if x.get("evento_id")]
+    if evento_id and evento_id in eids:
+        eids = [evento_id]
+    evs = await db.events.find({"org_id": org_id, "id": {"$in": eids}}, {"_id": 0}).to_list(1000)
+    return max(evs, key=lambda e: e.get("data_inizio") or "") if evs else None
+
+
+def _staff_mail(kind: str, ev: Optional[dict], name: str, role: str, url: Optional[str]):
+    ev = ev or {}
+    return email_utils.staff_event_email(kind=kind, event_name=ev.get("nome") or "CRMEvent", event_date=_fmt_event_dates(ev),
+                                         logo_url=_event_logo_url(ev) if ev.get("logo_url") else None, name=name, role=role, cta_url=url)
+
+
+async def _do_person_invite(admin: dict, person: dict, role: str, email: str, evento_id: Optional[str] = None) -> dict:
     person_id = person["id"]
     token = secrets.token_urlsafe(32)
     existing = await db.users.find_one({"email": email})
-    if existing:
+    activated = bool(existing and existing.get("password_hash") and existing.get("active", True) and existing.get("role") in ("staff", "volunteer"))
+    if activated:
+        await db.users.update_one({"email": email}, {"$set": {"person_id": person_id, "role": role, "org_id": admin["org_id"]}})
+    elif existing:
         await db.users.update_one({"email": email}, {"$set": {"person_id": person_id, "role": role, "org_id": admin["org_id"],
                                                               "activation_token": token, "active": True,
                                                               "activation_expires": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()}})
@@ -2415,25 +2458,36 @@ async def _do_person_invite(admin: dict, person: dict, role: str, email: str) ->
                                    "picture": person.get("foto_url", ""), "activation_token": token,
                                    "activation_expires": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
                                    "created_at": now_iso()})
-    link = f"{APP_URL}/attiva?token={token}"
+    link = f"{APP_URL}/login" if activated else f"{APP_URL}/attiva?token={token}"
     sent = True
     try:
-        await email_utils.send_email(to=email, subject="Il tuo accesso a CRMEvent",
-                                     html=email_utils.link_email(name=person["nome"],
-                                                                 intro="Sei stato invitato ad accedere alla tua area personale su CRMEvent. Attiva l'account e imposta la tua password.",
-                                                                 cta_label="Attiva il mio account", url=link,
-                                                                 footer_note="L'invito scade tra 7 giorni."))
+        subject, html, from_name = _staff_mail("esistente" if activated else "nuovo", await _staff_mail_event(admin["org_id"], person_id, evento_id),
+                                               person["nome"], role, link)
+        await email_utils.send_email(to=email, subject=subject, html=html, from_name=from_name)
     except Exception as e:
         logger.error(f"invite email failed: {e}")
         sent = False
     ts = now_iso()
-    await db.persons.update_one(oq(admin, id=person_id), {"$set": {"invite_status": "invito_inviato", "user_role": role,
-                                                                  "last_invite_at": ts, "last_invite_by": admin.get("name") or admin.get("email")},
-                                                         "$inc": {"invite_count": 1}})
+    st = {"user_role": role, "last_invite_at": ts, "last_invite_by": admin.get("name") or admin.get("email")}
+    if not activated:
+        st["invite_status"] = "invito_inviato"
+    await db.persons.update_one(oq(admin, id=person_id), {"$set": st, "$inc": {"invite_count": 1}})
     await record_audit(admin, "person_invite_sent", org_id=admin["org_id"], target_email=email,
                        target_name=f"{person.get('cognome') or ''} {person.get('nome') or ''}".strip(),
-                       detail=f"Ruolo: {'Staff' if role == 'staff' else 'Volontario'}" + ("" if sent else " · email non inviata"))
-    return {"ok": True, "email_sent": sent, "last_invite_at": ts, "role": role}
+                       detail=f"Ruolo: {'Staff' if role == 'staff' else 'Volontario'}" + (" · account già attivo" if activated else "") + ("" if sent else " · email non inviata"))
+    return {"ok": True, "email_sent": sent, "last_invite_at": ts, "role": role, "existing_account": activated}
+
+
+@api.get("/events/{event_id}/staff-email-preview")
+async def staff_email_preview(event_id: str, kind: str = "nuovo", role: str = "staff", admin: dict = Depends(require_admin)):
+    if kind not in email_utils.STAFF_KINDS or role not in ("staff", "volunteer"):
+        raise HTTPException(status_code=400, detail="Tipo di anteprima non valido")
+    ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    url = {"nuovo": f"{APP_URL}/attiva?token=ANTEPRIMA", "esistente": f"{APP_URL}/login"}.get(kind)
+    subject, html, from_name = _staff_mail(kind, ev, admin.get("name") or "Mario", role, url)
+    return {"subject": subject, "from_name": from_name, "html": html}
 
 
 @api.post("/persons/{person_id}/invite")
@@ -2442,7 +2496,7 @@ async def invite_person(person_id: str, body: InviteIn, admin: dict = Depends(re
     person = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0})
     if not person:
         raise HTTPException(status_code=404, detail="Persona non trovata")
-    return await _send_person_invite(admin, person, body.role, body.force)
+    return await _send_person_invite(admin, person, body.role, body.force, body.evento_id)
 
 
 @api.post("/person-invites/bulk")
@@ -3198,8 +3252,14 @@ class ChatIn(BaseModel):
     request_id: Optional[str] = None  # idempotenza consumo crediti (UUID lato client, riusato sui retry)
 
 
+def _deny_ai_for_staff(user: dict):
+    if user.get("role") in ("staff", "volunteer"):
+        raise HTTPException(status_code=403, detail="Assistente AI non disponibile per Staff e Volontari")
+
+
 @api.post("/support/chat")
 async def support_chat(body: ChatIn, request: Request, user: dict = Depends(get_current_user)):
+    _deny_ai_for_staff(user)
     org = DEFAULT_ORG
     if body.conversation_id:
         conv = await db.support_conversations.find_one({"id": body.conversation_id}, {"_id": 0})
@@ -3277,6 +3337,7 @@ class FeedbackIn(BaseModel):
 
 @api.post("/support/feedback")
 async def support_feedback(body: FeedbackIn, user: dict = Depends(get_current_user)):
+    _deny_ai_for_staff(user)
     m = await db.support_messages.find_one({"id": body.message_id}, {"_id": 0})
     if not m:
         raise HTTPException(status_code=404, detail="Messaggio non trovato")
@@ -11040,6 +11101,7 @@ async def pub_avail_info(code: str):
     off_t = set((settings.get("disattivati") or {}).get("taglie") or [])
     taglie = [t for t in (settings.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]
     return {"active": True, "event": base, "days": _avail_days(event), "taglie_options": taglie,
+            "ristoro_teams": await _ristoro_teams(link["org_id"], event["id"]),
             "has_allestimento": bool(event.get("data_inizio_allestimento")),
             "has_disallestimento": bool(event.get("data_fine_disallestimento")),
             "attivita_options": attivita}
@@ -11072,6 +11134,7 @@ class PubAvailIn(BaseModel):
     preferenza_attivita: Optional[str] = None
     preferenza_altro: Optional[str] = None
     taglia: Optional[str] = Field(default=None, max_length=20)
+    ristoro_team_id: Optional[str] = Field(default=None, max_length=64)
     privacy: bool = False
     marketing_consent: bool = False
     lang: Optional[str] = None
@@ -11135,6 +11198,13 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         off_t = set((st.get("disattivati") or {}).get("taglie") or [])
         if submitted["taglia"] not in [t for t in (st.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]:
             raise HTTPException(status_code=400, detail="Taglia non valida")
+    ristoro_tid = None
+    if _is_ristoro_pref(body.preferenza_attivita):
+        rteams = await _ristoro_teams(org_id, event["id"])
+        if rteams:
+            if body.ristoro_team_id not in {t["id"] for t in rteams}:
+                raise HTTPException(status_code=400, detail="Seleziona il Team Ristoro")
+            ristoro_tid = body.ristoro_team_id
     person = await db.persons.find_one({"org_id": org_id, "email": email}, {"_id": 0}) if email else None
     if not person and cell:
         person = await db.persons.find_one({"org_id": org_id, "cellulare": cell}, {"_id": 0})
@@ -11200,6 +11270,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
             "compilation_lang": lang,
             "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
+    await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"ristoro_team_id": ristoro_tid}})
     await ANA["ensure_link"](org_id, pid, event["id"], await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0}))
     # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
     try:

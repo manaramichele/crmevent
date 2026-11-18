@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import TeamSelect from "@/components/TeamSelect";
+import { useTeams } from "@/lib/teamsStore";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import { calcAge } from "@/components/crm";
 import SettingSelect from "@/components/SettingSelect";
@@ -50,7 +51,13 @@ function Section({ title, children, testid }) {
 }
 
 function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
-  const set = (k, v) => onChange({ ...r, [k]: v, ...(k === "evento_id" ? { team_id: "" } : {}) });
+  const set = (k, v) => onChange({ ...r, [k]: v, ...(k === "evento_id" ? { team_id: "" } : {}), ...(k === "ruolo" ? { mansione_auto: false } : {}) });
+  const { teams } = useTeams();
+  const setTeam = (v) => {
+    const tn = (id) => (teams || []).find((t) => t.id === id)?.nome;
+    const auto = r.mansione_auto || !r.ruolo || r.ruolo === tn(r.team_id);
+    onChange({ ...r, team_id: v, ...(auto && v && tn(v) ? { ruolo: tn(v), mansione_auto: true } : {}) });
+  };
   const [addM, setAddM] = useState(false);
   const prefOpts = [...new Set([...ruoli, ...(r.preferenza ? [r.preferenza] : [])])];
   return (
@@ -63,7 +70,7 @@ function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
         <label className="text-xs text-slate-500">Ruolo<select className={`${sel} ${r.categoria === "da_classificare" ? "border-amber-300 bg-amber-50" : ""}`} value={r.categoria} onChange={(e) => set("categoria", e.target.value)} data-testid={`mask-assign-cat-${i}`}>{r.categoria === "da_classificare" && <option value="da_classificare">Da classificare</option>}{CATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
         <label className="text-xs text-slate-500">Preferenza
           <select className={sel} value={r.preferenza || ""} onChange={(e) => set("preferenza", e.target.value)} data-testid={`mask-assign-pref-${i}`}><option value="">{availPref ? `Dal link: ${availPref}` : "— Nessuna —"}</option>{prefOpts.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
-        <div className="text-xs text-slate-500">Team<TeamSelect value={r.team_id || ""} eventoId={r.evento_id} onChange={(v) => set("team_id", v)} testid={`mask-assign-team-${i}`} /></div>
+        <div className="text-xs text-slate-500">Team<TeamSelect value={r.team_id || ""} eventoId={r.evento_id} onChange={setTeam} testid={`mask-assign-team-${i}`} /></div>
         <label className="text-xs text-slate-500">Mansione<select className={sel} value={r.ruolo || ""} onChange={(e) => { if (e.target.value === ADD_OPTION) setAddM(true); else set("ruolo", e.target.value); }} data-testid={`mask-assign-mansione-${i}`}><option value="">— Nessuna —</option>{[...new Set([...ruoli, ...(r.ruolo ? [r.ruolo] : [])])].map((x) => <option key={x} value={x}>{x}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select>{addM && <InlineAddOption listKey="ruoli_staff" small testid={`mask-assign-mansione-add-${i}`} onDone={(v) => { setAddM(false); if (v) set("ruolo", v); }} />}</label>
       </div>
     </div>
@@ -78,7 +85,7 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
   const initial = useMemo(() => ({
     data: pick(person, names),
     rows: (person?.assegnazioni || []).filter((a) => ["staff", "volontario", "collaboratore", "da_classificare"].includes(a.categoria))
-      .map((a) => ({ key: a.id, id: a.id, evento_id: a.evento_id, categoria: a.categoria === "collaboratore" ? "staff" : a.categoria, team_id: a.team_id || "", ruolo: a.ruolo || "", preferenza: a.preferenza || "", stato: a.stato, orig: a.categoria })),
+      .map((a) => ({ key: a.id, id: a.id, evento_id: a.evento_id, categoria: a.categoria === "collaboratore" ? "staff" : a.categoria, team_id: a.team_id || "", ruolo: a.ruolo || "", mansione_auto: !!a.mansione_auto, preferenza: a.preferenza || "", stato: a.stato, orig: a.categoria })),
   }), [person]); // eslint-disable-line react-hooks/exhaustive-deps
   const [data, setData] = useState(initial.data);
   const [rows, setRows] = useState(initial.rows.length || person ? initial.rows : [blankRow(defaultCategoria)]);
@@ -136,7 +143,7 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
       const keep = new Set(rows.filter((r) => r.id).map((r) => r.id));
       for (const a of initial.rows) if (!keep.has(a.id)) await api.delete(`/staff/${a.id}`);
       for (const r of rows) {
-        const payload = { persona_id: pid, evento_id: r.evento_id, categoria: r.id && r.orig === "collaboratore" && r.categoria === "staff" ? "collaboratore" : r.categoria, team_id: r.team_id || "", ruolo: r.ruolo || "", preferenza: r.preferenza || "" };
+        const payload = { persona_id: pid, evento_id: r.evento_id, categoria: r.id && r.orig === "collaboratore" && r.categoria === "staff" ? "collaboratore" : r.categoria, team_id: r.team_id || "", ruolo: r.ruolo || "", mansione_auto: !!r.mansione_auto, preferenza: r.preferenza || "" };
         if (!r.id) { const { data: s } = await api.post("/staff", { ...payload, stato: "da_contattare" }); setRows((cur) => cur.map((x) => (x.key === r.key ? { ...x, id: s.id } : x))); r.id = s.id; }
         else {
           const o = initial.rows.find((x) => x.id === r.id);
