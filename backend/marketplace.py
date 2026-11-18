@@ -482,9 +482,9 @@ def build(db, deps: dict):
         try:
             p = stripe_sdk.Price.retrieve(price_id)
         except stripe_sdk.error.StripeError:
-            raise HTTPException(status_code=400, detail=f"Price ID non trovato su Stripe ({mode})")
+            raise HTTPException(status_code=400, detail={"field": "stripe_price_id", "message": f"Price ID non trovato su Stripe ({mode})"})
         if not p.get("active") or p.get("currency") != "eur" or p.get("unit_amount") != cents or ((p.get("recurring") or {}).get("interval")) != itv:
-            raise HTTPException(status_code=400, detail="Il Price ID Stripe non corrisponde a prezzo, valuta (EUR) o modalità del servizio")
+            raise HTTPException(status_code=400, detail={"field": "stripe_price_id", "message": f"Il Price ID Stripe non corrisponde al servizio: su Stripe {(p.get('unit_amount') or 0) / 100:.2f} {str(p.get('currency') or '').upper()} {(p.get('recurring') or {}).get('interval') or 'una tantum'}{'' if p.get('active') else ' (disattivato)'}, nel servizio {cents / 100:.2f} EUR {itv or 'una tantum'}"})
         await db.marketplace_services.update_one({"id": svc["id"]}, {"$set": {f"stripe_prices.{mode}": {
             "product_id": p.get("product"), "price_id": p["id"], "amount_cents": cents, "interval": itv, "source": "manual", "updated_at": _now()}}})
 
@@ -648,23 +648,44 @@ def build(db, deps: dict):
         return {"url": ps.url}
 
     # ---------------- Super Admin ----------------
-    def _clean(body: ServiceIn) -> dict:
+    def _bad(field: str, message: str):
+        raise HTTPException(status_code=400, detail={"field": field, "message": message})
+
+    def _clean(body: ServiceIn, prev: Optional[dict] = None) -> dict:
+        prev = prev or {}
         d = body.model_dump()
         d.pop("stripe_price_id", None)
+        # Tipi fissati da moduli dedicati (Control Room per evento, add-on legato al piano annuale): non modificabili dal Catalogo.
+        if prev.get("price_type") == "per_event":
+            d.update(price_type="per_event", price=prev.get("price"))
+        if prev.get("billing_method") == "plan_addon":
+            d.update(billing_method="plan_addon", price_type="yearly")
+        d["name"] = (d["name"] or "").strip()
+        if not d["name"]:
+            _bad("name", "Il nome del servizio è obbligatorio")
         if d["price"] is not None and d["price"] < 0:
-            raise HTTPException(status_code=400, detail="Il prezzo non può essere negativo")
+            _bad("price", "Il prezzo non può essere negativo")
+        if d["price_type"] not in PRICE_TYPES + (("per_event",) if prev.get("price_type") == "per_event" else ()):
+            _bad("price_type", f"Tipo di prezzo «{d['price_type']}» non previsto: scegli Una tantum, Mensile, Annuale o A consumo")
+        if d["status"] not in STATUSES:
+            _bad("status", f"Stato commerciale «{d['status']}» non previsto: scegli Prossimamente, Disponibile o Sospeso")
+        if d["scope"] not in ("org", "event"):
+            _bad("scope", f"Ambito «{d['scope']}» non previsto: scegli Organizzazione o Singolo evento")
+        if d["billing_method"] not in ("stripe", "plan_addon") or (d["billing_method"] == "plan_addon" and prev.get("billing_method") != "plan_addon"):
+            _bad("billing_method", "Modalità di addebito non prevista: per i nuovi servizi è disponibile solo Stripe")
+        if d["sort"] < 0:
+            _bad("sort", "L'ordine deve essere un numero intero positivo")
+        if d["price_type"] == "usage" and not (d.get("usage_unit") or "").strip() and d["price"]:
+            _bad("usage_unit", "Per un prezzo a consumo indica l'unità di consumo (es. messaggio)")
         d["video_url"] = (d.get("video_url") or "").strip() or None
         d["video_title"] = (d.get("video_title") or "").strip()[:150] or None
         d["video_id"] = youtube_id(d["video_url"]) if d["video_url"] else None
         if d["video_url"] and not d["video_id"]:
-            raise HTTPException(status_code=400, detail="Link YouTube non valido (usa un link youtube.com, youtu.be o Shorts)")
-        if d["price_type"] not in PRICE_TYPES or d["status"] not in STATUSES or d["scope"] not in ("org", "event") \
-                or d["billing_method"] != "stripe":
-            raise HTTPException(status_code=400, detail="Valori non validi")
+            _bad("video_url", "Link YouTube non valido (usa un link youtube.com, youtu.be o Shorts)")
         if d["image"] and len(d["image"]) > 400_000:
-            raise HTTPException(status_code=400, detail="Immagine troppo grande (max 300 KB)")
+            _bad("image", "Immagine troppo grande (max 300 KB)")
         if d["purchasable"] and not d["tech_ready"]:
-            raise HTTPException(status_code=400, detail="Un servizio non può essere acquistabile se il modulo non è tecnicamente pronto")
+            _bad("purchasable", "Un servizio non può essere acquistabile se il modulo non è tecnicamente pronto")
         if d["status"] == "coming_soon":
             d["purchasable"] = False
         return d
@@ -711,14 +732,17 @@ def build(db, deps: dict):
 
     @r.put("/platform/marketplace/services/{sid}")
     async def admin_update(sid: str, body: ServiceIn, admin: dict = Depends(deps["require_superadmin"])):
-        d = _clean(body)
-        prev = await db.marketplace_services.find_one({"id": sid}, {"_id": 0, "status": 1, "billing_method": 1})
-        if (prev or {}).get("billing_method") == "plan_addon":
-            d.update(billing_method="plan_addon", price_type="yearly")
+        prev = await db.marketplace_services.find_one({"id": sid}, {"_id": 0, "status": 1, "billing_method": 1, "price_type": 1, "price": 1, "stripe_prices": 1})
+        if not prev:
+            raise HTTPException(status_code=404, detail="Servizio non trovato")
+        d = _clean(body, prev)
+        pid_in = (body.stripe_price_id or "").strip()
+        if pid_in and pid_in != ((prev.get("stripe_prices") or {}).get(deps["stripe_mode"]) or {}).get("price_id") \
+                and (prev.get("billing_method") == "plan_addon" or prev.get("price_type") == "per_event"):
+            _bad("stripe_price_id", "Il Price ID di questo servizio è gestito automaticamente da CRMEvent e non può essere sostituito a mano")
         res = await db.marketplace_services.update_one({"id": sid}, {"$set": {**d, "updated_at": _now()}})
         if not res.matched_count:
             raise HTTPException(status_code=404, detail="Servizio non trovato")
-        pid_in = (body.stripe_price_id or "").strip()
         cur = await db.marketplace_services.find_one({"id": sid}, {"_id": 0})
         cur_pid = ((cur.get("stripe_prices") or {}).get(deps["stripe_mode"]) or {}).get("price_id")
         if pid_in and pid_in != cur_pid:

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { SpeedPick, ElevationToggle, AidEditor } from "@/components/eventmap/EventMapExtras";
-import { RaceBar, RaceDialog, CopyDialog, RaceFields, UnassignedBanner } from "@/components/eventmap/EventMapRaces";
+import { RaceBar, RaceDialog, CopyDialog, RaceFields, UnassignedBanner, kmTxt } from "@/components/eventmap/EventMapRaces";
 import { VideoGroupCard, AidPausePick, TimingWarning } from "@/components/eventmap/EventMapVideos";
 import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
