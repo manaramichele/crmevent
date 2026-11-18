@@ -1175,3 +1175,11 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Email: email_utils.staff_event_email (logo evento via /api/public/event-logo/{id} o iniziali, nome+data evento, CTA, footer piccolo CRMEvent), oggetto "<Evento> – ...", mittente "<Evento> | CRMEvent" (from_name su tutti i provider, caratteri speciali rimossi). Invito: account già attivo (password presente) → nessun nuovo token, email "Sei stato associato" con link login; nuovo → attivazione. Evento: evento_id dell invito o il più recente della persona. Anteprima: GET /api/events/{id}/staff-email-preview, pulsanti nel dialog Raccolta disponibilità.
 - Nota: la conferma disponibilità resta sul flusso Brevo esistente (template già con logo evento); il nuovo template "disponibilita" è usato solo in anteprima.
 - Test: iteration_184 (backend 15/15, frontend ok; corretti logo footer e nome mittente).
+
+## Modulo annuale Gestione Associazione Sportiva nel piano (2026-11-18)
+- Scelte utente: solo piani annuali; prova/gratuito/manuale bloccati; prezzo e pagamenti pronti ma acquisto spento (servizio coming_soon, purchasable=false); scheda rinominata "Gestione Associazione Sportiva" (key gestione-societa), 99 euro/anno, billing_method plan_addon.
+- backend/plan_addons.py: quote (formula giorni + anteprima Stripe create_preview), purchase (Subscription.modify aggiunge item alla sottoscrizione del piano, proration always_invoice, error_if_incomplete, blocco doppi acquisti e importo cambiato), renewal on/off (rimuove/ri-aggiunge item senza prorata; modulo attivo fino a current_period_end, poi expired), sync_from_event su customer.subscription.* (scadenza, past_due, canceled). Seed una tantum schema_meta plan_addon_asd_v1.
+- subscriptions.py: _item ignora gli item plan_addon; cambio verso semestrale bloccato con modulo attivo.
+- Frontend PlanAddonPanel nel dettaglio Marketplace; marketplace._public espone billing_method.
+- Test: tests/e2e_plan_addon.py (Stripe test clock, prorata 6 mesi 49,64 euro, fattura unica, rinnovo con 2 item, pagamento fallito senza addebito, annullamento piano) + iteration_185.
+- Per accendere l acquisto: Super Admin imposta il servizio disponibile/acquistabile quando il modulo sarà sviluppato.

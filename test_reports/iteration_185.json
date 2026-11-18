@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend test of the 'Gestione Associazione Sportiva' plan-addon card and detail (PlanAddonPanel). On first run the card still showed the old '€99,00/anno · Abbonamento annuale' because GET /api/marketplace/services did not include billing_method, so isAddon() was always false and the PlanAddonPanel never rendered. Fixed with a one-word change to the _public() whitelist in marketplace.py. After the fix every requested check passes on desktop and at 390px mobile. Quote and purchase were checked via curl as context: quote is blocked with purchasable=false, and purchase returns 400.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/marketplace/services", "issue": "_public() field whitelist left out billing_method, so the frontend never detected the plan_addon service (wrong price label, no PlanAddonPanel). FIXED by T1 (added 'billing_method' to the whitelist).", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Marketplace Detail footnote", "issue": "For the plan_addon service the generic footnote still says 'Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto', which contradicts the blocking message (paid yearly plan required). Add an isAddon(s) branch with its own text.", "selector": "[data-testid='mkt-detail'] p.text-xs.text-slate-500", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Marketplace detail mobile 390px", "issues": ["mkt-detail-actions sticky bar (-mx-6) causes about 8px horizontal overflow in the dialog. Cosmetic only; content stays readable."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Review the T1 fix in backend/marketplace.py _public() (billing_method added) and keep it",
+    "Change the Detail footnote for isAddon(s) services so it no longer says 'acquistabile con qualsiasi piano, anche gratuito o scaduto'",
+    "Optional: fix the 8px horizontal overflow from mkt-detail-actions on mobile"
+  ],
+  "critical_code_review_comments": [
+    "marketplace.py _public(): new service fields used by the frontend must be added to the whitelist. billing_method was missing.",
+    "PlanAddonPanel: when q.blocked is set and the service is not purchasable, only the blocked message shows (plan-addon-not-yet is hidden). This is OK for trial orgs.",
+    "PlanAddonPanel is rendered inside the grid, so the blocked message appears before s.terms. Fine."
+  ],
+  "updated_files": ["/app/backend/marketplace.py"],
+  "success_rate": {"backend": "N/A (frontend only; quote/purchase curl checks passed)", "frontend": "100% after fix (0% before fix: card price/mode and panel missing)"},
+  "seed_data_creation": "Created TEST_AddonOrg (org_id 2440723e732c402bbf3209238366a038, user test_addon_t1@example.com) via register-organization. Deleted afterwards: organization, user, and all org_id documents (saas_usage, saas_emails, saas_brevo_sync, memberships, brevo_tracker_log).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Card testid mkt-card-gestione-societa; detail testids mkt-detail-price, plan-addon-panel, plan-addon-note, plan-addon-blocked. A WelcomeDemo dialog ('Non ora') and a cookie banner ('Reject non-essential') block clicks after login, so dismiss them first. No Stripe purchases were run.",
+  "rca of the issue": "Marketplace.jsx isAddon(s) checks s.billing_method === 'plan_addon'. The DB doc has it (set by plan_addons.seed), but marketplace._public() builds the response from an explicit field list that did not include billing_method, so the frontend got undefined and used the default price/mode branch and skipped PlanAddonPanel. Mitigation: add billing_method to the whitelist (done)."
+}

@@ -47,6 +47,7 @@ import avail_prefs
 import anagrafica
 import option_lists
 import people_pdf
+import plan_addons
 import planner
 import addons
 import eventmap
@@ -7187,6 +7188,7 @@ async def stripe_webhook(request: Request):
             return {"received": True}
         await PARTNER["on_refund"](obj)
         return {"received": True}
+    await PLAN_ADDONS["sync_from_event"](t, obj)
     if await CONTROL_ROOM["handle_webhook"](t, obj) or await ADDONS["handle_webhook"](t, obj) or await SAAS["handle_webhook"](t, obj) or await MKT["handle_webhook"](t, obj):
         return {"received": True}
     if t == "customer.subscription.deleted":
@@ -10257,6 +10259,7 @@ async def migrate_memberships():
 async def startup():
     await db.users.create_index("email", unique=True)
     logger.info(f"availability -> staff migration: {await ANA['migrate']()}")
+    await PLAN_ADDONS["seed"]()
     if not await db.schema_meta.find_one({"id": "fic_manual_backlog_v1"}):
         # pagamenti gi\u00e0 registrati prima della fatturazione in bozza: solo generazione manuale dal pulsante (mai automatica)
         await db.invoices.update_many({"kind": {"$in": ["saas_subscription", "marketplace"]}, "fic_document_id": None, "fic_auto": {"$exists": False}},
@@ -14240,6 +14243,8 @@ MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
     "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing, "record_invoice": _record_invoice,
     "emit_invoice": _emit_saas_invoice, "stripe_mode": STRIPE_MODE, "controlroom_grant": lambda *a: MODULES_HUB["grant_cr"](*a)}))
+PLAN_ADDONS = plan_addons.build(db, {"require_admin": require_admin, "record_audit": record_audit, "billing_missing": _billing_missing, "stripe_mode": STRIPE_MODE})
+app.include_router(PLAN_ADDONS["router"])
 app.include_router(MKT["router"])
 app.include_router(news.build_router(db, get_current_user, require_superadmin, record_audit))
 app.include_router(video_support.build_router(db, require_admin, require_superadmin, record_audit, {
