@@ -42,6 +42,7 @@ import subscriptions
 import brevo_subscriptions
 import brevo_tracker
 import iscritti
+import asd
 import calendario_italia
 import avail_prefs
 import anagrafica
@@ -14125,6 +14126,9 @@ ISCRITTI = iscritti.build(db, {"require_member": require_org_member, "require_su
 press.ISCRITTI.update({k: ISCRITTI[k] for k in ("is_active", "select_recipients", "unsub_url")})
 app.include_router(ISCRITTI["router"])
 app.add_event_handler("startup", ISCRITTI["ensure_indexes"])
+ASD = asd.build(db, {"require_member": require_org_member, "record_audit": record_audit, "cf_valid": _cf_valid})
+app.include_router(ASD["router"])
+app.add_event_handler("startup", ASD["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
 app.include_router(AVP["router"])
 ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label, "cf_valid": _cf_valid})

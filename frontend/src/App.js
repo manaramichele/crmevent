@@ -41,6 +41,7 @@ import PlannerDemoAdmin from "@/pages/PlannerDemoAdmin";
 import HomePageAdmin from "@/pages/HomePageAdmin";
 import PlatformReferenti from "@/pages/PlatformReferenti";
 import Iscritti from "@/pages/Iscritti";
+import Associazione from "@/pages/Associazione";
 import AuditLog from "@/pages/AuditLog";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
@@ -194,6 +195,7 @@ function Shell() {
         <Route path="/segnalazioni" element={<Protected><Tickets /></Protected>} />
         <Route path="/comunicati-stampa" element={<Protected><PressReleases /></Protected>} />
         <Route path="/iscritti" element={<Protected><Iscritti /></Protected>} />
+        <Route path="/associazione" element={<Protected><Associazione /></Protected>} />
         <Route path="/piattaforma/segnalazioni" element={<Protected><SuperAdminOnly><PlatformTickets /></SuperAdminOnly></Protected>} />
         <Route path="/assistenza" element={<Protected><Assistenza /></Protected>} />
         <Route path="/assistenza/prenotazioni" element={<Protected><Assistenza /></Protected>} />
