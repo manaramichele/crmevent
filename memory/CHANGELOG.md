@@ -1324,5 +1324,7 @@ Task 2 — Creatività manuale:
 - Migrazione plan_addons.rename() (schema_meta rename_gestione_societa_v1 con backup): 1 record marketplace_services aggiornato, 0 acquisti; audit_logs storici non toccati.
 - Enti e Federazioni: elenco per organizzazione in settings.enti_federazioni (26 predefiniti), API /asd/enti (GET/POST/PUT/stato/order/DELETE), tesseramenti con ente_id + etichetta; testo libero legacy collegato all'inizializzazione. EnteSelect ricercabile con «+ Aggiungi ente o federazione»; gruppo «Gestione Società» in Gestione menu a tendina solo con modulo attivo. PUT /settings ignora enti_federazioni.
 - Test: iteration_193, tests/test_asd_enti_rename.py + test_asd_anagrafica_unica.py 31/31 (-n 0).
+- Stripe: plan_addons.rename_stripe_product() all'avvio rinomina solo il prodotto della modalità attiva in "CRMEvent · Gestione Società" (schema_meta rename_stripe_gestione_societa_{mode} con vecchio nome). Test: prod_VeSX9laxHCktGY rinominato; live verrà rinominato al primo avvio in produzione dopo la pubblicazione. Prezzi/abbonamenti non toccati.
+
 
 

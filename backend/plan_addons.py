@@ -1,4 +1,5 @@
 """Moduli annuali aggiunti all'abbonamento principale (es. Gestione Società): stessa sottoscrizione Stripe, prorata, rinnovo unico."""
+import asyncio
 import logging
 import math
 import uuid
@@ -217,12 +218,35 @@ def build(db, deps: dict):
         await db.schema_meta.insert_one({"id": "rename_gestione_societa_v1", "applied_at": _now().isoformat(), "new": ADDON_NAME, "backup": backup})
         logger.info(f"rename gestione-societa: services={len(backup['marketplace_services'])} purchases={len(backup['marketplace_purchases'])}")
 
+    async def rename_stripe_product() -> None:
+        """Aggiorna SOLO il nome del prodotto Stripe della modalità attiva: prezzi, ID e abbonamenti invariati. Idempotente."""
+        mode = deps["stripe_mode"]
+        mark = f"rename_stripe_gestione_societa_{mode}"
+        if await db.schema_meta.find_one({"id": mark}):
+            return
+        svc = await db.marketplace_services.find_one({"key": ADDON_KEY}, {"_id": 0, "name": 1, "stripe_prices": 1}) or {}
+        pid = ((svc.get("stripe_prices") or {}).get(mode) or {}).get("product_id")
+        if not pid:
+            return
+        want = f"CRMEvent · {svc.get('name') or ADDON_NAME}"
+        try:
+            prod = await asyncio.to_thread(stripe_sdk.Product.retrieve, pid)
+            old = prod.get("name")
+            if old != want:
+                await asyncio.to_thread(stripe_sdk.Product.modify, pid, name=want)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"rinomina prodotto Stripe {mode} non eseguita: {type(e).__name__}")
+            return
+        await db.schema_meta.insert_one({"id": mark, "applied_at": _now().isoformat(), "product_id": pid, "old_name": old, "new_name": want})
+        logger.info(f"prodotto Stripe {mode} {pid}: '{old}' -> '{want}'")
+
     async def seed() -> None:
         if not await db.schema_meta.find_one({"id": "plan_addon_asd_v1"}):
             await db.marketplace_services.update_one({"key": ADDON_KEY}, {"$set": {
                 "name": ADDON_NAME, "price": 99.0, "price_type": "yearly", "billing_method": "plan_addon", "purchasable": False, "billing_note": ADDON_NOTE}})
             await db.schema_meta.insert_one({"id": "plan_addon_asd_v1", "applied_at": _now().isoformat()})
         await rename()
+        await rename_stripe_product()
 
     async def has_active_addon(org_id: str) -> bool:
         return bool(await db.marketplace_purchases.find_one({"org_id": org_id, "source": "plan_addon", "status": {"$in": list(LIVE)}, "renew": {"$ne": False}}, {"_id": 1}))
