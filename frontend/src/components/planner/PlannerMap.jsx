@@ -43,6 +43,7 @@ export default function PlannerMap({ apiKey, stile, center, zoom, features, laye
       center: center || [12.4964, 41.9028], zoom: zoom || (center ? 16 : 5), attributionControl: { compact: true }, doubleClickZoom: false,
       maxBounds: bounds, minZoom: minZoom || 0, cooperativeGestures: cooperative, preserveDrawingBuffer: true });
     window.__plannerExportPng = () => m.getCanvas().toDataURL("image/png");
+    window.__plannerGetCenter = () => [m.getCenter().lng, m.getCenter().lat];
     map.current = m;
     if (window.__PLANNER_RECORDING) window.__plannerMap = m;
     let loaded = false;

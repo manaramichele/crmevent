@@ -123,14 +123,18 @@ export default function EventPlanner() {
   };
   const selected = h.features.find((f) => f.properties.id === sel);
   const patch = (p) => change(h.features.map((f) => (f.properties.id === sel ? { ...f, properties: { ...f.properties, ...p } } : f)));
-  const setGeom = (coords) => change(h.features.map((f) => (f.properties.id === sel ? { ...f, geometry: { ...f.geometry, coordinates: coords } } : f)));
+  const setGeom = (coords, remap) => change(h.features.map((f) => {
+    if (f.properties.id === sel) return { ...f, geometry: { ...f.geometry, coordinates: coords } };
+    if (remap && f.properties.link_route === sel && f.properties.link_idx != null) { const j = remap(+f.properties.link_idx); return { ...f, properties: { ...f.properties, link_idx: j, link_route: j == null ? null : sel } }; }
+    return f;
+  }));
   const addWater = (coords, extra) => {
     const lay = layers.find((l) => /percors/i.test(l.nome)) || layers[0];
     const f = { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: { id: uid(), tipo: "line", nome: extra.nome, categoria: "Percorsi", layer_id: lay.id, colore: "#0284C7", spessore: 4, disciplina: "nuoto", giri: extra.giri, frecce: true } };
     change([...h.features, f]); setSel(f.properties.id); setRight(true);
   };
   const drawWater = () => { setLinePreset({ nome: "Percorso nuoto", categoria: "Percorsi", colore: "#0284C7", extra: { disciplina: "nuoto", giri: 1, frecce: true, spessore: 4 } }); setPlacing(null); setMode("line"); toast.info("Clicca sulla mappa i punti del percorso in acqua, poi premi Termina (o doppio clic)"); };
-  const duplicate = () => { const c = translate({ ...selected, properties: { ...selected.properties, id: uid() } }, 0.00005, -0.00003); change([...h.features, c]); setSel(c.properties.id); };
+  const duplicate = () => { const c = translate({ ...selected, properties: { ...selected.properties, id: uid(), ...(selected.properties.link_route ? { link_route: null, link_idx: null, numero: null } : {}) } }, 0.00005, -0.00003); change([...h.features, c]); setSel(c.properties.id); };
   const remove = () => { change(h.features.filter((f) => f.properties.id !== sel)); setSel(null); };
   const search = async () => {
     if (!q.trim() || !cfg?.maptiler_key) return;
@@ -187,7 +191,7 @@ export default function EventPlanner() {
               <Button size="icon" variant="outline" onClick={search} data-testid="planner-search-btn"><Search className="h-4 w-4" /></Button></div>
             <div><div className="mb-1 text-xs font-semibold">Livelli</div><LayersPanel layers={layers} setLayers={setLayers} /></div>
             <div><div className="mb-1 text-xs font-semibold">Oggetti e strutture</div><LibraryPanel library={cfg?.library || []} placing={placing} onPick={(x) => { if (x?.tipo === "line") { setLinePreset(x); setPlacing(null); setMode("line"); toast.info(`Disegna la linea di "${x.nome}" sulla mappa, poi premi Termina`); } else { setPlacing(x); setLinePreset(null); setMode("select"); } if (x && window.innerWidth < 1024) setLeft(false); }} /></div>
-            <WaterPanel pid={proj.id} features={h.features} center={proj.center || [12.4964, 41.9028]} onAdd={addWater} onDraw={drawWater} />
+            <WaterPanel pid={proj.id} features={h.features} center={() => window.__plannerGetCenter?.() || proj.center || [12.4964, 41.9028]} onAdd={addWater} onDraw={drawWater} />
           </aside>}
           <main className="relative min-w-0 flex-1">
             <PlannerMap apiKey={cfg?.maptiler_key} stile={stile} center={proj.center} zoom={proj.zoom} features={h.features} layers={layers} selectedId={sel} mode={mode} placing={placing}

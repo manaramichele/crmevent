@@ -25,7 +25,7 @@ function CoordsEditor({ coords, onGeom }) {
           <input className="h-7 w-[5.6rem] rounded border border-slate-200 px-1" value={c[1]} onChange={(e) => set(i, 1, e.target.value)} data-testid={`water-pt-lat-${i}`} />
           <input className="h-7 w-[5.6rem] rounded border border-slate-200 px-1" value={c[0]} onChange={(e) => set(i, 0, e.target.value)} data-testid={`water-pt-lng-${i}`} />
           <span className="w-12 text-right text-slate-500">{i > 0 ? fmtM(distance(coords[i - 1], c)) : ""}</span>
-          {coords.length > 2 && <button type="button" onClick={() => onGeom(coords.filter((_, j) => j !== i))} className="p-1 text-slate-400 hover:text-red-600" aria-label="Elimina punto" data-testid={`water-pt-del-${i}`}><Trash2 className="h-3 w-3" /></button>}
+          {coords.length > 2 && <button type="button" onClick={() => onGeom(coords.filter((_, j) => j !== i), (j) => (j === i ? null : j > i ? j - 1 : j))} className="p-1 text-slate-400 hover:text-red-600" aria-label="Elimina punto" data-testid={`water-pt-del-${i}`}><Trash2 className="h-3 w-3" /></button>}
         </div>))}
       <button type="button" onClick={() => { const l = coords[coords.length - 1]; onGeom([...coords, [l[0] + 0.0003, l[1]]]); }} className="text-[11px] text-tiffany-active" data-testid="water-pt-add"><Plus className="inline h-3 w-3" /> Aggiungi punto</button>
     </div>
@@ -47,7 +47,7 @@ export function WaterProps({ f, features, onPatch, onGeom }) {
             <label className="flex items-end gap-1.5 pb-2 text-xs"><input type="checkbox" checked={!!p.frecce} onChange={(e) => onPatch({ frecce: e.target.checked })} data-testid="water-frecce" />Frecce direzionali</label></div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { const cs = f.geometry.coordinates; if (cs.length > 2) onGeom([...cs, cs[0]]); }} data-testid="water-close">Chiudi circuito</Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onGeom([...f.geometry.coordinates].reverse())} data-testid="water-reverse">Inverti direzione</Button></div>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { const n = f.geometry.coordinates.length; onGeom([...f.geometry.coordinates].reverse(), (i) => n - 1 - i); }} data-testid="water-reverse">Inverti direzione</Button></div>
           <CoordsEditor coords={f.geometry.coordinates} onGeom={onGeom} /></>}
       </>}
       {p.categoria === "Boe" && <>
@@ -99,7 +99,7 @@ export function WaterPanel({ pid, features, center, onAdd, onDraw }) {
       <div className="flex flex-wrap gap-1">{DISTANZE.map((d) => <button key={d} type="button" onClick={() => setDist(d)} className={`rounded-full border px-2 py-0.5 ${dist === d ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200"}`} data-testid={`water-dist-${d}`}>{d} m</button>)}</div>
       <select className={SEL} value={shape} onChange={(e) => setShape(e.target.value)} data-testid="water-shape"><option value="lineare">Lineare</option><option value="triangolo">Triangolare</option><option value="rettangolo">Rettangolare</option><option value="anello">Ad anello</option></select>
       <div className="flex flex-wrap gap-1">
-        <Button size="sm" className="h-8 bg-tiffany text-xs text-slate-900 hover:bg-tiffany-hover" onClick={() => onAdd(waterShape(center, shape, dist / giri), { giri, nome: `Nuoto ${dist} m` })} data-testid="water-create">Crea al centro mappa</Button>
+        <Button size="sm" className="h-8 bg-tiffany text-xs text-slate-900 hover:bg-tiffany-hover" onClick={() => onAdd(waterShape(center(), shape, dist / giri), { giri, nome: `Nuoto ${dist} m` })} data-testid="water-create">Crea al centro mappa</Button>
         <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onDraw} data-testid="water-draw">Disegna con clic</Button></div>
       <p className="text-[10px] text-slate-400">I valori sono suggerimenti. Distanze geodetiche tra i punti, senza seguire strade o sentieri: stima cartografica, non sostituisce la misurazione in acqua. Un percorso tracciato non è per questo sicuro.</p>
       {routes.length > 0 && <div className="rounded bg-slate-50 p-2" data-testid="water-summary">

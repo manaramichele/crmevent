@@ -31,17 +31,21 @@ def buoy_rows(features) -> list:
     def key(f):
         p = f["properties"]
         return (p.get("link_route") or "~", p.get("link_idx") if p.get("link_idx") is not None else 10 ** 6, p.get("numero") or 10 ** 6, p.get("nome") or "")
-    rows, prev, prog = [], None, 0.0
+    rows, prev, prog, group = [], None, 0.0, object()
     for f in sorted(buoys, key=key):
         p, c = f["properties"], f["geometry"]["coordinates"]
         rt = routes.get(p.get("link_route"))
-        if rt and p.get("link_idx") is not None:
+        g = p.get("link_route") if rt and p.get("link_idx") is not None else None
+        if g != group:  # nuovo tracciato o boe indipendenti: conteggio separato
+            prev, prog, group = None, 0.0, g
+        if g:
             pts = rt["geometry"]["coordinates"][: int(p["link_idx"]) + 1]
             prog = sum(dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
-            d_prev = prog - rows[-1]["progressiva"] if rows and rows[-1]["route"] == rt["properties"].get("nome") else None
+            d_prev = prog - rows[-1]["progressiva"] if prev else None
         else:
             d_prev = dist(prev, c) if prev else None
             prog = prog + (d_prev or 0)
+            rt = None
         rows.append({"numero": p.get("numero"), "nome": p.get("nome"), "tipologia": p.get("categoria_nome") or p.get("nome"), "colore": p.get("colore"),
                      "lat": round(c[1], 6), "lng": round(c[0], 6), "da_precedente": round(d_prev) if d_prev is not None else None,
                      "progressiva": round(prog), "note": p.get("note") or "", "responsabile": p.get("responsabile") or "",

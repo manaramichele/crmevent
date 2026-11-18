@@ -15,7 +15,7 @@ MAX_FEATURES = 5000
 MAX_REVISIONS = 30
 DEFAULT_LAYERS = ["Percorsi", "Partenza e arrivo", "Strutture", "Ristori", "Sicurezza", "Viabilità", "Staff e volontari", "Sponsor", "Fornitori", "Aree operative",
                   "Boe e segnaletica nautica", "Mezzi nautici", "Transizioni"]
-COLORS = ["#E11D48", "#0ABAB5", "#2563EB", "#F59E0B", "#DC2626", "#64748B", "#16A34A", "#9333EA", "#EA580C", "#0F766E"]
+COLORS = ["#E11D48", "#0ABAB5", "#2563EB", "#F59E0B", "#DC2626", "#64748B", "#16A34A", "#9333EA", "#EA580C", "#0F766E", "#F97316", "#0369A1", "#9333EA"]
 # Libreria iniziale: (categoria, nome, larghezza m, lunghezza m, colore, tipo) — tipo: box (in scala) | point | line (con passo m)
 LIBRARY = [
     ("Strutture", "Gazebo 3×3 m", 3, 3, "#0ABAB5", "box"), ("Strutture", "Gazebo 6×3 m", 6, 3, "#0ABAB5", "box"),
