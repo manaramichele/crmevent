@@ -17,7 +17,7 @@ import { NewsProductButton } from "@/components/news/NewsProductButton";
 const fmt = (iso) => { try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return "—"; } };
 const STATUS = { bozza: ["orange", "Bozza da approvare"], pubblicata: ["green", "Pubblicata"], ritirata: ["gray", "Ritirata"] };
 const SEL = "w-full h-10 rounded-md border border-slate-200 px-2 text-sm bg-white";
-const audLabel = (a) => (!a || a.type === "all" ? "Tutte le organizzazioni" : a.type === "superadmin" ? "Solo Super Admin" : a.type === "plans" ? `Piani: ${(a.plans || []).join(", ").toUpperCase()}` : a.type === "service_missing" ? `Senza modulo: ${a.service}` : `Modulo: ${a.service}`);
+const audLabel = (a, svcs = []) => { const nm = (svcs.find((s) => s.key === a?.service) || {}).name || a?.service; return (!a || a.type === "all" ? "Tutte le organizzazioni" : a.type === "superadmin" ? "Solo Super Admin" : a.type === "plans" ? `Piani: ${(a.plans || []).join(", ").toUpperCase()}` : a.type === "service_missing" ? `Senza modulo: ${nm}` : `Modulo: ${nm}`); };
 const MKT_STATUS = { available: "Disponibile", coming_soon: "Prossimamente", suspended: "Sospeso" };
 
 function ProductPicker({ value, onChange, services }) {
@@ -102,7 +102,7 @@ function EditDialog({ item, onClose, onSaved, services }) {
   );
 }
 
-function NewsCard({ n, act, onEdit }) {
+function NewsCard({ n, act, onEdit, services }) {
   const [c, l] = STATUS[n.status] || STATUS.bozza;
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-5" data-testid={`admin-news-${n.id}`}>
@@ -111,7 +111,7 @@ function NewsCard({ n, act, onEdit }) {
         {n.area && <StatusBadge color="tiffany">{n.area}</StatusBadge>}
         {n.simulated && <StatusBadge color="red">TEST · simulazione</StatusBadge>}
         {n.needs_completion && <StatusBadge color="orange" data-testid={`admin-news-incomplete-${n.id}`}>Da completare</StatusBadge>}
-        <StatusBadge color="gray" data-testid={`admin-news-audience-${n.id}`}>{audLabel(n.audience)}</StatusBadge>
+        <StatusBadge color="gray" data-testid={`admin-news-audience-${n.id}`}>{audLabel(n.audience, services)}</StatusBadge>
         {n.kind === "commerciale" && <StatusBadge color="blue" data-testid={`admin-news-kind-${n.id}`}>Commerciale</StatusBadge>}
         {n.version > 1 && <StatusBadge color="gray" data-testid={`admin-news-version-${n.id}`}>Pubblicazione n. {n.version}</StatusBadge>}
         <span className="text-xs text-slate-400">{n.status === "bozza" ? `Bozza del ${fmt(n.created_at)}` : `Pubblicata il ${fmt(n.published_at)}`}</span>
@@ -209,7 +209,7 @@ export default function PlatformNews() {
   const published = items.filter((n) => n.status !== "bozza").sort((a, b) => (b.published_at || "").localeCompare(a.published_at || ""));
   const list = (arr, empty, tid) => arr.length === 0
     ? <p className="text-sm text-slate-400 py-8 text-center" data-testid={tid}>{empty}</p>
-    : <div className="space-y-3">{arr.map((n) => <NewsCard key={n.id} n={n} act={act} onEdit={setEditing} />)}</div>;
+    : <div className="space-y-3">{arr.map((n) => <NewsCard key={n.id} n={n} act={act} onEdit={setEditing} services={services} />)}</div>;
   return (
     <div className="animate-fade-up max-w-3xl" data-testid="platform-news-page">
       <PageHeader title="Novità" subtitle="Comunicazioni preparate automaticamente da CRMEvent per ogni rilascio in produzione" action={<Button onClick={() => setEditing({})} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="news-create"><Plus className="w-4 h-4 mr-1" />Nuova novità</Button>} />

@@ -1,0 +1,46 @@
+{
+  "summary": "Tested the Novità feature end to end: linking a news item to a Marketplace product, the service_missing audience, and versioned republish with read tracking. Backend: new suite test_news_product_republish.py (11 tests), 10 pass. The one failure is a real gap: Control Room activations are not detected. The regression suite test_news_audience.py (17 tests) passes after updating its stale 'Gestione Associazione Sportiva' label to 'Gestione Società'. Frontend (Playwright, desktop 1920 and mobile 390): every Super Admin and org-user flow requested worked, except the 'Apri modulo' case for modules activated outside marketplace_purchases (see below).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/news, /api/news/unread-count (_news_org_context in server.py)", "issue": "The org's active modules come only from marketplace_purchases and org_services. Control Room activations (controlroom_purchases, created by grant_cr or a per-event purchase) are ignored. Reproduced: an org with an active controlroom_purchases row gets product.active=false. It therefore sees 'Scopri e acquista' instead of 'Apri modulo', and a service_missing=control-room promotion still reaches it. By code inspection, the same gap probably applies to Event Map and Event Planner entitlements in addon_grants/addon_activations (plan-included Silver/Gold activations and addon purchases). Not tested with real data."},
+      {"endpoint": "PUT /api/platform/news/{nid}", "issue": "upd['product_id'] is always overwritten with body.product_id. An API client that omits product_id silently removes the product link. The UI always sends it, so the UI is not affected. Suggest updating it only when the field is present (model_fields_set)."},
+      {"endpoint": "_purchasable (news.py)", "issue": "activation in ('addon','controlroom') returns True even when the catalog flag purchasable=False. Event Planner (purchasable False, activation addon) would show 'Scopri e acquista'. Confirm this is intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Marketplace ?servizio deep link", "issue": "Closing the detail dialog does not remove ?servizio=<key> from the URL. A page refresh, or any later load() call (onChanged), reopens the same product sheet.", "selector": "[data-testid='mkt-detail']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PlatformNews card / News (SA)", "issues": ["The audience badge shows the technical key ('Senza modulo: gestione-societa') instead of the product name."]}
+    ]
+  },
+  "passed_checks": [
+    "Picker: lists Gestione Società, Event Map and Control Room; search filters the list; selecting and clearing work; the audience select includes service_missing plus a service select",
+    "POST /platform/news with product_id saves it; an invalid id returns 400 with field product_id; GET /platform/news returns product {id,key,name,status,active,purchasable,route}",
+    "Gestione Società (coming_soon) shows 'Scopri il modulo' in the admin preview, the Dashboard banner and /novita, and opens /marketplace?servizio=gestione-societa with mkt-detail open on Gestione Società",
+    "Event Map shows 'Scopri e acquista' and opens its own detail; Elenco Iscritti granted to the org shows 'Apri modulo' and navigates to /iscritti",
+    "service_missing: an org without the module receives the news; an org that was granted the module does not. The service and all audiences still work",
+    "Republish: mark-read lowers the count; withdraw hides the news; a withdrawn news can be edited and keeps product/kind/audience; republish keeps the same id, sets version 2 and adds 2 publication entries. The news shows as unread again, the count goes back up, the banner reappears even after an earlier dismiss, the product button still works, there is exactly one news_items doc, and the 'id:1' read key is kept. Legacy read_ids count only for v1",
+    "Admin UI: version badge 'Pubblicazione n. 2', history in Tracciabilità, Modifica and Ripubblica on the withdrawn card",
+    "Mobile 390px: no horizontal overflow (scrollWidth 390); banner buttons wrap correctly; the news card button fits"
+  ],
+  "test_report_links": ["/app/backend/tests/test_news_product_republish.py", "/app/backend/tests/test_news_audience.py", "/app/test_reports/pytest/news_product.xml"],
+  "action_items": [
+    "Extend _news_org_context to include active controlroom_purchases (key control-room) and addon entitlements for event-map/event-planner (addon_grants/addon_activations), so 'Apri modulo' and the service/service_missing audiences are correct for those modules",
+    "In admin_edit, update product_id only when it is sent (avoid silently unlinking)",
+    "Optional: clear ?servizio when the Marketplace detail closes; show the product name in the audience badge"
+  ],
+  "critical_code_review_comments": [
+    "news.py _visible loads up to 500 published rows and computes org context on every /news and /unread-count call. Fine now, but unread-count runs on every route change",
+    "Org deletion (/platform/organizations/{id}) leaves users with org_id=None. Pre-existing behaviour, seen during cleanup"
+  ],
+  "updated_files": ["/app/backend/tests/test_news_product_republish.py (new)", "/app/backend/tests/test_news_audience.py (label rename to 'Gestione Società')"],
+  "success_rate": {"backend": "96% (27/28)", "frontend": "100% of requested UI flows"},
+  "seed_data_creation": "All test data was created and then deleted by id: TEST_NEWSP/TEST_NEWSUI orgs and users, TEST_ news items, manual marketplace grants, a controlroom_purchases row and news_reads. The 2 pre-existing draft news items are untouched. No Stripe calls, no price changes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with -n 0: pytest tests/test_news_product_republish.py tests/test_news_audience.py -n 0. test_controlroom_active_detection fails until _news_org_context includes controlroom_purchases. New users see a 'Scopri CRMEvent con una demo gratuita' dialog ('Non ora') and the cookie banner ('Reject non-essential'); dismiss both before clicking. Elenco Iscritti has price None, so it is not purchasable; use Event Map for the 'Scopri e acquista' case."
+}

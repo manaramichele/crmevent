@@ -289,7 +289,8 @@ def build_router(db, get_current_user, require_superadmin, record_audit, org_con
             upd["area"] = body.area.strip()[:60]
         if body.audience is not None:
             upd["audience"] = _clean_audience(body.audience)
-        upd["product_id"] = await _clean_product(body.product_id)
+        if "product_id" in body.model_fields_set:
+            upd["product_id"] = await _clean_product(body.product_id)
         if body.kind is not None:
             upd["kind"] = _kind(body.kind)
         await db.news_items.update_one({"id": nid}, {"$set": upd})

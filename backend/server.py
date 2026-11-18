@@ -14263,6 +14263,12 @@ async def _news_org_context(org_id: str) -> dict:
     sids = await db.marketplace_purchases.distinct("service_id", {"org_id": org_id, "status": {"$in": ["active", "past_due"]}})
     keys = set(await db.marketplace_services.distinct("key", {"id": {"$in": sids}})) if sids else set()
     keys |= set(await db.org_services.distinct("service", {"org_id": org_id, "active": True}))
+    if await db.controlroom_purchases.find_one({"org_id": org_id, "status": "active"}, {"_id": 1}):
+        keys.add("control-room")
+    now = datetime.now(timezone.utc).isoformat()
+    for prod, key in (("planner", "event-planner"), ("eventmap", "event-map")):
+        if await db.addon_grants.find_one({"org_id": org_id, "product": prod, "status": "active", "$or": [{"expires_at": None}, {"expires_at": {"$exists": False}}, {"expires_at": {"$gt": now}}]}, {"_id": 1}):
+            keys.add(key)
     return {"plan": plan, "services": keys}
 
 

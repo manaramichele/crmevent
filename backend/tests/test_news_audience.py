@@ -90,8 +90,8 @@ class TestNews:
         rows = _mine(sa, REL)
         STATE["items"] += [x["id"] for x in rows]
         by = {x["area"]: x for x in rows}
-        assert set(by) == {"Gestione Associazione Sportiva", "Abbonamento", "Super Admin"}
-        assert by["Gestione Associazione Sportiva"]["audience"] == {"type": "service", "plans": [], "service": "gestione-societa"}
+        assert set(by) == {"Gestione Società", "Abbonamento", "Super Admin"}
+        assert by["Gestione Società"]["audience"] == {"type": "service", "plans": [], "service": "gestione-societa"}
         assert by["Abbonamento"]["audience"]["type"] == "all"
         assert by["Super Admin"]["audience"]["type"] == "superadmin"
         assert all(x["status"] == "bozza" for x in rows)
@@ -132,7 +132,7 @@ class TestNews:
         assert r.status_code == 200, r.text
         x = next(i for i in sa.get(f"{API}/platform/news", timeout=30).json() if i["id"] == nid)
         assert x["titolo"].startswith("TEST_NEWS") and x["area"] == "TEST_Categoria" and x["edited"] is True
-        for k in ("Abbonamento", "Super Admin", "Gestione Associazione Sportiva"):
+        for k in ("Abbonamento", "Super Admin", "Gestione Società"):
             r = sa.post(f"{API}/platform/news/{STATE['by'][k]}/publish", timeout=30)
             assert r.status_code == 200, (k, r.text)
         assert sa.post(f"{API}/platform/news/{nid}/publish", timeout=30).status_code == 400  # already published
@@ -141,7 +141,7 @@ class TestNews:
         ids = {n["id"] for n in org.get(f"{API}/news", timeout=30).json()}
         assert STATE["by"]["Abbonamento"] in ids
         assert STATE["by"]["Super Admin"] not in ids
-        assert STATE["by"]["Gestione Associazione Sportiva"] not in ids
+        assert STATE["by"]["Gestione Società"] not in ids
         sids = {n["id"] for n in sa.get(f"{API}/news", timeout=30).json()}
         assert set(STATE["by"].values()) <= sids
 
