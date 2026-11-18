@@ -477,7 +477,8 @@ def build(db, deps: dict):
         return price.id
 
     def _item(sub) -> dict:
-        return sub["items"]["data"][0]
+        items = sub["items"]["data"]
+        return next((i for i in items if ((i.get("price") or {}).get("metadata") or {}).get("kind") != "plan_addon"), items[0])
 
     async def sync_sub(sub, org_id: Optional[str] = None) -> Optional[str]:
         md = sub.get("metadata") or {}
@@ -777,6 +778,8 @@ def build(db, deps: dict):
         kind = _kind(s.get("plan"), s.get("billing_cycle"), body.plan, body.cycle)
         if kind == "same":
             raise HTTPException(status_code=400, detail="È già il tuo piano attuale")
+        if body.cycle != "yearly" and await db.marketplace_purchases.find_one({"org_id": org["id"], "source": "plan_addon", "status": {"$in": ["active", "past_due"]}, "renew": {"$ne": False}}, {"_id": 1}):
+            raise HTTPException(status_code=400, detail="Hai un modulo annuale attivo (Gestione Associazione Sportiva): per passare al semestrale disattiva prima il suo rinnovo automatico.")
         price_id = await ensure_price(cfg, body.plan, body.cycle)
         md = {"kind": "saas", "org_id": org["id"], "plan": body.plan, "cycle": body.cycle}
         trialing = sub.get("status") == "trialing"

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { toast } from "sonner";
 import { Search, Store, CheckCircle2, Clock, Bell, BellRing } from "lucide-react";
 import { ServiceIcon, PRICE_TYPES, STATUS, priceLabel } from "@/lib/marketplace";
+import PlanAddonPanel from "@/components/PlanAddonPanel";
 import { YouTubeTutorial } from "@/components/marketplace/YouTubeTutorial";
 import AddonBuy from "@/components/addons/AddonBuy";
 
@@ -51,6 +52,8 @@ function ActivePurchase({ s, canPurchase, onChanged }) {
 
 const isPlanner = (s) => s.key === "event-planner";
 const isCR = (s) => s.key === "control-room";
+const isAddon = (s) => s.billing_method === "plan_addon";
+const addonPrice = (s) => (s.price == null ? "Prezzo da definire" : `${eurInt(s.price)} €/anno + IVA`);
 const CR_PRICE = "119 € / evento + IVA";
 const CR_MODE = "Acquisto per singolo evento";
 const isEventMap = (s) => s.key === "event-map";
@@ -101,7 +104,7 @@ function Card({ s, onOpen, onToggle }) {
         {isCR(s) ? <><span className="font-semibold text-slate-800" data-testid={`mkt-card-price-${s.key}`}>{CR_PRICE}</span><span className="text-slate-500 text-right" data-testid={`mkt-card-mode-${s.key}`}>{CR_MODE}</span></>
           : isPlanner(s) ? <><span className="font-semibold text-slate-800" data-testid={`mkt-card-price-${s.key}`}>{plannerPrice(s)}</span><span className="text-slate-500 text-right">{PLANNER_SUB}</span></>
           : isEventMap(s) ? <><span className="font-semibold text-slate-800" data-testid={`mkt-card-price-${s.key}`}>{mapPrice(s)}</span><span className="text-slate-500 text-right" data-testid={`mkt-card-mode-${s.key}`}>{mapMode(s)}</span></>
-          : <><span className="font-semibold text-slate-800">{s.activation === "addon" ? "Vedi prezzi e inclusi" : priceLabel(s)}</span><span className="text-slate-500">{s.activation === "addon" ? "Per evento" : PRICE_TYPES[s.price_type]}</span></>}
+          : <><span className="font-semibold text-slate-800">{s.activation === "addon" ? "Vedi prezzi e inclusi" : isAddon(s) ? addonPrice(s) : priceLabel(s)}</span><span className="text-slate-500">{s.activation === "addon" ? "Per evento" : isAddon(s) ? "Rinnovo con il piano" : PRICE_TYPES[s.price_type]}</span></>}
       </div>
       {s.demo_free && s.purchasable_now && !s.active && <div className="mt-2 text-[11px] font-semibold text-amber-700" data-testid={`mkt-card-demo-free-${s.key}`}>Gratuito per organizzazione Demo</div>}
       {s.status === "coming_soon" && <div className="mt-3"><NotifyButton s={s} onToggle={onToggle} /></div>}
@@ -132,12 +135,13 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
         <DialogDescription className="text-sm text-slate-600">{isPlanner(s) ? "Progetta percorsi, strutture e spazi dei tuoi eventi direttamente sulla mappa: gazebo, transenne, archi, palchi, ristori, aree sponsor e postazioni volontari." : s.description}</DialogDescription>
         <YouTubeTutorial id={s.video_id} title={s.video_title} />
         <div className="grid grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 p-3">
-          <div><div className="text-xs text-slate-400">Prezzo{s.demo_free ? " di listino" : ""}</div><b data-testid="mkt-detail-price">{isCR(s) ? CR_PRICE : isPlanner(s) ? (monthly(s) == null ? "In definizione" : `${eurInt(monthly(s))} €/mese`) : isEventMap(s) ? mapPrice(s) : priceLabel(s)}</b>{s.demo_free && <div className="text-xs font-semibold text-amber-700" data-testid="mkt-detail-demo-free">Gratuito per organizzazione Demo</div>}</div>
+          <div><div className="text-xs text-slate-400">Prezzo{s.demo_free ? " di listino" : ""}</div><b data-testid="mkt-detail-price">{isAddon(s) ? addonPrice(s) : isCR(s) ? CR_PRICE : isPlanner(s) ? (monthly(s) == null ? "In definizione" : `${eurInt(monthly(s))} €/mese`) : isEventMap(s) ? mapPrice(s) : priceLabel(s)}</b>{s.demo_free && <div className="text-xs font-semibold text-amber-700" data-testid="mkt-detail-demo-free">Gratuito per organizzazione Demo</div>}</div>
           <div><div className="text-xs text-slate-400">Modalità</div><b data-testid="mkt-detail-mode">{isCR(s) ? CR_MODE : isPlanner(s) ? "Semestrale o annuale" : isEventMap(s) ? mapMode(s) : PRICE_TYPES[s.price_type]}</b></div>
           {s.usage_limits && <div className="col-span-2"><div className="text-xs text-slate-400">Limiti di utilizzo</div>{s.usage_limits}</div>}
           {s.features?.length > 0 && <div className="col-span-2 space-y-3" data-testid="mkt-detail-features"><div className="text-xs text-slate-400">Funzionalità previste</div>{s.features.map((g) => (
             <div key={g.title}><div className="text-sm font-semibold text-slate-800">{g.title}</div>
               <ul className="mt-1 space-y-0.5">{g.items.map((it) => <li key={it} className="flex gap-2 text-sm text-slate-600"><span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#0ABAB5] shrink-0" />{it}</li>)}</ul></div>))}</div>}
+          {isAddon(s) && <PlanAddonPanel />}
           {s.terms && <div className="col-span-2"><div className="text-xs text-slate-400">{s.status === "coming_soon" ? "Funzionalità previste" : "Condizioni e durata"}</div>{s.terms}</div>}
         </div>
         <p className="text-xs text-slate-500">{isCR(s) ? "Prezzo unico per tutti gli organizzatori, non incluso in alcun abbonamento CRMEvent e indipendente da Event Map ed Event Planner. Ogni acquisto abilita solo l'evento scelto, senza limiti di operatori. Dispositivi GPS, SIM, SMS e servizi esterni esclusi. Si attiva dopo la conferma del pagamento." : isPlanner(s) ? "Abbonamento valido per tutti gli eventi dell'organizzazione, pagato in anticipo per il periodo scelto e rinnovato con la stessa periodicità. SILVER e GOLD includono 1 evento; BRONZE e gli eventi aggiuntivi richiedono l'abbonamento. Il servizio si attiva dopo la conferma del pagamento." : isEventMap(s) ? "Attivazioni evento: SILVER ne include 1 e GOLD 3, ciascuna con 1 video, senza costi aggiuntivi. Abbonamento: valido 12 mesi per tutti gli eventi dell'organizzazione, con crediti video inclusi ogni anno; si rinnova ogni anno e si attiva dopo la conferma del pagamento." : ADDON_PRODUCT[s.key] ? "Attivazione per singolo evento. Silver include 1 evento, Gold 3 eventi; per gli eventi successivi si acquista un'attivazione aggiuntiva. Il diritto si attiva solo dopo la conferma del pagamento." : "Servizio extra, indipendente dagli abbonamenti BRONZE, SILVER e GOLD: acquistabile con qualsiasi piano, anche gratuito o scaduto. Appartiene all'organizzazione."}</p>
