@@ -1163,3 +1163,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 
 ## Rimossa voce Organizzazioni dal menu laterale (2026-11-18)
 - Layout.jsx PLATFORM_NAV: eliminata la voce "Organizzazioni" (/piattaforma?sezione=organizzazioni); accesso solo da Dashboard piattaforma → scheda Organizzazioni. Dashboard resta evidenziata anche su /piattaforma/org/*.
+
+## Team Ristoro dal link disponibilità (2026-11-18)
+- Pubblico: preferenza contenente "ristoro" → menu Team Ristoro (team dell evento con area o nome "Ristoro"), obbligatorio se presenti, messaggio se assenti; ristoro_team_id validato e salvato in availabilities.
+- ensure_link: team_id + ruolo (Mansione) = nome team, mansione_auto=true; su link esistente aggiorna solo se mansione_auto o Mansione vuota.
+- PersonMask: cambio Team aggiorna Mansione se automatica; modifica manuale → mansione_auto=false. Rinomina team (PUT org-scoped) aggiorna Mansione dei link automatici.
+- Test: iteration_183 + verifiche curl delle 2 correzioni.

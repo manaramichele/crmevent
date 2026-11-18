@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the Team Ristoro selection on the public availability link and the Mansione auto-sync, on both backend and frontend. Working: the public GET returns only the event's ristoro teams. Submitting with no team or a foreign team returns 400. Submitting with a valid team creates the Da classificare link with team_id, ruolo set to the team name and mansione_auto=true. The UI dropdown, error message, hide/clear on preference change and the no-ristoro info message all work. The mobile 390px form works. In the mask, team and mansione keep through Da classificare -> Volontario -> Staff, Mansione follows a team change, and a manual Mansione is kept on a later team change (persisted mansione_auto=false). Two bugs found: renaming a team does NOT update the Mansione of auto links, and a re-submission of the public form overwrites a manual Mansione and team on already-classified links.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/teams/{id}", "issue": "Team rename sync never runs. The sync code (db.staff.update_many team_id + mansione_auto -> ruolo) was added in _update(), which is only used by the non-org-scoped crud_routes branch (server.py ~line 637). Teams are org-scoped, so the PUT goes to the org-scoped _u (server.py ~1591-1632), which has no sync. Reproduced: team renamed 'TEST_Ristoro KM 20' -> 'KM 21', but the staff link with mansione_auto=true kept ruolo='TEST_Ristoro KM 20'. Fix: in org-scoped _u, after update_one add `if coll == 'teams' and clean.get('nome'): await db.staff.update_many(oq(user, team_id=item_id, mansione_auto=True), {'$set': {'ruolo': clean['nome']}})`", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/public/availability/{code} -> anagrafica.ensure_link", "issue": "When the person already has a link (any category), team_set {team_id, ruolo, mansione_auto:true} is always applied. This overwrites a manual Mansione (mansione_auto=false) and the admin-chosen team, even after the person is classified as Staff/Volontario. Reproduced: Staff link with ruolo='Addetto ristoro', mansione_auto=false; after re-submitting the form with another ristoro team, it became team=TEST_Ristoro KM 21, ruolo='TEST_Ristoro KM 21', mansione_auto=true. This breaks the 'manual Mansione never overwritten automatically' rule. Suggest: for an existing link, set ruolo/mansione_auto only if cur.mansione_auto or not cur.ruolo, and maybe only update team_id while the link is da_classificare."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Team rename -> Mansione column", "issue": "Because of the backend bug, Mansione in Staff/Volontari/Da classificare keeps the old team name after a rename via the Team tab (EntityManager PUT /teams)", "affected_selectors": ["person-row-{id}"]}
+    ],
+    "design_issues": [
+      {"screen": "Public form /partecipa and PersonMask", "issues": ["Data di nascita uses a native <input type=date> (browser default picker) instead of the shadcn calendar. Same pattern as before, not new."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ristoro_team_public.py", "/app/test_reports/pytest/pytest_ristoro.xml"],
+  "action_items": [
+    "Add the team-rename -> staff.ruolo sync (mansione_auto=true only, org-scoped) to the org-scoped PUT handler in crud_routes (server.py ~1591). The sync in _update() is dead for teams.",
+    "In anagrafica.ensure_link, do not overwrite ruolo/team_id of an existing link when mansione_auto is false (or when the link is already classified)"
+  ],
+  "critical_code_review_comments": [
+    "PersonMask setTeam: clearing the team (v='') keeps the old team name as Mansione and mansione_auto=true. Consider clearing ruolo when it equals the old team name.",
+    "The public submit rate limit (6/min/IP) is shared between test runs. Keep that in mind for automated tests.",
+    "server.py is >11k lines; it should be split."
+  ],
+  "updated_files": ["/app/backend/tests/test_ristoro_team_public.py"],
+  "success_rate": {"backend": "75% (3/4 pytest; the failure is the rename sync)", "frontend": "100% of the requested UI flows"},
+  "seed_data_creation": "Created inside org TEST_Rist Org: a second team TEST_Ristoro KM 20/21, event TEST_NoRistoro Evento + availability link, and TEST_ persons via public submits. After testing the whole org (all collections by org_id 079041b598aa4a93ac354d2c2adfc0eb, settings, organization, its users) was deleted as requested: 43 docs.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The test org was deleted, so the next run needs a new org, event, ristoro team and availability link (POST /api/events/{id}/availability/link). Test file test_ristoro_team_public.py reads /tmp/e6 and /tmp/rist ('CODE EVENT_ID TEAM_ID'). The public form needs a day check, preferenza, pf-no-cf + pf-data-nascita, and pf-privacy. On the admin page dismiss the demo popup ('Non ora') and the cookie banner ('Accept all') first. Open the mask by clicking nome-{pid}. TeamSelect options are mask-assign-team-0-opt-{teamId}.",
+  "rca of the issue": "Rename sync: the hook was put in the generic _update() helper, but org-scoped crud routes run their own inline update in _u and never call _update(), so the code is never reached for teams. Re-submit overwrite: ensure_link builds team_set unconditionally and applies it to any existing link, without checking cur.mansione_auto or the category."
+}

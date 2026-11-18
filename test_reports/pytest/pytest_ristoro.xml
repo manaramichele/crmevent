@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="4" time="2.235" timestamp="2026-11-18T11:14:59.829845+00:00" hostname="agent-env-bc348517-1a03-4a72-ae60-aa38be59b5cb"><testcase classname="tests.test_ristoro_team_public" name="test_public_ristoro_teams" time="0.302" /><testcase classname="tests.test_ristoro_team_public" name="test_submit_requires_team" time="0.273" /><testcase classname="tests.test_ristoro_team_public" name="test_full_flow" time="1.263"><failure message="AssertionError: assert 'TEST_Ristoro KM 20' == 'TEST_Ristoro KM 21'&#10;  &#10;  - TEST_Ristoro KM 21&#10;  ?                  ^&#10;  + TEST_Ristoro KM 20&#10;  ?                  ^">tests/test_ristoro_team_public.py:83: in test_full_flow
+    assert ln2["ruolo"] == "TEST_Ristoro KM 21"
+E   AssertionError: assert 'TEST_Ristoro KM 20' == 'TEST_Ristoro KM 21'
+E     
+E     - TEST_Ristoro KM 21
+E     ?                  ^
+E     + TEST_Ristoro KM 20
+E     ?                  ^</failure></testcase><testcase classname="tests.test_ristoro_team_public" name="test_other_pref_ignores_team" time="0.284" /></testsuite></testsuites>

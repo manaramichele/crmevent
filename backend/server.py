@@ -633,8 +633,6 @@ async def _update(coll, _id, data):
     res = await db[coll].update_one({"id": _id}, {"$set": clean})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Elemento non trovato")
-    if coll == "teams" and clean.get("nome"):
-        await db.staff.update_many({"team_id": _id, "mansione_auto": True}, {"$set": {"ruolo": clean["nome"]}})
     return await _get(coll, _id)
 
 
@@ -1621,6 +1619,8 @@ def crud_routes(path, coll, model, org_scoped=True):
         res = await db[coll].update_one(oq(user, id=item_id), {"$set": clean})
         if res.matched_count == 0:
             raise HTTPException(status_code=404, detail="Elemento non trovato")
+        if coll == "teams" and clean.get("nome"):
+            await db.staff.update_many(oq(user, team_id=item_id, mansione_auto=True), {"$set": {"ruolo": clean["nome"]}})
         if coll == "events" and old_ev and ("data_inizio" in clean or "data_fine" in clean):
             new_di = clean.get("data_inizio", old_ev.get("data_inizio"))
             new_df = clean.get("data_fine", old_ev.get("data_fine"))

@@ -125,13 +125,15 @@ def build(db, deps: dict):
 
     async def ensure_link(org_id: str, person_id: str, evento_id: str, av: dict) -> None:
         """Inserisce la persona nell'elenco Staff/Volontari dell'evento come Da classificare (idempotente)."""
-        cur = await db.staff.find_one({"org_id": org_id, "persona_id": person_id, "evento_id": evento_id}, {"_id": 0, "id": 1, "categoria": 1})
+        cur = await db.staff.find_one({"org_id": org_id, "persona_id": person_id, "evento_id": evento_id}, {"_id": 0, "id": 1, "categoria": 1, "ruolo": 1, "mansione_auto": 1})
         team = None
         if av.get("ristoro_team_id"):
             team = await db.teams.find_one({"org_id": org_id, "evento_id": evento_id, "id": av["ristoro_team_id"]}, {"_id": 0, "id": 1, "nome": 1})
         team_set = {"team_id": team["id"], "ruolo": team["nome"], "mansione_auto": True} if team else {}
         if cur:
-            upd = dict(team_set)
+            upd = {}
+            if team_set and (cur.get("mansione_auto") or not cur.get("ruolo")):
+                upd.update(team_set)
             if cur.get("categoria") == "da_classificare":
                 upd["preferenza"] = pref_label(av) or ""
             if upd:
