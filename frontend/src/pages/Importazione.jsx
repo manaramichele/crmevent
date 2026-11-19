@@ -13,7 +13,7 @@ import { ImportHistory } from "@/components/import/ImportHistory";
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 const PERSON_TARGETS = ["persone", "soci"];
 
-function Wizard({ target, info, onClose, onDone }) {
+function Wizard({ target, info, onClose, onDone, initialEvent }) {
   const [job, setJob] = useState(null);
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState("");
@@ -22,7 +22,7 @@ function Wizard({ target, info, onClose, onDone }) {
   const [read, setRead] = useState(null);
   const [mapping, setMapping] = useState({});
   const [mode, setMode] = useState("both");
-  const [eventId, setEventId] = useState("");
+  const [eventId, setEventId] = useState(initialEvent || "");
   const [cats, setCats] = useState({});
   const [resp, setResp] = useState({});
   const [evMap, setEvMap] = useState({});
@@ -46,7 +46,7 @@ function Wizard({ target, info, onClose, onDone }) {
       const { data } = await api.post(`/imports/jobs/${job.id}/read`, { sheet, header_row: Number(header) || 1, layout }, { params: { target: target.key } });
       setRead(data); setPrev(null);
       if (!keepMapping) setMapping(data.suggested);
-      if (pipe && !sheets.length) setSheets([{ sheet, event_id: (data.pipeline?.fogli.find((f) => f.sheet === sheet) || {}).event_id || "" }]);
+      if (pipe && (job.sheets.length === 1 || !sheets.some((s) => s.sheet === sheet))) setSheets([{ sheet, event_id: (data.pipeline?.fogli.find((f) => f.sheet === sheet) || {}).event_id || "" }]);
     } catch (e) { err(e); }
   }, [job, sheet, header, layout, target.key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { doRead(false); }, [doRead]);
@@ -63,7 +63,7 @@ function Wizard({ target, info, onClose, onDone }) {
   const evOpts = [{ value: "", label: pipe ? "Evento dal file / dal foglio" : "Nessun evento (solo anagrafica)" }, ...info.events.map((e) => ({ value: e.id, label: e.nome, hint: e.edizione || (e.data_inizio || "").slice(0, 10) }))];
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto" data-testid="import-wizard">
+      <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto overflow-x-hidden" data-testid="import-wizard">
         <DialogHeader><DialogTitle className="font-display">Importa in {target.label}</DialogTitle>
           <DialogDescription>{info.org.nome}{!target.active && " · modulo non attivo: i dati vengono salvati ma restano invisibili all'organizzazione finché non lo attiva"}</DialogDescription></DialogHeader>
         {result ? (
@@ -81,7 +81,7 @@ function Wizard({ target, info, onClose, onDone }) {
               {pipe && <label className="text-xs text-slate-500">Struttura<select className={`${SEL} block mt-1`} value={layout} onChange={(e) => setLayout(e.target.value)} data-testid="import-layout"><option value="rows">Una riga per attività</option><option value="columns">Colonne = fasi</option></select></label>}
               <label className="text-xs text-slate-500">Modalità<select className={`${SEL} block mt-1`} value={mode} onChange={(e) => setMode(e.target.value)} data-testid="import-mode"><option value="new">Solo nuovi</option><option value="update">Aggiorna esistenti</option><option value="both">Nuovi + aggiornamento</option></select></label>
               {(pipe || PERSON_TARGETS.includes(target.key) || ["sponsor", "pernottamenti", "pasti"].includes(target.key)) && target.key !== "soci" &&
-                <div className="min-w-[240px]"><div className="text-xs text-slate-500 mb-1">Evento per tutte le righe</div><SearchSelect value={eventId} onChange={setEventId} options={evOpts} testid="import-default-event" /></div>}
+                <div className="w-full sm:w-auto sm:min-w-[240px] min-w-0"><div className="text-xs text-slate-500 mb-1">Evento per tutte le righe</div><SearchSelect value={eventId} onChange={setEventId} options={evOpts} testid="import-default-event" /></div>}
             </div>
             {read && <>
               <p className="text-xs text-slate-500" data-testid="import-total">{read.total} record trovati · anteprima delle prime {Math.min(20, read.total)} righe</p>
@@ -130,7 +130,7 @@ export default function Importazione() {
         </div>
       </div>
       <SectionCard title="Storico importazioni"><ImportHistory reloadKey={reload} /></SectionCard>
-      {open && <Wizard target={open} info={info} onClose={() => setOpen(null)} onDone={() => setReload((x) => x + 1)} />}
+      {open && <Wizard target={open} info={info} initialEvent={params.get("event") || ""} onClose={() => setOpen(null)} onDone={() => setReload((x) => x + 1)} />}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Accesso unico al sistema di importazione Excel/CSV, preimpostato sul modulo della sezione.
-export function ImportLink({ target, label = "Importa Excel/CSV" }) {
+export function ImportLink({ target, label = "Importa Excel/CSV", eventId }) {
   const nav = useNavigate();
-  return <Button type="button" variant="outline" onClick={() => nav(`/importazione?target=${target}`)} data-testid={`import-link-${target}`}><FileSpreadsheet className="w-4 h-4 mr-1.5" />{label}</Button>;
+  return <Button type="button" variant="outline" onClick={() => nav(`/importazione?target=${target}${eventId ? `&event=${eventId}` : ""}`)} data-testid={`import-link-${target}`}><FileSpreadsheet className="w-4 h-4 mr-1.5" />{label}</Button>;
 }

@@ -1,0 +1,49 @@
+{
+  "summary": "Tested the universal Excel/CSV import from end to end, both backend and frontend. Backend: 21 of 21 pytest tests pass in the new file backend/tests/test_universal_import.py. They cover upload (CSV with ';' and ',' separators, an XLSX with 2 sheets, a bad extension), read with header_row=2, auto-matching, a preview that writes nothing, run, 409 on a second run, history, errors.csv, the persone dedupe rules (email, cellulare, possibile_duplicato, conflitto, duplicato_file, empty cells never wiping data, staff link, team, mansione), and soci imported by the Super Admin while the module is inactive (persons, soci, a tesseramento via CSI and a quota; an unknown ente gives a warning; the org admin gets 403 and the target is hidden; after activation the data is visible with no duplicates). Pipeline: format A with fase remap/skip, Stato, responsabile, re-import -> esistente, a user edit -> conflitto, and sovrascrivi; format B (columns); format C (2 sheets -> 2 events); event matching on the exact name only; the org admin sees nothing until the pipeline is activated; event_pipelines and the org doc are unchanged. Also covered: aziende dedupe by P.IVA and name, sponsor deals, pernottamenti/pasti (an unknown person -> error), configs CRUD with global configs limited to the Super Admin, the pipeline template headers, undo (removes unmodified records, keeps modified ones, sets annullato, a second undo returns 409), and isolation between orgs. Frontend: tested the hub, the template download, the persone wizard (upload, auto-mapping, preview, run, result, history), the Super Admin flow from /piattaforma (platform-open-import) with a 2-sheet XLSX pipeline (phase and responsible sections, skip, preview summary, run), all section import-link-* buttons, and mobile 390. Found and FIXED a critical overlay bug in SearchSelect. Found 1 functional bug in the pipeline sheet switch and 1 mobile overflow issue (both still open).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "importer.records()", "issue": "Number parsing ignores the Italian thousands separator. A value without a comma, such as '1.500' or '1.500 €', becomes 1.5 instead of 1500, because float() is called directly when there is no ','."},
+      {"endpoint": "importer.records()", "issue": "The reported row number is always i+2 and does not take header_row into account. With header_row=2 every row number in the preview, the history errors and errors.csv is off by 1 compared with the Excel row."},
+      {"endpoint": "POST /api/imports/jobs/{id}/preview (pipeline)", "issue": "Rows of a phase set to {action:'skip'} are counted as status 'errore' (the 'Errori' counter and errors.csv). This should be a separate 'escluso' status or count, otherwise the user thinks the file contains errors."},
+      {"endpoint": "importer.apply pipeline", "issue": "seed_categories(org, eid) runs when an event has no categories. The seeded default categories are not tracked in refs, so undo leaves them behind and they also appear on events whose pipeline is not active."},
+      {"endpoint": "importer.allowed()", "issue": "An org admin (not only the Super Admin) can import into the pipeline of an event whose pipeline is not active; the tasks stay hidden. Confirm this is intended. Activating the pipeline later could also interact with the categories already imported (seeding duplicates): not verified."},
+      {"endpoint": "importer.pipeline_summary / classify", "issue": "Performance: one DB query per row (category find_one per item, plus loading every pipeline_tasks row of the event for each row in classify). An O(n^2) risk for files with 5000 rows."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "shared.jsx SearchSelect inside the import Dialog", "issue": "FIXED BY TESTING AGENT. PopoverContent (z-50) was rendered below the DialogOverlay (z-[100]). In every searchable select (mapping fields import-map-field-{i}, the default event import-default-event, import-resp-*, import-evmap-*, import-sheet-event-*) the options could not be clicked with the mouse; only the keyboard worked. Selecting a default event did not apply, so staff links were never created. Fix: added z-[200] to PopoverContent in SearchSelect. Verified that mouse selection now works.", "selector": "[data-testid^=import-map-field-], [data-testid=import-default-event]", "priority": "CRITICAL"},
+      {"component": "Importazione.jsx Wizard (pipeline)", "issue": "Switching the sheet in import-sheet-select does not change what gets imported. The 'sheets' state is only set when it is empty (doRead: `if (pipe && !sheets.length) setSheets(...)`), so options.sheets keeps the first sheet. Reproduced: an XLSX with sheets 'TEST_Evento UI' (2 rows) and 'Altro' (1 row). After selecting 'Altro', the total shows 1 record but the preview and import process the 2 rows of the first sheet. Fix: when a single sheet is selected (or when the sheet changes), reset sheets to [{sheet, event_id}], or keep them in sync.", "selector": "[data-testid=import-sheet-select]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Import wizard on mobile 390", "issues": ["The wizard content overflows horizontally (scrollWidth 516 vs clientWidth 388). The config bar, the sheet event selects, the fase name input and the preview grid are cut off on the right. Add min-w-0 / flex-wrap / w-full on the inputs and the SearchSelect (min-w-[170px] plus long fixed widths)."]},
+      {"screen": "EventPipeline page (pipeline not active)", "issues": ["The 'Importa pipeline da Excel' button floats above the activation card, offset to the right and not aligned with the content. The link also does not pre-select the current event (consider /importazione?target=pipeline&event=<id>)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_universal_import.py", "/app/backend/tests/import_ui_seed.py", "/app/test_reports/pytest/pytest_universal_import.xml"],
+  "action_items": [
+    "Fix the pipeline wizard sheet switch: keep the 'sheets' state in sync with import-sheet-select (HIGH)",
+    "Fix the horizontal overflow of the import wizard on mobile 390",
+    "Parse Italian thousands separators ('1.500' -> 1500) in number fields",
+    "Make the row number in preview/errors take header_row into account (row = i + header_row + 1)",
+    "Do not count skipped phases as 'errore'; show a separate 'esclusi' count",
+    "Track the categories seeded by seed_categories in refs (undo) or avoid seeding on events whose pipeline is not active",
+    "Keep the z-[200] fix on SearchSelect PopoverContent (or apply it globally to popovers used inside dialogs)"
+  ],
+  "critical_code_review_comments": [
+    "importer.py is 812 lines, above the 700-line guideline: split it into targets/fields, plan/classify, apply and routes",
+    "classify for pipeline loads every task of the event for each row (to_list(5000) per row): precompute a dict of titles per event once per plan",
+    "pipeline_summary runs a find_one on categories per item: cache it per (event, name)",
+    "run() calls plan() again on the current DB state, which is correct ('applies exactly the plan' only holds if nothing changed in between): acceptable, but document it",
+    "undo checks 'used' persons only through staff/asd_soci/deals.referente/lodgings: it misses meals.persona_id and pipeline_tasks.responsabile_id/persona_id, so undo can delete a person still referenced by a meal or task created later by a user"
+  ],
+  "updated_files": ["/app/frontend/src/components/import/shared.jsx", "/app/backend/tests/test_universal_import.py", "/app/backend/tests/import_ui_seed.py"],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "85% (1 critical bug fixed, 1 HIGH sheet-switch bug + 1 mobile overflow open)"},
+  "seed_data_creation": "TEST_IMP_* orgs, events, persons, jobs and configs were created and all of them deleted (verified 0 left). import_ui_seed.py seed/cleanup ORG_ID can recreate a UI test org.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... pytest tests/test_universal_import.py -n 0. In the UI, dismiss the cookie banner ('Accept all') and the demo popup ('Non ora') after login. The Super Admin acts via localStorage acting_org_id. SearchSelect options inside the Dialog now work with the mouse (z-[200]). Retest: pipeline sheet switch (import-sheet-select -> preview rows must come from the selected sheet) and the mobile 390 wizard overflow.",
+  "rca of the issue": "SearchSelect unclickable: the Radix PopoverContent is portaled to body with z-50, while the shadcn DialogOverlay is z-[100] (custom). The overlay intercepted pointer events on the popover items, so only keyboard selection worked and the default event was silently not applied. Sheet switch: Wizard.doRead only initialises 'sheets' when it is empty, so options.sheets keeps sending the first sheet name, and plan() prefers options.sheets over body.sheet."
+}

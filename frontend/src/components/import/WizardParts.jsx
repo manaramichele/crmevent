@@ -61,17 +61,17 @@ export function PipelineSetup({ read, events, cats, setCats, resp, setResp, evMa
           {allSheets.map((s) => { const cur = sheets.find((x) => x.sheet === s.name); return (
             <div key={s.name} className="flex flex-col sm:flex-row sm:items-center gap-2 py-1">
               <label className="flex items-center gap-2 text-sm sm:w-56"><input type="checkbox" checked={!!cur} onChange={(e) => setSheets(e.target.checked ? [...sheets, { sheet: s.name, event_id: (p.fogli.find((f) => f.sheet === s.name) || {}).event_id || "" }] : sheets.filter((x) => x.sheet !== s.name))} data-testid={`import-sheet-${s.name}`} />{s.name} <span className="text-xs text-slate-400">{s.rows} righe</span></label>
-              {cur && <div className="flex-1"><SearchSelect value={cur.event_id} onChange={(v) => setSheets(sheets.map((x) => (x.sheet === s.name ? { ...x, event_id: v } : x)))} options={evOpts} testid={`import-sheet-event-${s.name}`} /></div>}
+              {cur && <div className="flex-1 min-w-0"><SearchSelect value={cur.event_id} onChange={(v) => setSheets(sheets.map((x) => (x.sheet === s.name ? { ...x, event_id: v } : x)))} options={evOpts} testid={`import-sheet-event-${s.name}`} /></div>}
             </div>); })}
         </section>)}
       {p.fasi.length > 0 && (
         <section data-testid="import-pipeline-fasi"><h4 className="text-sm font-semibold mb-1">Abbina fasi Pipeline</h4>
           <p className="text-xs text-slate-500 mb-2">Ogni fase del file diventa una Categoria della pipeline: collega una categoria esistente, scrivi un nuovo nome oppure escludila. Le nuove categorie vengono aggiunte in fondo, nell'ordine indicato.</p>
           {p.fasi.map((f, i) => { const m = cats[f] || { action: "use", name: f }; return (
-            <div key={f} className="grid grid-cols-1 sm:grid-cols-[200px_140px_1fr] gap-2 py-1 items-center" data-testid={`import-fase-row-${i}`}>
+            <div key={f} className="grid grid-cols-1 sm:grid-cols-[200px_140px_1fr] gap-2 py-1 items-center min-w-0" data-testid={`import-fase-row-${i}`}>
               <span className="text-sm font-medium truncate">{f}</span>
               <select className={SEL} value={m.action} onChange={(e) => setCats({ ...cats, [f]: { ...m, action: e.target.value } })} data-testid={`import-fase-action-${i}`}><option value="use">Importa in</option><option value="skip">Escludi</option></select>
-              {m.action === "use" && <><Input list={`cats-${i}`} value={m.name} onChange={(e) => setCats({ ...cats, [f]: { ...m, name: e.target.value } })} className="h-9" data-testid={`import-fase-name-${i}`} />
+              {m.action === "use" && <><Input list={`cats-${i}`} value={m.name} onChange={(e) => setCats({ ...cats, [f]: { ...m, name: e.target.value } })} className="h-9 w-full min-w-0" data-testid={`import-fase-name-${i}`} />
                 <datalist id={`cats-${i}`}>{catOpts.map((c) => <option key={c} value={c} />)}</datalist></>}
             </div>); })}
         </section>)}
@@ -111,8 +111,8 @@ export function ConfigBar({ target, mapping, options, onLoad, superadmin }) {
   };
   const del = async () => { if (cur && window.confirm(`Eliminare "${cur.name}"?`)) { try { await api.delete(`/imports/configs/${cur.id}`); setSel(""); load(); } catch (e) { err(e); } } };
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="import-config-bar">
-      <select className={SEL} value={sel} onChange={(e) => { setSel(e.target.value); const c = list.find((x) => x.id === e.target.value); if (c) onLoad(c); }} data-testid="import-config-select">
+    <div className="flex flex-wrap items-center gap-2 min-w-0" data-testid="import-config-bar">
+      <select className={`${SEL} max-w-full`} value={sel} onChange={(e) => { setSel(e.target.value); const c = list.find((x) => x.id === e.target.value); if (c) onLoad(c); }} data-testid="import-config-select">
         <option value="">Configurazioni salvate…</option>{list.map((c) => <option key={c.id} value={c.id}>{c.name}{c.org_id === null ? " (condivisa)" : ""}</option>)}
       </select>
       <Button size="sm" variant="outline" onClick={() => save(true)} data-testid="import-config-save"><Save className="w-4 h-4 mr-1" />Salva abbinamenti</Button>
@@ -134,6 +134,7 @@ export function PreviewPanel({ prev, ctx }) {
         {[["Righe", prev.rows], ["Da creare", a.crea + (prev.items.filter((x) => x.action === "collega").length)], ["Da aggiornare", a.aggiorna], ["Duplicati", c.possibile_duplicato + c.duplicato_file], ["Conflitti", c.conflitto], ["Errori", c.errore]].map(([k, v]) => (
           <div key={k} className="rounded-lg border border-slate-200 py-2"><div className="text-lg font-bold" data-testid={`import-count-${k}`}>{v}</div><div className="text-[11px] text-slate-500">{k}</div></div>))}
       </div>
+      {c.escluso > 0 && <p className="text-xs text-slate-500" data-testid="import-excluded-rows">Righe escluse (fasi non importate): {c.escluso}</p>}
       {prev.excluded.length > 0 && <p className="text-xs text-slate-500">Colonne escluse: {prev.excluded.join(", ")}</p>}
       {p && (
         <div className="rounded-lg border border-slate-200 p-3 text-sm space-y-1" data-testid="import-preview-pipeline">

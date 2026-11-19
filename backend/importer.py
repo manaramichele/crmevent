@@ -235,7 +235,7 @@ def build(db, deps: dict):
         return hits[0]["id"] if len(hits) == 1 else None
 
     # ---------- parsing ----------
-    def records(cols: list, data: list, mapping: dict, fields: list) -> list:
+    def records(cols: list, data: list, mapping: dict, fields: list, first_row: int = 2) -> list:
         kinds = {f["key"]: f["type"] for f in fields}
         out = []
         for i, row in enumerate(data):
@@ -252,8 +252,13 @@ def build(db, deps: dict):
                         continue
                     val = d
                 elif t == "number":
+                    raw = val.replace("€", "").replace(" ", "").strip()
+                    if "," in raw:
+                        raw = raw.replace(".", "").replace(",", ".")
+                    elif re.match(r"^\d{1,3}(\.\d{3})+$", raw):
+                        raw = raw.replace(".", "")
                     try:
-                        val = float(val.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".") if "," in val else val.replace("€", "").strip())
+                        val = float(raw)
                     except ValueError:
                         errs.append(f"{col}: numero non valido ({val})")
                         continue
@@ -268,7 +273,7 @@ def build(db, deps: dict):
             for f in fields:
                 if f["required"] and not rec.get(f["key"]):
                     errs.append(f"{f['label']}: campo obbligatorio")
-            out.append({"row": i + 2, "data": rec, "errors": errs})
+            out.append({"row": i + first_row, "data": rec, "errors": errs})
         return out
 
     # ---------- persone: regole duplicati condivise (Staff / Volontari e Gestione Società) ----------
@@ -308,14 +313,15 @@ def build(db, deps: dict):
         sheets = opts.get("sheets") if t == "pipeline" and opts.get("sheets") else [{"sheet": body.sheet, "event_id": opts.get("event_id")}]
         lk = await lookups(org)
         ev_fix, resp_fix = opts.get("eventi") or {}, opts.get("responsabili") or {}
-        items, seen = [], set()
+        items, seen, task_cache = [], set(), {}
+        active_pipes = set(await db.event_pipelines.distinct("event_id", {"org_id": org, "active": True})) if t == "pipeline" else set()
         for sh in sheets:
             sheet = next((s for s in job["sheets"] if s["name"] == (sh.get("sheet") or job["sheets"][0]["name"])), None)
             if not sheet:
                 raise HTTPException(status_code=400, detail=f"Foglio non trovato: {sh.get('sheet')}")
             cols, data = table(sheet, body.header_row, body.layout)
             mapping = {"Attività": "titolo", "Fase": "fase"} if body.layout == "columns" else body.mapping
-            for rec in records(cols, data, mapping, fields):
+            for rec in records(cols, data, mapping, fields, (max(body.header_row, 1) + 1) if body.layout != "columns" else 2):
                 rec["sheet"] = sheet["name"]
                 d = rec["data"]
                 if t in ("persone", "pipeline", "sponsor", "pernottamenti", "pasti"):
@@ -325,12 +331,14 @@ def build(db, deps: dict):
                     rec["event_id"] = eid
                     if t in ("pipeline", "sponsor", "pernottamenti", "pasti") and not eid:
                         rec["errors"].append("Evento di destinazione mancante")
+                    if t == "pipeline" and eid and not is_super(user) and eid not in active_pipes:
+                        rec["errors"].append("Pipeline non attiva su questo evento: attivala prima di importare")
                 if rec["errors"]:
                     rec["status"], rec["message"] = "errore", "; ".join(rec["errors"])
                 else:
-                    await classify(org, t, rec, lk, resp_fix, opts, seen, body.mode)
+                    await classify(org, t, rec, lk, resp_fix, opts, seen, body.mode, task_cache)
                 items.append(rec)
-        cnt = {k: sum(1 for x in items if x["status"] == k) for k in ("nuovo", "esistente", "possibile_duplicato", "conflitto", "duplicato_file", "errore")}
+        cnt = {k: sum(1 for x in items if x["status"] == k) for k in ("nuovo", "esistente", "possibile_duplicato", "conflitto", "duplicato_file", "errore", "escluso")}
         act = {"crea": sum(1 for x in items if x.get("action") == "crea"), "aggiorna": sum(1 for x in items if x.get("action") == "aggiorna"),
                "ignora": sum(1 for x in items if x.get("action") in (None, "ignora"))}
         excluded = [c for c, k in (body.mapping or {}).items() if not k] if body.layout != "columns" else []
@@ -339,7 +347,7 @@ def build(db, deps: dict):
             out["pipeline"] = await pipeline_summary(org, items, opts, lk)
         return out
 
-    async def classify(org, t, rec, lk, resp_fix, opts, seen, mode):
+    async def classify(org, t, rec, lk, resp_fix, opts, seen, mode, task_cache):
         d = rec["data"]
         if t in ("persone", "soci"):
             fk = file_key(d)
@@ -382,7 +390,7 @@ def build(db, deps: dict):
             fase = d.get("fase") or ""
             fm = (opts.get("fasi") or {}).get(fase) if fase else None
             if fm and fm.get("action") == "skip":
-                rec.update(status="errore", message=f"Fase esclusa dall'importazione: {fase}", action="ignora")
+                rec.update(status="escluso", message=f"Fase esclusa dall'importazione: {fase}", action="ignora")
                 return
             rec["categoria_nome"] = (fm or {}).get("name") or fase or None
             rec["responsabile_id"] = match_person_name(d.get("responsabile"), lk["people"], resp_fix)
@@ -392,10 +400,11 @@ def build(db, deps: dict):
             if d.get("codice_esterno"):
                 ex = await db.pipeline_tasks.find_one({"org_id": org, "event_id": rec["event_id"], "import_ref": d["codice_esterno"]}, {"_id": 0})
             if not ex:
-                for x in await db.pipeline_tasks.find({"org_id": org, "event_id": rec["event_id"]}, {"_id": 0}).to_list(5000):
-                    if _norm(x.get("titolo")) == _norm(d.get("titolo")):
-                        ex = x
-                        break
+                if rec["event_id"] not in task_cache:
+                    task_cache[rec["event_id"]] = {}
+                    for y in await db.pipeline_tasks.find({"org_id": org, "event_id": rec["event_id"]}, {"_id": 0}).to_list(10000):
+                        task_cache[rec["event_id"]].setdefault(_norm(y.get("titolo")), y)
+                ex = task_cache[rec["event_id"]].get(_norm(d.get("titolo")))
             fk = f"{rec['event_id']}:{_norm(d.get('titolo'))}:{_norm(rec['categoria_nome'])}"
             if fk in seen:
                 rec.update(status="duplicato_file", message="Attività ripetuta nel file", action="ignora")
@@ -414,14 +423,16 @@ def build(db, deps: dict):
 
     async def pipeline_summary(org, items, opts, lk) -> dict:
         evs = {e["id"]: e["nome"] for e in lk["events"]}
-        by_cat, by_ev, cat_new = {}, {}, set()
+        by_cat, by_ev, cat_new, known = {}, {}, set(), {}
         for x in items:
             if x.get("action") not in ("crea", "aggiorna"):
                 continue
             c = x.get("categoria_nome") or "Senza fase"
             by_cat[c] = by_cat.get(c, 0) + 1
             by_ev[evs.get(x["event_id"], "?")] = by_ev.get(evs.get(x["event_id"], "?"), 0) + 1
-            if x.get("categoria_nome") and not await db.pipeline_categories.find_one({"org_id": org, "event_id": x["event_id"], "name": {"$regex": f"^{re.escape(x['categoria_nome'])}$", "$options": "i"}}, {"_id": 1}):
+            if x["event_id"] not in known:
+                known[x["event_id"]] = {_norm(n) for n in await db.pipeline_categories.distinct("name", {"org_id": org, "event_id": x["event_id"]})}
+            if x.get("categoria_nome") and _norm(x["categoria_nome"]) not in known[x["event_id"]]:
                 cat_new.add(x["categoria_nome"])
         active = {p["event_id"] for p in await db.event_pipelines.find({"org_id": org, "active": True}, {"_id": 0, "event_id": 1}).to_list(2000)}
         ev_ids = {x["event_id"] for x in items if x.get("event_id")}
@@ -457,7 +468,7 @@ def build(db, deps: dict):
         for x in p["items"]:
             if x.get("action") not in ("crea", "aggiorna", "collega"):
                 skipped += 1
-                if x["status"] in ("errore", "conflitto", "possibile_duplicato", "duplicato_file"):
+                if x["status"] in ("errore", "conflitto", "possibile_duplicato", "duplicato_file", "escluso"):
                     errors.append({"foglio": x["sheet"], "riga": x["row"], "stato": x["status"], "messaggio": x.get("message")})
                 continue
             d = x["data"]
@@ -561,7 +572,10 @@ def build(db, deps: dict):
                 elif t == "pipeline":
                     eid = x["event_id"]
                     if not await db.pipeline_categories.count_documents({"org_id": org, "event_id": eid}):
-                        await seed_categories(org, eid)
+                        await seed_categories(org, eid)  # stesse categorie iniziali dell'attivazione, tracciate per l'annullamento
+                        await db.pipeline_categories.update_many({"org_id": org, "event_id": eid}, {"$set": {**mark, "updated_at": now}})
+                        for cid0 in await db.pipeline_categories.distinct("id", {"org_id": org, "event_id": eid}):
+                            add("pipeline_categories", cid0)
                     cat_id = None
                     if x.get("categoria_nome"):
                         ck = (eid, _norm(x["categoria_nome"]))
