@@ -1337,3 +1337,7 @@ Task 2 — Creatività manuale:
 - _news_org_context ora considera anche Control Room attive e addon_grants planner/eventmap.
 - Test: iteration_194 + test_news_product_republish.py e test_news_audience.py 28/28.
 
+
+## 2026-11-18 — Fase evento "In corso"
+- Elenco controllato EVENT_STATI (server.py) pianificato | attivo (= In corso, chiave storica già usata da dashboard/demo) | concluso | annullato, validato su POST/PUT (422). Events.jsx: opzioni nell'ordine richiesto, colori blu/verde/grigio/rosso, filtro Fase nell'elenco, default Pianificato in creazione (EntityDialog supporta field.default). Dashboard "prossimi" esclude annullati. Nessun evento esistente modificato. Test iteration_195.
+

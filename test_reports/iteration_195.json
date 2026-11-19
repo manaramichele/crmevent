@@ -1,0 +1,34 @@
+{
+  "summary": "Tested the 'In corso' Fase evento (stored key 'attivo'). Backend: test_event_fase_in_corso.py has 9 tests and all pass. The test_event_duplicate.py regression (8 tests) also passes. Covered: create with each of the 4 states and read back with GET, omitted stato defaults to pianificato, invalid stato returns 422 'Fase evento non valida...' on both POST and PUT, PUT transitions are saved, a partial PUT keeps the stato, GET /api/dashboard eventi.attivi counts 'attivo' correctly, and duplicating an 'attivo' event creates a 'pianificato' copy while the original stays 'attivo'. Frontend at 1920px and 390px: the edit dialog select lists Pianificato, In corso, Concluso, Annullato in that order. Pianificato -> In corso -> Concluso was saved and the value was kept on reopen. Creating an event as In corso works. List badges: sky, emerald, slate and red. The filter-event-stato filter shows exactly the right event for each of the 4 states. The mobile card and edit dialog render with no horizontal overflow, and editing on mobile saved Annullato. The Event Planner, Event Map and Control Room routes behave the same for 'attivo' and 'annullato' events (planner redirects to /event-planner because the add-on is not active in a trial org; nothing depends on the phase). The phase distribution of existing events is unchanged (14 pianificato, 2 attivo, 1 concluso; no invalid values in the DB).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/dashboard", "issue": "eventi.prossimi counts future events with stato != 'concluso', so 'annullato' events are counted as upcoming. Consider excluding annullato."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Dashboard KPI", "issue": "The data-testid kpi-eventi-attivi does not exist in the current Dashboard.jsx. It is referenced only by the Onboarding.jsx tour step, which points to a missing element. The backend value is correct but is not shown as a KPI card in the UI, so it could not be verified there.", "affected_selectors": ["[data-testid=kpi-eventi-attivi]"]}
+    ],
+    "design_issues": [
+      {"screen": "Eventi create dialog", "issues": ["The 'Fase evento' select shows the placeholder 'Seleziona...' instead of 'Pianificato' on create. The backend saves pianificato, but prefilling stato: 'pianificato' in EMPTY would make the default visible.", "The date fields use the browser's native date picker, not a shadcn calendar (existing behaviour)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_event_fase_in_corso.py", "/app/backend/tests/ui_fase_setup.py", "/app/test_reports/pytest/fase_results.xml"],
+  "action_items": [
+    "Optional: set the default stato 'pianificato' in the Events create form (EMPTY) so the select shows it",
+    "Optional: exclude 'annullato' from dashboard eventi.prossimi",
+    "Fix the Onboarding step that targets the missing kpi-eventi-attivi, or add that KPI back to the Dashboard if it is expected"
+  ],
+  "critical_code_review_comments": [
+    "The EVENT_STATI validation sits inside the Event model_validator, and _opt(model) inherits it, so PUT is also validated (confirmed: 422).",
+    "DELETE /api/platform/organizations/{id} does not remove the org's admin user (only staff/volunteer), so orphan admin users remain. I removed my TEST users by exact email. This is existing behaviour, not part of this feature."
+  ],
+  "updated_files": ["/app/backend/tests/test_event_fase_in_corso.py", "/app/backend/tests/ui_fase_setup.py"],
+  "success_rate": {"backend": "100%", "frontend": "100% of requested flows (the KPI card is missing from the UI; verified through the API)"},
+  "seed_data_creation": "Created the TEST_FaseOrg_* and TEST_FaseUI_* orgs with TEST_ events. All were deleted through the platform org delete; the TEST users were deleted by exact email.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with -n 0: pytest tests/test_event_fase_in_corso.py -n 0. UI setup: python tests/ui_fase_setup.py setup|cleanup (state in /tmp/ui_fase.json). On mobile, dismiss the cookie banner ('Reject non-essential') before clicking Accedi. Desktop edit buttons are duplicated (the mobile copy is hidden), so use the ':visible' locator. Login redirects to /app (Dashboard)."
+}

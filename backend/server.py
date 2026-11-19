@@ -1064,6 +1064,9 @@ async def activate(body: ActivateIn, response: Response):
 
 
 # ---------------- entity models ----------------
+EVENT_STATI = ("pianificato", "attivo", "concluso", "annullato")  # "attivo" = In corso (chiave storica)
+
+
 class Event(BaseModel):
     nome: str
     edizione: Optional[str] = None
@@ -1088,7 +1091,7 @@ class Event(BaseModel):
     telefono: Optional[str] = None
     partecipanti_previsti: Optional[int] = None
     budget: Optional[float] = None
-    stato: Optional[str] = "pianificato"
+    stato: Optional[str] = "pianificato"  # pianificato | attivo (In corso) | concluso | annullato
     descrizione: Optional[str] = None
     note: Optional[str] = None
     giorni_descrizioni: Optional[dict] = None
@@ -1105,6 +1108,8 @@ class Event(BaseModel):
                 if prev and val < prev[1]:
                     raise ValueError(f"{label} non può essere precedente a {prev[0]}")
                 prev = (label, val)
+        if self.stato is not None and self.stato not in EVENT_STATI:
+            raise ValueError("Fase evento non valida: scegli Pianificato, In corso, Concluso o Annullato")
         # Descrizioni giornata: mantieni solo le date comprese nell'intervallo evento e non vuote.
         if self.giorni_descrizioni is not None and self.data_inizio:
             di = self.data_inizio[:10]
@@ -2771,7 +2776,7 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
     out = {
         "sections": can,
         "eventi": {"attivi": len([e for e in events if e.get("stato") == "attivo"]),
-                   "prossimi": len([e for e in events if fut(e) and e.get("stato") != "concluso"]),
+                   "prossimi": len([e for e in events if fut(e) and e.get("stato") not in ("concluso", "annullato")]),
                    "conclusi": len([e for e in events if e.get("stato") == "concluso"]), "totali": len(events)},
         "crm": {"aziende": len(companies), "persone": len(persons), "nuovi_contatti": nuovi, "prospect": prospect},
         "commerciale": {"trattative_aperte": len([d for d in deals if d.get("stato") == "aperta" and d.get("fase") not in ("confermato", "perso")]),
