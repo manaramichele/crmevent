@@ -43,6 +43,7 @@ import brevo_subscriptions
 import brevo_tracker
 import iscritti
 import asd
+import importer
 import calendario_italia
 import avail_prefs
 import anagrafica
@@ -13092,8 +13093,18 @@ class PipelineTaskUpd(BaseModel):
     crm_section: Optional[str] = None
 
 
+async def _pipeline_hidden(user: dict, event_id: str) -> bool:
+    """Dati importati dal Super Admin su pipeline non attiva: restano invisibili all'organizzazione finché non la attiva."""
+    if user.get("role") == "superadmin":
+        return False
+    p = await _pipeline_doc(user["org_id"], event_id)
+    return not (p and p.get("active"))
+
+
 @api.get("/events/{event_id}/pipeline/categories")
 async def pipeline_categories_list(event_id: str, user: dict = Depends(require_admin)):
+    if await _pipeline_hidden(user, event_id):
+        return []
     return await db.pipeline_categories.find(oq(user, event_id=event_id), {"_id": 0}).sort("order", 1).to_list(500)
 
 
@@ -13133,6 +13144,8 @@ async def pipeline_category_delete(cat_id: str, confirm: bool = False, user: dic
 
 @api.get("/events/{event_id}/pipeline/tasks")
 async def pipeline_tasks_list(event_id: str, user: dict = Depends(require_admin)):
+    if await _pipeline_hidden(user, event_id):
+        return {"tasks": [], "stats": None}
     rows = await db.pipeline_tasks.find(oq(user, event_id=event_id), {"_id": 0}).sort("created_at", 1).to_list(5000)
     return {"tasks": [_serialize_task(t) for t in rows], "stats": await _pipeline_stats(user["org_id"], event_id)}
 
@@ -14141,6 +14154,11 @@ ASD = asd.build(db, {"require_member": require_org_member, "record_audit": recor
                      "person_scope": _person_scope, "link_visible": _link_visible, "prefs_for": lambda *a: AVP["prefs_for"](*a)})
 app.include_router(ASD["router"])
 app.add_event_handler("startup", ASD["ensure_indexes"])
+IMPORTER = importer.build(db, {"require_admin": require_admin, "record_audit": record_audit, "normalize": TN.normalize_fields, "asd": ASD,
+                               "seed_pipeline_categories": _seed_pipeline_categories})
+api_router_imports = IMPORTER["router"]
+app.include_router(api_router_imports, prefix="/api")
+app.add_event_handler("startup", IMPORTER["ensure_indexes"])
 AVP = avail_prefs.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit})
 app.include_router(AVP["router"])
 ANA = anagrafica.build(db, {"require_admin": require_admin, "pref_label": avail_prefs.pref_label, "cf_valid": _cf_valid})

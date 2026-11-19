@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend retest of the universal import fixes from iteration 196, using a TEST_IMPUI_* org with an org admin, the Super Admin acting on that org, and a 2-sheet XLSX ('TEST_Evento UI' with 2 rows, 'Altro' with 1 row). 5 of 6 items passed as delivered. (1) Sheet switch: PASS. Selecting 'Altro' in import-sheet-select changes the total to 1, preview shows only 'Altro · 2 TEST_Task ALTRO 1', the sheet checkboxes follow the selection, and the run imported from the selected sheet. Multi-sheet checkboxes with import-sheet-event-* worked (3 tasks created in the chosen event). (2) Mobile 390 overflow: FAIL as delivered. scrollWidth 485 vs clientWidth 388 on the mapping step and 622 vs 388 on the preview. Root cause: DialogContent is a CSS grid with an auto track (min-width:auto), so the track grows to the min-content width of its widest child; the min-w-0 classes on the children do not help. FIXED BY THE TESTING AGENT: added grid-cols-[minmax(0,1fr)] to the DialogContent in Importazione.jsx. After the fix, scrollWidth equals clientWidth (388) on the mapping, sheets/fasi, config bar and preview steps, with 0 elements past the dialog edge; desktop is unchanged (1022 = 1022). (3) SearchSelect mouse clicks inside the dialog: PASS on desktop and mobile (import-sheet-event-*, import-map-field-*). (4) EventPipeline: PASS. import-link-pipeline is on the same row as pipeline-back (vertical centres equal), opens /importazione?target=pipeline&event=<id>, the wizard opens automatically, and import-default-event is preselected. (5) Escludi: PASS. The Permessi row shows 'Escluso' with the note 'Fase esclusa dall'importazione', the Errori count is 0, and import-excluded-rows shows 'Righe escluse (fasi non importate): 1'. (6) An org admin importing into an inactive event gets the row error 'Pipeline non attiva su questo evento: attivala prima di importare'. The Super Admin imported into the inactive event without problems (the task was created).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/imports/jobs/{id}/run (pipeline)", "issue": "Excluded rows (status 'escluso') are stored in result.errori. The result screen shows 'segnalazioni 1' after a run where the preview said Errori 0. Excluded rows probably end up in errors.csv / history errors too."},
+      {"endpoint": "preview pipeline_summary.fasi_da_creare", "issue": "The preview does not account for seed_categories. On an event with no categories, the preview listed 'Fasi da creare: Logistica, Permessi, Sponsor', but the run reported fasi_create 2, because Logistica came from the seeded default categories. On the second import the preview said 'Logistica' and the run said fasi_create 0. Also, 12 default categories are seeded into an event whose pipeline is not active (still open from iteration 196)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Importazione.jsx DialogContent (mobile)", "issue": "FIXED BY TESTING AGENT: horizontal overflow on mobile 390. The grid track grew to the min-content width of its widest child (453-590px). Added grid-cols-[minmax(0,1fr)]. Verified sw == cw on every step.", "selector": "[data-testid=import-wizard]", "priority": "MEDIUM"},
+      {"component": "PipelineSetup with multiple sheets", "issue": "When several sheets are checked, 'Abbina fasi Pipeline' (and the responsabili/eventi sections) list only the phases of the sheet in import-sheet-select (read.pipeline). Phases of the other checked sheets, such as Sponsor from 'Altro', can only be remapped or excluded by switching the select. Switching does keep the multi-sheet selection, so a workaround exists, but users will not find it.", "selector": "[data-testid=import-pipeline-fasi]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Import wizard sheets", "issues": ["The row count shown in import-sheet-select ('Altro (2)') and next to each checkbox ('2 righe') includes the header row, while import-total says '1 record trovati'. Show the data-row count or call it 'righe totali'."]},
+      {"screen": "Import wizard opened from an event pipeline", "issues": ["When a sheet name exactly matches an event name, the auto-proposed sheet event takes priority over import-default-event (the event the user came from). For example, from TEST_Attivo's pipeline, the 'Altro' sheet went to the 'Altro' event, and the org admin got a 'Pipeline non attiva' error. Consider letting an explicit ?event= default win, or highlight the per-sheet event."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/import_ui_seed.py"],
+  "action_items": [
+    "Keep the grid-cols-[minmax(0,1fr)] fix on the import-wizard DialogContent (or apply it to DialogContent globally)",
+    "Show the phases (and responsabili/eventi) of every checked sheet in PipelineSetup, not only the sheet chosen in import-sheet-select",
+    "Do not count 'escluso' rows as 'segnalazioni'/errors in the run result or errors.csv",
+    "Make preview fasi_da_creare consistent with seed_categories (or do not seed on import)",
+    "Fix the sheet row count label (it includes the header row)"
+  ],
+  "critical_code_review_comments": [
+    "Importazione.jsx doRead: the sheets state only resets when the selected sheet is not already in sheets. If the user checks both sheets and then picks one in the select, both stay selected: the total shows 1 sheet but the preview covers both. Acceptable, but confusing; consider labelling the select 'Foglio da mappare'.",
+    "doRead's useCallback reads 'sheets' without listing it as a dependency (eslint is disabled). It works because sheet changes recreate the callback, but it is fragile."
+  ],
+  "updated_files": ["/app/frontend/src/pages/Importazione.jsx", "/app/backend/tests/import_ui_seed.py"],
+  "success_rate": {"backend": "not tested (frontend only)", "frontend": "100% after fix (6/6 items; the mobile overflow was fixed by the testing agent, 5/6 as delivered)"},
+  "seed_data_creation": "import_ui_seed.py seed created the TEST_IMPUI_c77ae8 org, an org admin, 3 events and /tmp/test_two_sheets.xlsx. Everything was deleted with cleanup (0 docs left for that org_id; saas_usage/saas_emails/saas_brevo_sync/brevo_tracker_log docs for the TEST org were removed as well).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use 'python backend/tests/import_ui_seed.py seed' (prints org/email/events, writes /tmp/test_two_sheets.xlsx) and 'cleanup <org> <email>'. Log in through page.request.post('/api/auth/login'). For the Super Admin, set localStorage acting_org_id. Hide the cookie banner with add_style_tag('[data-testid=cookie-banner]{display:none!important}'): it is z-[10000] and intercepts clicks on mobile.",
+  "rca of the issue": "Mobile overflow: the shadcn DialogContent uses 'grid' with an implicit auto column. Grid items default to min-width:auto, so the column widens to the min-content width of descendants (the mapping table, the preview table and fixed-width rows) even inside overflow-x-auto wrappers. overflow-x-hidden only clipped the content instead of shrinking it. grid-template-columns: minmax(0,1fr) caps the track at the container width."
+}

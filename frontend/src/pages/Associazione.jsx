@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/crm";
+import { ImportLink } from "@/components/import/ImportLink";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AsdDashboard } from "@/components/asd/AsdDashboard";
 import { AsdSoci } from "@/components/asd/AsdSoci";
@@ -35,7 +36,7 @@ export default function Associazione() {
   const props = { status, soci, onChanged: changed };
   return (
     <div data-testid="asd-page">
-      <PageHeader title="Gestione Società" subtitle="Gestisci soci, tesseramenti, quote associative, certificati medici e scadenze della tua società sportiva." />
+      <PageHeader title="Gestione Società" subtitle="Gestisci soci, tesseramenti, quote associative, certificati medici e scadenze della tua società sportiva." action={<ImportLink target="soci" />} />
       <Tabs value={tab} onValueChange={go}>
         <div className="overflow-x-auto -mx-1 px-1 mb-4"><TabsList className="w-max">{TABS.map(([k, l]) => <TabsTrigger key={k} value={k} data-testid={`asd-tab-${k}`}>{l}</TabsTrigger>)}</TabsList></div>
         <TabsContent value="dashboard"><AsdDashboard go={go} refreshKey={rk} /></TabsContent>

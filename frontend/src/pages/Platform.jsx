@@ -124,6 +124,7 @@ export default function Platform() {
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-8 flex items-center gap-3 flex-wrap text-sm text-slate-600" data-testid="platform-integrations-moved">
         <ReceiptText className="w-5 h-5 text-tiffany-active" />Fatture in Cloud e Brevo si gestiscono ora in Marketing &amp; Admin.
         <Button size="sm" variant="outline" className="ml-auto" onClick={() => nav("/marketing/admin")} data-testid="platform-open-integrations"><Link2 className="w-4 h-4 mr-1.5" />Apri integrazioni</Button>
+        <Button size="sm" variant="outline" onClick={() => nav("/importazione")} data-testid="platform-open-import">Importazione dati</Button>
       </div>
       <NormalizePreview />
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

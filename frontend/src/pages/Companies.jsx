@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { StatusBadge, PageHeader, PrimaryButton, TextAction, DeleteConfirm } from "@/components/crm";
+import { ImportLink } from "@/components/import/ImportLink";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -46,7 +47,7 @@ export default function Companies() {
   return (
     <div className="animate-fade-up">
       <PageHeader title="Aziende" subtitle="Anagrafica unica: sponsor, partner, media, fornitori, prospect e istituzioni"
-        action={perm.create ? <PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-company-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi azienda</PrimaryButton> : null} />
+        action={perm.create ? <div className="flex flex-wrap gap-2"><ImportLink target="aziende" /><PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-company-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi azienda</PrimaryButton></div> : null} />
       <div className="mb-4 relative w-full sm:w-72">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <Input className="pl-9" placeholder="Cerca aziende..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-company-input" />

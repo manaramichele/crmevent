@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { StaffAssignSelect } from "@/components/StaffAssignSelect";
+import { ImportLink } from "@/components/import/ImportLink";
 import { usePeople, invalidatePeople } from "@/lib/peopleStore";
 import {
   ArrowLeft, Rocket, Coins, Wallet, CheckCircle2, Clock, AlertTriangle, Flame, Plus, Pencil,
@@ -278,7 +279,10 @@ export default function EventPipeline() {
 
   return (
     <div className="max-w-6xl space-y-6" data-testid="event-pipeline-page">
-      <button onClick={() => navigate("/eventi")} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800" data-testid="pipeline-back"><ArrowLeft className="w-4 h-4" />Torna agli eventi</button>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <button onClick={() => navigate("/eventi")} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800" data-testid="pipeline-back"><ArrowLeft className="w-4 h-4" />Torna agli eventi</button>
+        <ImportLink target="pipeline" label="Importa pipeline da Excel" eventId={id} />
+      </div>
 
       {!status.active ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-2xl mx-auto" data-testid="pipeline-intro">
