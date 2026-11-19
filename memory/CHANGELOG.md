@@ -1341,3 +1341,10 @@ Task 2 — Creatività manuale:
 ## 2026-11-18 — Fase evento "In corso"
 - Elenco controllato EVENT_STATI (server.py) pianificato | attivo (= In corso, chiave storica già usata da dashboard/demo) | concluso | annullato, validato su POST/PUT (422). Events.jsx: opzioni nell'ordine richiesto, colori blu/verde/grigio/rosso, filtro Fase nell'elenco, default Pianificato in creazione (EntityDialog supporta field.default). Dashboard "prossimi" esclude annullati. Nessun evento esistente modificato. Test iteration_195.
 
+
+## 2026-11-19 — Importazione universale Excel/CSV + Pipeline
+- backend/importer.py (unico motore, /api/imports): upload xlsx/xls/csv (tutti i fogli, separatore rilevato), read (riga intestazioni, layout rows|columns, auto-abbinamento sinonimi, fasi/responsabili/eventi di tutti i fogli), preview = stesso piano dell'esecuzione (nuovo/esistente/possibile_duplicato/conflitto/duplicato_file/errore/escluso), run (lock, 409 se ripetuto), history, errors.csv, undo controllato (solo record creati non modificati/collegati), templates xlsx, configs (org o globali Super Admin).
+- Destinazioni: persone (+ collegamento evento, team, mansione), soci (persona condivisa + asd_soci + tesseramento con enti + quota), aziende, sponsor (azienda + deal), pernottamenti, pasti, pipeline (fasi -> categorie per evento, stato da colonna, responsabile = persona, formati A/B/C, conflitto se modificata dagli utenti). Elenco Iscritti mantiene il suo wizard.
+- Super Admin (Org attiva) importa anche in moduli non attivi senza attivarli; organizzatori: Gestione Società solo se attivo, pipeline solo su eventi con pipeline attiva. GET pipeline tasks/categories vuoti per l'organizzazione finché la pipeline non è attiva (_pipeline_hidden).
+- UI: pagina /importazione (link da Piattaforma e pulsanti «Importa Excel/CSV» nelle sezioni), wizard in components/import/*. Test: iteration_196/197, tests/test_universal_import.py 21/21 (-n 0).
+

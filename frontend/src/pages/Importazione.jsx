@@ -46,7 +46,7 @@ function Wizard({ target, info, onClose, onDone, initialEvent }) {
       const { data } = await api.post(`/imports/jobs/${job.id}/read`, { sheet, header_row: Number(header) || 1, layout }, { params: { target: target.key } });
       setRead(data); setPrev(null);
       if (!keepMapping) setMapping(data.suggested);
-      if (pipe && (job.sheets.length === 1 || !sheets.some((s) => s.sheet === sheet))) setSheets([{ sheet, event_id: (data.pipeline?.fogli.find((f) => f.sheet === sheet) || {}).event_id || "" }]);
+      if (pipe && (job.sheets.length === 1 || !sheets.some((s) => s.sheet === sheet))) setSheets([{ sheet, event_id: initialEvent || (data.pipeline?.fogli.find((f) => f.sheet === sheet) || {}).event_id || "" }]);
     } catch (e) { err(e); }
   }, [job, sheet, header, layout, target.key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { doRead(false); }, [doRead]);
@@ -63,7 +63,7 @@ function Wizard({ target, info, onClose, onDone, initialEvent }) {
   const evOpts = [{ value: "", label: pipe ? "Evento dal file / dal foglio" : "Nessun evento (solo anagrafica)" }, ...info.events.map((e) => ({ value: e.id, label: e.nome, hint: e.edizione || (e.data_inizio || "").slice(0, 10) }))];
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto overflow-x-hidden" data-testid="import-wizard">
+      <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto overflow-x-hidden grid-cols-[minmax(0,1fr)]" data-testid="import-wizard">
         <DialogHeader><DialogTitle className="font-display">Importa in {target.label}</DialogTitle>
           <DialogDescription>{info.org.nome}{!target.active && " · modulo non attivo: i dati vengono salvati ma restano invisibili all'organizzazione finché non lo attiva"}</DialogDescription></DialogHeader>
         {result ? (
@@ -76,7 +76,7 @@ function Wizard({ target, info, onClose, onDone, initialEvent }) {
           <div className="space-y-5">
             <div className="flex flex-wrap items-end gap-3 text-sm">
               <div><div className="text-xs text-slate-500">File</div><div className="font-medium">{job.filename}{job.sheets[0].sep && ` · separatore «${job.sheets[0].sep === "\t" ? "tab" : job.sheets[0].sep}»`}</div></div>
-              {job.sheets.length > 1 && <label className="text-xs text-slate-500">Foglio<select className={`${SEL} block mt-1`} value={sheet} onChange={(e) => setSheet(e.target.value)} data-testid="import-sheet-select">{job.sheets.map((s) => <option key={s.name} value={s.name}>{s.name} ({s.rows})</option>)}</select></label>}
+              {job.sheets.length > 1 && <label className="text-xs text-slate-500">Foglio<select className={`${SEL} block mt-1`} value={sheet} onChange={(e) => setSheet(e.target.value)} data-testid="import-sheet-select">{job.sheets.map((s) => <option key={s.name} value={s.name}>{s.name} ({Math.max(s.rows - 1, 0)} record)</option>)}</select></label>}
               <label className="text-xs text-slate-500">Riga intestazioni<input type="number" min={1} max={30} className={`${SEL} block mt-1 w-24`} value={header} onChange={(e) => setHeader(e.target.value)} data-testid="import-header-row" /></label>
               {pipe && <label className="text-xs text-slate-500">Struttura<select className={`${SEL} block mt-1`} value={layout} onChange={(e) => setLayout(e.target.value)} data-testid="import-layout"><option value="rows">Una riga per attività</option><option value="columns">Colonne = fasi</option></select></label>}
               <label className="text-xs text-slate-500">Modalità<select className={`${SEL} block mt-1`} value={mode} onChange={(e) => setMode(e.target.value)} data-testid="import-mode"><option value="new">Solo nuovi</option><option value="update">Aggiorna esistenti</option><option value="both">Nuovi + aggiornamento</option></select></label>

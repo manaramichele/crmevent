@@ -60,7 +60,7 @@ export function PipelineSetup({ read, events, cats, setCats, resp, setResp, evMa
           <p className="text-xs text-slate-500 mb-2">Ogni foglio va nella pipeline di un evento. Il nome del foglio è usato come proposta.</p>
           {allSheets.map((s) => { const cur = sheets.find((x) => x.sheet === s.name); return (
             <div key={s.name} className="flex flex-col sm:flex-row sm:items-center gap-2 py-1">
-              <label className="flex items-center gap-2 text-sm sm:w-56"><input type="checkbox" checked={!!cur} onChange={(e) => setSheets(e.target.checked ? [...sheets, { sheet: s.name, event_id: (p.fogli.find((f) => f.sheet === s.name) || {}).event_id || "" }] : sheets.filter((x) => x.sheet !== s.name))} data-testid={`import-sheet-${s.name}`} />{s.name} <span className="text-xs text-slate-400">{s.rows} righe</span></label>
+              <label className="flex items-center gap-2 text-sm sm:w-56"><input type="checkbox" checked={!!cur} onChange={(e) => setSheets(e.target.checked ? [...sheets, { sheet: s.name, event_id: (p.fogli.find((f) => f.sheet === s.name) || {}).event_id || "" }] : sheets.filter((x) => x.sheet !== s.name))} data-testid={`import-sheet-${s.name}`} />{s.name} <span className="text-xs text-slate-400">{Math.max(s.rows - 1, 0)} record</span></label>
               {cur && <div className="flex-1 min-w-0"><SearchSelect value={cur.event_id} onChange={(v) => setSheets(sheets.map((x) => (x.sheet === s.name ? { ...x, event_id: v } : x)))} options={evOpts} testid={`import-sheet-event-${s.name}`} /></div>}
             </div>); })}
         </section>)}

@@ -669,15 +669,20 @@ def build(db, deps: dict):
         mapping = {"Attività": "titolo", "Fase": "fase"} if body.layout == "columns" else suggest(cols, fields)
         out = {"columns": cols, "preview": data[:20], "total": len(data), "suggested": mapping, "raw_top": sheet["rows"][:6]}
         if target == "pipeline":
-            fi = next((c for c, k in mapping.items() if k == "fase"), None)
-            ri = next((c for c, k in mapping.items() if k == "responsabile"), None)
-            ei = next((c for c, k in mapping.items() if k == "evento"), None)
-            vals = lambda c: sorted({r[cols.index(c)] for r in data if c and r[cols.index(c)]})[:200] if c else []  # noqa: E731
+            fvals, rvals, evals = set(), set(), set()
+            for s in j["sheets"]:  # fasi, responsabili ed eventi di tutti i fogli (formato C)
+                c2, d2 = (cols, data) if s is sheet else table(s, body.header_row, body.layout)
+                m2 = mapping if s is sheet else ({"Attività": "titolo", "Fase": "fase"} if body.layout == "columns" else suggest(c2, fields))
+                for key, acc in (("fase", fvals), ("responsabile", rvals), ("evento", evals)):
+                    c = next((c for c, k in m2.items() if k == key), None)
+                    if c:
+                        acc.update(r[c2.index(c)] for r in d2 if r[c2.index(c)])
+            vals = lambda acc: sorted(acc)[:200]  # noqa: E731
             lk = await lookups(user["org_id"])
             cats = sorted(set(await db.pipeline_categories.distinct("name", {"org_id": user["org_id"]})))
-            out["pipeline"] = {"fasi": vals(fi), "categorie_esistenti": cats,
-                               "responsabili": [{"valore": v, "persona_id": match_person_name(v, lk["people"], {})} for v in vals(ri)],
-                               "eventi": [{"valore": v, "event_id": match_event(v, lk["events"], {})} for v in vals(ei)],
+            out["pipeline"] = {"fasi": vals(fvals), "categorie_esistenti": cats,
+                               "responsabili": [{"valore": v, "persona_id": match_person_name(v, lk["people"], {})} for v in vals(rvals)],
+                               "eventi": [{"valore": v, "event_id": match_event(v, lk["events"], {})} for v in vals(evals)],
                                "fogli": [{"sheet": s["name"], "event_id": match_event(s["name"], lk["events"], {})} for s in j["sheets"]]}
         return out
 
