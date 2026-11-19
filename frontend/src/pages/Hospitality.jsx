@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader, StatusBadge, useCollection, useSettings, formatDateRange } from "@/components/crm";
+import { ImportLink } from "@/components/import/ImportLink";
 import SettingSelect from "@/components/SettingSelect";
 import InlineAddOption from "@/components/InlineAddOption";
 import StructureSelect from "@/components/StructureSelect";
@@ -688,6 +689,7 @@ export default function Hospitality() {
     <div className="animate-fade-up">
       <PageHeader title="Ospitalità & Pasti" subtitle="Pernottamenti, colazioni, pranzi e cene per ogni persona dell'evento"
         action={<div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <ImportLink target="pernottamenti" label="Importa pernottamenti" /><ImportLink target="pasti" label="Importa pasti" />
           <Button variant="outline" onClick={() => setStructOpen(true)} data-testid="open-structures"><Building2 className="w-4 h-4 mr-1.5" />Strutture</Button>
           <Select value={eventId} onValueChange={setEventId}><SelectTrigger className="flex-1 min-w-0 sm:flex-none sm:w-52" data-testid="hosp-event-select"><SelectValue placeholder="Seleziona evento" /></SelectTrigger>
             <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>

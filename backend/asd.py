@@ -825,4 +825,4 @@ def build(db, deps: dict):
             "prossime_scadenze": dl[:12],
         }
 
-    return {"router": r, "ensure_indexes": ensure_indexes, "is_active": is_active, "soci_map": soci_map}
+    return {"router": r, "ensure_indexes": ensure_indexes, "is_active": is_active, "soci_map": soci_map, "enti": enti, "ente_label": ente_label}

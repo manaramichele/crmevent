@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useCollection, EntityDialog, PageHeader, PrimaryButton, StatusBadge, formatEUR, useSettings, toOptions } from "@/components/crm";
+import { ImportLink } from "@/components/import/ImportLink";
 import { formatApiError } from "@/lib/api";
 import { personOptions } from "@/lib/names";
 import {
@@ -71,7 +72,7 @@ export default function SponsorsPartners() {
       <PageHeader
         title="Sponsor & Partner"
         subtitle="Pipeline commerciale per sponsor, partner e fornitori"
-        action={perm.create ? <PrimaryButton onClick={() => { setEditing(null); setOpen(true); }} data-testid="add-deal-button"><Plus className="w-4 h-4 mr-1.5" />Nuova trattativa</PrimaryButton> : null}
+        action={perm.create ? <div className="flex flex-wrap gap-2"><ImportLink target="sponsor" /><PrimaryButton onClick={() => { setEditing(null); setOpen(true); }} data-testid="add-deal-button"><Plus className="w-4 h-4 mr-1.5" />Nuova trattativa</PrimaryButton></div> : null}
       />
 
       {eventFilter !== "all" && (

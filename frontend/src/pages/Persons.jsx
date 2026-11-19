@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { can, canSendInvites } from "@/lib/perms";
 import { PersonInviteDialog, BulkInviteBar, LastInvite, INV, INV_LABEL } from "@/components/PersonInvites";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ImportLink } from "@/components/import/ImportLink";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -470,6 +471,7 @@ export default function Persons({ mode = "anagrafiche" }) {
         subtitle={isStaff ? "Staff e Volontari degli eventi: ruoli, team e turni" : "Referenti e contatti delle aziende"}
         action={!can(user, isStaff ? "staff" : "anagrafiche", "create") ? null : isStaff ? (
           <div className="flex flex-wrap gap-2">
+            <ImportLink target="persone" />
             <PrimaryButton onClick={() => setMask({ person: null, cat: "staff" })} data-testid="add-staff-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi Staff</PrimaryButton>
             <PrimaryButton onClick={() => setMask({ person: null, cat: "volontario" })} data-testid="add-volunteer-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi Volontario</PrimaryButton>
           </div>
