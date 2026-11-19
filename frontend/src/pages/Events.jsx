@@ -36,13 +36,10 @@ function DemoProjectBanner({ navigate }) {
   );
 }
 
-const STATO = { attivo: "green", pianificato: "tiffany", concluso: "gray", annullato: "red" };
-const STATO_LABEL = { attivo: "In corso", pianificato: "Pianificato", concluso: "Concluso", annullato: "Annullato" };
-const FASE_EDIT_OPTIONS = [
-  { value: "pianificato", label: "Pianificato" },
-  { value: "concluso", label: "Concluso" },
-  { value: "annullato", label: "Annullato" },
-];
+// Elenco controllato della Fase evento ("attivo" = In corso, chiave già usata da dashboard e dati esistenti).
+const STATO = { pianificato: "blue", attivo: "green", concluso: "gray", annullato: "red" };
+const STATO_LABEL = { pianificato: "Pianificato", attivo: "In corso", concluso: "Concluso", annullato: "Annullato" };
+const FASE_EDIT_OPTIONS = Object.entries(STATO_LABEL).map(([value, label]) => ({ value, label }));
 
 const EMPTY = { nome: "", tipologia: "", descrizione: "", immagine_url: "", pdf_url: "", file_url: "", gpx_url: "", distanza: null, url_esterno: "", google_maps_url: "" };
 
@@ -440,7 +437,7 @@ export default function Events() {
       <DemoProjectBanner navigate={navigate} />
       <EntityManager key={ver} title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event" defaultSort={{ key: "data_inizio", dir: "asc" }}
-        searchKeys={["nome", "citta", "tipologia"]} fullActions
+        searchKeys={["nome", "citta", "tipologia"]} fullActions filters={[{ name: "stato", label: "Fase", options: FASE_EDIT_OPTIONS }]}
         rowActions={(row, helpers) => (
           <EventRowActions row={row} navigate={navigate}
             setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal}
