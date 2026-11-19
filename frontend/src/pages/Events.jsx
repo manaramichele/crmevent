@@ -405,7 +405,7 @@ export default function Events() {
     { name: "telefono", label: "Telefono", type: "tel" },
     { name: "partecipanti_previsti", label: "Partecipanti previsti", type: "number" },
     { name: "budget", label: "Budget (€)", type: "number" },
-    { name: "stato", label: "Fase evento", keepOrder: true, type: "select", options: FASE_EDIT_OPTIONS },
+    { name: "stato", label: "Fase evento", keepOrder: true, type: "select", options: FASE_EDIT_OPTIONS, default: "pianificato" },
     { name: "descrizione", label: "Descrizione", type: "textarea", full: true },
     { name: "note", label: "Note", type: "textarea", full: true },
   ];

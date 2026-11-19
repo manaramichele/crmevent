@@ -2776,7 +2776,7 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
     out = {
         "sections": can,
         "eventi": {"attivi": len([e for e in events if e.get("stato") == "attivo"]),
-                   "prossimi": len([e for e in events if fut(e) and e.get("stato") != "concluso"]),
+                   "prossimi": len([e for e in events if fut(e) and e.get("stato") not in ("concluso", "annullato")]),
                    "conclusi": len([e for e in events if e.get("stato") == "concluso"]), "totali": len(events)},
         "crm": {"aziende": len(companies), "persone": len(persons), "nuovi_contatti": nuovi, "prospect": prospect},
         "commerciale": {"trattative_aperte": len([d for d in deals if d.get("stato") == "aperta" and d.get("fase") not in ("confermato", "perso")]),

@@ -344,10 +344,11 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
 }
 
 export function EntityDialog({ open, onOpenChange, title, fields, initial, onSubmit, options, testid = "entity", entityCreators, size = "medium", caseRules }) {
-  const [form, setForm] = useState(initial || {});
+  const blank = () => initial || Object.fromEntries(fields.filter((f) => f.default !== undefined).map((f) => [f.name, f.default]));
+  const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
   const [addField, setAddField] = useState(null);
-  useEffect(() => { setForm(initial || {}); }, [initial, open]);
+  useEffect(() => { setForm(blank()); }, [initial, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const change = (name, val) => setForm((f) => ({ ...f, [name]: val }));
   const fixCase = (name) => { const k = caseRules?.[name]; if (k) setForm((f) => (typeof f[name] === "string" ? { ...f, [name]: CASE_FN[k](f[name]) } : f)); };
