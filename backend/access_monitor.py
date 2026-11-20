@@ -209,6 +209,12 @@ def build(db, deps: dict):
             out.append(_row(u, aus.get(u["user_id"], {}), mems, timeout, now))
         return out
 
+    async def _close_stale():
+        cfg = await get_config()
+        cutoff = _iso(_now() - timedelta(minutes=int(cfg["inactivity_timeout_min"])))
+        await db.access_sessions.update_many({"ended_at": None, "last_activity_at": {"$lt": cutoff}},
+                                             [{"$set": {"ended_at": "$last_activity_at", "end_reason": "timeout"}}])
+
     @r.get("/platform/access/overview")
     async def overview(request: Request, scope: str = "all", date_from: Optional[str] = None, date_to: Optional[str] = None,
                        admin: dict = Depends(require_sa)):
@@ -218,12 +224,14 @@ def build(db, deps: dict):
             if not org_id or not await db.organizations.find_one({"id": org_id}, {"_id": 1}):
                 raise HTTPException(status_code=400, detail="Seleziona un'organizzazione attiva nella tendina gialla")
         rows = await _rows(org_id)
+        await _close_stale()
         uids = [x["user_id"] for x in rows]
         sq = {"user_id": {"$in": uids}}
         if date_from or date_to:
             sq["started_at"] = {**({"$gte": date_from} if date_from else {}), **({"$lte": date_to + "T23:59:59.999999"} if date_to else {})}
         sess = await db.access_sessions.find(sq, {"_id": 0, "active_seconds": 1}).to_list(200000)
-        tot = sum(s.get("active_seconds", 0) for s in sess)
+        # Senza periodo: tempo deduplicato per utente (più schede/dispositivi contati una volta sola).
+        tot = sum(x["total_seconds"] for x in rows) if not (date_from or date_to) else sum(s.get("active_seconds", 0) for s in sess)
         logged = [x for x in rows if x["status"] != "never"]
         k = {"users": len(rows), "logged": len(logged),
              "active_7": sum(1 for x in logged if x["days_inactive"] < 7),
@@ -243,6 +251,7 @@ def build(db, deps: dict):
         cfg = await get_config()
         by_user, _ = await _memberships()
         au = await db.access_users.find_one({"user_id": user_id}, {"_id": 0}) or {}
+        await _close_stale()
         row = _row(u, au, by_user.get(user_id, []), timedelta(minutes=int(cfg["inactivity_timeout_min"])), _now())
         sessions = await db.access_sessions.find({"user_id": user_id}, {"_id": 0, "client_id": 0}).sort("started_at", -1).to_list(500)
         logins = await db.access_logins.find({"user_id": user_id}, {"_id": 0}).sort("at", -1).to_list(500)
@@ -459,6 +468,7 @@ def build(db, deps: dict):
         cutoff = _iso(_now() - timedelta(days=30 * int(cfg["retention_months"])))
         await db.access_sessions.delete_many({"started_at": {"$lt": cutoff}})
         await db.access_logins.delete_many({"at": {"$lt": cutoff}})
+        await _close_stale()
         stats = await run_reminders()
         if cfg["enabled"] and cfg["mode"] == "live":
             await sync_brevo()

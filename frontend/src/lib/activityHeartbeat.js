@@ -19,6 +19,7 @@ const mark = () => {
   if (now - lastMark < 5000 || document.visibilityState !== "visible") return;
   lastMark = now;
   localStorage.setItem(KEY_INTERACT, String(now));
+  if (now - Number(localStorage.getItem(KEY_SENT) || 0) >= INTERVAL - 2000) setTimeout(() => beat(), 0);
 };
 
 const beat = (force = false) => {
@@ -33,7 +34,6 @@ const beat = (force = false) => {
 
 export function startHeartbeat() {
   EVENTS.forEach((e) => window.addEventListener(e, mark, { passive: true }));
-  mark();
   const first = setTimeout(() => beat(true), 1500);
   const timer = setInterval(() => beat(), 15000);
   return () => {

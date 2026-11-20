@@ -1354,3 +1354,10 @@ Task 2 — Creatività manuale:
 - Fix: gli archivi ricordano l org caricata (acting_org_id), si svuotano e riscaricano al cambio, scartano risposte arrivate in ritardo per l org precedente.
 - Diagnostica Aruba in sola lettura: tools/aruba_diag/diagnostica_org_readonly.py + PROCEDURA.md.
 - Test: iteration_198 frontend 100%. NON pubblicato in produzione (Aruba), in attesa di autorizzazione.
+
+## 2026-11-20 - Accessi e utilizzo + promemoria automatici Brevo (solo sviluppo)
+- backend/access_monitor.py (+ access_templates.py): access_logins, access_sessions (heartbeat 60s solo con interazione, timeout configurabile, sessioni per dispositivo, totale utente deduplicato), access_users (riepilogo), access_reminders (indice unico cycle_id+step), access_runs (una esecuzione al giorno), access_reminder_config. Login tracciato in /auth/login, /auth/session, registrazione, attivazione, invito, Google login (_track_login).
+- API Super Admin /api/platform/access/*: overview (scope all|active), users/{id}, config, simulate, activate/deactivate, run-now, reminders, templates (+setup bozze Brevo), brevo-sync (attributi CRM_EVENT_*, creati solo se mancanti). /api/access/heartbeat, /api/access/end, /api/access/unsubscribe. Cron access-reminders-tick ogni ora (esegue all orario configurato).
+- Frontend: Audit Log > tab Accessi e utilizzo (components/access/*), lib/activityHeartbeat.js in AuthContext.
+- Default: simulazione, automazione disattivata, ruoli admin_org, 2° promemoria promozionale (serve consenso marketing). Preview: ACCESS_REMINDERS_FAKE_SEND=1 (nessun invio reale). BREVO_API_KEY assente in preview: template da creare con il pulsante dove la chiave c e.
+- Test: iteration_199 backend 14/14, frontend 95%; corretti dopo il test: primo heartbeat senza interazione, KPI tempo deduplicato, chiusura sessioni scadute, validazione numeri, URL tab. Non pubblicato.

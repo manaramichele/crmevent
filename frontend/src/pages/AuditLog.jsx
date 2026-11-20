@@ -29,7 +29,7 @@ export default function AuditLog() {
       </div>
       <div className="flex gap-1 border-b border-slate-200">
         {[["log", "Registro operazioni"], ["accessi", "Accessi e utilizzo"]].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setTab(k)} data-testid={`audit-tab-${k}`}
+          <button key={k} type="button" onClick={() => { setTab(k); window.history.replaceState(null, "", k === "accessi" ? "?tab=accessi" : window.location.pathname); }} data-testid={`audit-tab-${k}`}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === k ? "border-tiffany text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{l}</button>))}
       </div>
       {tab === "log" ? <OperationsLog /> : <AccessUsage />}

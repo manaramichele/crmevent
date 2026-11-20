@@ -98,7 +98,11 @@ export function AccessReminderSettings() {
   if (!cfg) return <p className="text-sm text-slate-400">Caricamento…</p>;
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
   const act = async (fn, ok) => { try { const { data } = await fn(); setCfg(data); toast.success(ok); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
-  const save = () => act(() => api.put("/platform/access/config", cfg), "Impostazioni salvate").then(loadTpls);
+  const save = () => {
+    const empty = NUMS.find(([k]) => cfg[k] === "" || cfg[k] === null || Number.isNaN(Number(cfg[k])));
+    if (empty) { toast.error(`Inserisci un numero valido: ${empty[1]}`); return; }
+    act(() => api.put("/platform/access/config", cfg), "Impostazioni salvate").then(loadTpls);
+  };
   const activate = () => { if (window.confirm("Attivare l'invio reale dei promemoria? Le email partiranno all'orario configurato.")) act(() => api.post("/platform/access/activate", { confirm: true }), "Invio reale attivato"); };
   const sync = async () => { try { const { data } = await api.post("/platform/access/brevo-sync"); toast.success(data.skipped ? data.reason : `Sincronizzati ${data.synced} contatti`); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
   return (
