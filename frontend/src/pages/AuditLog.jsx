@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { StatusBadge } from "@/components/crm";
 import { Button } from "@/components/ui/button";
 import { ScrollText, Filter, X } from "lucide-react";
+import { AccessUsage } from "@/components/access/AccessUsage";
 
 const ACTION_COLOR = { org_access: "tiffany", org_switch: "orange", org_created: "green", org_updated: "blue", member_added: "green", member_removed: "red", member_role_changed: "orange", member_enabled: "green", member_disabled: "red", invite_sent: "tiffany", invite_resent: "tiffany", invite_revoked: "red", invite_accepted: "green", lead_linked: "blue" };
 
@@ -16,6 +17,27 @@ function fmtDate(iso) {
 }
 
 export default function AuditLog() {
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "accessi" ? "accessi" : "log");
+  return (
+    <div className="space-y-6" data-testid="audit-log-page">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center"><ScrollText className="w-5 h-5" /></div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Audit Log</h1>
+          <p className="text-sm text-slate-500">Registro delle operazioni, accessi e utilizzo della piattaforma. Sola lettura.</p>
+        </div>
+      </div>
+      <div className="flex gap-1 border-b border-slate-200">
+        {[["log", "Registro operazioni"], ["accessi", "Accessi e utilizzo"]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setTab(k)} data-testid={`audit-tab-${k}`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === k ? "border-tiffany text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{l}</button>))}
+      </div>
+      {tab === "log" ? <OperationsLog /> : <AccessUsage />}
+    </div>
+  );
+}
+
+function OperationsLog() {
   const [items, setItems] = useState([]);
   const [actors, setActors] = useState([]);
   const [orgs, setOrgs] = useState([]);
@@ -47,15 +69,7 @@ export default function AuditLog() {
   const inputCls = "h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-tiffany focus:ring-2 focus:ring-tiffany/30 transition-all";
 
   return (
-    <div className="space-y-6" data-testid="audit-log-page">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center"><ScrollText className="w-5 h-5" /></div>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Audit Log</h1>
-          <p className="text-sm text-slate-500">Registro degli accessi e delle operazioni del Super Admin. Sola lettura, non modificabile.</p>
-        </div>
-      </div>
-
+    <div className="space-y-6" data-testid="audit-operations">
       <div className="bg-white border border-slate-200 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3 text-sm font-medium text-slate-600"><Filter className="w-4 h-4" />Filtri</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
+import { startHeartbeat, endAccessSession } from "@/lib/activityHeartbeat";
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);   // null = checking, false = anon, object = user
   const [loading, setLoading] = useState(true);
   const [actingOrgId, setActingOrgId] = useState(() => localStorage.getItem("acting_org_id") || "");
+  const trackUser = user && !user.support ? user.user_id : null;
+  useEffect(() => {
+    if (!trackUser) return undefined;
+    return startHeartbeat();
+  }, [trackUser]);
 
   const setActingOrg = useCallback(async (id, reload = true, previousId = "") => {
     if (id) localStorage.setItem("acting_org_id", id);
@@ -66,6 +72,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     if (user?.support) return stopSupport();
+    await endAccessSession();
     try { await api.post("/auth/logout"); } catch {}
     localStorage.removeItem("acting_org_id");
     setActingOrgId("");

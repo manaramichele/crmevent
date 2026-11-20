@@ -67,4 +67,12 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: access-reminders-tick
+    description: "Accessi e utilizzo: ogni ora controlla se è l'orario configurato; una volta al giorno applica la conservazione dello storico e, solo se l'invio reale è attivo, invia i promemoria di inattività"
+    cron: "5 * * * *"
+    timezone: "Europe/Rome"
+    endpoint: "{{BASE_URL}}/api/cron/access-reminders-tick"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
 

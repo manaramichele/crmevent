@@ -73,6 +73,7 @@ import google_login
 import partner_portal
 import marketplace
 import brevo_funnel
+import access_monitor
 import social_ai
 import social_creative
 import instagram_utils
@@ -287,6 +288,14 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
 
 SAAS: dict = {}
 MKT: dict = {}
+ACC: dict = {}
+
+
+async def _track_login(user_id: str, method: str) -> None:
+    try:
+        await ACC["on_login"](user_id, method)
+    except Exception as e:
+        logger.error(f"access login tracking error: {e}")
 
 
 async def _enforce_plan(request: Request, org_id: str, org_role: str) -> None:
@@ -832,6 +841,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
     except Exception as e:
         logger.error(f"registered-user sync error: {e}")
     _track_signup(uid, org["id"], "password")
+    await _track_login(uid, "registration")
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
@@ -927,6 +937,7 @@ async def login(body: LoginIn, response: Response):
     response.delete_cookie("session_token", path="/", secure=True, samesite="none")
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login_at": now_iso()}})
     BRT["track"]("login_completed", user["user_id"], user.get("org_id"), {"method": "password"})
+    await _track_login(user["user_id"], "password")
     return await user_payload(user)
 
 
@@ -958,6 +969,7 @@ async def google_session(request: Request, response: Response):
     await db.users.update_one({"user_id": uid}, {"$set": {"last_login_at": now_iso()}})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
     BRT["track"]("login_completed", uid, u.get("org_id"), {"method": "google"})
+    await _track_login(uid, "google")
     return await user_payload(u)
 
 
@@ -1058,6 +1070,7 @@ async def activate(body: ActivateIn, response: Response):
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {**upd, "last_login_at": now_iso()}})
     if user.get("person_id"):
         await db.persons.update_one({"id": user["person_id"]}, {"$set": {"invite_status": "account_attivato", "invite_accepted_at": now_iso(), "updated_at": now_iso()}})
+    await _track_login(user["user_id"], "activation")
     token = create_access_token(user["user_id"], user["email"])
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -6075,6 +6088,7 @@ async def register_via_invite(token: str, body: InviteRegisterIn, response: Resp
         "org_id": inv["org_id"], "picture": "", "active": True, "last_login_at": now_iso(), "created_at": now_iso()})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
     await _accept_invite(inv, u)
+    await _track_login(uid, "invite")
     tok = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", tok, 7 * 24 * 3600)
     return await user_payload(u, inv["org_id"])
@@ -6756,6 +6770,15 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
 AUDIT_ACTION_LABELS = {
+    "access_reminder_sent": "Promemoria accessi inviato",
+    "access_reminder_failed": "Promemoria accessi non inviato",
+    "access_reminders_config": "Promemoria accessi: impostazioni",
+    "access_reminders_live": "Promemoria accessi: invio reale attivato",
+    "access_reminders_simulation": "Promemoria accessi: simulazione",
+    "access_reminders_run": "Promemoria accessi: esecuzione manuale",
+    "access_reminders_opt_out": "Promemoria accessi: disiscrizione",
+    "access_templates_setup": "Promemoria accessi: template Brevo",
+    "access_brevo_sync": "Promemoria accessi: sincronizzazione Brevo",
     "event_duplicated": "Evento duplicato",
     "homepage_settings": "Impostazioni homepage",
     "homepage_logo": "Logo evento in homepage",
@@ -14271,7 +14294,12 @@ app.include_router(google_login.build_router(db, {"create_access_token": create_
                                                    "verify_password": verify_password, "user_payload": user_payload,
                                                    "person_name": TN.person_name, "now_iso": now_iso,
                                                    "partner_identity": PARTNER["google_identity"],
-                                                   "on_login": lambda u: BRT["track"]("login_completed", u["user_id"], u.get("org_id"), {"method": "google"})}), prefix="/api")
+                                                   "on_login": lambda u: (BRT["track"]("login_completed", u["user_id"], u.get("org_id"), {"method": "google"}),
+                                                                           asyncio.create_task(_track_login(u["user_id"], "google")))}), prefix="/api")
+ACC.update(access_monitor.build(db, {"get_current_user": get_current_user, "require_superadmin": require_superadmin, "record_audit": record_audit,
+                                     "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET, "secret": JWT_SECRET}))
+app.include_router(ACC["router"])
+app.add_event_handler("startup", ACC["ensure_indexes"])
 app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
