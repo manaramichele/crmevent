@@ -1348,3 +1348,9 @@ Task 2 — Creatività manuale:
 - Super Admin (Org attiva) importa anche in moduli non attivi senza attivarli; organizzatori: Gestione Società solo se attivo, pipeline solo su eventi con pipeline attiva. GET pipeline tasks/categories vuoti per l'organizzazione finché la pipeline non è attiva (_pipeline_hidden).
 - UI: pagina /importazione (link da Piattaforma e pulsanti «Importa Excel/CSV» nelle sezioni), wizard in components/import/*. Test: iteration_196/197, tests/test_universal_import.py 21/21 (-n 0).
 
+
+## 2026-11-20 - Correzione Staff / Volontari al cambio Org attiva (solo sviluppo)
+- Causa: il Super Admin cambia org senza ricaricare la pagina; gli archivi globali frontend lib/peopleStore.js (/staff + /persons-enriched) e lib/teamsStore.js (/teams) restavano dell org precedente. Backend e dati corretti.
+- Fix: gli archivi ricordano l org caricata (acting_org_id), si svuotano e riscaricano al cambio, scartano risposte arrivate in ritardo per l org precedente.
+- Diagnostica Aruba in sola lettura: tools/aruba_diag/diagnostica_org_readonly.py + PROCEDURA.md.
+- Test: iteration_198 frontend 100%. NON pubblicato in produzione (Aruba), in attesa di autorizzazione.

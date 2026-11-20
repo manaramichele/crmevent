@@ -1,0 +1,23 @@
+{
+  "summary": "Read-only frontend verification of the fix for stale Staff/Volontari data when a Super Admin switches 'Org attiva' without a page reload (peopleStore/teamsStore now track which org they loaded). The fix works. Each switch in the sequence Demo -> QA Modello Eventi -> TabTest Org -> Nova Events -> Demo, done without a reload (confirmed: performance.timeOrigin did not change), gave the same results as a full page reload on that org. Compared for each org: Staff rows, the Evento column, Evento filter options, 'Tutti i team' filter options, the Da classificare badge and rows, Volontari rows, Team tab rows and Turni rows. Results: Demo 16 staff / 18 volunteers / badge 2 / 7 teams / 14 shifts (Bologna City Run 2026). QA 6/6/4/5/3. TabTest 2/3/1/1/1. Nova 0 people, 1 event. After each switch, GET /api/staff, /api/persons-enriched and /api/teams were sent again with the new org's X-Org-Id. Six rapid switch sequences (~120ms apart, including back-and-forth like Demo->QA->Demo and Demo->QA->TabTest) each ended on the last org's data, with no late overwrite. Also passed: going to Eventi, switching org there, then back to Staff/Volontari through the sidebar; and the mobile drawer org switcher. Regression: Eventi, Aziende and Dashboard (/app) update on switch, and EventPipeline loads people (staff + persons-enriched with the Demo header).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "peopleStore/teamsStore: when the org changes, a component that stays subscribed (never remounts) gets the EMPTY snapshot (loading:true) but nothing triggers a refetch. The reset and refetch only happen in subscribe(). Today this is safe because Layout remounts children with key=actingOrgId. Any consumer outside that keyed subtree (for example a global header widget) would stay on loading forever. Possible hardening: refetch when getSnapshot sees an org mismatch, or listen for an org-change event.",
+    "getSnapshot returns state for state.org === null, which is the initial state before the first fetch. This is fine because the first subscribe sets org right away through fetchPeople.",
+    "Not caused by this fix: the Dashboard To Do list on QA Modello Eventi shows 'Evento non trovato' items (pipeline tasks pointing to events that no longer exist). This is a data quality issue only."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100%"},
+  "seed_data_creation": "None. Testing was read-only: no records were created, edited or deleted. Note that every org switch triggers the app's own POST /api/platform/audit/org-access audit entry; this is normal app behaviour.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Preview org ids: Demo=b7f40862230441b9a0bedabefe8dab49, QA Modello Eventi=org_qa_eventi, TabTest Org=c5efb5a60b8345a1a51cb491e3a69b1e, Nova Events=d91c8d145b8b454ca09962d9d43fcc12 (a second 'Nova Events' is nova_events_test_org). Org switcher: [data-testid=org-switcher-select] (desktop), [data-testid=mobile-org-switcher] select (mobile). The Dashboard route is /app (/dashboard falls back to the landing page). Rows on Staff/Volontari tabs use person-row-*, the Team tab uses team-name-*, and Turni uses shift-row-*.",
+  "rca of the issue": "Reproduction context: the Super Admin org switch calls setActingOrg(id, reload=false). Layout remounts children with key=actingOrgId, but the module-level peopleStore and teamsStore kept loaded=true for the previous org, so subscribe() never refetched. The fix stores the org on the state, resets on mismatch in subscribe/getSnapshot, and drops responses that arrive for a stale org. Verified fixed on preview. The production case (A.S.D. Città di Trento / Trio Events) was not accessed, as instructed."
+}
