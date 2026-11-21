@@ -42,7 +42,7 @@ function Bars({ data, onPick }) {
         <span>Disponibili | Assegnati | Necessari</span>
       </div>
       {data.slots.map((s) => (
-        <button key={s.start} type="button" onClick={() => onPick(s)} className="w-full grid grid-cols-[86px_1fr_auto] items-center gap-2 text-left rounded hover:bg-slate-50 px-1 py-0.5" data-testid={`cov-slot-${s.start}`}>
+        <button key={s.start} type="button" onClick={() => onPick(s)} className="w-full grid grid-cols-[86px_1fr_170px] items-center gap-2 text-left rounded hover:bg-slate-50 px-1 py-0.5" data-testid={`cov-slot-${s.start}`}>
           <span className="text-xs font-medium text-slate-600 tabular-nums">{s.start}–{s.end}</span>
           <span className="relative h-5 bg-slate-100 rounded overflow-hidden">
             <span className="absolute inset-y-0 left-0 bg-tiffany/40" style={{ width: `${(s.available / max) * 100}%` }} />
@@ -111,7 +111,7 @@ export default function CoverageTab({ events, teams, settings, version, onOpenPe
           {data.tbc.length > 0 && <button type="button" onClick={() => setSlot({ tbc: true })} className="text-sm text-amber-700 underline" data-testid="cov-open-tbc">Vedi {data.tbc.length} persone con orario da confermare</button>}
           <CoverageNeeds eventoId={f.evento_id} date={data.date} mansioni={data.mansioni} pct={data.yellow_margin_pct} onChanged={() => setTick((t) => t + 1)} />
         </>) : <CoverageMatrix params={params} version={`${version}-${tick}`} onPick={(d) => { setF((p) => ({ ...p, date: d })); setView("day"); }} />}
-        <CoverageSlotDialog slot={slot} data={data} eventName={ev?.nome} onClose={() => setSlot(null)} onOpenPerson={onOpenPerson} />
+        <CoverageSlotDialog slot={slot} data={data} eventName={ev?.nome} onClose={() => setSlot(null)} onOpenPerson={(pid) => { setSlot(null); onOpenPerson(pid); }} />
       </>)}
     </div>
   );

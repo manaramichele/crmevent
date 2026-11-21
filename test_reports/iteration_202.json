@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the new 'Copertura oraria' tab in Staff / Volontari end to end. Backend: 16 of 16 pytest tests pass (test_staff_coverage.py). They seed TEST_ event, persons, availabilities and staff links in the Demo org, then check: a full slot; a partial slot (08:30-10:00 counts as partial in the 60-min 08:00 slot and full at 08:30 in 30-min mode); an overnight slot running 22:00-02:00 across 2 days; date with no time -> tbc ('Orario da confermare'); overlapping intervals of one person counted once; the latest availability record wins; disponibile:false is ignored; a staff link with no availability form uses arrival and departure; step 15, 30 and 60 (20 -> 400); filters mansione (role or preferred activity), cat, gruppo, team; Assegnati; matrix; org isolation (other org -> 404 for coverage, needs POST and needs DELETE); needs red/yellow and the 400 validation; config pct (101 -> 422); PDF summary, by_mansione and names (no phone numbers, application/pdf); xlsx (spreadsheetml, overnight row 10/05 22:00 -> 11/05 02:00); auto-update after PUT /api/staff/{id}. Demo demo_evt_bcr: day 17/10 shows 16:00-24:00 with 12 people; 18/10 shows 00:00-07:00 with 12 and 07:00-15:00 with 34; matrix shows both days. Frontend (Playwright, desktop 1920 and mobile 390): tab order is correct and the tab shows for Demo and for org_qa_eventi (empty state); matrix cell click switches to day view for that date; slot dialog lists people sorted by cognome, search works, and a row click opens person-mask; tbc link and dialog work; adding 3 needs in the UI gives red, yellow and green dots; deleting them brings back the empty state; cat, mansione and team filters give correct counts (18 volontari + 16 staff = 34, Fotografo 2, Percorso 6); 15-min step gives 60 slots; all 4 export buttons trigger downloads with correct filenames; mobile has no horizontal overflow; other tabs still clickable. All TEST_ data was deleted.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/staff-coverage (_apply_needs)", "issue": "A need is applied to a slot only if need.start <= slot.start (check is `a < sl['s'] + 1`). A need that starts mid-slot (e.g. 08:30-10:00 with 60-min slots) does not mark the 08:00 slot, which is partially covered by that need. The 08:00 slot then shows no status even though people are needed from 08:30."},
+      {"endpoint": "/api/staff-coverage", "issue": "Performance: one request calls _load (several Mongo queries) 2-3 times (when date is missing, for _day, and for allp). Not a problem at Demo scale; worth caching for large events."},
+      {"endpoint": "/api/staff-coverage (_load)", "issue": "Classification ignores availability.ruolo_evento. A person who has only an availability (no staff link) is always shown as 'Da classificare' and is excluded by cat=staff and cat=volontari, even when ruolo_evento is staff or volontario. This may be intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CoverageSlotDialog -> person mask", "issue": "Clicking a person opens person-mask while cov-slot-dialog stays open underneath, so 2 modal dialogs are stacked. It works, but the Team tab closes its dialog first; consider calling onClose() before onOpenPerson.", "selector": "[data-testid^=cov-person-]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Copertura oraria bars", "issues": ["Each slot row is its own grid with an auto-width last column, so rows that show a status dot or '(n parz.)' have a shorter bar track than other rows. Bars do not line up across rows (visible at 08:00-11:00 after adding needs). Use a fixed width for the numbers column."]},
+      {"screen": "Login / all pages", "issues": ["The cookie banner (z-10000) covers the lower-left area, including the cov-open-tbc link and the needs form, until the user accepts. This is expected GDPR behaviour, noted only for test automation."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_staff_coverage.py", "/app/test_reports/pytest/coverage_results.xml"],
+  "action_items": [
+    "Optional: apply needs to every slot they overlap (use `a < sl['s'] + step and b > sl['s']`), or document that needs must start on slot boundaries",
+    "Optional: give the numbers column in the coverage bars a fixed width so bar tracks line up",
+    "Optional: close the slot dialog before opening the person mask"
+  ],
+  "critical_code_review_comments": [
+    "coverage.py is 411 lines and clean; _id is excluded everywhere; org scoping is correct on every query, including needs delete",
+    "_apply_needs boundary condition (see minor backend issue)",
+    "The latest-availability comparison uses ISO strings (updated_at, then created_at). This works only if every record uses the same timezone format.",
+    "The xlsx export includes phone numbers (cellulare). This is fine for the internal Excel; the PDFs correctly leave them out."
+  ],
+  "updated_files": ["/app/backend/tests/test_staff_coverage.py"],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "TEST_cov_evt_<tag> event, 9 TEST_cov_* persons, availabilities and 3 staff links (via API) created and deleted by the pytest module fixture. For the UI, TEST_cov_ui_tbc person and availability on demo_evt_bcr plus 3 TEST_UINeed needs were created and deleted. settings.coverage_yellow_pct for Demo was left at 10 (the default value).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && REACT_APP_BACKEND_URL=<url> python -m pytest test_staff_coverage.py -n0 (order-dependent: TestAutoUpdate edits the linkonly link, so run serially). Accept the cookie banner (cookie-accept-all) before UI clicks. demo_evt_bcr expected values: 17/10 has 12 people in each slot 16-24; 18/10 has 12 people 00-07 and 34 people 07-15; 18 volontari / 16 staff; Fotografo 2; team demo_team_percorso 6."
+}

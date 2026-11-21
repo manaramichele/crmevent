@@ -99,6 +99,9 @@ def build(db, deps: dict):
         for pid, p in persons.items():
             ls, av = by_p.get(pid, []), latest.get(pid)
             cats = {x.get("categoria") for x in ls}
+            if not ls and av:  # solo modulo disponibilità: usa il ruolo dichiarato
+                re_ = _fold(av.get("ruolo_evento"))
+                cats = {"staff"} if re_.startswith("staff") else ({"volontario"} if re_.startswith("volont") else set())
             roles = sorted({x["ruolo"] for x in ls if x.get("ruolo")})
             pref = (av or {}).get("preferenza_attivita") or next((x.get("preferenza") for x in ls if x.get("preferenza")), None)
             tids = {x.get("team_id") for x in ls if x.get("team_id")}
@@ -164,7 +167,7 @@ def build(db, deps: dict):
             q["mansione"] = mansione
         return await db.coverage_needs.find(q, {"_id": 0}).to_list(5000)
 
-    def _apply_needs(day_iso, slots, needs, people, pct):
+    def _apply_needs(day_iso, slots, needs, people, pct, step):
         assigned = {p["id"] for p in people if p["assigned"]}
         for sl in slots:
             n = 0
@@ -173,7 +176,7 @@ def build(db, deps: dict):
                     continue
                 a, b = _hm(nd["start"]), _hm(nd["end"])
                 b = 1440 if b == 0 else b
-                if a is not None and b is not None and a < sl["s"] + 1 and b > sl["s"]:
+                if a is not None and b is not None and a < sl["s"] + step and b > sl["s"]:
                     n += int(nd["needed"])
             avail = len(sl["full"]) + len(sl["partial"])
             sl["available"] = avail
@@ -193,7 +196,7 @@ def build(db, deps: dict):
         if not day:
             raise HTTPException(status_code=400, detail="Data non valida")
         ev, people = await _load(org, evento_id, mansione, team_id, gruppo, cat)
-        slots = _apply_needs(day_iso, _slots(day, people, step), await _needs(org, evento_id, mansione), people, await _yellow(org))
+        slots = _apply_needs(day_iso, _slots(day, people, step), await _needs(org, evento_id, mansione), people, await _yellow(org), step)
         d0 = _abs(day, 0)
         today = [p for p in people if any(a < d0 + 1440 and b > d0 for a, b in p["iv"])]
         tbc = [p for p in people if day_iso in p["tbc"] and p not in today]
