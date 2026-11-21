@@ -364,7 +364,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "eta", label: "Età", type: "age", virtual: true },
     { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" },
     { name: "taglia", label: "Taglia", type: "setting", settingKey: "taglie", options: settings?.taglie || [] },
-    { name: "gruppo_appartenenza", label: "Gruppo di appartenenza", type: "setting", settingKey: "gruppi_appartenenza", options: (settings?.gruppi_appartenenza || []).filter((g) => !((settings?.disattivati || {}).gruppi_appartenenza || []).includes(g)) },
+    { name: "gruppo_appartenenza", label: "Gruppo di appartenenza", type: "setting", settingKey: "gruppi_appartenenza", noneLabel: "Nessun gruppo", options: (settings?.gruppi_appartenenza || []).filter((g) => !((settings?.disattivati || {}).gruppi_appartenenza || []).includes(g)) },
     { name: "indirizzo", label: "Indirizzo e numero civico", full: true }, { name: "cap", label: "CAP" }, { name: "citta", label: "Località / Comune" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "note", label: "Note", type: "textarea", full: true },

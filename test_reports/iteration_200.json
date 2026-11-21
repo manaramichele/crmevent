@@ -1,0 +1,43 @@
+{
+  "summary": "I tested the 'Gruppo di appartenenza' feature end to end, on the backend and in the UI. Backend: 15 pytest tests (tests/test_gruppi_appartenenza.py), 14 pass. The one failure is a permission bypass: an org admin can rewrite the group list through the generic PUT /api/settings, skipping the Super Admin-only rule. UI (Playwright, desktop and mobile), all checks pass. Public link: the field sits just before the activity question, 'Nessun gruppo' (italic) is selected by default, the option order is correct, '+ Aggiungi gruppo' opens the dialog, an empty name is refused, a new group is auto-selected and the other filled fields are kept. The activity is still required, and the submit saves the group on the person. Staff/Volontari: in the staff, volontari and da_classificare tabs the column sits between Mansione and Evento. 'Nessun gruppo' shows when empty, long names are truncated with a title tooltip, and filter (all/none/specific), search and sort (asc/desc) work, as does the mobile m-gruppo row. The edit mask saves the group and Team/Mansione are still there. Settings: the list appears under Staff e Volontari with search, empty state and per-group counts. An org admin can add (duplicates ignoring case and spaces are merged) but sees no rename/delete buttons and gets 403 on the API. A Super Admin with Org attiva Nova can rename (records updated) and delete: the confirm shows the number of people, the person is unlinked and still exists. Groups stay in their own org. A group created from a public link lands in the link's org even when a Super Admin session sends X-Org-Id of another org. 'Nessun gruppo' is refused when adding or renaming.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/settings", "issue": "Permission bypass (confirmed by test_org_admin_generic_settings_put_bypass). An org admin can $set gruppi_appartenenza through the generic settings PUT and remove groups, including groups in use, without unlinking. This skips the 'only Super Admin can rename/delete' rule, leaves stale group values on persons and could store 'Nessun gruppo'. Fix: in update_settings, drop option_lists.ORG_ONLY keys (and disattivati.gruppi_appartenenza) from the body unless the caller passes _is_manager."},
+      {"endpoint": "POST /api/settings/lists/gruppi_appartenenza/rename and /delete", "issue": "availabilities.gruppo_appartenenza (set in pub_avail_submit) is not in LISTS['gruppi_appartenenza'] targets, so rename/delete leave the old group name on availability records (verified: after delete the person was null but the availability still had the deleted name). It is not shown in the UI today. Either add ('availabilities','gruppo_appartenenza') to the targets, or document it as a historical snapshot and do not count it."},
+      {"endpoint": "PUT /api/persons/{id}", "issue": "gruppo_appartenenza is not checked against the org's group list or the reserved name. Any string, including 'Nessun gruppo' or a deleted group, can be saved through the API. The UI only offers valid values."},
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "When the person already exists, a submitted group overwrites their current group with no mismatch tracking, unlike the other fields. Matching the group name ignores case but does not collapse inner spaces the way public_add does. Low impact."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Settings add duplicate group (OptionListsManager add)", "issue": "Adding a duplicate shows the toast 'Voce aggiunta' even when the API returns created:false, so the user may think a new group was created. Show 'Gruppo già presente' instead.", "affected_selectors": ["optlist-gruppi_appartenenza-add"]}
+    ],
+    "design_issues": [
+      {"screen": "Settings > Gruppi di appartenenza", "issues": ["Delete uses native window.confirm and not a shadcn AlertDialog, unlike the rest of the app", "Count label says '1 voci' on other cards (plural for 1); the groups card is fine ('1 persona')"]},
+      {"screen": "Person edit mask", "issues": ["The empty group shows '—' and the clear option reads '— Nessuna —'. It should read 'Nessun gruppo' to match the table and public form."]},
+      {"screen": "Staff/Volontari filters (1920px)", "issues": ["The new people-gruppo-filter wraps alone onto a second line under the filter row; acceptable but slightly unbalanced"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_gruppi_appartenenza.py", "/app/backend/tests/ui_gruppi_setup.py", "/app/test_reports/pytest/pytest_gruppi.xml"],
+  "action_items": [
+    "Block org admins from changing gruppi_appartenenza through the generic PUT /api/settings: strip ORG_ONLY keys unless the caller is Super Admin.",
+    "Decide what happens to availabilities.gruppo_appartenenza on rename/delete: include it in the LISTS targets or document it as a snapshot.",
+    "Optionally check persons.gruppo_appartenenza on PUT /api/persons against the org list and the reserved name.",
+    "Show an 'already present' message when adding a duplicate group in Settings.",
+    "Label the mask's empty/clear option 'Nessun gruppo'."
+  ],
+  "critical_code_review_comments": [
+    "server.py update_settings sets the raw body with no key allowlist; this is the root cause of the ORG_ONLY bypass.",
+    "option_lists.public_add uses $push with no atomic dedupe; two requests at the same moment with the same name can both push. Use a conditional update or $addToSet on the normalized value.",
+    "Files are very large: server.py has 14k+ lines (pre-existing). Persons.jsx is 539 lines (fine)."
+  ],
+  "updated_files": ["/app/backend/tests/test_gruppi_appartenenza.py", "/app/backend/tests/ui_gruppi_setup.py"],
+  "success_rate": {"backend": "93% (14/15)", "frontend": "100%"},
+  "seed_data_creation": "Temporary data in nova_events_test_org: TEST_ admin users inserted directly in Mongo (deleted), TEST_ persons/availabilities created through the public link (deleted), and TEST_ groups (removed). Also removed the main agent's 'TEST_Croce Rossa' from Demo settings, as the CLEANUP item asked. Final check: no TEST_ groups in any org's settings, and no TEST_ persons, availabilities or users left. Existing Nova person 'John Smith' was not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Super Admin manara.michele.pro@gmail.com / CrmEvent2026!. qa.eventi@crmeventqa.it / QaEvents2026! logs in, but org_qa_eventi returns plan_readonly 403 on every write, so it cannot be used for org-admin write tests. The tests create a temporary TEST_ admin in nova_events_test_org instead (it needs a phone number on the user, otherwise the UI redirects to 'Completa il tuo profilo').",
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=<url> python -m pytest tests/test_gruppi_appartenenza.py -n 0 (run serially; public endpoints are rate-limited to 6 submits/min and 5 groups/min per IP; it cleans up after itself). Nova link GTsKCYLQZQb8U8AeOh_wO6Jp-BngpWW9 is writable (internal plan); the event day is 2026-12-19 and activities are Ristoro/Accoglienza/Percorso. For UI: python tests/ui_gruppi_setup.py setup|cleanup (add a telefono to the user). Super Admin Org attiva = localStorage acting_org_id. Hide [data-testid=cookie-banner]. The only failing test is the expected PUT /api/settings bypass."
+}

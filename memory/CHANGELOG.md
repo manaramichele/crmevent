@@ -1361,3 +1361,9 @@ Task 2 — Creatività manuale:
 - Frontend: Audit Log > tab Accessi e utilizzo (components/access/*), lib/activityHeartbeat.js in AuthContext.
 - Default: simulazione, automazione disattivata, ruoli admin_org, 2° promemoria promozionale (serve consenso marketing). Preview: ACCESS_REMINDERS_FAKE_SEND=1 (nessun invio reale). BREVO_API_KEY assente in preview: template da creare con il pulsante dove la chiave c e.
 - Test: iteration_199 backend 14/14, frontend 95%; corretti dopo il test: primo heartbeat senza interazione, KPI tempo deduplicato, chiusura sessioni scadute, validazione numeri, URL tab. Non pubblicato.
+
+## 2026-11-21 - Gruppo di appartenenza Staff / Volontari (solo sviluppo)
+- option_lists.py: elenco gruppi_appartenenza (Staff e Volontari, persons.gruppo_appartenenza), ORG_ONLY (no valori piattaforma, rinomina/eliminazione solo Super Admin), RESERVED "Nessun gruppo", POST /settings/lists/{key}/delete (scollega persone + availabilities), public_add (dedup maiuscole/spazi). PUT /settings ignora gruppi per non Super Admin.
+- Pubblico: gruppi_options in GET /public/availability/{code}, POST /public/availability/{code}/groups (org del link), submit salva gruppo su persona e disponibilita.
+- Frontend: PublicGroupSelect.jsx in Partecipa (prima della preferenza attivita), colonna/filtro/ricerca/ordinamento in Persons.jsx tra Mansione ed Evento, campo nella maschera persona, ricerca e conteggio persone in OptionListsManager.
+- Test: iteration_200 frontend 100%, backend 14/15; corretti dopo: bypass PUT /settings, rinomina/eliminazione su availabilities, messaggio voce gia presente, etichetta Nessun gruppo nella maschera. Non pubblicato.

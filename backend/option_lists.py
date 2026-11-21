@@ -34,6 +34,8 @@ DEFAULTS = {
 }
 # Elenchi solo dell'organizzazione (niente valori piattaforma): rinomina/eliminazione riservate al Super Admin, eliminazione scollega i record.
 ORG_ONLY = {"gruppi_appartenenza"}
+# Record storici aggiornati in rinomina/eliminazione ma non conteggiati come "persone collegate".
+EXTRA_TARGETS = {"gruppi_appartenenza": [("availabilities", "gruppo_appartenenza", False, None)]}
 RESERVED = {"gruppi_appartenenza": {"nessun gruppo"}}
 # Sezioni senza elenchi liberi: usano stati tecnici o anagrafiche strutturate.
 TECHNICAL = {"Attività e Scadenze": "Tipi e stati di attività e follow-up sono stati tecnici del flusso di lavoro.",
@@ -185,7 +187,7 @@ def build(db, deps: dict):
         await _save(user, key, items, dis)
         n = 0
         if not user.get("platform_scope"):
-            for coll, field, arr, extra in LISTS[key][2]:
+            for coll, field, arr, extra in LISTS[key][2] + EXTRA_TARGETS.get(key, []):
                 q = {"org_id": user["org_id"], field: body.old, **(extra or {})}
                 res = await (db[coll].update_many(q, {"$set": {f"{field}.$[el]": new}}, array_filters=[{"el": body.old}]) if arr else db[coll].update_many(q, {"$set": {field: new}}))
                 n += res.modified_count
@@ -202,7 +204,7 @@ def build(db, deps: dict):
         if body.value not in items:
             raise HTTPException(status_code=404, detail="Voce non trovata")
         n = 0
-        for coll, field, _, extra in LISTS[key][2]:
+        for coll, field, _, extra in LISTS[key][2] + EXTRA_TARGETS.get(key, []):
             res = await db[coll].update_many({"org_id": user["org_id"], field: body.value, **(extra or {})}, {"$set": {field: None, "updated_at": _now()}})
             n += res.modified_count
         dis = [x for x in ((doc.get("disattivati") or {}).get(key) or []) if x != body.value]
@@ -226,7 +228,7 @@ def build(db, deps: dict):
         await db.settings.update_one({"id": org_id}, {"$push": {key: v}, "$set": {"updated_at": _now()}}, upsert=True)
         return {"value": v, "created": True}
 
-    return {"router": r, "public_add": public_add}
+    return {"router": r, "public_add": public_add, "is_manager": _is_manager}
 
 
 def merge_defaults(base: dict, platform: Optional[dict]) -> dict:

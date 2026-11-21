@@ -2939,6 +2939,11 @@ async def get_settings(admin: dict = Depends(require_admin)):
 async def update_settings(body: dict, admin: dict = Depends(require_admin)):
     body.pop("_id", None)
     body.pop(asd.ENTI_KEY, None)
+    if admin.get("role") != "superadmin":
+        for k in option_lists.ORG_ONLY:
+            body.pop(k, None)
+            if isinstance(body.get("disattivati"), dict):
+                body["disattivati"].pop(k, None)
     body["id"] = admin["org_id"]
     await db.settings.update_one({"id": admin["org_id"]}, {"$set": body}, upsert=True)
     return await db.settings.find_one({"id": admin["org_id"]}, {"_id": 0})

@@ -24,7 +24,7 @@ function ListCard({ list, params, canManage: canManageAll, reload }) {
   };
   const add = async () => {
     if (!val.trim()) return;
-    try { await api.post(`/settings/lists/${k}/items`, { value: val }, { params }); setVal(""); toast.success("Voce aggiunta"); window.dispatchEvent(new Event(LISTS_CHANGED)); reload(); } catch (e) { err(e); }
+    try { const { data } = await api.post(`/settings/lists/${k}/items`, { value: val }, { params }); setVal(""); toast.success(data.created === false ? "Voce già presente" : "Voce aggiunta"); window.dispatchEvent(new Event(LISTS_CHANGED)); reload(); } catch (e) { err(e); }
   };
   const rename = async () => {
     try { const { data } = await api.post(`/settings/lists/${k}/rename`, { old: edit.old, new: edit.value }, { params }); toast.success(data.records_updated ? `Rinominata (${data.records_updated} record aggiornati)` : "Rinominata"); setEdit(null); window.dispatchEvent(new Event(LISTS_CHANGED)); reload(); }
