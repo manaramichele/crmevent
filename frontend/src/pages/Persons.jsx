@@ -30,6 +30,7 @@ import { PERSON_RULES } from "@/lib/textCase";
 import PersonMask, { PROVENIENZA } from "@/components/PersonMask";
 import ExportPdfButton from "@/components/ExportPdfButton";
 import GroupsTab from "@/components/GroupsTab";
+import CoverageTab from "@/components/coverage/CoverageTab";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
@@ -502,6 +503,7 @@ export default function Persons({ mode = "anagrafiche" }) {
             <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare{daClassificare > 0 && <span className="ml-1.5 rounded-full bg-amber-100 text-amber-800 px-1.5 text-[11px] font-bold" data-testid="da-classificare-count">{daClassificare}</span>}</TabsTrigger>
             <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
             <TabsTrigger value="gruppi" data-testid="tab-gruppi">Gruppi</TabsTrigger>
+            <TabsTrigger value="copertura" data-testid="tab-copertura">Copertura oraria</TabsTrigger>
             <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
           </TabsList>
           {["staff", "volontari", "da_classificare"].map((t) => (
@@ -526,6 +528,10 @@ export default function Persons({ mode = "anagrafiche" }) {
           <TabsContent value="gruppi">
             <GroupsTab rows={rows} events={events} settings={settings} user={user}
               renderTable={(groupRows, ev) => <PeopleTable tab="gruppi" lockedEvent={ev} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} {...peopleProps} rows={groupRows} />} />
+          </TabsContent>
+          <TabsContent value="copertura">
+            <CoverageTab events={events} teams={teams} settings={settings} version={rows}
+              onOpenPerson={(pid) => { const p = rows.find((x) => x.id === pid); if (p) setMask({ person: p }); }} />
           </TabsContent>
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
