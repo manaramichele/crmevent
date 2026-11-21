@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the new 'Gruppi' tab in Staff / Volontari (frontend and backend). Every requested item works: tab order, empty state and the 'Aggiungi gruppo' link, group cards with correct counts in alphabetical order, single-group and event filters, table sort and columns, PDF download for one group and for all groups, live update after editing a person's group in the mask, org isolation, and the other tabs. Backend: 8/8 pytest pass. They check POST /api/staff/groups-pdf content by extracting the PDF text: group, event and combined filters, 404 for an unknown event, an empty result for an unknown group, org isolation, 401 without auth, no email/phone in the PDF, alphabetical sections and the 'Non indicata' size summary. Only minor cosmetic issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/staff/groups-pdf", "issue": "The PDF filename uses str.title(), so it comes out as 'CRMEvent_Gruppo_Tuttiigruppi_<date>.pdf' (and 'TestCroceRossa'). Cosmetic."},
+      {"endpoint": "/api/staff/groups-pdf", "issue": "Plural agreement in the PDF: '1 persone' in the group heading and in 'Riepilogo taglie (1 persone)'. It should read '1 persona'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Gruppi tab", "issues": [
+        "The card counter shows '1 persone' when there is one person; it should be singular.",
+        "When an event filter is active, groups with 0 people for that event still show a card ('0 persone · Nessun evento associato'). This is acceptable, but you could dim or hide these cards.",
+        "When an event is selected, the Evento column in the table still lists all of the person's events (for example 'Bologna City Run 2026, Sunset Triathlon 2027'), while Mansione and Team are filtered to that event.",
+        "The table's own 'people-gruppo-filter' dropdown still appears inside the Gruppi tab and duplicates the groups-select above it."
+      ]},
+      {"screen": "/impostazioni?lista=gruppi_appartenenza", "issues": ["The highlighted Gruppi di appartenenza box stretches to the height of its grid row, leaving a large empty white area when the list is empty."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_groups_tab_pdf.py", "/app/test_reports/pytest/groups_tab.xml"],
+  "action_items": [
+    "Optional: fix the singular 'persona' wording in GroupCard and in the people_pdf._render_groups headings and size summary",
+    "Optional: build the PDF filename without .title() so it keeps the group name's original letter case",
+    "Optional: hide people-gruppo-filter when tab === 'gruppi'"
+  ],
+  "critical_code_review_comments": [
+    "GroupsTab inEv uses eventi_ids/preferenze, while the backend PDF uses staff links or availabilities for the event. They match on the current data, but a person who is only in a preference could fall out of one of the two if the data diverges.",
+    "PeopleTable sorts the 'gruppo' accessor with toLowerCase only, while the cards use accent-folded order. Groups whose names start with accented letters could appear in a different order in the table and in the cards.",
+    "The 'Stampa gruppo' button has no loading or disabled state, so double clicks trigger duplicate downloads (the same applies to 'Stampa tutti i gruppi')."
+  ],
+  "updated_files": ["/app/backend/tests/test_groups_tab_pdf.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. demo_p09 was changed to TEST_Croce Rossa through the person mask and then reverted to TEST_Protezione Civile; the API confirms the revert.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login: superadmin (see test_credentials). Set localStorage acting_org_id or the X-Org-Id header. Demo org b7f40862230441b9a0bedabefe8dab49 has 9 seeded people (demo_p01..p09), 3 per TEST_ group, all staff, 0 volunteers. Event demo_evt_tri contains p02 and p04; demo_evt_trail contains p01 and p03. org_qa_eventi has no groups, so it shows the empty state. The PDF text extraction helper is in test_groups_tab_pdf.py (handles ASCII85 + Flate)."
+}

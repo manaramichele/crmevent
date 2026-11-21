@@ -166,7 +166,7 @@ def build(db, deps: dict):
         logo = await _logo(ev, org) if ev else await _logo({}, org)
         total = sum(len(s[1]) for s in sections)
         pdf = _render_groups(body.gruppo, ev, o.get("nome") or "", logo, sections, total)
-        name = re.sub(r"[^A-Za-z0-9]+", "", (body.gruppo or "TuttiIGruppi").title())[:40] or "Gruppo"
+        name = re.sub(r"[^A-Za-z0-9]+", "", body.gruppo or "TuttiIGruppi")[:40] or "Gruppo"
         fname = f"CRMEvent_Gruppo_{name}_{datetime.now(ROME).strftime('%Y-%m-%d')}.pdf"
         return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{fname}"', "X-Export-Count": str(total)})
 
@@ -213,7 +213,7 @@ def _render_groups(single, ev, org_name, logo, sections, total):
 
     def sizes_para(sz, n):
         txt = " · ".join(f"{escape(k)}: <b>{v}</b>" for k, v in sz) or "—"
-        return Paragraph(f"<b>Riepilogo taglie</b> ({n} persone): {txt}", sub)
+        return Paragraph(f"<b>Riepilogo taglie</b> ({n} {'persona' if n == 1 else 'persone'}): {txt}", sub)
 
     info = [Paragraph(escape(title), h1), Paragraph(f"<b>{escape(ev_name)}</b>" + (f" · {escape(org_name)}" if org_name else ""), ss["BodyText"]),
             Paragraph(f"Generato il {gen} · <b>Persone: {total}</b>" + ("" if single else f" · Gruppi: {len(sections)}"), sub),
@@ -234,7 +234,7 @@ def _render_groups(single, ev, org_name, logo, sections, total):
         if i and not single:
             story.append(PageBreak())
         if not single:
-            story.append(Paragraph(f"{escape(g)} <font size=10 color='#64748B'>· {len(rows)} persone</font>", gh))
+            story.append(Paragraph(f"{escape(g)} <font size=10 color='#64748B'>· {len(rows)} {'persona' if len(rows) == 1 else 'persone'}</font>", gh))
         story += [table(rows), Spacer(1, 6), sizes_para(sz, len(rows))]
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=16 * mm, title=title, author="CRMEvent")

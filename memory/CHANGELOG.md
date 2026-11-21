@@ -1367,3 +1367,8 @@ Task 2 — Creatività manuale:
 - Pubblico: gruppi_options in GET /public/availability/{code}, POST /public/availability/{code}/groups (org del link), submit salva gruppo su persona e disponibilita.
 - Frontend: PublicGroupSelect.jsx in Partecipa (prima della preferenza attivita), colonna/filtro/ricerca/ordinamento in Persons.jsx tra Mansione ed Evento, campo nella maschera persona, ricerca e conteggio persone in OptionListsManager.
 - Test: iteration_200 frontend 100%, backend 14/15; corretti dopo: bypass PUT /settings, rinomina/eliminazione su availabilities, messaggio voce gia presente, etichetta Nessun gruppo nella maschera. Non pubblicato.
+
+## 2026-11-21 - Linguetta Gruppi in Staff / Volontari (solo sviluppo)
+- frontend/src/components/GroupsTab.jsx: linguetta Gruppi (Staff|Volontari|Da classificare|Team|Gruppi|Turni), stato vuoto, + Aggiungi gruppo -> /impostazioni?lista=gruppi_appartenenza (evidenziato), schede gruppo con totale/Staff/Volontari/eventi, filtro evento, selettore gruppo, tabella PeopleTable tab=gruppi (tutte le categorie, colonna Email, ordinamento gruppo>cognome>nome, evento bloccato).
+- backend/people_pdf.py: POST /api/staff/groups-pdf {evento_id?, gruppo?} PDF A4 (logo, evento/Tutti gli eventi, org, gruppo, totale, data; Cognome|Nome|Mansione|Taglia; preferenza in corsivo se manca mansione; riepilogo taglie incl. Non indicata; una sezione per gruppo con salto pagina; niente telefono/email).
+- Test: iteration_201 backend 8/8, frontend 100%; poi corretti singolare persona/persone, nome file, filtro gruppo duplicato nella linguetta. Dati di prova rimossi. Non pubblicato.

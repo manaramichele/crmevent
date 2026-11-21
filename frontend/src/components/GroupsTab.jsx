@@ -31,7 +31,7 @@ function GroupCard({ g, active, onPick }) {
     <button type="button" onClick={onPick} data-testid={`group-card-${g.name}`}
       className={`text-left rounded-xl border p-4 transition-colors ${active ? "border-tiffany bg-tiffany/10" : "border-slate-200 bg-white hover:border-tiffany/60"}`}>
       <div className="font-semibold text-slate-900 truncate" title={g.name}>{g.name}</div>
-      <div className="mt-1 text-sm text-slate-600" data-testid={`group-counts-${g.name}`}><b>{g.total}</b> persone · Staff {g.staff} · Volontari {g.vol}</div>
+      <div className="mt-1 text-sm text-slate-600" data-testid={`group-counts-${g.name}`}><b>{g.total}</b> {g.total === 1 ? "persona" : "persone"} · Staff {g.staff} · Volontari {g.vol}</div>
       <div className="mt-1 text-xs text-slate-400 truncate" title={g.events.join(", ")}>{g.events.length ? g.events.join(", ") : "Nessun evento associato"}</div>
     </button>
   );
