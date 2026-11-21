@@ -73,6 +73,7 @@ import google_login
 import partner_portal
 import marketplace
 import brevo_funnel
+import access_monitor
 import social_ai
 import social_creative
 import instagram_utils
@@ -287,6 +288,14 @@ async def require_admin(request: Request, user: dict = Depends(get_current_user)
 
 SAAS: dict = {}
 MKT: dict = {}
+ACC: dict = {}
+
+
+async def _track_login(user_id: str, method: str) -> None:
+    try:
+        await ACC["on_login"](user_id, method)
+    except Exception as e:
+        logger.error(f"access login tracking error: {e}")
 
 
 async def _enforce_plan(request: Request, org_id: str, org_role: str) -> None:
@@ -832,6 +841,7 @@ async def register_organization(body: OrgRegisterIn, response: Response):
     except Exception as e:
         logger.error(f"registered-user sync error: {e}")
     _track_signup(uid, org["id"], "password")
+    await _track_login(uid, "registration")
     token = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
@@ -927,6 +937,7 @@ async def login(body: LoginIn, response: Response):
     response.delete_cookie("session_token", path="/", secure=True, samesite="none")
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login_at": now_iso()}})
     BRT["track"]("login_completed", user["user_id"], user.get("org_id"), {"method": "password"})
+    await _track_login(user["user_id"], "password")
     return await user_payload(user)
 
 
@@ -958,6 +969,7 @@ async def google_session(request: Request, response: Response):
     await db.users.update_one({"user_id": uid}, {"$set": {"last_login_at": now_iso()}})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
     BRT["track"]("login_completed", uid, u.get("org_id"), {"method": "google"})
+    await _track_login(uid, "google")
     return await user_payload(u)
 
 
@@ -1058,6 +1070,7 @@ async def activate(body: ActivateIn, response: Response):
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {**upd, "last_login_at": now_iso()}})
     if user.get("person_id"):
         await db.persons.update_one({"id": user["person_id"]}, {"$set": {"invite_status": "account_attivato", "invite_accepted_at": now_iso(), "updated_at": now_iso()}})
+    await _track_login(user["user_id"], "activation")
     token = create_access_token(user["user_id"], user["email"])
     set_auth_cookie(response, "access_token", token, 7 * 24 * 3600)
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -1154,6 +1167,7 @@ class Person(BaseModel):
     codice_fiscale: Optional[str] = None
     luogo_nascita: Optional[str] = None
     taglia: Optional[str] = None
+    gruppo_appartenenza: Optional[str] = None
     indirizzo: Optional[str] = None
     cap: Optional[str] = None
     citta: Optional[str] = None
@@ -2925,6 +2939,11 @@ async def get_settings(admin: dict = Depends(require_admin)):
 async def update_settings(body: dict, admin: dict = Depends(require_admin)):
     body.pop("_id", None)
     body.pop(asd.ENTI_KEY, None)
+    if admin.get("role") != "superadmin":
+        for k in option_lists.ORG_ONLY:
+            body.pop(k, None)
+            if isinstance(body.get("disattivati"), dict):
+                body["disattivati"].pop(k, None)
     body["id"] = admin["org_id"]
     await db.settings.update_one({"id": admin["org_id"]}, {"$set": body}, upsert=True)
     return await db.settings.find_one({"id": admin["org_id"]}, {"_id": 0})
@@ -6075,6 +6094,7 @@ async def register_via_invite(token: str, body: InviteRegisterIn, response: Resp
         "org_id": inv["org_id"], "picture": "", "active": True, "last_login_at": now_iso(), "created_at": now_iso()})
     u = await db.users.find_one({"user_id": uid}, {"_id": 0})
     await _accept_invite(inv, u)
+    await _track_login(uid, "invite")
     tok = create_access_token(uid, email)
     set_auth_cookie(response, "access_token", tok, 7 * 24 * 3600)
     return await user_payload(u, inv["org_id"])
@@ -6756,6 +6776,15 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
 AUDIT_ACTION_LABELS = {
+    "access_reminder_sent": "Promemoria accessi inviato",
+    "access_reminder_failed": "Promemoria accessi non inviato",
+    "access_reminders_config": "Promemoria accessi: impostazioni",
+    "access_reminders_live": "Promemoria accessi: invio reale attivato",
+    "access_reminders_simulation": "Promemoria accessi: simulazione",
+    "access_reminders_run": "Promemoria accessi: esecuzione manuale",
+    "access_reminders_opt_out": "Promemoria accessi: disiscrizione",
+    "access_templates_setup": "Promemoria accessi: template Brevo",
+    "access_brevo_sync": "Promemoria accessi: sincronizzazione Brevo",
     "event_duplicated": "Evento duplicato",
     "homepage_settings": "Impostazioni homepage",
     "homepage_logo": "Logo evento in homepage",
@@ -11120,6 +11149,7 @@ async def pub_avail_info(code: str):
             "ristoro_teams": await _ristoro_teams(link["org_id"], event["id"]),
             "has_allestimento": bool(event.get("data_inizio_allestimento")),
             "has_disallestimento": bool(event.get("data_fine_disallestimento")),
+            "gruppi_options": _active_groups(settings),
             "attivita_options": attivita}
 
 
@@ -11151,9 +11181,30 @@ class PubAvailIn(BaseModel):
     preferenza_altro: Optional[str] = None
     taglia: Optional[str] = Field(default=None, max_length=20)
     ristoro_team_id: Optional[str] = Field(default=None, max_length=64)
+    gruppo_appartenenza: Optional[str] = Field(default=None, max_length=80)
     privacy: bool = False
     marketing_consent: bool = False
     lang: Optional[str] = None
+
+
+def _active_groups(settings: dict) -> list:
+    off = set((settings.get("disattivati") or {}).get("gruppi_appartenenza") or [])
+    return [g for g in (settings.get("gruppi_appartenenza") or []) if g not in off]
+
+
+class PubGroupIn(BaseModel):
+    nome: str = Field(min_length=1, max_length=80)
+
+
+@api.post("/public/availability/{code}/groups")
+async def pub_avail_add_group(code: str, body: PubGroupIn, request: Request):
+    if not _avail_rate_ok(f"grp:{_client_ip(request)}", max_calls=5, window=60):
+        raise HTTPException(status_code=429, detail="Troppe richieste. Riprova tra qualche istante.")
+    link = await db.avail_links.find_one({"code": code}, {"_id": 0})
+    if not link or not link.get("active"):
+        raise HTTPException(status_code=410, detail="La raccolta delle disponibilità per questo evento è terminata.")
+    # Destinazione: sempre l'organizzazione proprietaria del link (mai l'Org attiva del Super Admin).
+    return await OPT["public_add"](link["org_id"], "gruppi_appartenenza", body.nome)
 
 
 @api.post("/public/availability/{code}")
@@ -11214,6 +11265,12 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         off_t = set((st.get("disattivati") or {}).get("taglie") or [])
         if submitted["taglia"] not in [t for t in (st.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]:
             raise HTTPException(status_code=400, detail="Taglia non valida")
+    gruppo = (body.gruppo_appartenenza or "").strip() or None
+    if gruppo:
+        gst = await db.settings.find_one({"id": org_id}, {"_id": 0, "gruppi_appartenenza": 1, "disattivati": 1}) or {}
+        gruppo = next((g for g in _active_groups(gst) if g.lower() == gruppo.lower()), None)
+        if not gruppo:
+            raise HTTPException(status_code=400, detail="Gruppo di appartenenza non valido")
     ristoro_tid = None
     if _is_ristoro_pref(body.preferenza_attivita):
         rteams = await _ristoro_teams(org_id, event["id"])
@@ -11240,6 +11297,8 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                 fill[k] = new
             elif new and cur and str(cur).strip().lower() != str(new).strip().lower():
                 mismatch[k] = {"attuale": cur, "inviato": new}
+        if gruppo:
+            fill["gruppo_appartenenza"] = gruppo
         if fill:
             await db.persons.update_one({"id": person["id"], "org_id": org_id}, {"$set": {**fill, "updated_at": now_iso()}})
         pid = person["id"]
@@ -11249,6 +11308,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                                          "data_nascita": submitted["data_nascita"], "codice_fiscale": cf_norm or None,
                                          "luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth) if cf_norm else None,
                                          "taglia": submitted["taglia"],
+                                         "gruppo_appartenenza": gruppo,
                                          "tag": ["disponibilita"],
                                          "provenienza": {"tipo": "link_disponibilita", "at": now_iso(), "evento_id": link["evento_id"], "link_code": code},
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
@@ -11286,7 +11346,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
             "compilation_lang": lang,
             "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
-    await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"ristoro_team_id": ristoro_tid}})
+    await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"ristoro_team_id": ristoro_tid, "gruppo_appartenenza": gruppo}})
     await ANA["ensure_link"](org_id, pid, event["id"], await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0}))
     # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
     try:
@@ -14271,7 +14331,12 @@ app.include_router(google_login.build_router(db, {"create_access_token": create_
                                                    "verify_password": verify_password, "user_payload": user_payload,
                                                    "person_name": TN.person_name, "now_iso": now_iso,
                                                    "partner_identity": PARTNER["google_identity"],
-                                                   "on_login": lambda u: BRT["track"]("login_completed", u["user_id"], u.get("org_id"), {"method": "google"})}), prefix="/api")
+                                                   "on_login": lambda u: (BRT["track"]("login_completed", u["user_id"], u.get("org_id"), {"method": "google"}),
+                                                                           asyncio.create_task(_track_login(u["user_id"], "google")))}), prefix="/api")
+ACC.update(access_monitor.build(db, {"get_current_user": get_current_user, "require_superadmin": require_superadmin, "record_audit": record_audit,
+                                     "app_url": APP_URL, "cron_secret": WEBHOOK_CRON_SECRET, "secret": JWT_SECRET}))
+app.include_router(ACC["router"])
+app.add_event_handler("startup", ACC["ensure_indexes"])
 app.include_router(TN.build_router(db, require_superadmin, record_audit))
 MKT.update(marketplace.build(db, {
     "require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,

@@ -188,6 +188,8 @@ def build_router(db, deps: dict) -> APIRouter:
             raise HTTPException(status_code=403, detail="Accesso disabilitato")
         await db.oauth_login_links.delete_one({"id": lid})
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"google_sub": doc["sub"], "last_login_at": deps["now_iso"]()}})
+        if deps.get("on_login"):
+            deps["on_login"](user)
         deps["set_auth_cookie"](response, "access_token", deps["create_access_token"](user["user_id"], user["email"]), 7 * 24 * 3600)
         response.delete_cookie("session_token", path="/", secure=True, samesite="none")
         response.delete_cookie(LINK_COOKIE, path="/api/oauth/google")

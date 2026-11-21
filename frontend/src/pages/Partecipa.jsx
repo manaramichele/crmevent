@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2, CalendarDays, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { personName } from "@/lib/textCase";
+import PublicGroupSelect, { NO_GROUP } from "@/components/PublicGroupSelect";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 const CRM_LOGO = "/logo-crmevent.png?v=5";
@@ -42,6 +43,9 @@ const T = {
     phaseSetup: "Allestimento", phaseTeardown: "Disallestimento", phaseEvent: "Evento",
     from: "Dalle", to: "Alle",
     prefLabel: "Che attività preferiresti svolgere?", prefPlaceholder: "Seleziona un'attività",
+    groupLabel: "Gruppo di appartenenza", groupNone: "Nessun gruppo", groupAdd: "+ Aggiungi gruppo", groupAddTitle: "Aggiungi gruppo",
+    groupAddDesc: "Associazione, gruppo sportivo, protezione civile o altra realtà a cui appartieni.", groupName: "Nome gruppo",
+    groupNameReq: "Inserisci il nome del gruppo", groupExists: "Il gruppo era già presente: l'abbiamo selezionato", save: "Salva", cancel: "Annulla",
     taglia: "Taglia", tagliaPlaceholder: "Seleziona la taglia (facoltativo)",
     ristoroLabel: "Team Ristoro", ristoroPlaceholder: "Seleziona il punto ristoro", errRistoro: "Seleziona il Team Ristoro",
     ristoroNone: "Non ci sono ancora punti ristoro configurati: l'organizzazione ti assegnerà in seguito.",
@@ -82,6 +86,9 @@ const T = {
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
     from: "From", to: "To",
     prefLabel: "What activity would you prefer to do?", prefPlaceholder: "Select an activity",
+    groupLabel: "Group you belong to", groupNone: "No group", groupAdd: "+ Add group", groupAddTitle: "Add group",
+    groupAddDesc: "Association, sports club, civil protection or other organisation you belong to.", groupName: "Group name",
+    groupNameReq: "Enter the group name", groupExists: "This group already existed: we selected it", save: "Save", cancel: "Cancel",
     taglia: "Size", tagliaPlaceholder: "Select your size (optional)",
     ristoroLabel: "Refreshment team", ristoroPlaceholder: "Select the refreshment point", errRistoro: "Select the refreshment team",
     ristoroNone: "No refreshment points are configured yet: the organisers will assign you later.",
@@ -129,6 +136,8 @@ export default function Partecipa() {
   const [noCf, setNoCf] = useState(false);
   const [days, setDays] = useState({});
   const [pref, setPref] = useState("");
+  const [gruppo, setGruppo] = useState(NO_GROUP);
+  const [gruppi, setGruppi] = useState([]);
   const [dayErr, setDayErr] = useState(false);
   const [prefErr, setPrefErr] = useState(false);
   const daysRef = useRef(null);
@@ -146,6 +155,7 @@ export default function Partecipa() {
       if (res.status === 404) { setState("notfound"); return; }
       const data = await res.json();
       setInfo(data);
+      setGruppi(data.gruppi_options || []);
       setState(data.active ? "form" : "inactive");
     } catch { setState("notfound"); }
   }, [code]);
@@ -193,6 +203,7 @@ export default function Partecipa() {
         preferenza_altro: pref === ALTRO ? prefAltro : null,
         taglia: form.taglia || null,
         ristoro_team_id: isRistoro ? ristoroTeam || null : null,
+        gruppo_appartenenza: gruppo === NO_GROUP ? null : gruppo,
         privacy: true,
         marketing_consent: marketing,
         lang,
@@ -306,6 +317,8 @@ export default function Partecipa() {
           </div>
           {dayErr && <p role="alert" className="mt-2 text-sm font-medium text-red-600" data-testid="pf-days-error">{t("errEventDay")}</p>}
         </div>
+
+        <div data-testid="pf-gruppo-section"><F label={t("groupLabel")}><PublicGroupSelect code={code} value={gruppo} onChange={setGruppo} options={gruppi} onOptions={setGruppi} t={t} /></F></div>
 
         <div ref={prefRef} className={`scroll-mt-24 rounded-xl transition-colors space-y-2 ${prefErr ? "ring-2 ring-red-400 bg-red-50/40 p-3 -mx-1" : ""}`} data-testid="pf-pref-section" aria-invalid={prefErr || undefined}>
         <F label={t("prefLabel")} req>

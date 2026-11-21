@@ -1,0 +1,47 @@
+{
+  "summary": "Tested Super Admin Audit Log > 'Accessi e utilizzo' end to end (backend and frontend). Backend: 14/14 pytest checks pass. Covered: login tracking, heartbeat (60s cap per beat, interacted:false ignored, two client_ids at the same time not doubling the user total, a new session after timeout with the old one closed as 'timeout'), /access/end on logout, SA-only gating (403 for org admin, 401 anonymous), KPI consistency, scope=active org separation and its 400 errors, user detail, config validation and persistence, activate refused without templates or confirm, simulate writes nothing. Reminder engine with TEST_ users in an isolated TEST_ org (orgs_include limited to it so no real preview user got reminders): inactive_1 and never_1 recorded as test_sent with a fake messageId; no duplicates on a second run-now; promotional inactive_2/never_2 excluded without marketing_consent and sent once consent=true; a new login stops the sequence and starts a new cycle with a different cycle_id after 8 more days; disabled, role 'user', opted-out and non-activated accounts excluded with the right reason. Unsubscribe: wrong token gives 400, valid token sets reminders_opt_out. Cron without the secret gives 401. Frontend: KPIs, search, the org/role/status/inactivity filters, sorting and the row detail dialog work; settings save with validation toast and persist after reload; the Brevo setup and sync buttons show 'Brevo non configurato' (expected); simulation table works; 'Attiva invio reale' (with confirm) and 'Torna alla simulazione' work; the email log shows type, days, template, status, message id and next login; Registro operazioni loads with access_reminder_sent entries; logout calls /access/end before /auth/logout. Heartbeat in the browser: a beat 1.5-3s after load or interaction; no beat during 80s idle; with 2 tabs, only 1 beat in a 77s interaction window (localStorage throttle works). No critical bugs. Found minor issues, listed below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/platform/access/overview", "issue": "KPI total_seconds and avg_session_seconds add up access_sessions.active_seconds per client_id, so 2 devices/tabs at the same time double-count in the KPIs. The per-user access_users.total_seconds is correctly deduplicated. Measured: KPI total 68s vs user total 64s for one user with 2 clients. Fix: compute the KPI total from access_users.total_seconds, or deduplicate overlapping sessions."},
+      {"endpoint": "access_sessions lifecycle", "issue": "A session is closed only when the same client_id sends another heartbeat or calls /access/end. Sessions from other devices or browsers, or from a tab closed without logout, stay open forever (ended_at null, end_reason null). Confirmed: the SA has several open sessions from earlier browser contexts. Suggest closing stale sessions (last_activity_at older than the timeout) in daily_tick, on login, or when listing."},
+      {"endpoint": "audit (record_audit with SYSTEM_ACTOR)", "issue": "Entries from 'Automazione promemoria' are stored with scope 'org' and org_id null. The actor filter list in /platform/audit comes from the users collection, so it cannot select the system actor to filter reminder entries."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "activityHeartbeat.js startHeartbeat", "issue": "mark() runs at mount, so the first forced beat (1.5s) is sent with interacted:true even with no real user interaction. A page reload, or a browser restoring tabs, therefore counts as activity, updates last_activity_at and can reset an inactivity reminder cycle. This goes against the 'heartbeat only on real interaction' requirement. Fix: do not call mark() at start, and only send the first beat after a real event.", "selector": "n/a", "priority": "MEDIUM"},
+      {"component": "AccessReminderSettings number fields", "issue": "Clearing a number field and saving shows the raw English Pydantic 422 message 'Input should be a valid integer, unable to parse string as an integer'. Needs client-side validation or an Italian message.", "selector": "[data-testid^=access-cfg-]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Utenti sub-tab load", "issue": "GET /platform/access/overview?scope=all is called twice on mount (double fetch)", "affected_selectors": ["[data-testid=access-usage]"]}
+    ],
+    "design_issues": [
+      {"screen": "Accessi e utilizzo > Utenti", "issues": ["The 'Sessioni dal / al' period filters use the browser's native date input (shows mm/dd/yyyy, not the Italian format). Use the shadcn Calendar/DatePicker."]},
+      {"screen": "Global", "issues": ["The cookie banner defaults to EN text on an Italian UI and covers the bottom-left of the page, including the 'Salva impostazioni' button area, until dismissed (pre-existing)."]},
+      {"screen": "Audit Log tabs", "issues": ["Clicking 'Registro operazioni' does not update the URL (?tab=accessi stays), so reload or deep-link brings back the Accessi tab."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_access_monitor.py", "/app/backend/tests/cleanup_access_test.py", "/app/test_reports/pytest/access_monitor.xml"],
+  "action_items": [
+    "Do not count page load as an interaction in activityHeartbeat.js (remove the initial mark(), or require a real event before the first beat)",
+    "Base the overview KPI total_seconds and avg_session on deduplicated time (access_users.total_seconds), not the sum of per-client sessions",
+    "Close stale access_sessions (last_activity_at older than the timeout) periodically, e.g. in daily_tick, so session history and end_reason stay accurate",
+    "Validate the reminder settings number inputs on the client side and show Italian error messages",
+    "Replace the native date inputs with the shadcn date picker",
+    "Optional: include the system actor in the audit actor filter; fetch the overview only once on mount"
+  ],
+  "critical_code_review_comments": [
+    "GET /api/access/unsubscribe changes state (sets opt-out) on a plain GET. Email security scanners that prefetch links can opt users out without them knowing. Use a confirmation page with a POST, or the RFC 8058 List-Unsubscribe-Post header.",
+    "reminders_log runs one access_logins query per reminder (N+1, up to 1000). _rows() and _plan() load all users, memberships and access_users on every overview or simulate call; fine now but will not scale.",
+    "never_start_from: 'registration' uses users.created_at and 'activation' uses registered_at (set e.g. in complete-profile). Check that registered_at really means activation for invited users.",
+    "Heartbeat timeout uses max(cfg,1) but _rows uses int(cfg) without the guard (the PUT validation prevents 0, so this is only a robustness note)."
+  ],
+  "updated_files": ["/app/backend/tests/test_access_monitor.py", "/app/backend/tests/cleanup_access_test.py"],
+  "success_rate": {"backend": "100% (14/14 tests; 3 minor issues)", "frontend": "95% (all flows work; minor UX/design issues)"},
+  "seed_data_creation": "Created and then deleted TEST_ data only: org TEST_org_<run>, TEST_<run>_* users, memberships, access_users, access_logins, access_sessions and access_reminders, plus audit_logs rows targeting those emails or that org. Config restored to deactivate + enabled:false, templates all null, orgs_include []. No access_runs docs were created (cron not executed). The Super Admin's own config-change audit rows and the SA's real login/session records from browser runs remain (normal usage).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_access_monitor.py -n 0 (must be serial; the module fixture creates an isolated TEST org and sets orgs_include to it so live run-now never touches real users, then cleans up). Use KEEP_ACCESS_TEST_DATA=1 to keep data for UI inspection, then run python tests/cleanup_access_test.py. The cookie banner intercepts clicks: hide [data-testid=cookie-banner] via add_init_script CSS. A fake send is visible as status test_sent with messageId <test-...@preview>. The SA org switcher may auto-select the newest org.",
+  "rca of the issue": "KPI double count: overview sums session.active_seconds and each client_id has its own session that gets its own increments; the dedup exists only at access_users level (last_counted_at). Page-load activity: startHeartbeat() calls mark() before any event, which writes acc_last_interaction=now, so beat(true) after 1.5s passes the interacted check."
+}
