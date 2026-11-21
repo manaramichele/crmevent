@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { LISTS_CHANGED } from "@/lib/optionLists";
 import { SectionCard } from "@/components/crm";
@@ -18,6 +18,12 @@ function ListCard({ list, params, canManage: canManageAll, reload }) {
   const orgOnly = !!list.org_only;
   const items = list.items;
   const k = list.key;
+  const boxRef = useRef(null);
+  const focus = new URLSearchParams(window.location.search).get("lista") === k;
+  useEffect(() => {
+    if (!focus || !boxRef.current) return;
+    boxRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focus]);
   const put = async (next) => {
     try { await api.put(`/settings/lists/${k}`, { items: next.map((i) => i.value), disattivati: next.filter((i) => !i.active).map((i) => i.value) }, { params }); window.dispatchEvent(new Event(LISTS_CHANGED)); reload(); }
     catch (e) { err(e); }
@@ -41,7 +47,7 @@ function ListCard({ list, params, canManage: canManageAll, reload }) {
   const shown = items.map((it, i) => ({ it, i })).filter(({ it }) => !q.trim() || it.value.toLowerCase().includes(q.trim().toLowerCase()));
   const ib = "h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid={`optlist-${k}`}>
+    <div ref={boxRef} className={`rounded-xl border bg-white p-4 ${focus ? "border-tiffany ring-2 ring-tiffany/30" : "border-slate-200"}`} data-testid={`optlist-${k}`}>
       <div className="flex items-center justify-between gap-2 mb-2"><h4 className="text-sm font-semibold text-slate-800">{list.label}</h4><span className="text-xs text-slate-400">{items.length} voci</span></div>
       {orgOnly && <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca un gruppo" className="h-9 text-sm mb-2" data-testid={`optlist-${k}-search`} />}
       <ul className={`divide-y divide-slate-100 ${orgOnly ? "max-h-[420px] overflow-y-auto" : ""}`}>
