@@ -10,9 +10,12 @@ import { EntiSettings } from "@/components/asd/AsdEnti";
 
 const err = (e) => toast.error(formatApiError(e.response?.data?.detail));
 
-function ListCard({ list, params, canManage, reload }) {
+function ListCard({ list, params, canManage: canManageAll, reload }) {
   const [val, setVal] = useState("");
   const [edit, setEdit] = useState(null);
+  const [q, setQ] = useState("");
+  const canManage = list.can_manage ?? canManageAll;
+  const orgOnly = !!list.org_only;
   const items = list.items;
   const k = list.key;
   const put = async (next) => {
@@ -30,12 +33,19 @@ function ListCard({ list, params, canManage, reload }) {
   const move = (i, d) => { const n = [...items]; [n[i], n[i + d]] = [n[i + d], n[i]]; put(n); };
   const toggle = (i) => put(items.map((x, j) => (j === i ? { ...x, active: !x.active } : x)));
   const remove = (i) => { if (window.confirm(`Eliminare "${items[i].value}"?`)) put(items.filter((_, j) => j !== i)); };
+  const removeUnlink = async (it) => {
+    const msg = it.usage > 0 ? `Il gruppo "${it.value}" è collegato a ${it.usage} ${it.usage === 1 ? "persona" : "persone"}.\nEliminandolo, queste persone torneranno a "Nessun gruppo". Le anagrafiche non vengono eliminate.\n\nContinuare?` : `Eliminare "${it.value}"?`;
+    if (!window.confirm(msg)) return;
+    try { const { data } = await api.post(`/settings/lists/${k}/delete`, { value: it.value }, { params }); toast.success(data.records_unlinked ? `Eliminato (${data.records_unlinked} persone scollegate)` : "Eliminato"); window.dispatchEvent(new Event(LISTS_CHANGED)); reload(); } catch (e) { err(e); }
+  };
+  const shown = items.map((it, i) => ({ it, i })).filter(({ it }) => !q.trim() || it.value.toLowerCase().includes(q.trim().toLowerCase()));
   const ib = "h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30";
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid={`optlist-${k}`}>
       <div className="flex items-center justify-between gap-2 mb-2"><h4 className="text-sm font-semibold text-slate-800">{list.label}</h4><span className="text-xs text-slate-400">{items.length} voci</span></div>
-      <ul className="divide-y divide-slate-100">
-        {items.map((it, i) => (
+      {orgOnly && <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca un gruppo" className="h-9 text-sm mb-2" data-testid={`optlist-${k}-search`} />}
+      <ul className={`divide-y divide-slate-100 ${orgOnly ? "max-h-[420px] overflow-y-auto" : ""}`}>
+        {shown.map(({ it, i }) => (
           <li key={it.value} className="flex items-center gap-1.5 py-1.5" data-testid={`optlist-${k}-item-${i}`}>
             {edit?.old === it.value ? (<>
               <Input autoFocus value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} onKeyDown={(e) => e.key === "Enter" && rename()} className="h-8 text-sm" data-testid={`optlist-${k}-rename-input`} />
@@ -43,13 +53,15 @@ function ListCard({ list, params, canManage, reload }) {
               <button className={ib} onClick={() => setEdit(null)}><X className="w-4 h-4" /></button>
             </>) : (<>
               <span className={`flex-1 min-w-0 truncate text-sm ${it.active ? "text-slate-800" : "text-slate-400 line-through"}`}>{it.value}</span>
-              {it.usage > 0 && <span className="text-[11px] text-slate-400 whitespace-nowrap" title="Record che usano questa voce">{it.usage} in uso</span>}
+              {orgOnly ? <span className="text-[11px] text-slate-400 whitespace-nowrap" data-testid={`optlist-${k}-count-${i}`}>{it.usage} {it.usage === 1 ? "persona" : "persone"}</span>
+                : it.usage > 0 && <span className="text-[11px] text-slate-400 whitespace-nowrap" title="Record che usano questa voce">{it.usage} in uso</span>}
               {!it.active && <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 rounded px-1.5">Disattivata</span>}
               {canManage && (<>
-                <button className={ib} disabled={i === 0} onClick={() => move(i, -1)} title="Sposta su" data-testid={`optlist-${k}-up-${i}`}><ArrowUp className="w-3.5 h-3.5" /></button>
-                <button className={ib} disabled={i === items.length - 1} onClick={() => move(i, 1)} title="Sposta giù" data-testid={`optlist-${k}-down-${i}`}><ArrowDown className="w-3.5 h-3.5" /></button>
+                <button className={ib} disabled={q !== "" || i === 0} onClick={() => move(i, -1)} title="Sposta su" data-testid={`optlist-${k}-up-${i}`}><ArrowUp className="w-3.5 h-3.5" /></button>
+                <button className={ib} disabled={q !== "" || i === items.length - 1} onClick={() => move(i, 1)} title="Sposta giù" data-testid={`optlist-${k}-down-${i}`}><ArrowDown className="w-3.5 h-3.5" /></button>
                 <button className={ib} onClick={() => setEdit({ old: it.value, value: it.value })} title="Rinomina" data-testid={`optlist-${k}-rename-${i}`}><Pencil className="w-3.5 h-3.5" /></button>
-                {it.usage > 0
+                {orgOnly ? <button className={`${ib} hover:text-red-500`} onClick={() => removeUnlink(it)} title="Elimina" data-testid={`optlist-${k}-delete-${i}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                : it.usage > 0
                   ? <button className={ib} onClick={() => toggle(i)} title={it.active ? "Disattiva (voce in uso)" : "Riattiva"} data-testid={`optlist-${k}-toggle-${i}`}>{it.active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
                   : <>{!it.active && <button className={ib} onClick={() => toggle(i)} title="Riattiva" data-testid={`optlist-${k}-toggle-${i}`}><Eye className="w-3.5 h-3.5" /></button>}
                     <button className={`${ib} hover:text-red-500`} onClick={() => remove(i)} title="Elimina" data-testid={`optlist-${k}-delete-${i}`}><Trash2 className="w-3.5 h-3.5" /></button></>}
@@ -57,6 +69,7 @@ function ListCard({ list, params, canManage, reload }) {
             </>)}
           </li>
         ))}
+        {orgOnly && !shown.length && <li className="py-2 text-sm text-slate-400" data-testid={`optlist-${k}-empty`}>{items.length ? "Nessun gruppo trovato" : "Nessun gruppo registrato"}</li>}
       </ul>
       <div className="flex gap-2 mt-2">
         <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Nuova voce" className="h-9 text-sm" data-testid={`optlist-${k}-add-input`} />

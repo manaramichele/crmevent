@@ -37,6 +37,7 @@ const STATO_COLOR = { confermato: "green", disponibile: "green", da_riconfermare
 function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited, canDelete = true }) {
   const [q, setQ] = useState("");
   const [tagliaFilter, setTagliaFilter] = useState("all");
+  const [gruppoFilter, setGruppoFilter] = useState("all");
   const [evFilter, setEvFilter] = useState("all");
   const [prefFilter, setPrefFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -78,7 +79,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (mansFilter !== "all" && !asg(r).some((a) => (mansFilter === "none" ? !a.ruolo : a.ruolo === mansFilter))) return false;
     if (provFilter !== "all" && (r.provenienza_tipo || "non_determinata") !== provFilter) return false;
     if (tagliaFilter !== "all" && (tagliaFilter === "none" ? !!r.taglia : r.taglia !== tagliaFilter)) return false;
-    if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.codice_fiscale || ""} ${r.cellulare || ""} ${r.ruolo || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
+    if (gruppoFilter !== "all" && (gruppoFilter === "none" ? !!r.gruppo_appartenenza : r.gruppo_appartenenza !== gruppoFilter)) return false;
+    if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.codice_fiscale || ""} ${r.cellulare || ""} ${r.ruolo || ""} ${r.gruppo_appartenenza || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
   const { sort, toggle } = useSort({ key: "cognome", dir: "asc" });
@@ -94,6 +96,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     team: (r) => multi(r, (a) => teamName(a.team_id)).join(", "),
     evento: (r) => (r.eventi_nomi || []).join(", "),
     qualifica: (r) => mansioneText(r),
+    gruppo: (r) => r.gruppo_appartenenza || "",
     aziende: (r) => (r.aziende_nomi || []).join(", "),
     accesso: (r) => INV_LABEL[r.invite_status || "non_invitato"] || "",
   };
@@ -178,6 +181,10 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     ? <div className="flex flex-wrap gap-1">{r.teams_nomi.map((t, i) => <span key={i} className="inline-flex items-center rounded-full bg-tiffany-light text-tiffany-fg px-2 py-0.5 text-xs font-medium whitespace-nowrap">{t}</span>)}</div>
     : <span className="text-slate-400">—</span>));
   const mansCell = (r) => multiCell(r, (a) => a.ruolo, "mansione");
+  const gruppoCell = (r) => (r.gruppo_appartenenza
+    ? <span className="block max-w-[180px] truncate text-slate-700" title={r.gruppo_appartenenza} data-testid={`gruppo-${r.id}`}>{r.gruppo_appartenenza}</span>
+    : <span className="italic text-slate-400" data-testid={`gruppo-${r.id}`}>Nessun gruppo</span>);
+  const gruppoOpts = [...new Set(rows.map((r) => r.gruppo_appartenenza).filter(Boolean))].sort((a, b) => a.localeCompare(b, "it"));
   const teamOpts = [...new Map(rows.flatMap((r) => (r.assegnazioni || []).filter((a) => a.team_id && (evFilter === "all" || a.evento_id === evFilter)).map((a) => [a.team_id, teamName(a.team_id)])).filter(([, n]) => n)).entries()].sort((a, b) => a[1].localeCompare(b[1], "it"));
   const mansOpts = [...new Set(rows.flatMap((r) => (r.assegnazioni || []).map((a) => a.ruolo).filter(Boolean)))].sort((a, b) => a.localeCompare(b, "it"));
   const tagliaOpts = [...new Set(rows.map((r) => r.taglia).filter(Boolean))];
@@ -209,6 +216,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         {isStaffTab && <select className={fsel} value={mansFilter} onChange={(e) => setMansFilter(e.target.value)} data-testid="people-mansione-filter"><option value="all">Tutte le mansioni</option><option value="none">Senza mansione</option>{mansOpts.map((m) => <option key={m} value={m}>{m}</option>)}</select>}
         {isStaffTab && <select className={fsel} value={provFilter} onChange={(e) => setProvFilter(e.target.value)} data-testid="people-provenienza-filter"><option value="all">Tutte le provenienze</option>{Object.entries(PROVENIENZA).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {isStaffTab && <select className="h-10 w-full sm:w-36 rounded-md border border-slate-200 bg-white px-2 text-sm" value={tagliaFilter} onChange={(e) => setTagliaFilter(e.target.value)} data-testid="people-taglia-filter"><option value="all">Tutte le taglie</option><option value="none">Senza taglia</option>{tagliaOpts.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
+        {isStaffTab && <select className={fsel} value={gruppoFilter} onChange={(e) => setGruppoFilter(e.target.value)} data-testid="people-gruppo-filter"><option value="all">Tutti i gruppi</option><option value="none">Nessun gruppo</option>{gruppoOpts.map((g) => <option key={g} value={g}>{g}</option>)}</select>}
         {(tab === "staff" || tab === "volontari") && <ExportPdfButton section={tab} eventoId={evFilter !== "all" ? evFilter : null} eventName={evFilter !== "all" ? evName(evFilter) : ""} personIds={displayRows.map((r) => r.id)} scopeLabel={`${displayRows.length} ${displayRows.length === 1 ? "persona" : "persone"} con i filtri attuali`} />}
       </div>
       {isStaffTab && selectedRows.length > 0 && (
@@ -237,6 +245,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 {isStaffTab ? (<>
                   <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Team</span>{teamsCell(r)}</div>
                   <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span>{mansCell(r)}</div>
+                  <div className="flex items-start gap-2 min-w-0" data-testid={`m-gruppo-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Gruppo</span><div className="min-w-0">{gruppoCell(r)}</div></div>
                   {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
                 </>) : (<>
@@ -267,6 +276,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 <Th k="taglia" label="Taglia" />
                 <Th k="team" label="Team" />
                 <Th k="qualifica" label="Mansione" />
+                <Th k="gruppo" label="Gruppo di appartenenza" />
                 <Th k="evento" label="Evento" />
                 <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
               </>) : (<>
@@ -294,6 +304,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                         <td className="px-3 py-3 text-slate-700 whitespace-nowrap" data-testid={`taglia-${r.id}`}>{r.taglia || "—"}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
                         <td className="px-4 py-3">{mansCell(r)}</td>
+                        <td className="px-4 py-3">{gruppoCell(r)}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
                       </>
                     ) : (
@@ -353,6 +364,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     { name: "data_nascita", label: "Data di nascita", type: "date" }, { name: "eta", label: "Età", type: "age", virtual: true },
     { name: "codice_fiscale", label: "Codice Fiscale" }, { name: "luogo_nascita", label: "Luogo di nascita" },
     { name: "taglia", label: "Taglia", type: "setting", settingKey: "taglie", options: settings?.taglie || [] },
+    { name: "gruppo_appartenenza", label: "Gruppo di appartenenza", type: "setting", settingKey: "gruppi_appartenenza", options: (settings?.gruppi_appartenenza || []).filter((g) => !((settings?.disattivati || {}).gruppi_appartenenza || []).includes(g)) },
     { name: "indirizzo", label: "Indirizzo e numero civico", full: true }, { name: "cap", label: "CAP" }, { name: "citta", label: "Località / Comune" },
     { name: "provincia", label: "Provincia" }, { name: "regione", label: "Regione" }, { name: "nazione", label: "Nazione" },
     { name: "note", label: "Note", type: "textarea", full: true },

@@ -1167,6 +1167,7 @@ class Person(BaseModel):
     codice_fiscale: Optional[str] = None
     luogo_nascita: Optional[str] = None
     taglia: Optional[str] = None
+    gruppo_appartenenza: Optional[str] = None
     indirizzo: Optional[str] = None
     cap: Optional[str] = None
     citta: Optional[str] = None
@@ -11143,6 +11144,7 @@ async def pub_avail_info(code: str):
             "ristoro_teams": await _ristoro_teams(link["org_id"], event["id"]),
             "has_allestimento": bool(event.get("data_inizio_allestimento")),
             "has_disallestimento": bool(event.get("data_fine_disallestimento")),
+            "gruppi_options": _active_groups(settings),
             "attivita_options": attivita}
 
 
@@ -11174,9 +11176,30 @@ class PubAvailIn(BaseModel):
     preferenza_altro: Optional[str] = None
     taglia: Optional[str] = Field(default=None, max_length=20)
     ristoro_team_id: Optional[str] = Field(default=None, max_length=64)
+    gruppo_appartenenza: Optional[str] = Field(default=None, max_length=80)
     privacy: bool = False
     marketing_consent: bool = False
     lang: Optional[str] = None
+
+
+def _active_groups(settings: dict) -> list:
+    off = set((settings.get("disattivati") or {}).get("gruppi_appartenenza") or [])
+    return [g for g in (settings.get("gruppi_appartenenza") or []) if g not in off]
+
+
+class PubGroupIn(BaseModel):
+    nome: str = Field(min_length=1, max_length=80)
+
+
+@api.post("/public/availability/{code}/groups")
+async def pub_avail_add_group(code: str, body: PubGroupIn, request: Request):
+    if not _avail_rate_ok(f"grp:{_client_ip(request)}", max_calls=5, window=60):
+        raise HTTPException(status_code=429, detail="Troppe richieste. Riprova tra qualche istante.")
+    link = await db.avail_links.find_one({"code": code}, {"_id": 0})
+    if not link or not link.get("active"):
+        raise HTTPException(status_code=410, detail="La raccolta delle disponibilità per questo evento è terminata.")
+    # Destinazione: sempre l'organizzazione proprietaria del link (mai l'Org attiva del Super Admin).
+    return await OPT["public_add"](link["org_id"], "gruppi_appartenenza", body.nome)
 
 
 @api.post("/public/availability/{code}")
@@ -11237,6 +11260,12 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         off_t = set((st.get("disattivati") or {}).get("taglie") or [])
         if submitted["taglia"] not in [t for t in (st.get("taglie") or option_lists.DEFAULTS["taglie"]) if t not in off_t]:
             raise HTTPException(status_code=400, detail="Taglia non valida")
+    gruppo = (body.gruppo_appartenenza or "").strip() or None
+    if gruppo:
+        gst = await db.settings.find_one({"id": org_id}, {"_id": 0, "gruppi_appartenenza": 1, "disattivati": 1}) or {}
+        gruppo = next((g for g in _active_groups(gst) if g.lower() == gruppo.lower()), None)
+        if not gruppo:
+            raise HTTPException(status_code=400, detail="Gruppo di appartenenza non valido")
     ristoro_tid = None
     if _is_ristoro_pref(body.preferenza_attivita):
         rteams = await _ristoro_teams(org_id, event["id"])
@@ -11263,6 +11292,8 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                 fill[k] = new
             elif new and cur and str(cur).strip().lower() != str(new).strip().lower():
                 mismatch[k] = {"attuale": cur, "inviato": new}
+        if gruppo:
+            fill["gruppo_appartenenza"] = gruppo
         if fill:
             await db.persons.update_one({"id": person["id"], "org_id": org_id}, {"$set": {**fill, "updated_at": now_iso()}})
         pid = person["id"]
@@ -11272,6 +11303,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
                                          "data_nascita": submitted["data_nascita"], "codice_fiscale": cf_norm or None,
                                          "luogo_nascita": ANA["birth_place_from_cf"](cf_norm, birth) if cf_norm else None,
                                          "taglia": submitted["taglia"],
+                                         "gruppo_appartenenza": gruppo,
                                          "tag": ["disponibilita"],
                                          "provenienza": {"tipo": "link_disponibilita", "at": now_iso(), "evento_id": link["evento_id"], "link_code": code},
                                          "note": "Inserito automaticamente dalla raccolta disponibilità pubblica"})
@@ -11309,7 +11341,7 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
             "user_agent": (request.headers.get("user-agent") or "")[:300], "code": code,
             "compilation_lang": lang,
             "brevo_status": "pending", "created_at": now, "updated_at": now, **mk_fields})
-    await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"ristoro_team_id": ristoro_tid}})
+    await db.availabilities.update_one({"org_id": org_id, "id": av_id}, {"$set": {"ristoro_team_id": ristoro_tid, "gruppo_appartenenza": gruppo}})
     await ANA["ensure_link"](org_id, pid, event["id"], await db.availabilities.find_one({"org_id": org_id, "id": av_id}, {"_id": 0}))
     # Brevo sync (best-effort, gated): CRMEvent save has priority and is already committed above.
     try:
