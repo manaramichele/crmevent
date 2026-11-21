@@ -29,16 +29,19 @@ import { usePeople } from "@/lib/peopleStore";
 import { PERSON_RULES } from "@/lib/textCase";
 import PersonMask, { PROVENIENZA } from "@/components/PersonMask";
 import ExportPdfButton from "@/components/ExportPdfButton";
+import GroupsTab from "@/components/GroupsTab";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
 const STATO_COLOR = { confermato: "green", disponibile: "green", da_riconfermare: "orange", disponibilita_richiesta: "blue", da_contattare: "gray", non_disponibile: "red", rinunciato: "red" };
 
-function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited, canDelete = true }) {
+function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited, canDelete = true, lockedEvent }) {
   const [q, setQ] = useState("");
   const [tagliaFilter, setTagliaFilter] = useState("all");
   const [gruppoFilter, setGruppoFilter] = useState("all");
-  const [evFilter, setEvFilter] = useState("all");
+  const [evState, setEvFilter] = useState("all");
+  const evFilter = lockedEvent ?? evState;
+  const groupMode = tab === "gruppi";
   const [prefFilter, setPrefFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
   const [mansFilter, setMansFilter] = useState("all");
@@ -83,8 +86,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.codice_fiscale || ""} ${r.cellulare || ""} ${r.ruolo || ""} ${r.gruppo_appartenenza || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
-  const { sort, toggle } = useSort({ key: "cognome", dir: "asc" });
-  const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare";
+  const { sort, toggle } = useSort({ key: groupMode ? "gruppo" : "cognome", dir: "asc" });
+  const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare" || groupMode;
   const leaderIds = new Set(teams.filter((t) => t.responsabile_id && (evFilter === "all" || t.evento_id === evFilter)).map((t) => t.responsabile_id));
   const ACC = {
     cognome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
@@ -96,7 +99,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     team: (r) => multi(r, (a) => teamName(a.team_id)).join(", "),
     evento: (r) => (r.eventi_nomi || []).join(", "),
     qualifica: (r) => mansioneText(r),
-    gruppo: (r) => r.gruppo_appartenenza || "",
+    gruppo: (r) => `${(r.gruppo_appartenenza || "").toLowerCase()}|${(r.cognome || "").toLowerCase()} ${(r.nome || "").toLowerCase()}`,
+    email: (r) => r.email || "",
     aziende: (r) => (r.aziende_nomi || []).join(", "),
     accesso: (r) => INV_LABEL[r.invite_status || "non_invitato"] || "",
   };
@@ -196,7 +200,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input className="pl-9" placeholder="Cerca persone..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="search-person-input" />
         </div>
-        {isStaffTab && (
+        {isStaffTab && lockedEvent === undefined && (
           <div className="w-full sm:w-56" data-testid="people-event-filter">
             <Select value={evFilter} onValueChange={setEvFilter}>
               <SelectTrigger><SelectValue placeholder="Tutti gli eventi" /></SelectTrigger>
@@ -271,6 +275,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 <Th k="cognome" label="Cognome" />
                 <Th k="nome" label="Nome" />
                 <Th k="cellulare" label="Cellulare" />
+                {groupMode && <Th k="email" label="Email" />}
                 <Th k="ruolo_evento" label="Ruolo" />
                 <Th k="preferenza" label="Preferenza" />
                 <Th k="taglia" label="Taglia" />
@@ -299,6 +304,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                         <td className="px-4 py-3"><span className="font-medium text-slate-800" data-testid={`cognome-${r.id}`}>{r.cognome || "—"}</span><LastInvite person={r} /></td>
                         <td className="px-4 py-3 text-slate-800" data-testid={`nome-${r.id}`}>{r.nome}</td>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
+                        {groupMode && <td className="px-4 py-3 text-slate-700" data-testid={`email-${r.id}`}>{r.email || "—"}</td>}
                         <td className="px-4 py-3">{roleBadges(r)}</td>
                         <td className="px-4 py-3">{prefCell(r)}</td>
                         <td className="px-3 py-3 text-slate-700 whitespace-nowrap" data-testid={`taglia-${r.id}`}>{r.taglia || "—"}</td>
@@ -495,6 +501,7 @@ export default function Persons({ mode = "anagrafiche" }) {
             <TabsTrigger value="volontari" data-testid="tab-volontari">Volontari</TabsTrigger>
             <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare{daClassificare > 0 && <span className="ml-1.5 rounded-full bg-amber-100 text-amber-800 px-1.5 text-[11px] font-bold" data-testid="da-classificare-count">{daClassificare}</span>}</TabsTrigger>
             <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
+            <TabsTrigger value="gruppi" data-testid="tab-gruppi">Gruppi</TabsTrigger>
             <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
           </TabsList>
           {["staff", "volontari", "da_classificare"].map((t) => (
@@ -515,6 +522,10 @@ export default function Persons({ mode = "anagrafiche" }) {
                 <TeamMembersDialog team={team} open onOpenChange={(o) => !o && close()} persons={rows} staffLinks={staffLinks} events={events}
                   onReloadStaff={reload} onEdit={edit} canEdit={canEditMembers} onSaveNote={saveNote(update, team.id)}
                   onOpenPerson={(pid) => { close(); const p = rows.find((x) => x.id === pid); if (p) setMask({ person: p }); else setDetailId(pid); }} />)} />
+          </TabsContent>
+          <TabsContent value="gruppi">
+            <GroupsTab rows={rows} events={events} settings={settings} user={user}
+              renderTable={(groupRows, ev) => <PeopleTable tab="gruppi" lockedEvent={ev} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} {...peopleProps} rows={groupRows} />} />
           </TabsContent>
           <TabsContent value="turni">
             <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
