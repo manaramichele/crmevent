@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CASE_FN } from "@/lib/textCase";
+import DaySlotsField from "@/components/DaySlotsField";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -265,6 +266,10 @@ function Field({ field, value, onChange, options, onAddEntity, form }) {
   if (field.type === "image") {
     return <ImageUpload value={value} onChange={(u) => onChange(field.name, u)} testid={`field-${field.name}`} />;
   }
+  if (field.type === "dayslots") {
+    const days = form?.data_inizio ? eventDayList(form?.data_inizio_allestimento || form?.data_inizio, form?.data_fine_disallestimento || form?.data_fine) : [];
+    return <DaySlotsField days={days} value={value} onChange={(v) => onChange(field.name, v)} eventId={form?.id} />;
+  }
   if (field.type === "daydesc") {
     const list = eventDayList(form?.data_inizio, form?.data_fine);
     const val = value || {};
@@ -426,7 +431,7 @@ export function TextAction({ icon: Icon, children, danger, className = "", ...pr
   );
 }
 
-export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, extraActions, mobileCard, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail, defaultSort, belowFilters }) {
+export function EntityManager({ title, subtitle, endpoint, fields, columns, options = {}, entityLabel = "elemento", testid = "entity", searchKeys = ["nome"], filters = [], rowActions, extraActions, mobileCard, guardCreate, fullActions = false, onSaved, onMutate, entityCreators, section, renderDetail, defaultSort, belowFilters, initialFilters }) {
   const [detailRow, setDetailRow] = useState(null);
   const { user } = useAuth();
   const allow = (a) => !section || can(user, section, a);
@@ -434,7 +439,7 @@ export function EntityManager({ title, subtitle, endpoint, fields, columns, opti
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
-  const [filterVals, setFilterVals] = useState({});
+  const [filterVals, setFilterVals] = useState(() => initialFilters || {});
 
   const openNew = async () => { if (guardCreate) { const ok = await guardCreate(); if (!ok) return; } setEditing(null); setDialogOpen(true); };
   const openEdit = (row) => { setEditing(row); setDialogOpen(true); };

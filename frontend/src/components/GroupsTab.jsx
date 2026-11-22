@@ -38,9 +38,9 @@ function GroupCard({ g, active, onPick }) {
 }
 
 // Linguetta Gruppi: stessi dati della scheda Volontari, raggruppati per Gruppo di appartenenza (distinto dal Team operativo).
-export default function GroupsTab({ rows, events, settings, user, renderTable }) {
+export default function GroupsTab({ rows, events, settings, user, renderTable, initialEvent = "all" }) {
   const nav = useNavigate();
-  const [ev, setEv] = useState("all");
+  const [ev, setEv] = useState(initialEvent);
   const [sel, setSel] = useState("all");
   const inEv = (r) => ev === "all" || (r.eventi_ids || []).includes(ev) || (r.preferenze || []).some((p) => p.evento_id === ev);
   const groups = useMemo(() => {

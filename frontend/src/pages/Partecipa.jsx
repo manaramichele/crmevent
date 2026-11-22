@@ -39,9 +39,9 @@ const T = {
     cfPlaceholder: "es. RSSMRA85T10A562S", cellPlaceholder: "333 1234567",
     noCf: "Non ho un Codice Fiscale italiano",
     whenTitle: "Giorni dell'evento in cui sei disponibile",
-    whenSubtitle: "Seleziona almeno un giorno dell'evento. Allestimento, disallestimento e orari sono facoltativi.",
+    whenSubtitle: "Seleziona almeno un giorno dell'evento e, per ogni giorno, Mattina e/o Pomeriggio.",
     phaseSetup: "Allestimento", phaseTeardown: "Disallestimento", phaseEvent: "Evento",
-    from: "Dalle", to: "Alle",
+    from: "Dalle", to: "Alle", slotMorning: "Mattina", slotAfternoon: "Pomeriggio", errSlot: "Per ogni giorno selezionato scegli Mattina e/o Pomeriggio.",
     prefLabel: "Che attività preferiresti svolgere?", prefPlaceholder: "Seleziona un'attività",
     groupLabel: "Gruppo di appartenenza", groupNone: "Nessun gruppo", groupAdd: "+ Aggiungi gruppo", groupAddTitle: "Aggiungi gruppo",
     groupAddDesc: "Associazione, gruppo sportivo, protezione civile o altra realtà a cui appartieni.", groupName: "Nome gruppo",
@@ -82,9 +82,9 @@ const T = {
     cfPlaceholder: "e.g. RSSMRA85T10A562S", cellPlaceholder: "333 1234567",
     noCf: "I don't have an Italian Tax Code",
     whenTitle: "Event days when you are available",
-    whenSubtitle: "Select at least one event day. Set-up, tear-down and times are optional.",
+    whenSubtitle: "Select at least one event day and, for each day, Morning and/or Afternoon.",
     phaseSetup: "Set-up", phaseTeardown: "Tear-down", phaseEvent: "Event",
-    from: "From", to: "To",
+    from: "From", to: "To", slotMorning: "Morning", slotAfternoon: "Afternoon", errSlot: "For each selected day choose Morning and/or Afternoon.",
     prefLabel: "What activity would you prefer to do?", prefPlaceholder: "Select an activity",
     groupLabel: "Group you belong to", groupNone: "No group", groupAdd: "+ Add group", groupAddTitle: "Add group",
     groupAddDesc: "Association, sports club, civil protection or other organisation you belong to.", groupName: "Group name",
@@ -167,7 +167,7 @@ export default function Partecipa() {
 
   const ch = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const toggleDay = (date, on) => { setDays((d) => ({ ...d, [date]: { ...(d[date] || {}), disponibile: on } })); if (on && info?.days?.some((x) => x.date === date && x.fase === "evento")) setDayErr(false); };
-  const setDayTime = (date, k, v) => setDays((d) => ({ ...d, [date]: { ...(d[date] || {}), [k]: v } }));
+  const toggleSlot = (date, sid, on) => setDays((d) => { const cur = new Set(d[date]?.fasce || []); if (on) cur.add(sid); else cur.delete(sid); return { ...d, [date]: { ...(d[date] || {}), fasce: [...cur] } }; });
 
   const submit = async () => {
     const eventDays = new Set((info?.days || []).filter((d) => d.fase === "evento").map((d) => d.date));
@@ -184,8 +184,10 @@ export default function Partecipa() {
     } else if ((form.codice_fiscale || "").trim().length !== 16) {
       toast.error(t("errCf")); return;
     }
-    const selDays = Object.entries(days).filter(([, v]) => v.disponibile).map(([date, v]) => ({ date, disponibile: true, dalle: v.dalle || "", alle: v.alle || "" }));
+    const selDays = Object.entries(days).filter(([, v]) => v.disponibile).map(([date, v]) => ({ date, disponibile: true, fasce: v.fasce || [] }));
     if (!hasEventDay) { fail("errEventDay", daysRef); return; }
+    const noSlot = selDays.find((d) => !d.fasce.length);
+    if (noSlot) { toast.error(t("errSlot")); daysRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     if (!prefOk) { fail(pref === ALTRO ? "errPrefAltro" : "errPref", prefRef); return; }
     const isRistoro = /ristoro/i.test(pref || "");
     if (isRistoro && (info?.ristoro_teams || []).length && !ristoroTeam) { setRistoroErr(true); fail("errRistoro", prefRef); return; }
@@ -300,15 +302,12 @@ export default function Partecipa() {
                     </div>
                   </div>
                   {on && (
-                    <div className="grid grid-cols-1 gap-2 mt-3 pl-8" data-testid={`pf-day-times-${d.date}`}>
-                      <div>
-                        <Label className="block text-[11px] text-slate-400 mb-1">{t("from")}</Label>
-                        <Input type="time" style={{ width: 150, maxWidth: "100%" }} value={days[d.date]?.dalle || ""} onChange={(e) => setDayTime(d.date, "dalle", e.target.value)} data-testid={`pf-day-from-${d.date}`} />
-                      </div>
-                      <div>
-                        <Label className="block text-[11px] text-slate-400 mb-1">{t("to")}</Label>
-                        <Input type="time" style={{ width: 150, maxWidth: "100%" }} value={days[d.date]?.alle || ""} onChange={(e) => setDayTime(d.date, "alle", e.target.value)} data-testid={`pf-day-to-${d.date}`} />
-                      </div>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-5 mt-3 pl-8" data-testid={`pf-day-slots-${d.date}`}>
+                      {(d.fasce || []).map((s) => (
+                        <label key={s.id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                          <Checkbox checked={(days[d.date]?.fasce || []).includes(s.id)} onCheckedChange={(v) => toggleSlot(d.date, s.id, !!v)} data-testid={`pf-slot-${d.date}-${s.id}`} />
+                          <span>{t(s.id === "mattina" ? "slotMorning" : "slotAfternoon")}{s.start && s.end && <span className="text-slate-400"> ({s.start}–{s.end})</span>}</span>
+                        </label>))}
                     </div>
                   )}
                 </div>
