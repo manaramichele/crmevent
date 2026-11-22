@@ -3,6 +3,9 @@ import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import { FasciaPeopleDialog, LegacyDialog } from "./CoverageFasceDialogs";
+import CoverageBulkDialog from "./CoverageBulkDialog";
+import { Button } from "@/components/ui/button";
+import { UsersRound } from "lucide-react";
 
 const DOT = { green: "bg-emerald-500", yellow: "bg-amber-400", red: "bg-red-500" };
 export const fmtDayLong = (d) => { const s = new Date(`${d}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "2-digit" }); return s.charAt(0).toUpperCase() + s.slice(1); };
@@ -21,7 +24,8 @@ function NeedInput({ row, eventoId, onSaved }) {
     placeholder="—" className="w-16 h-8 rounded border border-slate-200 px-2 text-sm tabular-nums" data-testid={`fx-need-${row.date}-${row.fascia}`} />;
 }
 
-export default function CoverageFasce({ params, day, version, onOpenPerson }) {
+export default function CoverageFasce({ params, day, version, onOpenPerson, onChanged }) {
+  const [bulk, setBulk] = useState(false);
   const [data, setData] = useState(null);
   const [pick, setPick] = useState(null);
   const [legacyOpen, setLegacyOpen] = useState(false);
@@ -34,10 +38,14 @@ export default function CoverageFasce({ params, day, version, onOpenPerson }) {
   const open = (fn) => { setPick(null); setLegacyOpen(false); onOpenPerson(fn); };
   return (
     <div className="space-y-3" data-testid="cov-fasce">
+      <div className="flex flex-wrap items-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => setBulk(true)} disabled={!data.rows.length} data-testid="cov-bulk-open"><UsersRound className="w-4 h-4 mr-1" />Assegna fascia per mansione</Button>
       {data.legacy.length > 0 && (
         <button type="button" onClick={() => setLegacyOpen(true)} className="w-full sm:w-auto inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 hover:bg-amber-100" data-testid="cov-legacy-indicator">
           <AlertTriangle className="w-4 h-4" />Disponibilità da aggiornare: <b data-testid="cov-legacy-count">{data.legacy.length}</b>
         </button>)}
+      </div>
+      <CoverageBulkDialog open={bulk} onClose={() => setBulk(false)} eventoId={params.evento_id} rows={data.rows} mansioni={data.mansioni || []} onDone={() => { setTick((t) => t + 1); onChanged?.(); }} />
       <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
         <table className="w-full text-sm min-w-[640px]" data-testid="cov-fasce-table">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">

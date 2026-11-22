@@ -550,7 +550,7 @@ export default function Persons({ mode = "anagrafiche" }) {
               renderTable={(groupRows, ev) => <PeopleTable tab="gruppi" lockedEvent={ev} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} {...peopleProps} rows={groupRows} />} />
           </TabsContent>
           <TabsContent value="copertura">
-            <CoverageTab key={`c-${effEv}`} initialEvent={effEv !== "all" ? effEv : ""} events={events} teams={teams} settings={settings} version={rows}
+            <CoverageTab key={`c-${effEv}`} initialEvent={effEv !== "all" ? effEv : ""} events={events} teams={teams} settings={settings} version={rows} onChanged={reload}
               onOpenPerson={(pid) => { const p = rows.find((x) => x.id === pid); if (p) setMask({ person: p }); }} />
           </TabsContent>
           <TabsContent value="turni">
