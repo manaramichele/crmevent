@@ -341,7 +341,7 @@ def build(db, deps: dict):
                            or (_hm(x.get("ora_inizio")) < b and (_hm(x.get("ora_fine")) or 1440) > a)]
                     ppl.append({k: p[k] for k in ("id", "nome", "cognome", "gruppo", "mansioni", "preferenza", "team", "categoria")} |
                                {"cov": c[0], "orario": c[1], "legacy": c[2], "changed": c[3], "turni": tur,
-                                "assigned": c[0] != "tbc" and bool(p["mansioni"] or p["team"])})
+                                "assigned": c[0] == "complete" and bool(p["mansioni"] or p["team"])})
                 av = [x for x in ppl if x["cov"] == "complete"]
                 n = needs.get((d["date"], s["id"])) or None
                 status = None

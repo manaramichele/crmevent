@@ -36,7 +36,7 @@ export function FasciaPeopleDialog({ row, onClose, onOpenPerson }) {
   return (
     <Dialog open={!!row} onOpenChange={(o) => { if (!o) { setFlt("all"); onClose(); } }}>
       <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto" data-testid="fx-people-dialog">
-        <DialogHeader><DialogTitle>{row && `${row.label} · ${fmtD(row.date)}${row.start ? ` · ${row.start}–${row.end}` : ""}`}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="pr-8">{row && `${row.label} · ${fmtD(row.date)}${row.start ? ` · ${row.start}–${row.end}` : ""}`}</DialogTitle></DialogHeader>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {[["all", "Tutti"], ["new", "Aggiornati"], ["legacy", "Da aggiornare"]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setFlt(k)} className={`px-3 py-1 rounded-full border ${flt === k ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600"}`} data-testid={`fx-filter-${k}`}>{l}</button>))}

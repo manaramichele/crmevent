@@ -22,7 +22,7 @@ function initState(days, prefDays) {
 }
 
 const toPayload = (st) => Object.entries(st).sort(([a], [b]) => a.localeCompare(b))
-  .map(([date, v]) => (v.legacy && v.keep ? { date, keep: true } : v.sel.length ? { date, fasce: ["mattina", "pomeriggio"].filter((x) => v.sel.includes(x)) } : null)).filter(Boolean);
+  .map(([date, v]) => ((v.legacy && v.keep) || v.proposed ? { date, keep: true } : v.sel.length ? { date, fasce: ["mattina", "pomeriggio"].filter((x) => v.sel.includes(x)) } : null)).filter(Boolean);
 
 function DayRow({ eid, day, v, onSet }) {
   const lg = v?.legacy;
@@ -40,9 +40,10 @@ function DayRow({ eid, day, v, onSet }) {
       {lg && (
         <div className={`mt-1.5 text-xs rounded px-2 py-1 flex flex-wrap items-center gap-2 ${v.keep ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-500"}`} data-testid={`mask-avail-legacy-${eid}-${day.date}`}>
           {v.keep ? <><span className="rounded bg-amber-200 px-1.5 py-0.5 font-semibold" data-testid={`mask-avail-legacy-badge-${eid}-${day.date}`}>Da aggiornare</span> Vecchio modulo, orario comunicato: <b>{lg.dalle || lg.alle ? `${lg.dalle || "?"}–${lg.alle || "?"}` : "non indicato"}</b> · seleziona Mattina e/o Pomeriggio e salva per aggiornarla</>
-            : v.proposed ? <><span className="rounded bg-amber-200 px-1.5 py-0.5 font-semibold" data-testid={`mask-avail-legacy-badge-${eid}-${day.date}`}>Da aggiornare</span> Il vecchio orario {lg.dalle}–{lg.alle} corrisponde alla fascia proposta: salva per confermare</>
+            : v.proposed ? <><span className="rounded bg-amber-200 px-1.5 py-0.5 font-semibold" data-testid={`mask-avail-legacy-badge-${eid}-${day.date}`}>Da aggiornare</span> Il vecchio orario {lg.dalle}–{lg.alle} corrisponde alla fascia proposta: finché non confermi resta invariato
+              <button type="button" className="underline font-semibold" onClick={() => onSet({ sel: v.sel, legacy: lg, keep: false })} data-testid={`mask-avail-confirm-${eid}-${day.date}`}>Conferma proposta</button></>
             : v.sel.length ? <>Sostituirà l'orario originale {lg.dalle || "?"}–{lg.alle || "?"}</> : <>L'orario originale {lg.dalle || "?"}–{lg.alle || "?"} verrà rimosso</>}
-          {!v.keep && <button type="button" className="inline-flex items-center gap-1 underline" onClick={() => onSet({ sel: [], legacy: lg, keep: true })} data-testid={`mask-avail-restore-${eid}-${day.date}`}><RotateCcw className="w-3 h-3" />Mantieni originale</button>}
+          {!v.keep && !v.proposed && <button type="button" className="inline-flex items-center gap-1 underline" onClick={() => onSet({ sel: [], legacy: lg, keep: true })} data-testid={`mask-avail-restore-${eid}-${day.date}`}><RotateCcw className="w-3 h-3" />Mantieni originale</button>}
         </div>)}
     </div>
   );
@@ -53,7 +54,7 @@ function EventAvail({ eid, name, prefDays, onChange }) {
   const [st, setSt] = useState({});
   const [init, setInit] = useState("[]");
   useEffect(() => {
-    api.get(`/events/${eid}/fasce-giorni`).then(({ data }) => { const s = initState(data.days, prefDays); setDays(data.days); setSt(s); setInit(JSON.stringify(toPayload(Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.proposed ? { ...v, keep: true } : v]))))); }).catch(() => setDays([]));
+    api.get(`/events/${eid}/fasce-giorni`).then(({ data }) => { const s = initState(data.days, prefDays); setDays(data.days); setSt(s); setInit(JSON.stringify(toPayload(s))); }).catch(() => setDays([]));
   }, [eid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (days) { const p = toPayload(st); onChange(eid, p, JSON.stringify(p) !== init); } }, [st, days]); // eslint-disable-line react-hooks/exhaustive-deps
   const all = useMemo(() => {

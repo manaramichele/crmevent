@@ -12,7 +12,8 @@ function NeedInput({ row, eventoId, onSaved }) {
   useEffect(() => { setV(row.needed ?? ""); }, [row.needed]);
   const save = async () => {
     const n = v === "" ? 0 : Number(v);
-    if (Number.isNaN(n) || n < 0 || n === (row.needed || 0)) return;
+    if (Number.isNaN(n) || n < 0 || !Number.isInteger(n)) { toast.error("Inserisci un numero intero maggiore o uguale a 0"); setV(row.needed ?? ""); return; }
+    if (n === (row.needed || 0)) return;
     try { await api.put("/staff-coverage/fascia-needs", { evento_id: eventoId, date: row.date, fascia: row.fascia, needed: n }); onSaved(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };

@@ -1,0 +1,37 @@
+{
+  "summary": "Tested Copertura oraria Mattina/Pomeriggio (fasce) end-to-end on TEST_Fasce Ev as test_fx_f73982@example.com. Backend: 11/11 pytest pass (baseline counts, legacy classification, filters, Necessari with status and validation, assigned via team, PDF exports, converting legacy days with days_history, partial conversion keeping 20/12 legacy and the other event TEST_Altro Ev untouched, public registration counted once per slot, org isolation 404). UI: default view is fasce; table counts match the spec exactly (19M 3+1 partial+1 to verify, 19P 2+2+1, 20M 2, 20P 0); indicator 3; the people dialog is sorted by surname, has legacy badges and the Tutti/Aggiornati/Da aggiornare filters work; the legacy dialog shows the days and Modifica anagrafica opens section D. Converting LegacyParziale makes the indicator 2 and 19M 4 with no partial, and days_history holds 10:00-15:00. Partial conversion of LegacyCompleta with 'Mantieni originale' on 20/12 keeps 20/12 legacy. Necessari persists after reload, shows a red/green dot, and clearing it removes it. Giving a mansione through the mask makes assegnati 1. There is no mansione filter; the team/gruppo/day filters work; both PDF downloads work; the Orario dettagliato and Più giorni views render; at 390px the table scrolls horizontally. Two logic and UX issues found (see action_items). All seeded TEST_ data was restored afterwards: availabilities snapshot, staff ruolo/team, needs, the public-registration person and the isolation orgs were deleted.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/staff-coverage/fasce (coverage.py _fasce)", "issue": "'assigned' is computed as c[0] != 'tbc' and (mansioni or team). PARTIAL people are counted as Assegnati even though they are not Disponibili. Verified: giving TEST_LegacyParziale a mansione gives 19 Mattina available=3 partial=1 assigned=1 and 19 Pomeriggio assigned=1. So Assegnati can exceed Disponibili, which contradicts 'Assegnato = available person with mansione OR team'. Fix: use c[0] == 'complete'. The same rule is used in the people dialog 'Stato assegnazione' and in the PDF note."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PersonAvailability (exact-match proposed legacy day)", "issue": "Opening the mask for TEST_LegacyCompleta (20/12 06:00-12:00 matches Mattina exactly) makes the mask dirty at once. Clicking Annulla with no edits shows 'Ci sono modifiche non salvate...'. Any save of the mask (e.g. editing only the phone) silently converts that legacy day to Mattina unless the user clicks 'Mantieni originale'. This conflicts with 'no auto-conversion'. Cause: the init payload treats proposed days as keep:true, but the initial state has keep:false with sel ticked, so JSON(payload) !== init. Suggested fix: only send or flag the proposed conversion after explicit user interaction, or let the dirty check ignore untouched proposals while still showing them pre-ticked.", "selector": "[data-testid=mask-avail-legacy-badge-<eid>-2026-12-20]", "priority": "MEDIUM"},
+      {"component": "NeedInput", "issue": "A negative value (e.g. -1) is silently ignored and stays in the input with no feedback.", "selector": "[data-testid^=fx-need-]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "fx-people-dialog on mobile 390px", "issues": ["The dialog title 'Mattina · sabato 19/12/2026 · 08:00–13:00' runs under the close X button. The inner table scrolls horizontally, which is fine."]},
+      {"screen": "Staff/Volontari page load", "issues": ["One console error 'Failed to load resource: 401' during load (harmless, probably a request before auth)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter206_coverage_fasce.py", "/app/backend/tests/fx_db_helper.py", "/app/backend/tests/fx_partial_assigned_check.py", "/app/test_reports/pytest/pytest_iter206.xml"],
+  "action_items": [
+    "coverage.py _fasce: count assigned only for cov == 'complete' (partial people must not count in Assegnati)",
+    "PersonAvailability.jsx: an untouched exact-match proposal should not make the mask dirty and should not be auto-converted on an unrelated save (or require explicit confirmation)",
+    "Minor: fix the mobile dialog title overlapping the close button; give feedback or clamp on a negative Necessari"
+  ],
+  "critical_code_review_comments": [
+    "_legacy() uses the unfiltered people list, so the indicator ignores the team/gruppo/cat filters. That is probably intended, but the indicator count can differ from the filtered table.",
+    "cov-fx-date options come from /staff-coverage days (_event_days), which may include days with no fasce (e.g. legacy days outside the event range). Selecting such a day shows an empty table.",
+    "server.py is >14k lines (pre-existing); coverage.py is 600 lines, which is OK."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter206_coverage_fasce.py", "/app/backend/tests/fx_db_helper.py", "/app/backend/tests/fx_partial_assigned_check.py"],
+  "success_rate": {"backend": "100% (11/11) + 1 logic issue found by an ad-hoc check", "frontend": "95% - all requested flows work; 1 medium UX/spec issue, 2 minor"},
+  "seed_data_creation": "None kept. A temporary TEST_Pub person/availability from the public registration and the TEST_IsoOrg orgs were created and then deleted. Seeded availabilities, staff and needs were restored from a snapshot.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest /app/backend/tests/test_iter206_coverage_fasce.py -n 0. It snapshots and restores the TEST_FasceOrg availabilities and cleans up its own isolation org. fx_db_helper.py show|snap|restore inspects and restores the seed. Person ids: Mattina f23569e2..., Pomeriggio 670a7758..., Entrambe 465aaa12..., LegacyCompleta 6b6238e8..., LegacyParziale 6d9ed5cb..., LegacySenzaOrari f6d8699e.... The public link code is x-qp0puHPMHnZDN4FJYBoXD5D7hZmbAi (rate limit 6/min/IP)."
+}
