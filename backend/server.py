@@ -1110,6 +1110,7 @@ class Event(BaseModel):
     descrizione: Optional[str] = None
     note: Optional[str] = None
     giorni_descrizioni: Optional[dict] = None
+    fasce_disponibilita: Optional[dict] = None
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -1133,6 +1134,24 @@ class Event(BaseModel):
                 k[:10]: str(v).strip() for k, v in self.giorni_descrizioni.items()
                 if v and str(v).strip() and di <= k[:10] <= df
             }
+        if self.fasce_disponibilita is not None:
+            clean = {}
+            for k, v in (self.fasce_disponibilita or {}).items():
+                if not isinstance(v, dict):
+                    continue
+                day = {}
+                for sid in ("mattina", "pomeriggio"):
+                    s = v.get(sid) or {}
+                    on = bool(s.get("attiva", True))
+                    st, en = (s.get("start") or "").strip()[:5], (s.get("end") or "").strip()[:5]
+                    if on and st and en and en <= st:
+                        raise ValueError(f"{k[:10]} {sid.capitalize()}: l'orario finale deve essere successivo a quello iniziale")
+                    day[sid] = {"attiva": on, "start": st or None, "end": en or None}
+                m, p = day["mattina"], day["pomeriggio"]
+                if m["attiva"] and p["attiva"] and m["end"] and p["start"] and p["start"] < m["end"]:
+                    raise ValueError(f"{k[:10]}: Mattina e Pomeriggio si sovrappongono")
+                clean[k[:10]] = day
+            self.fasce_disponibilita = clean
         return self
 
 
@@ -10500,9 +10519,67 @@ def _avail_days(event: dict) -> list:
                "label": f"{_WD_IT[cur.weekday()]} {cur.day} {_MO_IT[cur.month]}"}
         if fase == "evento":
             day["descrizione"] = desc.get(cur.isoformat()) or None
+        day["fasce"] = _day_slots(event, cur.isoformat())
         out.append(day)
         cur += timedelta(days=1)
     return out
+
+
+SLOT_LABELS = {"mattina": "Mattina", "pomeriggio": "Pomeriggio"}
+
+
+def _day_slots(event: dict, iso: str) -> list:
+    """Fasce attive di un giorno (configurate nell'evento); senza configurazione: Mattina e Pomeriggio senza orari."""
+    cfg = (event.get("fasce_disponibilita") or {}).get(iso) or {}
+    out = []
+    for sid in ("mattina", "pomeriggio"):
+        s = cfg.get(sid) or {}
+        if s.get("attiva", True):
+            out.append({"id": sid, "label": SLOT_LABELS[sid], "start": s.get("start"), "end": s.get("end")})
+    return out
+
+
+@api.get("/events/{event_id}/fasce-stale")
+async def fasce_stale(event_id: str, admin: dict = Depends(require_admin)):
+    ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    n = 0
+    async for a in db.availabilities.find(oq(admin, evento_id=event_id, **{"days.fasce": {"$exists": True}}), {"_id": 0, "days": 1}):
+        if _resync_days(ev, a.get("days") or [])[1]:
+            n += 1
+    return {"stale": n}
+
+
+def _resync_days(ev: dict, days: list):
+    changed, out = False, []
+    for d in days:
+        if d.get("fasce"):
+            cur = {s["id"]: s for s in _day_slots(ev, d.get("date") or "")}
+            nf = [{**f, "start": cur[f["id"]]["start"], "end": cur[f["id"]]["end"]} if f.get("id") in cur else f for f in d["fasce"]]
+            if nf != d["fasce"]:
+                changed = True
+                st = [f["start"] for f in nf if f.get("start")]
+                en = [f["end"] for f in nf if f.get("end")]
+                d = {**d, "fasce": nf, "dalle": min(st) if len(st) == len(nf) else None, "alle": max(en) if len(en) == len(nf) else None}
+        out.append(d)
+    return out, changed
+
+
+@api.post("/events/{event_id}/fasce-sync")
+async def fasce_sync(event_id: str, admin: dict = Depends(require_admin)):
+    """Aggiornamento esplicito: allinea gli orari delle disponibilità Mattina/Pomeriggio già raccolte alla configurazione attuale."""
+    ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    n = 0
+    async for a in db.availabilities.find(oq(admin, evento_id=event_id, **{"days.fasce": {"$exists": True}}), {"_id": 0, "id": 1, "days": 1}):
+        days, changed = _resync_days(ev, a.get("days") or [])
+        if changed:
+            await db.availabilities.update_one(oq(admin, id=a["id"]), {"$set": {"days": days, "updated_at": now_iso()}})
+            n += 1
+    await record_audit(admin, "availability_slots_synced", org_id=admin["org_id"], detail=f"{ev.get('nome')}: {n} disponibilità aggiornate")
+    return {"updated": n}
 
 
 def _avail_link_url(code: str) -> str:
@@ -11233,14 +11310,26 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         birth = (body.data_nascita or "").strip()[:10]
         if not birth:
             raise HTTPException(status_code=400, detail="Inserisci il Codice Fiscale oppure la Data di nascita")
-    day_meta = {d["date"]: d["fase"] for d in _avail_days(event)}
+    day_meta = {d["date"]: d for d in _avail_days(event)}
     days_clean = []
     for d in (body.days or []):
         if not (d.get("date") and d.get("disponibile")):
             continue
         if d["date"] not in day_meta:
             continue
-        days_clean.append({"date": d["date"], "fase": day_meta[d["date"]],
+        meta = day_meta[d["date"]]
+        if isinstance(d.get("fasce"), list):
+            opts = {s["id"]: s for s in meta.get("fasce") or []}
+            sel = [opts[x] for x in dict.fromkeys(d["fasce"]) if x in opts]
+            if not sel:
+                raise HTTPException(status_code=400, detail=f"Seleziona Mattina e/o Pomeriggio per {meta['label']}.")
+            st = [s["start"] for s in sel if s.get("start")]
+            en = [s["end"] for s in sel if s.get("end")]
+            days_clean.append({"date": d["date"], "fase": meta["fase"],
+                               "fasce": [{"id": s["id"], "start": s.get("start"), "end": s.get("end")} for s in sel],
+                               "dalle": min(st) if len(st) == len(sel) else None, "alle": max(en) if len(en) == len(sel) else None})
+            continue
+        days_clean.append({"date": d["date"], "fase": meta["fase"],
                            "dalle": (d.get("dalle") or "").strip() or None,
                            "alle": (d.get("alle") or "").strip() or None})
     if not days_clean:

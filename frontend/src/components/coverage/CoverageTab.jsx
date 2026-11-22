@@ -58,8 +58,8 @@ function Bars({ data, onPick }) {
   );
 }
 
-export default function CoverageTab({ events, teams, settings, version, onOpenPerson }) {
-  const [f, setF] = useState({ evento_id: events.length === 1 ? events[0].id : "", date: "", mansione: "", team_id: "", gruppo: "", cat: "all", step: 60 });
+export default function CoverageTab({ events, teams, settings, version, onOpenPerson, initialEvent = "" }) {
+  const [f, setF] = useState({ evento_id: initialEvent || (events.length === 1 ? events[0].id : ""), date: "", mansione: "", team_id: "", gruppo: "", cat: "all", step: 60 });
   const [view, setView] = useState("day");
   const [data, setData] = useState(null);
   const [slot, setSlot] = useState(null);

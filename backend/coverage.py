@@ -120,6 +120,15 @@ def build(db, deps: dict):
                 day = _d(dd.get("date"))
                 if not day or dd.get("disponibile") is False:
                     continue
+                fs = dd.get("fasce") or []
+                if fs:
+                    for fz in fs:
+                        a, b = _hm(fz.get("start")), _hm(fz.get("end"))
+                        if a is None or b is None:
+                            tbc.add(day.isoformat())
+                        else:
+                            iv.append((_abs(day, a), _abs(day, b if b > a else b + 1440)))
+                    continue
                 a, b = _hm(dd.get("dalle")), _hm(dd.get("alle"))
                 if a is None or b is None:
                     tbc.add(day.isoformat())

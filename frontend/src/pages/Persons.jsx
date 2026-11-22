@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { EntityManager, EntityDialog, StatusBadge, useCollection, useSettings, toOptions, PageHeader, PrimaryButton, TextAction, DeleteConfirm } from "@/components/crm";
 import { TeamNoteButton } from "@/components/TeamNote";
@@ -36,12 +37,13 @@ const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaborat
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
 const STATO_COLOR = { confermato: "green", disponibile: "green", da_riconfermare: "orange", disponibilita_richiesta: "blue", da_contattare: "gray", non_disponibile: "red", rinunciato: "red" };
 
-function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited, canDelete = true, lockedEvent }) {
+function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks = [], ruoli = [], onReload, onOpen, onEdit, onInvite, onDelete, onInvited, canDelete = true, lockedEvent, evValue, onEvChange }) {
   const [q, setQ] = useState("");
   const [tagliaFilter, setTagliaFilter] = useState("all");
   const [gruppoFilter, setGruppoFilter] = useState("all");
-  const [evState, setEvFilter] = useState("all");
-  const evFilter = lockedEvent ?? evState;
+  const [evState, setEvState] = useState("all");
+  const evFilter = lockedEvent ?? evValue ?? evState;
+  const setEvFilter = onEvChange || setEvState;
   const groupMode = tab === "gruppi";
   const [prefFilter, setPrefFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -357,6 +359,19 @@ export default function Persons({ mode = "anagrafiche" }) {
   const { staff: staffLinks, persons: rows, loading, reload } = usePeople();
   const { teams } = useTeams();
   const settings = useSettings();
+  const navigate = useNavigate();
+  const [sp, setSp] = useSearchParams();
+  const urlEv = sp.get("evento");
+  const [pageEv, setPageEvState] = useState(urlEv || "all");
+  const evOk = pageEv === "all" || events.some((e) => e.id === pageEv);
+  const effEv = evOk ? pageEv : "all";
+  const setPageEv = (v) => { setPageEvState(v); const n = new URLSearchParams(sp); if (v && v !== "all") n.set("evento", v); else n.delete("evento"); setSp(n, { replace: true }); };
+  const evBanner = effEv !== "all" && (
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-tiffany-border bg-tiffany-light/30 px-4 py-2.5 text-sm" data-testid="staff-event-banner">
+      <span>Evento: <b data-testid="staff-event-banner-name">{events.find((e) => e.id === effEv)?.nome}</b></span>
+      <button type="button" className="ml-auto text-tiffany-active hover:underline" onClick={() => navigate("/eventi")} data-testid="staff-back-to-event">← Torna agli eventi</button>
+      <button type="button" className="text-slate-500 hover:underline" onClick={() => setPageEv("all")} data-testid="staff-clear-event">Mostra tutti gli eventi</button>
+    </div>);
   const [detailId, setDetailId] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -495,7 +510,8 @@ export default function Persons({ mode = "anagrafiche" }) {
             <PrimaryButton onClick={() => setMask({ person: null, cat: "volontario" })} data-testid="add-volunteer-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi Volontario</PrimaryButton>
           </div>
         ) : <PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi persona</PrimaryButton>} />
-      {isStaff ? (
+      {isStaff ? (<>
+        {evBanner}
         <Tabs defaultValue="staff">
           <TabsList className="mb-4 flex-wrap h-auto">
             <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
@@ -508,11 +524,11 @@ export default function Persons({ mode = "anagrafiche" }) {
           </TabsList>
           {["staff", "volontari", "da_classificare"].map((t) => (
             <TabsContent key={t} value={t}>
-              <PeopleTable tab={t} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} {...peopleProps} />
+              <PeopleTable tab={t} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} evValue={effEv} onEvChange={setPageEv} {...peopleProps} />
             </TabsContent>
           ))}
           <TabsContent value="team">
-            <EntityManager title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
+            <EntityManager key={`team-${effEv}`} initialFilters={effEv !== "all" ? { evento_id: effEv } : undefined} title="Team" subtitle="Squadre operative per evento con Team Leader" endpoint="/teams"
               fields={teamFields} columns={teamCols} entityLabel="team" testid="team" section="teams" searchKeys={["nome", "area"]} onMutate={invalidateTeams} filters={[{ name: "evento_id", label: "Evento", options: eventOpts }]}
               extraActions={(r, { update }) => <TeamNoteButton team={r} canEdit={canEditStaff} onSave={saveNote(update, r.id)} />}
               mobileCard={teamMobileCard}
@@ -526,20 +542,20 @@ export default function Persons({ mode = "anagrafiche" }) {
                   onOpenPerson={(pid) => { close(); const p = rows.find((x) => x.id === pid); if (p) setMask({ person: p }); else setDetailId(pid); }} />)} />
           </TabsContent>
           <TabsContent value="gruppi">
-            <GroupsTab rows={rows} events={events} settings={settings} user={user}
+            <GroupsTab key={`g-${effEv}`} initialEvent={effEv} rows={rows} events={events} settings={settings} user={user}
               renderTable={(groupRows, ev) => <PeopleTable tab="gruppi" lockedEvent={ev} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} {...peopleProps} rows={groupRows} />} />
           </TabsContent>
           <TabsContent value="copertura">
-            <CoverageTab events={events} teams={teams} settings={settings} version={rows}
+            <CoverageTab key={`c-${effEv}`} initialEvent={effEv !== "all" ? effEv : ""} events={events} teams={teams} settings={settings} version={rows}
               onOpenPerson={(pid) => { const p = rows.find((x) => x.id === pid); if (p) setMask({ person: p }); }} />
           </TabsContent>
           <TabsContent value="turni">
-            <EntityManager title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
+            <EntityManager key={`t-${effEv}`} initialFilters={effEv !== "all" ? { evento_id: effEv } : undefined} title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
               fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" section="turni" searchKeys={["ruolo", "area", "luogo"]}
               filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
           </TabsContent>
         </Tabs>
-      ) : (
+      </>) : (
         <PeopleTable tab="referenti_aziende" {...peopleProps} />
       )}
 

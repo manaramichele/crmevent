@@ -21,7 +21,9 @@ export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita:
 const CATS = [["staff", "Staff"], ["volontario", "Volontario"]];
 const ADDR = ["indirizzo", "cap", "citta", "provincia", "regione", "nazione"];
 const dm = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "");
-const daysText = (days) => (days || []).map((d) => `${dm(d.date)}${d.dalle || d.alle ? ` ${d.dalle || "?"}–${d.alle || "?"}` : ""}`).join(", ");
+const daysText = (days) => (days || []).map((d) => (d.fasce?.length
+  ? `${dm(d.date)}: ${d.fasce.map((f) => (f.id === "mattina" ? "Mattina" : "Pomeriggio")).join(" e ")}${d.fasce.some((f) => f.start) ? ` (${d.fasce.map((f) => `${f.start || "?"}–${f.end || "?"}`).join(", ")})` : ""}`
+  : `${dm(d.date)}${d.dalle || d.alle ? ` ${d.dalle || "?"}–${d.alle || "?"}` : ""}`)).join(", ");
 const sel = "h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm";
 const blankRow = (categoria) => ({ key: Math.random().toString(36).slice(2), evento_id: "", categoria, team_id: "", ruolo: "", preferenza: "" });
 

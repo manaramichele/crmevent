@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 import { Rocket, Image as ImageIcon } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal, Copy } from "lucide-react";
+import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal, Copy, Users } from "lucide-react";
 import { DuplicateEventDialog } from "@/components/events/DuplicateEventDialog";
 import { useAuth } from "@/context/AuthContext";
 import { can } from "@/lib/perms";
@@ -289,6 +289,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
 
 function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, onDuplicate }) {
   const all = [
+    { key: "staffvol", label: "Staff / Volontari", Icon: Users, run: () => navigate(`/staff-volontari?evento=${row.id}`), title: "Staff e Volontari di questo evento" },
     { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
     { key: "briefing", label: "Briefing", Icon: FileText, run: () => navigate(`/eventi/${row.id}/briefing`), title: "Briefing evento" },
     { key: "planner", label: "Event Planner", Icon: FileText, run: () => navigate(`/eventi/${row.id}/planner`), title: "Event Planner" },
@@ -298,8 +299,8 @@ function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, open
     ...(onDuplicate ? [{ key: "duplicate", label: "Duplica evento", Icon: Copy, run: () => onDuplicate(row), title: "Duplica evento" }] : []),
   ];
   const byKey = (k) => all.find((a) => a.key === k);
-  const primary = ["availability", "pipeline", "maps", "calsync"].map(byKey);
-  const secondary = ["duplicate", "event-credits", "briefing"].map(byKey).filter(Boolean);
+  const primary = ["staffvol", "availability", "pipeline", "maps"].map(byKey);
+  const secondary = ["calsync", "duplicate", "event-credits", "briefing"].map(byKey).filter(Boolean);
 
   return (
     <>
@@ -390,6 +391,7 @@ export default function Events() {
     { name: "data_fine", label: "Data fine", type: "date" },
     { name: "data_fine_disallestimento", label: "Data fine disallestimento (facoltativa)", type: "date" },
     { name: "giorni_descrizioni", label: "Descrizione delle singole giornate (facoltativa)", type: "daydesc", full: true },
+    { name: "fasce_disponibilita", label: "Fasce orarie raccolta disponibilità (Mattina / Pomeriggio)", type: "dayslots", full: true },
     { name: "ora_inizio", label: "Ora inizio", type: "time" },
     { name: "ora_fine", label: "Ora fine", type: "time" },
     { name: "localita", label: "Località / Venue" },
