@@ -1412,3 +1412,11 @@ Task 2 — Creatività manuale:
 ## 2026-11-22 - Copertura oraria: Assegna fascia per mansione
 - coverage.py: POST /staff-coverage/bulk-fascia/preview e /apply (mansioni scelte, giorno, fascia; stesse regole dello script Pisa: aggiunge senza togliere, vecchio formato convertito con storico, esclusi non disponibili e vecchi orari che coprono l altra fascia; codice anteprima, 409 se i dati cambiano, Audit Log availability_bulk_update). GET /staff-coverage/fasce restituisce anche mansioni.
 - CoverageBulkDialog.jsx: scelta giorno/fascia/mansioni, anteprima con conteggi ed elenco, conferma. Verificato con script API e screenshot (desktop e mobile).
+
+## 2026-11-22 - Da classificare: Elimina richiesta + Copertura solo confermati
+- POST /api/da-classificare/delete (sposta link Da classificare, disponibilita se non resta altro ruolo, e anagrafica se senza storico in deleted_requests; Audit Log; nessuna email). Super Admin: GET /api/admin/deleted-requests, POST /restore (no duplicati; 409 se la persona si e registrata di nuovo). UI: DaClassificareActions.jsx (desktop e mobile), pulsante Richieste eliminate solo Super Admin.
+- Copertura oraria conta solo link staff/collaboratore/volontario con stato confermato (scelta utente). Maschera anagrafica: select Stato per evento.
+
+## 2026-11-22 - Copertura oraria per Team e fascia
+- coverage.py: righe giorno x fascia x Team (alfabetico); disponibili = confermati del team con copertura completa; assegnazioni in coverage_assignments (una per persona per fascia, solo dentro Copertura, scelta utente), POST/DELETE /staff-coverage/assign con avvisi 409 (fuori disponibilita, altro team; move/force), /staff-coverage/team-needs, mancanti; assegnazioni non piu valide segnalate come da verificare. Bulk ora per Team. Pannello Da sistemare (fabbisogni per mansione, confermati senza team). PDF per Team. Rimossi editor fabbisogni per mansione e stampa Per mansione dalla UI (dati conservati).
+- Test iteration_207-209 + fix (orfani con filtri, move/force separati).

@@ -4,14 +4,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Printer, FileSpreadsheet, CalendarDays, Clock } from "lucide-react";
 import CoverageSlotDialog from "./CoverageSlotDialog";
-import CoverageNeeds from "./CoverageNeeds";
 import CoverageMatrix from "./CoverageMatrix";
 import CoverageFasce from "./CoverageFasce";
 import { LayoutList } from "lucide-react";
 import { sortIt } from "@/lib/sortOptions";
 
 const fsel = "h-10 w-full sm:w-auto sm:min-w-[150px] rounded-md border border-slate-200 bg-white px-2 text-sm";
-const STATUS_BAR = { green: "bg-emerald-500", yellow: "bg-amber-400", red: "bg-red-500" };
 const fmtDay = (d) => new Date(`${d}T12:00:00`).toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" });
 
 export async function downloadCoverage(params, fallback) {
@@ -35,14 +33,13 @@ function Kpi({ label, value, id }) {
 }
 
 function Bars({ data, onPick }) {
-  const max = Math.max(1, ...data.slots.map((s) => Math.max(s.available, s.needed || 0)));
+  const max = Math.max(1, ...data.slots.map((s) => s.available));
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1.5" data-testid="cov-bars">
       <div className="flex flex-wrap gap-4 text-xs text-slate-500 mb-2">
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-tiffany" />Intera fascia</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-tiffany/40" />Parziale</span>
-        <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3 bg-slate-800" />Necessari</span>
-        <span>Disponibili | Assegnati | Necessari</span>
+        <span>Disponibili confermati (assegnazioni e fabbisogni: vista Per Team e fascia)</span>
       </div>
       {data.slots.map((s) => (
         <button key={s.start} type="button" onClick={() => onPick(s)} className="w-full grid grid-cols-[86px_1fr_170px] items-center gap-2 text-left rounded hover:bg-slate-50 px-1 py-0.5" data-testid={`cov-slot-${s.start}`}>
@@ -50,11 +47,9 @@ function Bars({ data, onPick }) {
           <span className="relative h-5 bg-slate-100 rounded overflow-hidden">
             <span className="absolute inset-y-0 left-0 bg-tiffany/40" style={{ width: `${(s.available / max) * 100}%` }} />
             <span className="absolute inset-y-0 left-0 bg-tiffany" style={{ width: `${(s.full.length / max) * 100}%` }} />
-            {s.needed && <span className="absolute inset-y-0 w-0.5 bg-slate-800" style={{ left: `${(s.needed / max) * 100}%` }} />}
           </span>
           <span className="text-xs tabular-nums whitespace-nowrap flex items-center gap-1.5" data-testid={`cov-slot-nums-${s.start}`}>
-            {s.status && <span className={`w-2.5 h-2.5 rounded-full ${STATUS_BAR[s.status]}`} data-testid={`cov-status-${s.start}-${s.status}`} />}
-            <b>{s.available}</b>{s.partial.length > 0 && <span className="text-slate-400">({s.partial.length} parz.)</span>} | {s.assigned} | {s.needed ?? "—"}
+            <b>{s.available}</b>{s.partial.length > 0 && <span className="text-slate-400">({s.partial.length} parz.)</span>}
           </span>
         </button>))}
     </div>
@@ -94,17 +89,16 @@ export default function CoverageTab({ events, teams, settings, version, onOpenPe
       {!f.evento_id ? <div className="bg-white border border-dashed border-slate-300 rounded-xl p-10 text-center text-slate-500" data-testid="cov-pick-event">Seleziona un evento per vedere la copertura oraria.</div> : data && (<>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-            <button type="button" onClick={() => setView("fasce")} className={`px-3 py-1.5 text-sm rounded-md ${view === "fasce" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-fasce"><LayoutList className="w-4 h-4 inline mr-1" />Mattina / Pomeriggio</button>
+            <button type="button" onClick={() => setView("fasce")} className={`px-3 py-1.5 text-sm rounded-md ${view === "fasce" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-fasce"><LayoutList className="w-4 h-4 inline mr-1" />Per Team e fascia</button>
             <button type="button" onClick={() => setView("day")} className={`px-3 py-1.5 text-sm rounded-md ${view === "day" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-day"><Clock className="w-4 h-4 inline mr-1" />Orario dettagliato</button>
             <button type="button" onClick={() => setView("matrix")} className={`px-3 py-1.5 text-sm rounded-md ${view === "matrix" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-matrix"><CalendarDays className="w-4 h-4 inline mr-1" />Più giorni</button>
           </div>
           <div className="flex flex-wrap gap-2 sm:ml-auto">
             {view === "fasce" ? (<>
-              <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...fxParams, ...(fday ? { date: fday } : {}), kind: "pdf", mode: "fasce" }, "Fasce.pdf")} data-testid="cov-print-fasce"><Printer className="w-4 h-4 mr-1" />Riepilogo fasce</Button>
-              <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...fxParams, ...(fday ? { date: fday } : {}), kind: "pdf", mode: "fasce_names" }, "Fasce.pdf")} data-testid="cov-print-fasce-names"><Printer className="w-4 h-4 mr-1" />Elenco per fascia</Button>
+              <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...fxParams, ...(fday ? { date: fday } : {}), kind: "pdf", mode: "fasce" }, "Fasce.pdf")} data-testid="cov-print-fasce"><Printer className="w-4 h-4 mr-1" />Riepilogo Team e fasce</Button>
+              <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...fxParams, ...(fday ? { date: fday } : {}), kind: "pdf", mode: "fasce_names" }, "Fasce.pdf")} data-testid="cov-print-fasce-names"><Printer className="w-4 h-4 mr-1" />Elenco per Team</Button>
             </>) : (<>
             <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "pdf", mode: "summary" }, "Copertura.pdf")} data-testid="cov-print-summary"><Printer className="w-4 h-4 mr-1" />Riepilogo giornaliero</Button>
-            <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "pdf", mode: "by_mansione" }, "Copertura.pdf")} data-testid="cov-print-mansione"><Printer className="w-4 h-4 mr-1" />Per mansione</Button>
             <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "pdf", mode: "names" }, "Copertura.pdf")} data-testid="cov-print-names"><Printer className="w-4 h-4 mr-1" />Elenco orario</Button>
             </>)}
             <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "xlsx" }, "Disponibilita.xlsx")} data-testid="cov-export-xlsx"><FileSpreadsheet className="w-4 h-4 mr-1" />Excel</Button>
@@ -121,7 +115,6 @@ export default function CoverageTab({ events, teams, settings, version, onOpenPe
           </div>
           <Bars data={data} onPick={setSlot} />
           {data.tbc.length > 0 && <button type="button" onClick={() => setSlot({ tbc: true })} className="text-sm text-amber-700 underline" data-testid="cov-open-tbc">Vedi {data.tbc.length} persone con orario da confermare</button>}
-          <CoverageNeeds eventoId={f.evento_id} date={data.date} mansioni={data.mansioni} pct={data.yellow_margin_pct} onChanged={() => setTick((t) => t + 1)} />
         </>) : <CoverageMatrix params={params} version={`${version}-${tick}`} onPick={(d) => { setF((p) => ({ ...p, date: d })); setView("day"); }} />}
         <CoverageSlotDialog slot={slot} data={data} eventName={ev?.nome} onClose={() => setSlot(null)} onOpenPerson={(pid) => { setSlot(null); onOpenPerson(pid); }} />
       </>)}

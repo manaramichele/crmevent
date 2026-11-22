@@ -1,0 +1,35 @@
+{
+  "summary": "Tested Copertura oraria per Team e fascia on TEST_Ev Team (org test_tm_420d7a). Backend: new pytest file test_iter209_team_fasce.py, 5/6 pass. Covered row order and shape, team filter, needs validation, the 409 availability warning, force, 400 for wrong team, unassign, and PDFs. The failure is a real bug: fake 'da verificare' assignments appear when the Staff/Volontari filter is used. UI (desktop 1920 + mobile 390): all requested flows pass with no page errors. (1) Table rows, Giorno/Fascia with hours, teams in alphabetical order (Bici, Ristoro Arrivo, Segreteria). (2) Setting Necessari (2, then cleared) updates Mancanti; Ristoro Mattina=3. (3) Dialog: assigning Bruno updates counts. Assigning Carla (partial/legacy) shows fx-assign-warn; Conferma assigns her ('Fuori disponibilità') with 2 assegnati / 1 mancante. Rimuovi updates the counts. (4) Move between teams: Bruno's team temporarily switched to Bici in the DB. The Bici dialog shows 'Assegnato a Ristoro Arrivo'. Assegna asks 'Già assegnata al Team Ristoro Arrivo… confermi lo spostamento?'. Conferma moves him and he is counted once (Bici 1, Ristoro orphan count back to 1). (5) TEST_DaClass never appears in the dialog, counts or legacy list. (6) Elena assigned, then set to Rinunciato via the edit mask (opened from fx-person-edit; mask-assign-stato-0): Segreteria Mattina shows avail 0, '0 · 1 da verificare', and the dialog shows 'Nessun membro confermato'. (7) The cov-team filter limits rows and its options are alphabetical; cov-fx-date works. (8) The cov-mansione-warnings panel lists TEST_NoTeam (Addetto); clicking the name opens the PersonMask. (9) Bulk dialog: team chips are alphabetical and the fascia options show hours. Preview for Ristoro+Segreteria/Pomeriggio lists only confirmed members (Bruno already, Carla skipped because her legacy hours overlap the other fascia). The apply button is disabled with 0 to update. Apply was not run because no seed person needed an update. (10) cov-print-fasce and cov-print-fasce-names download CRMEvent_Fasce_TESTEvTeam.pdf. Orario dettagliato (bars + 6 KPIs, no mansione editor, only Riepilogo giornaliero/Elenco orario prints) and Più giorni both render. (11) The legacy indicator shows 1 (TEST_Carla only).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/staff-coverage/fasce?cat=staff|volontari (and gruppo=)", "issue": "orphans are computed against pmap, which is built from _load(...) filtered by cat/gruppo. A valid assignment of a person excluded by the filter is counted as 'N da verificare' (orphan). Repro: force-assign TEST_Carla (volontario) to Ristoro Pomeriggio. fasce?cat=all gives orphans=0; fasce?cat=staff gives orphans=1 ('· 1 da verificare' shown in red). Fix: compute orphans against the unfiltered confirmed people list (e.g. the allp already loaded in the fasce endpoint, or call _load without cat/gruppo inside _fasce), and only skip filtered-out people in the counts. Also decide whether Assegnati/Mancanti should change with the category filter: today Mancanti grows when filtering Solo Staff."},
+      {"endpoint": "POST /api/staff-coverage/assign force=true", "issue": "One force flag skips both the other_team check and the availability check. When moving a partial/unavailable person between teams, the user confirms only 'spostamento' and never sees the availability warning, but the assignment is saved as forced. Consider returning both messages in one 409 or checking them one after the other."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Copertura Per Team e fascia (mobile 390px)", "issues": ["The table scrolls sideways (min-w 760px). At 390px the Disponibili/Assegnati/Necessari/Mancanti columns are off-screen at first view. Consider a card layout or a sticky Team column on mobile."]},
+      {"screen": "PersonMask", "issues": ["Data di nascita uses the browser's native date input (mm/dd/yyyy), not the shadcn calendar. This existed before this feature."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter209_team_fasce.py", "/app/test_reports/pytest/iter209.xml"],
+  "action_items": [
+    "Fix the fake orphans ('da verificare') under the cat/gruppo filters in _fasce: compute orphans against the unfiltered confirmed people.",
+    "Optional: when moving between teams with force, also warn about availability (partial/none) before saving a forced assignment.",
+    "Optional: MansioneWarnings calls w.no_team.sort(...), which changes the props/state array in place; use [...w.no_team].sort."
+  ],
+  "critical_code_review_comments": [
+    "coverage.py _fasce: pmap = filtered people, so orphans are wrong under filters (see above).",
+    "coverage.py DELETE /staff-coverage/assign does not check the event or date. It is scoped to the org, so this is harmless, but it returns ok with removed=0 silently.",
+    "coverage.py is 793 lines (over 700): consider moving _pdf_fasce/_pdf/_xlsx into a separate module."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter209_team_fasce.py"],
+  "success_rate": {"backend": "83% (5/6)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "None. Test changes were all reverted: Bruno's team link was temporarily set to Bici and restored to Ristoro Arrivo. Elena's stato was set to rinunciato through the UI and restored to confermato in the DB. All test assignments were removed. Necessari for Segreteria Pomeriggio was set to 2, then cleared. Final state matches the initial one (only Anna's stale Ristoro Mattina assignment, Ristoro Mattina needed=3). Elena's link updated_at timestamp changed because of the mask save.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=https://manage-events-12.preview.emergentagent.com pytest backend/tests/test_iter209_team_fasce.py -n 0. test_cat_filter_does_not_create_fake_orphans should pass once fixed. UI: login test_tm_420d7a@example.com / TestPass123!, /staff-volontari, tab-copertura, cov-event=fbdf9b4c48d141dfab29a0c7f46cbaed. Person ids: Bruno e13cc33e14124e98973250b75dd3be8c, Carla c73ec7efd2954b56bef7b31a4e813037, Elena 9ee7e7f750f945d99df1be750a2af17b. Team ids: Bici 777fa8c9..., Ristoro 5c6c46ac..., Segreteria b14556b4.... Persons have a single staff link per event, so testing the move between teams requires temporarily changing the link's team_id."
+}

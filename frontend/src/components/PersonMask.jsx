@@ -21,6 +21,7 @@ import { sortIt } from "@/lib/sortOptions";
 
 export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", associazione: "Gestione Società", non_determinata: "Non determinata" };
 const CATS = [["staff", "Staff"], ["volontario", "Volontario"]];
+const STATI = [["da_contattare", "Da contattare"], ["disponibilita_richiesta", "Disponibilità richiesta"], ["disponibile", "Disponibile"], ["da_riconfermare", "Da riconfermare"], ["confermato", "Confermato"], ["non_disponibile", "Non disponibile"], ["rinunciato", "Rinunciato"]];
 const ADDR = ["indirizzo", "cap", "citta", "provincia", "regione", "nazione"];
 const dm = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "");
 const WD = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
@@ -75,6 +76,8 @@ function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="text-xs text-slate-500">Ruolo<select className={`${sel} ${r.categoria === "da_classificare" ? "border-amber-300 bg-amber-50" : ""}`} value={r.categoria} onChange={(e) => set("categoria", e.target.value)} data-testid={`mask-assign-cat-${i}`}>{r.categoria === "da_classificare" && <option value="da_classificare">Da classificare</option>}{CATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        <label className="text-xs text-slate-500">Stato<select className={`${sel} ${(r.stato || "da_contattare") === "confermato" ? "border-emerald-300 bg-emerald-50" : ""}`} value={r.stato || "da_contattare"} onChange={(e) => set("stato", e.target.value)} data-testid={`mask-assign-stato-${i}`}>{STATI.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <span className="text-[11px] text-slate-400">Solo Staff e Volontari Confermati entrano nella Copertura oraria</span></label>
         <label className="text-xs text-slate-500">Preferenza
           <select className={sel} value={r.preferenza || ""} onChange={(e) => set("preferenza", e.target.value)} data-testid={`mask-assign-pref-${i}`}><option value="">{availPref ? `Dal link: ${availPref}` : "— Nessuna —"}</option>{prefOpts.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
         <div className="text-xs text-slate-500">Team<TeamSelect value={r.team_id || ""} eventoId={r.evento_id} onChange={setTeam} testid={`mask-assign-team-${i}`} /></div>
@@ -155,10 +158,10 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
       for (const a of initial.rows) if (!keep.has(a.id)) await api.delete(`/staff/${a.id}`);
       for (const r of rows) {
         const payload = { persona_id: pid, evento_id: r.evento_id, categoria: r.id && r.orig === "collaboratore" && r.categoria === "staff" ? "collaboratore" : r.categoria, team_id: r.team_id || "", ruolo: r.ruolo || "", mansione_auto: !!r.mansione_auto, preferenza: r.preferenza || "" };
-        if (!r.id) { const { data: s } = await api.post("/staff", { ...payload, stato: "da_contattare" }); setRows((cur) => cur.map((x) => (x.key === r.key ? { ...x, id: s.id } : x))); r.id = s.id; }
+        if (!r.id) { const { data: s } = await api.post("/staff", { ...payload, stato: r.stato || "da_contattare" }); setRows((cur) => cur.map((x) => (x.key === r.key ? { ...x, id: s.id } : x))); r.id = s.id; }
         else {
           const o = initial.rows.find((x) => x.id === r.id);
-          if (JSON.stringify(o) !== JSON.stringify(r)) await api.put(`/staff/${r.id}`, { ...payload, stato: r.stato });
+          if (JSON.stringify(o) !== JSON.stringify(r)) await api.put(`/staff/${r.id}`, { ...payload, stato: r.stato || "da_contattare" });
         }
       }
       for (const [eid, a] of Object.entries(avail.current)) {
