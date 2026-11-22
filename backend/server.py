@@ -10638,7 +10638,12 @@ async def person_avail_update(person_id: str, event_id: str, body: PersonAvailIn
     out.sort(key=lambda d: d.get("date") or "")
     now = now_iso()
     if cur:
-        await db.availabilities.update_one(oq(admin, id=cur["id"]), {"$set": {"days": out, "updated_at": now, "days_edited_by": admin.get("email"), "days_edited_at": now}})
+        kept = {d.get("date") for d in out if not d.get("fasce")}
+        hist = [{**d, "sostituito_il": now, "sostituito_da": admin.get("email")} for iso, d in old.items() if not d.get("fasce") and iso not in kept]
+        upd = {"$set": {"days": out, "updated_at": now, "days_edited_by": admin.get("email"), "days_edited_at": now}}
+        if hist:
+            upd["$push"] = {"days_history": {"$each": hist}}
+        await db.availabilities.update_one(oq(admin, id=cur["id"]), upd)
         aid = cur["id"]
     else:
         if not out:
@@ -14387,7 +14392,7 @@ app.include_router(ANA["router"])
 OPT = option_lists.build(db, {"require_admin": require_admin, "get_settings": _org_settings, "allows": P.allows, "default_settings": default_settings})
 app.include_router(OPT["router"])
 app.include_router(people_pdf.build(db, {"require_admin": require_admin, "resolve_attachment": _resolve_attachment, "read_file_rec": _read_file_rec, "fallback_logo": _LOGO_PATH})["router"])
-app.include_router(coverage.build(db, {"require_admin": require_admin})["router"])
+app.include_router(coverage.build(db, {"require_admin": require_admin, "avail_days": _avail_days})["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})

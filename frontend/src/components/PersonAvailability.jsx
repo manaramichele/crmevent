@@ -14,8 +14,8 @@ function initState(days, prefDays) {
     const opts = days.find((x) => x.date === d.date)?.fasce || [];
     const one = opts.find((s) => s.start && s.start === d.dalle && s.end === d.alle);
     const [m, p] = [opts.find((s) => s.id === "mattina"), opts.find((s) => s.id === "pomeriggio")];
-    if (one) st[d.date] = { sel: [one.id], legacy: null, keep: false };
-    else if (m && p && m.start && m.start === d.dalle && p.end === d.alle && m.end === p.start) st[d.date] = { sel: ["mattina", "pomeriggio"], legacy: null, keep: false };
+    if (one) st[d.date] = { sel: [one.id], legacy: d, keep: false, proposed: true };
+    else if (m && p && m.start && m.start === d.dalle && p.end === d.alle && m.end === p.start) st[d.date] = { sel: ["mattina", "pomeriggio"], legacy: d, keep: false, proposed: true };
     else st[d.date] = { sel: [], legacy: d, keep: true };
   });
   return st;
@@ -39,7 +39,8 @@ function DayRow({ eid, day, v, onSet }) {
       </div>
       {lg && (
         <div className={`mt-1.5 text-xs rounded px-2 py-1 flex flex-wrap items-center gap-2 ${v.keep ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-500"}`} data-testid={`mask-avail-legacy-${eid}-${day.date}`}>
-          {v.keep ? <>Disponibilità originale (orario libero): <b>{lg.dalle || "?"}–{lg.alle || "?"}</b> · seleziona Mattina e/o Pomeriggio per sostituirla</>
+          {v.keep ? <><span className="rounded bg-amber-200 px-1.5 py-0.5 font-semibold" data-testid={`mask-avail-legacy-badge-${eid}-${day.date}`}>Da aggiornare</span> Vecchio modulo, orario comunicato: <b>{lg.dalle || lg.alle ? `${lg.dalle || "?"}–${lg.alle || "?"}` : "non indicato"}</b> · seleziona Mattina e/o Pomeriggio e salva per aggiornarla</>
+            : v.proposed ? <><span className="rounded bg-amber-200 px-1.5 py-0.5 font-semibold" data-testid={`mask-avail-legacy-badge-${eid}-${day.date}`}>Da aggiornare</span> Il vecchio orario {lg.dalle}–{lg.alle} corrisponde alla fascia proposta: salva per confermare</>
             : v.sel.length ? <>Sostituirà l'orario originale {lg.dalle || "?"}–{lg.alle || "?"}</> : <>L'orario originale {lg.dalle || "?"}–{lg.alle || "?"} verrà rimosso</>}
           {!v.keep && <button type="button" className="inline-flex items-center gap-1 underline" onClick={() => onSet({ sel: [], legacy: lg, keep: true })} data-testid={`mask-avail-restore-${eid}-${day.date}`}><RotateCcw className="w-3 h-3" />Mantieni originale</button>}
         </div>)}
@@ -52,7 +53,7 @@ function EventAvail({ eid, name, prefDays, onChange }) {
   const [st, setSt] = useState({});
   const [init, setInit] = useState("[]");
   useEffect(() => {
-    api.get(`/events/${eid}/fasce-giorni`).then(({ data }) => { const s = initState(data.days, prefDays); setDays(data.days); setSt(s); setInit(JSON.stringify(toPayload(s))); }).catch(() => setDays([]));
+    api.get(`/events/${eid}/fasce-giorni`).then(({ data }) => { const s = initState(data.days, prefDays); setDays(data.days); setSt(s); setInit(JSON.stringify(toPayload(Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.proposed ? { ...v, keep: true } : v]))))); }).catch(() => setDays([]));
   }, [eid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (days) { const p = toPayload(st); onChange(eid, p, JSON.stringify(p) !== init); } }, [st, days]); // eslint-disable-line react-hooks/exhaustive-deps
   const all = useMemo(() => {
