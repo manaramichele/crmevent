@@ -29,7 +29,7 @@ function Row({ r, first, eventoId, onOpen, onSaved }) {
     <tr className={`border-t ${first ? "border-slate-300" : "border-slate-100"}`} data-testid={`fx-row-${tid(r)}`}>
       <td className="px-3 py-2 whitespace-nowrap text-slate-700">{first ? fmtDayLong(r.date) : ""}</td>
       <td className="px-3 py-2 whitespace-nowrap">{first && <><b className="text-slate-800">{r.label}</b> <span className="text-xs text-slate-500 tabular-nums">{r.start && r.end ? `${r.start}–${r.end}` : "orario non impostato"}</span></>}</td>
-      <td className="px-3 py-2"><button type="button" onClick={onOpen} className="font-medium text-tiffany-fg underline-offset-2 hover:underline text-left" data-testid={`fx-open-${tid(r)}`}>{r.team}</button></td>
+      <td className="px-3 py-2 sticky left-0 bg-white sm:static"><button type="button" onClick={onOpen} className="font-medium text-tiffany-fg underline-offset-2 hover:underline text-left" data-testid={`fx-open-${tid(r)}`}>{r.team}</button></td>
       <td className="px-3 py-2 tabular-nums" data-testid={`fx-avail-${tid(r)}`}><b>{r.available}</b>
         {r.partial > 0 && <span className="ml-1.5 text-xs text-slate-500">+{r.partial} parziali</span>}
         {r.tbc > 0 && <span className="ml-1.5 text-xs text-amber-700">+{r.tbc} da verificare</span>}</td>

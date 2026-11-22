@@ -16,10 +16,10 @@ function PersonRow({ p, row, eventoId, onOpen, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [lab, cls] = COV[p.cov];
   const base = { evento_id: eventoId, date: row.date, fascia: row.fascia };
-  const assign = async (force) => {
+  const assign = async (opts = {}) => {
     setBusy(true);
-    try { await api.post("/staff-coverage/assign", { ...base, team_id: row.team_id, persona_id: p.id, force }); setWarn(null); onChanged(); }
-    catch (e) { const d = e.response?.data?.detail; if (e.response?.status === 409 && d?.message) setWarn(d.message); else toast.error(formatApiError(d)); }
+    try { await api.post("/staff-coverage/assign", { ...base, team_id: row.team_id, persona_id: p.id, ...opts }); setWarn(null); onChanged(); }
+    catch (e) { const d = e.response?.data?.detail; if (e.response?.status === 409 && d?.message) setWarn({ ...d, opts }); else toast.error(formatApiError(d)); }
     setBusy(false);
   };
   const remove = async () => {
@@ -37,9 +37,9 @@ function PersonRow({ p, row, eventoId, onOpen, onChanged }) {
         {p.assigned ? <div className="flex flex-wrap items-center gap-1.5"><Badge cls="bg-emerald-100 text-emerald-800" testid={`fx-person-assigned-${p.id}`}>Assegnato</Badge>{p.forced && <Badge cls="bg-red-50 text-red-700">Fuori disponibilità</Badge>}
           <Button size="sm" variant="ghost" className="h-7 px-2 text-red-600" disabled={busy} onClick={remove} data-testid={`fx-unassign-${p.id}`}>Rimuovi</Button></div>
           : <div className="space-y-1">{p.assigned_other && <div className="text-[11px] text-slate-500">Assegnato a {p.assigned_other}</div>}
-            <Button size="sm" variant="outline" className="h-7" disabled={busy} onClick={() => assign(false)} data-testid={`fx-assign-${p.id}`}>Assegna</Button></div>}
-        {warn && <div className="mt-1 rounded bg-amber-50 border border-amber-200 p-1.5 text-xs text-amber-900" data-testid={`fx-assign-warn-${p.id}`}>{warn}
-          <div className="mt-1 flex gap-2"><Button size="sm" className="h-7" disabled={busy} onClick={() => assign(true)} data-testid={`fx-assign-force-${p.id}`}>Conferma</Button><Button size="sm" variant="ghost" className="h-7" onClick={() => setWarn(null)}>Annulla</Button></div></div>}
+            <Button size="sm" variant="outline" className="h-7" disabled={busy} onClick={() => assign()} data-testid={`fx-assign-${p.id}`}>Assegna</Button></div>}
+        {warn && <div className="mt-1 rounded bg-amber-50 border border-amber-200 p-1.5 text-xs text-amber-900" data-testid={`fx-assign-warn-${p.id}`}>{warn.message}
+          <div className="mt-1 flex gap-2"><Button size="sm" className="h-7" disabled={busy} onClick={() => assign(warn.code === "other_team" ? { move: true } : { ...warn.opts, force: true })} data-testid={`fx-assign-force-${p.id}`}>Conferma</Button><Button size="sm" variant="ghost" className="h-7" onClick={() => setWarn(null)}>Annulla</Button></div></div>}
       </td>
     </tr>
   );

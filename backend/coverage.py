@@ -92,6 +92,7 @@ class AssignIn(BaseModel):
     team_id: str
     persona_id: str
     force: bool = False
+    move: bool = False
 
 
 class BulkFasciaIn(BaseModel):
@@ -350,12 +351,13 @@ def build(db, deps: dict):
     async def _fasce(org, evento_id, team_id=None, gruppo=None, cat="all"):
         """Copertura per giorno × fascia × Team: disponibili (confermati del team), assegnati (coverage_assignments), necessari, mancanti."""
         ev, people = await _load(org, evento_id, None, None, gruppo, cat)
+        _, allconf = await _load(org, evento_id)
         all_teams = sorted(await db.teams.find({"org_id": org, "evento_id": evento_id}, {"_id": 0, "id": 1, "nome": 1}).to_list(2000), key=lambda t: _fold(t.get("nome")))
         tname = {t["id"]: t.get("nome") or "" for t in all_teams}
         teams = [t for t in all_teams if not team_id or t["id"] == team_id]
         needs = {(n["date"], n["fascia"], n["team_id"]): int(n["needed"]) for n in await db.coverage_team_needs.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(20000)}
         asg = {(x["date"], x["fascia"], x["persona_id"]): x for x in await db.coverage_assignments.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(50000)}
-        pmap = {p["id"]: p for p in people}
+        pmap = {p["id"]: p for p in allconf}
         rows = []
         for d in avail_days(ev):
             for s in d.get("fasce") or []:
@@ -434,10 +436,10 @@ def build(db, deps: dict):
         c = _classify(p, body.date, body.fascia, a, b)
         q = {"org_id": org, "evento_id": body.evento_id, "date": body.date, "fascia": body.fascia, "persona_id": body.persona_id}
         cur = await db.coverage_assignments.find_one(q, {"_id": 0})
-        if not body.force:
-            if cur and cur["team_id"] != body.team_id:
+        if cur and cur["team_id"] != body.team_id and not (body.move or body.force):
                 t = await db.teams.find_one({"org_id": org, "id": cur["team_id"]}, {"_id": 0, "nome": 1}) or {}
                 raise HTTPException(status_code=409, detail={"code": "other_team", "message": f"Già assegnata al Team {t.get('nome') or '?'} in questa fascia: confermi lo spostamento?"})
+        if not body.force:
             if not c or c[0] != "complete":
                 why = {"partial": f"copre solo in parte la fascia ({c[1]})" if c else "", "tbc": "orario da verificare"}.get(c[0] if c else "", "non ha dichiarato disponibilità per questa fascia")
                 raise HTTPException(status_code=409, detail={"code": "availability", "message": f"{p['cognome']} {p['nome']} {why}: assegnare comunque?"})
