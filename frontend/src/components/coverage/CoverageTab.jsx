@@ -6,6 +6,8 @@ import { Printer, FileSpreadsheet, CalendarDays, Clock } from "lucide-react";
 import CoverageSlotDialog from "./CoverageSlotDialog";
 import CoverageNeeds from "./CoverageNeeds";
 import CoverageMatrix from "./CoverageMatrix";
+import CoverageFasce from "./CoverageFasce";
+import { LayoutList } from "lucide-react";
 import { sortIt } from "@/lib/sortOptions";
 
 const fsel = "h-10 w-full sm:w-auto sm:min-w-[150px] rounded-md border border-slate-200 bg-white px-2 text-sm";
@@ -61,12 +63,15 @@ function Bars({ data, onPick }) {
 
 export default function CoverageTab({ events, teams, settings, version, onOpenPerson, initialEvent = "" }) {
   const [f, setF] = useState({ evento_id: initialEvent || (events.length === 1 ? events[0].id : ""), date: "", team_id: "", gruppo: "", cat: "all", step: 60 });
-  const [view, setView] = useState("day");
+  const [view, setView] = useState("fasce");
+  const [fday, setFday] = useState("");
   const [data, setData] = useState(null);
   const [slot, setSlot] = useState(null);
   const [tick, setTick] = useState(0);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: k === "step" ? Number(e.target.value) : e.target.value, ...(k === "evento_id" ? { date: "", team_id: "" } : {}) }));
   const params = useMemo(() => Object.fromEntries(Object.entries(f).filter(([, v]) => v !== "" && v !== null)), [f]);
+  const fxParams = useMemo(() => Object.fromEntries(Object.entries({ evento_id: f.evento_id, team_id: f.team_id, gruppo: f.gruppo, cat: f.cat }).filter(([, v]) => v)), [f.evento_id, f.team_id, f.gruppo, f.cat]);
+  useEffect(() => { setFday(""); }, [f.evento_id]);
   useEffect(() => {
     if (!f.evento_id) { setData(null); return; }
     api.get("/staff-coverage", { params }).then(({ data: d }) => { setData(d); if (!f.date) setF((p) => ({ ...p, date: d.date })); })
@@ -79,26 +84,33 @@ export default function CoverageTab({ events, teams, settings, version, onOpenPe
     <div className="space-y-4" data-testid="coverage-tab">
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
         <select className={fsel} value={f.evento_id} onChange={set("evento_id")} data-testid="cov-event"><option value="">Seleziona evento…</option>{sortIt(events, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
+        {view === "fasce" && <select className={fsel} value={fday} onChange={(e) => setFday(e.target.value)} data-testid="cov-fx-date" disabled={!data}><option value="">Tutti i giorni</option>{(data?.days || []).map((d) => <option key={d} value={d}>{fmtDay(d)}</option>)}</select>}
         {view === "day" && <select className={fsel} value={f.date} onChange={set("date")} data-testid="cov-date" disabled={!data}>{(data?.days || []).map((d) => <option key={d} value={d}>{fmtDay(d)}</option>)}{data && !data.days.includes(f.date) && f.date && <option value={f.date}>{fmtDay(f.date)}</option>}</select>}
         <select className={fsel} value={f.team_id} onChange={set("team_id")} data-testid="cov-team"><option value="">Tutti i team</option>{evTeams.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
         <select className={fsel} value={f.gruppo} onChange={set("gruppo")} data-testid="cov-gruppo"><option value="">Tutti i gruppi</option>{groups.map((g) => <option key={g} value={g}>{g}</option>)}</select>
         <select className={fsel} value={f.cat} onChange={set("cat")} data-testid="cov-cat"><option value="all">Staff e Volontari</option><option value="staff">Solo Staff</option><option value="volontari">Solo Volontari</option></select>
-        <select className={fsel} value={f.step} onChange={set("step")} data-testid="cov-step"><option value={60}>60 minuti</option><option value={30}>30 minuti</option><option value={15}>15 minuti</option></select>
+        {view === "day" && <select className={fsel} value={f.step} onChange={set("step")} data-testid="cov-step"><option value={60}>60 minuti</option><option value={30}>30 minuti</option><option value={15}>15 minuti</option></select>}
       </div>
       {!f.evento_id ? <div className="bg-white border border-dashed border-slate-300 rounded-xl p-10 text-center text-slate-500" data-testid="cov-pick-event">Seleziona un evento per vedere la copertura oraria.</div> : data && (<>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-            <button type="button" onClick={() => setView("day")} className={`px-3 py-1.5 text-sm rounded-md ${view === "day" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-day"><Clock className="w-4 h-4 inline mr-1" />Giornata</button>
+            <button type="button" onClick={() => setView("fasce")} className={`px-3 py-1.5 text-sm rounded-md ${view === "fasce" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-fasce"><LayoutList className="w-4 h-4 inline mr-1" />Mattina / Pomeriggio</button>
+            <button type="button" onClick={() => setView("day")} className={`px-3 py-1.5 text-sm rounded-md ${view === "day" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-day"><Clock className="w-4 h-4 inline mr-1" />Orario dettagliato</button>
             <button type="button" onClick={() => setView("matrix")} className={`px-3 py-1.5 text-sm rounded-md ${view === "matrix" ? "bg-slate-900 text-white" : "text-slate-600"}`} data-testid="cov-view-matrix"><CalendarDays className="w-4 h-4 inline mr-1" />Più giorni</button>
           </div>
           <div className="flex flex-wrap gap-2 sm:ml-auto">
+            {view === "fasce" ? (<>
+              <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...fxParams, ...(fday ? { date: fday } : {}), kind: "pdf", mode: "fasce" }, "Fasce.pdf")} data-testid="cov-print-fasce"><Printer className="w-4 h-4 mr-1" />Riepilogo fasce</Button>
+              <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...fxParams, ...(fday ? { date: fday } : {}), kind: "pdf", mode: "fasce_names" }, "Fasce.pdf")} data-testid="cov-print-fasce-names"><Printer className="w-4 h-4 mr-1" />Elenco per fascia</Button>
+            </>) : (<>
             <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "pdf", mode: "summary" }, "Copertura.pdf")} data-testid="cov-print-summary"><Printer className="w-4 h-4 mr-1" />Riepilogo giornaliero</Button>
             <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "pdf", mode: "by_mansione" }, "Copertura.pdf")} data-testid="cov-print-mansione"><Printer className="w-4 h-4 mr-1" />Per mansione</Button>
-            <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "pdf", mode: "names" }, "Copertura.pdf")} data-testid="cov-print-names"><Printer className="w-4 h-4 mr-1" />Elenco per fascia</Button>
+            <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "pdf", mode: "names" }, "Copertura.pdf")} data-testid="cov-print-names"><Printer className="w-4 h-4 mr-1" />Elenco orario</Button>
+            </>)}
             <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "xlsx" }, "Disponibilita.xlsx")} data-testid="cov-export-xlsx"><FileSpreadsheet className="w-4 h-4 mr-1" />Excel</Button>
           </div>
         </div>
-        {view === "day" ? (<>
+        {view === "fasce" ? <CoverageFasce params={fxParams} day={fday} version={version} onOpenPerson={onOpenPerson} /> : view === "day" ? (<>
           <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
             <Kpi id="day" label="Disponibili nel giorno" value={data.kpis.day_people} />
             <Kpi id="max" label="Max contemporanei" value={data.kpis.max} />

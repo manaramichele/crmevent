@@ -1399,3 +1399,9 @@ Task 2 — Creatività manuale:
 - Test dev: nuove registrazioni (senza/con gruppo, Mattina, Pomeriggio, entrambe, piu giorni, email esistente) salvate correttamente: persona, org, evento, gruppo, attivita, fasce con orari, link Da classificare.
 - Rilevati rischi: invio con vecchio formato orari liberi (pagina aperta prima dell aggiornamento) rifiutato con 400; reinvio stessa persona sostituisce i giorni precedenti; pagina bianca Aruba nascondeva gli elenchi.
 - Creato backend/scripts/aruba_check_registrations.py (sola lettura) per verificare il DB Aruba. Nessuna correzione applicata, in attesa di approvazione.
+
+## 2026-11-22 - Copertura oraria per fasce Mattina/Pomeriggio (solo sviluppo)
+- coverage.py: GET /staff-coverage/fasce (per giorno/fascia: disponibili=copertura completa, parziali, da verificare, assegnati=completi con mansione o team, necessari per fascia, stato, orari superati), PUT /staff-coverage/fascia-needs (collezione coverage_fascia_needs), export pdf mode fasce/fasce_names. Vecchio formato: completa/parziale/da verificare in base agli orari, badge Da aggiornare, indicatore persone da aggiornare.
+- Frontend: vista predefinita Mattina / Pomeriggio (CoverageFasce.jsx + CoverageFasceDialogs.jsx), filtro giorno, elenco persone per fascia con filtro Tutti/Aggiornati/Da aggiornare, elenco da aggiornare con apertura Modifica anagrafica. Viste Orario dettagliato e Piu giorni mantenute.
+- Maschera: badge Da aggiornare; giorni che coincidono esattamente con una fascia proposti ma convertiti solo con Conferma proposta o modifica. PUT /persons/{pid}/availability/{eid} conserva i vecchi orari sostituiti in days_history.
+- Test iteration_206: backend 11/11, frontend 95%; corretti assegnati (solo completi), proposta non auto-convertita, validazione necessari, titolo dialog mobile.

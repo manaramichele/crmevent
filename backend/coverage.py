@@ -64,6 +64,16 @@ class NeedIn(BaseModel):
     needed: int = Field(ge=1, le=10000)
 
 
+class FasciaNeedIn(BaseModel):
+    evento_id: str
+    date: str = Field(min_length=10, max_length=10)
+    fascia: str = Field(pattern="^(mattina|pomeriggio)$")
+    needed: int = Field(ge=0, le=10000)
+
+
+FX_LABEL = {"mattina": "Mattina", "pomeriggio": "Pomeriggio"}
+
+
 class ConfigIn(BaseModel):
     yellow_margin_pct: int = Field(ge=0, le=100)
 
@@ -71,6 +81,7 @@ class ConfigIn(BaseModel):
 def build(db, deps: dict):
     r = APIRouter(prefix="/api")
     require = deps["require_admin"]
+    avail_days = deps["avail_days"]
 
     async def _yellow(org):
         st = await db.settings.find_one({"id": org}, {"_id": 0, "coverage_yellow_pct": 1}) or {}
@@ -143,7 +154,8 @@ def build(db, deps: dict):
                         iv.append((_abs(d1, a), _abs(d2, b)))
                     elif d1:
                         tbc.add(d1.isoformat())
-            out.append({"id": pid, "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "cellulare": p.get("cellulare") or "",
+            pdays = {dd.get("date"): dd for dd in (av or {}).get("days") or [] if dd.get("date") and dd.get("disponibile") is not False}
+            out.append({"has_av": bool(av), "days": pdays, "id": pid, "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "cellulare": p.get("cellulare") or "",
                         "taglia": p.get("taglia") or "", "gruppo": p.get("gruppo_appartenenza") or "", "mansioni": roles, "preferenza": pref,
                         "team": ", ".join(sorted({teams[t] for t in tids if t in teams})),
                         "categoria": "Staff" if cats & STAFF_CATS else ("Volontario" if "volontario" in cats else "Da classificare"),
@@ -265,6 +277,103 @@ def build(db, deps: dict):
                          "cells": [len(cols[d][i]["full"]) + len(cols[d][i]["partial"]) for d in days]})
         return {"days": days, "rows": rows, "tbc": {d: sum(1 for p in people if d in p["tbc"]) for d in days}}
 
+    def _classify(p, iso, fid, a, b):
+        """(copertura, orario mostrato, vecchio formato, orari fascia cambiati) oppure None."""
+        if p["has_av"]:
+            dd = p["days"].get(iso)
+            if not dd:
+                return None
+            fs = dd.get("fasce") or []
+            if fs:
+                hit = next((x for x in fs if x.get("id") == fid), None)
+                if not hit:
+                    return None
+                changed = a is not None and b is not None and (_hm(hit.get("start")), _hm(hit.get("end"))) != (a, b)
+                return "complete", (f"{hit.get('start')}–{hit.get('end')}" if hit.get("start") and hit.get("end") else FX_LABEL[fid]), False, changed
+            x, y = _hm(dd.get("dalle")), _hm(dd.get("alle"))
+            orig = f"{dd.get('dalle') or '?'}–{dd.get('alle') or '?'}" if (dd.get("dalle") or dd.get("alle")) else "Orario non indicato"
+            if x is None or y is None or a is None or b is None:
+                return "tbc", orig, True, False
+            if y <= x:
+                y += 1440
+            if min(b, y) - max(a, x) <= 0:
+                return None
+            return ("complete" if x <= a and y >= b else "partial"), orig, True, False
+        if a is None or b is None:
+            return ("tbc", "Orario da confermare", False, False) if iso in p["tbc"] else None
+        d0 = _abs(_d(iso), 0)
+        ov = sum(max(0, min(d0 + b, y) - max(d0 + a, x)) for x, y in p["iv"])
+        if ov >= b - a:
+            return "complete", "Da assegnazione", False, False
+        if ov > 0:
+            ivs = [f"{_fmt(max(x, d0 + a) - d0)}–{_fmt(min(y, d0 + b) - d0)}" for x, y in p["iv"] if min(y, d0 + b) > max(x, d0 + a)]
+            return "partial", ", ".join(ivs), False, False
+        return ("tbc", "Orario da confermare", False, False) if iso in p["tbc"] else None
+
+    def _legacy(people):
+        out = []
+        for p in people:
+            ds = [{"date": iso, "orario": f"{dd.get('dalle') or '?'}–{dd.get('alle') or '?'}" if (dd.get("dalle") or dd.get("alle")) else "Orario non indicato"}
+                  for iso, dd in sorted(p["days"].items()) if not dd.get("fasce")]
+            if ds:
+                out.append({"id": p["id"], "nome": p["nome"], "cognome": p["cognome"], "categoria": p["categoria"], "days": ds})
+        return out
+
+    async def _fasce(org, evento_id, team_id=None, gruppo=None, cat="all"):
+        ev, people = await _load(org, evento_id, None, team_id, gruppo, cat)
+        needs = {(n["date"], n["fascia"]): int(n["needed"]) for n in await db.coverage_fascia_needs.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(5000)}
+        shifts = {}
+        for s in await db.shifts.find({"org_id": org, "evento_id": evento_id, "persona_id": {"$nin": [None, ""]}}, {"_id": 0, "persona_id": 1, "data": 1, "ora_inizio": 1, "ora_fine": 1}).to_list(20000):
+            shifts.setdefault((s["persona_id"], str(s.get("data") or "")[:10]), []).append(s)
+        pct, rows = await _yellow(org), []
+        for d in avail_days(ev):
+            for s in d.get("fasce") or []:
+                a, b = _hm(s.get("start")), _hm(s.get("end"))
+                if a is not None and b is not None and b <= a:
+                    b += 1440
+                ppl = []
+                for p in people:
+                    c = _classify(p, d["date"], s["id"], a, b)
+                    if not c:
+                        continue
+                    tur = [f"{x.get('ora_inizio') or '?'}–{x.get('ora_fine') or '?'}" for x in shifts.get((p["id"], d["date"]), [])
+                           if a is None or b is None or _hm(x.get("ora_inizio")) is None or _hm(x.get("ora_fine")) is None
+                           or (_hm(x.get("ora_inizio")) < b and (_hm(x.get("ora_fine")) or 1440) > a)]
+                    ppl.append({k: p[k] for k in ("id", "nome", "cognome", "gruppo", "mansioni", "preferenza", "team", "categoria")} |
+                               {"cov": c[0], "orario": c[1], "legacy": c[2], "changed": c[3], "turni": tur,
+                                "assigned": c[0] == "complete" and bool(p["mansioni"] or p["team"])})
+                av = [x for x in ppl if x["cov"] == "complete"]
+                n = needs.get((d["date"], s["id"])) or None
+                status = None
+                if n:
+                    status = "red" if len(av) < n else ("yellow" if len(av) < n + max(1, math.ceil(n * pct / 100)) else "green")
+                rows.append({"date": d["date"], "fascia": s["id"], "label": FX_LABEL[s["id"]], "start": s.get("start"), "end": s.get("end"),
+                             "available": len(av), "partial": sum(x["cov"] == "partial" for x in ppl), "tbc": sum(x["cov"] == "tbc" for x in ppl),
+                             "assigned": sum(x["assigned"] for x in ppl), "needed": n, "status": status,
+                             "changed": sum(x["changed"] for x in ppl), "people": ppl})
+        return ev, rows
+
+    @r.get("/staff-coverage/fasce")
+    async def fasce(evento_id: str, team_id: Optional[str] = None, gruppo: Optional[str] = None, cat: str = "all", user: dict = Depends(require)):
+        org = user["org_id"]
+        ev, rows = await _fasce(org, evento_id, team_id or None, gruppo or None, cat)
+        _, allp = await _load(org, evento_id)
+        return {"evento": {"id": ev["id"], "nome": ev.get("nome")}, "rows": rows, "legacy": _legacy(allp), "yellow_margin_pct": await _yellow(org)}
+
+    @r.put("/staff-coverage/fascia-needs")
+    async def fascia_need_put(body: FasciaNeedIn, user: dict = Depends(require)):
+        org = user["org_id"]
+        if not await db.events.find_one({"org_id": org, "id": body.evento_id}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Evento non trovato")
+        if not _d(body.date):
+            raise HTTPException(status_code=400, detail="Data non valida")
+        q = {"org_id": org, "evento_id": body.evento_id, "date": body.date, "fascia": body.fascia}
+        if body.needed:
+            await db.coverage_fascia_needs.update_one(q, {"$set": {**q, "needed": body.needed, "updated_at": datetime.now(ROME).isoformat()}}, upsert=True)
+        else:
+            await db.coverage_fascia_needs.delete_one(q)
+        return {"ok": True, "needed": body.needed or None}
+
     @r.get("/staff-coverage/needs")
     async def needs_list(evento_id: str, user: dict = Depends(require)):
         return sorted(await _needs(user["org_id"], evento_id), key=lambda n: (n["date"], n["start"], _fold(n["mansione"])))
@@ -304,6 +413,13 @@ def build(db, deps: dict):
             data = _xlsx(ev, people)
             return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             headers={"Content-Disposition": f'attachment; filename="CRMEvent_Disponibilita_{_slug(ev.get("nome"))}.xlsx"'})
+        if mode in ("fasce", "fasce_names"):
+            ev, rows = await _fasce(org, evento_id, team_id or None, gruppo or None, cat)
+            if date:
+                rows = [x for x in rows if x["date"] == date]
+            pdf = _pdf_fasce(ev, o.get("nome") or "", rows, names=(mode == "fasce_names"))
+            return Response(content=pdf, media_type="application/pdf",
+                            headers={"Content-Disposition": f'attachment; filename="CRMEvent_Fasce_{_slug(ev.get("nome"))}.pdf"'})
         if not date:
             raise HTTPException(status_code=400, detail="Seleziona una data")
         sections = []
@@ -325,6 +441,67 @@ def build(db, deps: dict):
 
 def _slug(s):
     return re.sub(r"[^A-Za-z0-9]+", "", s or "Evento")[:40] or "Evento"
+
+
+def _pdf_fasce(ev, org_name, rows, names=False):
+    from xml.sax.saxutils import escape
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    ss = getSampleStyleSheet()
+    W = A4[0] - 28 * mm
+    cell = ss["BodyText"].clone("fcell", fontSize=8.5, leading=10.5)
+    hcell = cell.clone("fhcell", textColor=colors.white, fontName="Helvetica-Bold")
+    sub = ss["BodyText"].clone("fsub", fontSize=9, leading=12, textColor=colors.HexColor("#475569"))
+    gh = ss["Heading3"].clone("fgh", spaceBefore=8, spaceAfter=4)
+    gen = datetime.now(ROME).strftime("%d/%m/%Y %H:%M")
+    STATUS = {"green": ("Sufficiente", "#DCFCE7"), "yellow": ("Al limite", "#FEF9C3"), "red": ("Insufficiente", "#FEE2E2")}
+    COV = {"complete": "Completa", "partial": "Parziale", "tbc": "Da verificare"}
+    GG = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+    dl = lambda iso: f"{GG[_d(iso).weekday()]} {_d(iso).strftime('%d/%m')}"
+
+    def tbl(data, widths, styles=()):
+        t = Table(data, colWidths=widths, repeatRows=1)
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(TIFFANY)), ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CBD5E1")),
+                               ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3), *styles]))
+        return t
+
+    def footer(c, d):
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.HexColor("#64748B"))
+        c.drawString(14 * mm, 8 * mm, f"CRMEvent · Copertura per fasce · {ev.get('nome') or ''} · generato il {gen}")
+        c.drawRightString(A4[0] - 14 * mm, 8 * mm, f"Pagina {d.page}")
+
+    story = [Paragraph("Copertura per fasce" + (" · elenco nominativo" if names else ""), ss["Title"].clone("fh1", alignment=0, fontSize=16, leading=20)),
+             Paragraph(f"<b>{escape(ev.get('nome') or '')}</b>" + (f" · {escape(org_name)}" if org_name else ""), ss["BodyText"]),
+             Paragraph("Disponibili = copertura completa della fascia; parziali e da verificare sono indicati a parte. Assegnati = disponibili con mansione o team.", sub), Spacer(1, 6)]
+    data = [[Paragraph(h, hcell) for h in ("Giorno", "Fascia", "Orario", "Disponibili", "Parziali", "Da verificare", "Assegnati", "Necessari", "Stato")]]
+    st = []
+    for j, x in enumerate(rows, 1):
+        lab, bg = STATUS.get(x["status"], ("—", None))
+        data.append([dl(x["date"]), x["label"], f"{x['start'] or '?'}–{x['end'] or '?'}", str(x["available"]), str(x["partial"]), str(x["tbc"]),
+                     str(x["assigned"]), str(x["needed"] or "—"), lab])
+        if bg:
+            st.append(("BACKGROUND", (8, j), (8, j), colors.HexColor(bg)))
+    story.append(tbl(data, [W * w for w in (0.12, 0.12, 0.13, 0.1, 0.09, 0.11, 0.1, 0.1, 0.13)], st))
+    if names:
+        for x in rows:
+            if not x["people"]:
+                continue
+            story.append(Paragraph(f"{dl(x['date'])} · {x['label']} {x['start'] or ''}–{x['end'] or ''} · {x['available']} disponibili", gh))
+            d = [[Paragraph(h, hcell) for h in ("Cognome e nome", "Team", "Gruppo", "Mansione", "Disponibilità", "Note")]]
+            for p in x["people"]:
+                note = ", ".join(filter(None, ["Da aggiornare" if p["legacy"] else "", "Assegnato" if p["assigned"] else "", ("Turno " + ", ".join(p["turni"])) if p["turni"] else ""]))
+                d.append([Paragraph(escape(v or "—"), cell) for v in (f"{p['cognome']} {p['nome']}".strip(), p["team"], p["gruppo"], ", ".join(p["mansioni"]),
+                                                                         f"{COV[p['cov']]} · {p['orario']}", note)])
+            story.append(tbl(d, [W * w for w in (0.22, 0.14, 0.14, 0.16, 0.18, 0.16)]))
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=16 * mm,
+                      title=f"Copertura per fasce · {ev.get('nome') or ''}", author="CRMEvent").build(story, onFirstPage=footer, onLaterPages=footer)
+    return buf.getvalue()
 
 
 def _xlsx(ev, people):
