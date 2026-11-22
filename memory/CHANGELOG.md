@@ -1394,3 +1394,8 @@ Task 2 — Creatività manuale:
 ## 2026-11-22 - FIX pagina bianca Staff / Volontari
 - Causa: Persons.jsx PeopleTable usava `settings` non definita (ordinamento taglie) -> ReferenceError con >=2 taglie diverse. Presente anche nel bundle pubblicato su Aruba (main.dc71b794.js).
 - Fix: const settings = useSettings() dentro PeopleTable. Test iteration_205 frontend 100%. Non pubblicato su Aruba.
+
+## 2026-11-22 - Verifica modulo pubblico Disponibilita (sola lettura)
+- Test dev: nuove registrazioni (senza/con gruppo, Mattina, Pomeriggio, entrambe, piu giorni, email esistente) salvate correttamente: persona, org, evento, gruppo, attivita, fasce con orari, link Da classificare.
+- Rilevati rischi: invio con vecchio formato orari liberi (pagina aperta prima dell aggiornamento) rifiutato con 400; reinvio stessa persona sostituisce i giorni precedenti; pagina bianca Aruba nascondeva gli elenchi.
+- Creato backend/scripts/aruba_check_registrations.py (sola lettura) per verificare il DB Aruba. Nessuna correzione applicata, in attesa di approvazione.
