@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api from "@/lib/platformApi";
 import { useSearchParams } from "react-router-dom";
 import { formatApiError } from "@/lib/api";
@@ -311,8 +312,8 @@ export default function LeadFinder() {
           {tab === "organizers" && (
             <div className="flex flex-wrap gap-2 items-center">
               <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ricerca libera…" className={`${FIELD} pl-9 w-64`} data-testid="lf-search" /></div>
-              <select value={fRegion} onChange={(e) => setFRegion(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-region"><option value="">Regione</option>{regions.map((r) => <option key={r}>{r}</option>)}</select>
-              <select value={fSport} onChange={(e) => setFSport(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-sport"><option value="">Sport</option>{sports.map((s) => <option key={s}>{s}</option>)}</select>
+              <select value={fRegion} onChange={(e) => setFRegion(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-region"><option value="">Regione</option>{sortIt(regions).map((r) => <option key={r}>{r}</option>)}</select>
+              <select value={fSport} onChange={(e) => setFSport(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-sport"><option value="">Sport</option>{sortIt(sports).map((s) => <option key={s}>{s}</option>)}</select>
               <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-status"><option value="">Stato</option>{Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
               <select value={fBrevo} onChange={(e) => setFBrevo(e.target.value)} className={`${FIELD} w-auto`} data-testid="lf-filter-brevo"><option value="">Brevo</option><option value="sincronizzato">Sincronizzati</option><option value="approvato">Approvati</option><option value="non_approvato">Non approvati</option></select>
               <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={fEmail} onChange={(e) => setFEmail(e.target.checked)} data-testid="lf-filter-email" />Email</label>

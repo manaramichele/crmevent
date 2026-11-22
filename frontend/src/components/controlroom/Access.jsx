@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import QRCode from "qrcode";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,7 @@ function Invites({ d, call }) {
   return (
     <div className="space-y-3" data-testid="cr-invites">
       <div className="flex flex-wrap gap-1.5">
-        <select className={`${S} flex-1`} value={f.resource_id} onChange={(e) => setF({ ...f, resource_id: e.target.value })} data-testid="cr-invite-resource"><option value="">Operatore o squadra…</option>{d.resources.map((r) => <option key={r.id} value={r.id}>{nameOf(r)}</option>)}</select>
+        <select className={`${S} flex-1`} value={f.resource_id} onChange={(e) => setF({ ...f, resource_id: e.target.value })} data-testid="cr-invite-resource"><option value="">Operatore o squadra…</option>{sortIt(d.resources, nameOf).map((r) => <option key={r.id} value={r.id}>{nameOf(r)}</option>)}</select>
         <select className={S} value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })} data-testid="cr-invite-role"><option value="operatore">Operatore</option><option value="coordinatore">Coordinatore</option></select>
         <select className={S} value={f.days} onChange={(e) => setF({ ...f, days: e.target.value })} data-testid="cr-invite-days">{[1, 2, 3, 7, 14].map((x) => <option key={x} value={x}>Scade in {x} g</option>)}</select>
         <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={f.can_set_priority} onChange={(e) => setF({ ...f, can_set_priority: e.target.checked })} />può indicare la priorità</label>

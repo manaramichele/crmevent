@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ export function EdizioniPanel({ data, canEdit, onChanged }) {
     <div className="space-y-4" data-testid="edizioni-panel">
       {canEdit && (
         <div className="bg-white border border-slate-200 rounded-xl p-4 grid sm:grid-cols-5 gap-2">
-          <select className={`${SEL} sm:col-span-2`} value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value })} data-testid="edizione-event"><option value="">Evento CRMEvent...</option>{data.events.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
+          <select className={`${SEL} sm:col-span-2`} value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value })} data-testid="edizione-event"><option value="">Evento CRMEvent...</option>{sortIt(data.events, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
           <Input type="number" value={f.anno} onChange={(e) => setF({ ...f, anno: e.target.value })} aria-label="Anno" data-testid="edizione-anno" />
           <Input placeholder="Edizione (es. 26ª)" value={f.edizione} onChange={(e) => setF({ ...f, edizione: e.target.value })} data-testid="edizione-label" />
           <Input placeholder="Gare (virgola)" value={f.gare} onChange={(e) => setF({ ...f, gare: e.target.value })} data-testid="edizione-gare" />

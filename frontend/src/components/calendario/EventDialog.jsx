@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,10 +32,10 @@ export function EventDialog({ id, meta, onClose, onSaved }) {
           <div className="space-y-4">
             {f.data_da_verificare && <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-xs font-semibold text-amber-800" data-testid="cal-event-date-conflict">DATA DA VERIFICARE: le fonti riportano date diverse. Nessuna comunicazione commerciale verrà programmata.</div>}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-              <label>Disciplina<select className={`${SEL} w-full`} value={f.disciplina} onChange={(e) => setF({ ...f, disciplina: e.target.value, specialita: "" })} data-testid="cal-ev-disciplina">{Object.keys(meta.discipline).map((k) => <option key={k} value={k}>{DISC_LABEL[k]}</option>)}</select></label>
+              <label>Disciplina<select className={`${SEL} w-full`} value={f.disciplina} onChange={(e) => setF({ ...f, disciplina: e.target.value, specialita: "" })} data-testid="cal-ev-disciplina">{sortIt(Object.keys(meta.discipline), (k) => DISC_LABEL[k]).map((k) => <option key={k} value={k}>{DISC_LABEL[k]}</option>)}</select></label>
               <label>Stato manifestazione<select className={`${SEL} w-full`} value={f.stato} onChange={(e) => setF({ ...f, stato: e.target.value })} data-testid="cal-ev-stato">{Object.entries(STATO_EVENTO).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
               <label>Stato commerciale<select className={`${SEL} w-full`} value={f.stato_commerciale} onChange={(e) => setF({ ...f, stato_commerciale: e.target.value })} data-testid="cal-ev-comm">{Object.entries(STATO_COMM).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-              <label className="sm:col-span-3">Organizzatore<select className={`${SEL} w-full`} value={f.organizer_id || ""} onChange={(e) => setF({ ...f, organizer_id: e.target.value || null })} data-testid="cal-ev-org"><option value="">— Nessuno —</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
+              <label className="sm:col-span-3">Organizzatore<select className={`${SEL} w-full`} value={f.organizer_id || ""} onChange={(e) => setF({ ...f, organizer_id: e.target.value || null })} data-testid="cal-ev-org"><option value="">— Nessuno —</option>{sortIt(orgs, (o) => o.nome).map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
               {F.map(([k, l, t]) => (
                 <label key={k} className={k === "nome" || k === "note" ? "sm:col-span-3" : ""}>{l}
                   {k === "specialita" ? <select className={`${SEL} w-full`} value={f.specialita || ""} onChange={(e) => setF({ ...f, specialita: e.target.value })} data-testid="cal-ev-specialita"><option value="">—</option>{meta.discipline[f.disciplina].map((s) => <option key={s}>{s}</option>)}</select>

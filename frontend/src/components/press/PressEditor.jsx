@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,7 @@ export function NewRelease({ events, onClose, onCreated }) {
         <DialogTitle>Nuovo comunicato</DialogTitle>
         <DialogDescription>L'AI usa solo i dati dell'evento e le informazioni che inserisci: non inventa numeri, risultati o dichiarazioni.</DialogDescription>
         <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Evento *"><select className={`${SEL} w-full`} value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value })} data-testid="press-new-event"><option value="">Seleziona un evento</option>{events.map((e) => <option key={e.id} value={e.id}>{e.nome}{e.data_inizio ? ` · ${e.data_inizio.slice(0, 10)}` : ""}</option>)}</select></Field>
+          <Field label="Evento *"><select className={`${SEL} w-full`} value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value })} data-testid="press-new-event"><option value="">Seleziona un evento</option>{sortIt(events, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}{e.data_inizio ? ` · ${e.data_inizio.slice(0, 10)}` : ""}</option>)}</select></Field>
           <Field label="Tipologia *"><select className={`${SEL} w-full`} value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })} data-testid="press-new-tipo">{Object.entries(TIPI).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
         </div>
         {info && (

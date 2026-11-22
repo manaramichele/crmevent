@@ -16,6 +16,8 @@ import SettingSelect from "@/components/SettingSelect";
 import { ADD_OPTION } from "@/lib/optionLists";
 import InlineAddOption from "@/components/InlineAddOption";
 import { AsdPersonSection } from "@/components/asd/AsdPeople";
+import PersonAvailability from "@/components/PersonAvailability";
+import { sortIt } from "@/lib/sortOptions";
 
 export const PROVENIENZA = { manuale: "Inserimento manuale", link_disponibilita: "Link disponibilità", associazione: "Gestione Società", non_determinata: "Non determinata" };
 const CATS = [["staff", "Staff"], ["volontario", "Volontario"]];
@@ -43,7 +45,7 @@ function EventPicker({ value, events, onChange, testid }) {
         <Command>
           <CommandInput placeholder="Cerca evento…" data-testid={`${testid}-search`} />
           <CommandList><CommandEmpty>Nessun evento</CommandEmpty>
-            {events.map((e) => <CommandItem key={e.id} value={`${e.nome} ${e.id}`} onSelect={() => { onChange(e.id); setOpen(false); }} data-testid={`${testid}-opt-${e.id}`}>{e.nome}</CommandItem>)}
+            {sortIt(events, (e) => e.nome).map((e) => <CommandItem key={e.id} value={`${e.nome} ${e.id}`} onSelect={() => { onChange(e.id); setOpen(false); }} data-testid={`${testid}-opt-${e.id}`}>{e.nome}</CommandItem>)}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -64,7 +66,7 @@ function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
     onChange({ ...r, team_id: v, ...(auto && v && tn(v) ? { ruolo: tn(v), mansione_auto: true } : {}) });
   };
   const [addM, setAddM] = useState(false);
-  const prefOpts = [...new Set([...ruoli, ...(r.preferenza ? [r.preferenza] : [])])];
+  const prefOpts = sortIt([...new Set([...ruoli, ...(r.preferenza ? [r.preferenza] : [])])]);
   return (
     <div className="rounded-lg border border-slate-200 p-3 space-y-2" data-testid={`mask-assign-${i}`}>
       <div className="flex items-center gap-2">
@@ -76,7 +78,7 @@ function AssignRow({ r, i, events, ruoli, availPref, onChange, onRemove }) {
         <label className="text-xs text-slate-500">Preferenza
           <select className={sel} value={r.preferenza || ""} onChange={(e) => set("preferenza", e.target.value)} data-testid={`mask-assign-pref-${i}`}><option value="">{availPref ? `Dal link: ${availPref}` : "— Nessuna —"}</option>{prefOpts.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
         <div className="text-xs text-slate-500">Team<TeamSelect value={r.team_id || ""} eventoId={r.evento_id} onChange={setTeam} testid={`mask-assign-team-${i}`} /></div>
-        <label className="text-xs text-slate-500">Mansione<select className={sel} value={r.ruolo || ""} onChange={(e) => { if (e.target.value === ADD_OPTION) setAddM(true); else set("ruolo", e.target.value); }} data-testid={`mask-assign-mansione-${i}`}><option value="">— Nessuna —</option>{[...new Set([...ruoli, ...(r.ruolo ? [r.ruolo] : [])])].map((x) => <option key={x} value={x}>{x}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select>{addM && <InlineAddOption listKey="ruoli_staff" small testid={`mask-assign-mansione-add-${i}`} onDone={(v) => { setAddM(false); if (v) set("ruolo", v); }} />}</label>
+        <label className="text-xs text-slate-500">Mansione<select className={sel} value={r.ruolo || ""} onChange={(e) => { if (e.target.value === ADD_OPTION) setAddM(true); else set("ruolo", e.target.value); }} data-testid={`mask-assign-mansione-${i}`}><option value="">— Nessuna —</option>{sortIt([...new Set([...ruoli, ...(r.ruolo ? [r.ruolo] : [])])]).map((x) => <option key={x} value={x}>{x}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select>{addM && <InlineAddOption listKey="ruoli_staff" small testid={`mask-assign-mansione-add-${i}`} onDone={(v) => { setAddM(false); if (v) set("ruolo", v); }} />}</label>
       </div>
     </div>
   );
@@ -97,8 +99,12 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
   const created = useRef(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const avail = useRef({});
+  const [availDirty, setAvailDirty] = useState(false);
+  const onAvail = (eid, days, d) => { avail.current[eid] = { days, dirty: d }; setAvailDirty(Object.values(avail.current).some((x) => x.dirty)); };
+  const availEvents = [...new Set([...rows.map((r) => r.evento_id), ...(person?.preferenze || []).map((p) => p.evento_id)].filter(Boolean))];
   useEffect(() => { setData(initial.data); setRows(initial.rows.length || person ? initial.rows : [blankRow(defaultCategoria)]); }, [initial]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dirty = JSON.stringify({ data, rows: rows.filter((r) => r.evento_id || r.id) }) !== JSON.stringify(initial);
+  const dirty = availDirty || JSON.stringify({ data, rows: rows.filter((r) => r.evento_id || r.id) }) !== JSON.stringify(initial);
   const close = () => { if (!dirty || window.confirm("Ci sono modifiche non salvate. Vuoi chiudere senza salvare?")) onClose(); };
   const availPref = (eid) => [...new Set((person?.preferenze || []).filter((p) => p.evento_id === eid).map((p) => p.preferenza).filter(Boolean))].join(", ");
   const prov = person ? (person.provenienza_tipo || "non_determinata") : "manuale";
@@ -155,6 +161,9 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
           if (JSON.stringify(o) !== JSON.stringify(r)) await api.put(`/staff/${r.id}`, { ...payload, stato: r.stato });
         }
       }
+      for (const [eid, a] of Object.entries(avail.current)) {
+        if (a.dirty && availEvents.includes(eid)) { await api.put(`/persons/${pid}/availability/${eid}`, { days: a.days }); a.dirty = false; }
+      }
       toast.success(person ? "Anagrafica aggiornata" : "Persona creata");
       onSaved();
     } catch (e) { setErr(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
@@ -189,6 +198,9 @@ export default function PersonMask({ person, defaultCategoria = "staff", fields,
             {rows.length === 0 && <p className="text-sm text-slate-400" data-testid="mask-no-events">Nessun evento associato.</p>}
             {rows.map((r, i) => <AssignRow key={r.key} r={r} i={i} events={events} ruoli={ruoli} availPref={availPref(r.evento_id)} onChange={(n) => setRows(rows.map((x) => (x.key === r.key ? n : x)))} onRemove={() => setRows(rows.filter((x) => x.key !== r.key))} />)}
             <Button type="button" variant="outline" onClick={() => setRows([...rows, blankRow(rows[rows.length - 1]?.categoria || defaultCategoria)])} data-testid="mask-add-event"><Plus className="h-4 w-4 mr-1.5" />Aggiungi evento</Button>
+          </Section>
+          <Section title="D · Disponibilità" testid="mask-section-disponibilita">
+            <PersonAvailability eventIds={availEvents} events={events} prefs={person?.preferenze} onChange={onAvail} />
           </Section>
           {person?.id && <AsdPersonSection personId={person.id} />}
         </div>

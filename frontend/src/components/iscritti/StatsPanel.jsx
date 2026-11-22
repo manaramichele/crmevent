@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api from "@/lib/api";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, LineChart, Line } from "recharts";
 
@@ -50,7 +51,7 @@ function StatsFilters({ f, setF, eds, org }) {
     <div className="space-y-2" data-testid="stats-filters">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         <select className={SEL} disabled value="" data-testid="stats-filter-org"><option value="">{org || "Organizzazione"}</option></select>
-        <select className={SEL} value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value, edizione_id: "" })} data-testid="stats-filter-event"><option value="">Tutti gli eventi</option>{events.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
+        <select className={SEL} value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value, edizione_id: "" })} data-testid="stats-filter-event"><option value="">Tutti gli eventi</option>{sortIt(events, (x) => x[1]).map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
         <select className={SEL} value={f.edizione_id} onChange={(e) => setF({ ...f, edizione_id: e.target.value })} data-testid="stats-filter-edizione"><option value="">Tutte le edizioni</option>{eds.filter((e) => (!f.event_id || e.event_id === f.event_id) && (!f.anni.length || f.anni.includes(e.anno))).map((e) => <option key={e.id} value={e.id}>{e.event_nome} {e.anno} {e.edizione}</option>)}</select>
         <select className={SEL} value={f.gara} onChange={(e) => setF({ ...f, gara: e.target.value })} data-testid="stats-filter-gara"><option value="">Tutte le distanze</option>{gare.map((g) => <option key={g}>{g}</option>)}</select>
       </div>

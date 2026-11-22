@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,7 @@ function Filters({ f, setF, meta }) {
       <Input placeholder="Cerca evento, comune, organizzatore" value={f.q} onChange={s("q")} className="h-9 col-span-2" data-testid="cal-filter-q" />
       <select className={SEL} value={f.anno} onChange={s("anno")} data-testid="cal-filter-anno"><option value="">Anno</option>{[y - 2, y - 1, y, y + 1, y + 2].map((a) => <option key={a}>{a}</option>)}</select>
       <select className={SEL} value={f.mese} onChange={s("mese")} data-testid="cal-filter-mese"><option value="">Mese</option>{MESI.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
-      <select className={SEL} value={f.disciplina} onChange={s("disciplina")} data-testid="cal-filter-disciplina"><option value="">Disciplina</option>{Object.keys(meta.discipline).map((k) => <option key={k} value={k}>{DISC_LABEL[k]}</option>)}</select>
+      <select className={SEL} value={f.disciplina} onChange={s("disciplina")} data-testid="cal-filter-disciplina"><option value="">Disciplina</option>{sortIt(Object.keys(meta.discipline), (k) => DISC_LABEL[k]).map((k) => <option key={k} value={k}>{DISC_LABEL[k]}</option>)}</select>
       <Input placeholder="Distanza" value={f.distanza} onChange={s("distanza")} className="h-9" data-testid="cal-filter-distanza" />
       <Input placeholder="Regione" value={f.regione} onChange={s("regione")} className="h-9" data-testid="cal-filter-regione" />
       <Input placeholder="Provincia" value={f.provincia} onChange={s("provincia")} className="h-9" data-testid="cal-filter-provincia" />

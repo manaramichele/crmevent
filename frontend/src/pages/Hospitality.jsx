@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader, StatusBadge, useCollection, useSettings, formatDateRange } from "@/components/crm";
 import { ImportLink } from "@/components/import/ImportLink";
@@ -692,7 +693,7 @@ export default function Hospitality() {
           <ImportLink target="pernottamenti" label="Importa pernottamenti" /><ImportLink target="pasti" label="Importa pasti" />
           <Button variant="outline" onClick={() => setStructOpen(true)} data-testid="open-structures"><Building2 className="w-4 h-4 mr-1.5" />Strutture</Button>
           <Select value={eventId} onValueChange={setEventId}><SelectTrigger className="flex-1 min-w-0 sm:flex-none sm:w-52" data-testid="hosp-event-select"><SelectValue placeholder="Seleziona evento" /></SelectTrigger>
-            <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
+            <SelectContent>{sortIt(events, (e) => e.nome).map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
           <Button className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold w-full sm:w-auto" onClick={() => setBulkOpen(true)} disabled={!persons.length} data-testid="open-bulk-assign"><UserPlus className="w-4 h-4 mr-1.5" />Assegna a più persone</Button>
         </div>} />
 
@@ -718,7 +719,7 @@ export default function Hospitality() {
                 <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input className="pl-9" placeholder="Cerca persona..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="hosp-search" /></div>
                 <Select value={fRuolo || "all"} onValueChange={(v) => setFRuolo(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-ruolo"><SelectValue placeholder="Ruolo" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti i ruoli</SelectItem>{Object.entries(CAT_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
                 <Select value={fStato || "all"} onValueChange={(v) => setFStato(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-stato"><SelectValue placeholder="Stato" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti gli stati</SelectItem>{Object.entries(STATO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
-                <Select value={fEsig || "all"} onValueChange={(v) => setFEsig(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-esig"><SelectValue placeholder="Esigenze" /></SelectTrigger><SelectContent><SelectItem value="all">Tutte le esigenze</SelectItem>{esigList.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent></Select>
+                <Select value={fEsig || "all"} onValueChange={(v) => setFEsig(v === "all" ? "" : v)}><SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" data-testid="filter-esig"><SelectValue placeholder="Esigenze" /></SelectTrigger><SelectContent><SelectItem value="all">Tutte le esigenze</SelectItem>{sortIt(esigList).map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent></Select>
               </div>
               <div className="md:hidden space-y-2" data-testid="hosp-mobile-list">
                 {filteredPersons.length === 0 ? <p className="py-8 text-center text-slate-400 text-sm">Nessuna persona.</p> :

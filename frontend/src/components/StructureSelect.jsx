@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -55,7 +56,7 @@ export default function StructureSelect({ value, onChange, testid = "struct" }) 
     <Select value={value || ""} onValueChange={(v) => { if (v === ADD) setAdding(true); else onChange(v, list.find((s) => s.id === v)); }}>
       <SelectTrigger data-testid={`${testid}-select`}><SelectValue placeholder="Seleziona struttura..." /></SelectTrigger>
       <SelectContent>
-        {list.map((s) => <SelectItem key={s.id} value={s.id} data-testid={`${testid}-opt-${s.id}`}>{s.nome}{s.tipologia ? ` · ${s.tipologia}` : ""}</SelectItem>)}
+        {sortIt(list, (s) => s.nome).map((s) => <SelectItem key={s.id} value={s.id} data-testid={`${testid}-opt-${s.id}`}>{s.nome}{s.tipologia ? ` · ${s.tipologia}` : ""}</SelectItem>)}
         <SelectItem value={ADD} className="text-tiffany-active font-semibold" data-testid={`${testid}-add`}>+ Nuova struttura</SelectItem>
       </SelectContent>
     </Select>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -71,7 +72,7 @@ export function StationDialog({ open, feature, eid, pid, onClose, onSaved }) {
         <div className="flex flex-wrap gap-1">{Object.entries(KIND).map(([k, [l, c]]) => <button key={k} type="button" onClick={() => { set({ kind: k }); setSel([]); }} className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${f.kind === k ? "text-white" : "text-slate-700"}`} style={f.kind === k ? { background: c, borderColor: c } : {}} data-testid={`station-kind-${k}`}>{k === "generica" ? "Postazione generica" : l}</button>)}</div>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className={lbl}>Nome postazione<Input value={f.nome} onChange={(e) => set({ nome: e.target.value })} className="h-8 text-sm" data-testid="station-nome" /></label>
-          <label className={lbl}>Tipologia<select value={f.tipologia || ""} onChange={(e) => { if (e.target.value === ADD_OPTION) setAddT(true); else set({ tipologia: e.target.value }); }} className="h-8 w-full rounded-md border border-slate-200 px-2 text-sm" data-testid="station-tipologia"><option value="">–</option>{[...new Set([...tipi, ...(f.tipologia ? [f.tipologia] : [])])].map((t) => <option key={t}>{t}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select>{addT && <InlineAddOption listKey="tipi_postazione" small testid="station-tipologia-add" onDone={(v) => { setAddT(false); if (v) set({ tipologia: v }); }} />}</label>
+          <label className={lbl}>Tipologia<select value={f.tipologia || ""} onChange={(e) => { if (e.target.value === ADD_OPTION) setAddT(true); else set({ tipologia: e.target.value }); }} className="h-8 w-full rounded-md border border-slate-200 px-2 text-sm" data-testid="station-tipologia"><option value="">–</option>{sortIt([...new Set([...tipi, ...(f.tipologia ? [f.tipologia] : [])])]).map((t) => <option key={t}>{t}</option>)}<option value={ADD_OPTION}>+ Aggiungi</option></select>{addT && <InlineAddOption listKey="tipi_postazione" small testid="station-tipologia-add" onDone={(v) => { setAddT(false); if (v) set({ tipologia: v }); }} />}</label>
           <label className={lbl}>Ruolo operativo<Input value={f.ruolo || ""} onChange={(e) => set({ ruolo: e.target.value })} className="h-8 text-sm" data-testid="station-ruolo" /></label>
           <label className={lbl}>Data<Input type="date" value={f.data || ""} onChange={(e) => set({ data: e.target.value })} className="h-8 text-sm" data-testid="station-data" /></label>
           <label className={lbl}>Inizio<Input type="time" value={f.ora_inizio || ""} onChange={(e) => set({ ora_inizio: e.target.value })} className="h-8 text-sm" data-testid="station-inizio" /></label>
@@ -79,7 +80,7 @@ export function StationDialog({ open, feature, eid, pid, onClose, onSaved }) {
         </div>
         <label className={lbl}>Note<Input value={f.note || ""} onChange={(e) => set({ note: e.target.value })} className="h-8 text-sm" data-testid="station-note" /></label>
         {f.kind === "team" && <label className={lbl}>Team<select value={f.team_id || ""} onChange={(e) => { const t = ppl?.teams.find((x) => x.id === e.target.value); set({ team_id: e.target.value }); setSel((t?.membri || []).map((m) => m.persona_id)); }} className="h-8 w-full rounded-md border border-slate-200 px-2 text-sm" data-testid="station-team">
-          <option value="">Scegli il team…</option>{(ppl?.teams || []).map((t) => <option key={t.id} value={t.id}>{t.nome} · {t.membri.length} persone</option>)}</select></label>}
+          <option value="">Scegli il team…</option>{sortIt(ppl?.teams, (t) => t.nome).map((t) => <option key={t.id} value={t.id}>{t.nome} · {t.membri.length} persone</option>)}</select></label>}
         {team && <p className="text-xs text-slate-600" data-testid="station-team-info">Responsabile: <b>{team.responsabile || "–"}</b> · componenti: {team.membri.length}. Deseleziona chi non è assegnato a questa postazione.</p>}
         {f.kind !== "generica" && (f.kind !== "team" || team) && <PersonPick list={list} sel={sel} setSel={setSel} />}
         {conf && <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900" data-testid="station-conflicts"><b>Turni sovrapposti:</b>{conf.map((c, i) => <div key={i}>{c.nome}: {c.luogo || "turno"} {c.data} {c.ora_inizio || ""}-{c.ora_fine || ""}</div>)}</div>}

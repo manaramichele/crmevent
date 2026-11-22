@@ -6,6 +6,7 @@ import { Printer, FileSpreadsheet, CalendarDays, Clock } from "lucide-react";
 import CoverageSlotDialog from "./CoverageSlotDialog";
 import CoverageNeeds from "./CoverageNeeds";
 import CoverageMatrix from "./CoverageMatrix";
+import { sortIt } from "@/lib/sortOptions";
 
 const fsel = "h-10 w-full sm:w-auto sm:min-w-[150px] rounded-md border border-slate-200 bg-white px-2 text-sm";
 const STATUS_BAR = { green: "bg-emerald-500", yellow: "bg-amber-400", red: "bg-red-500" };
@@ -59,7 +60,7 @@ function Bars({ data, onPick }) {
 }
 
 export default function CoverageTab({ events, teams, settings, version, onOpenPerson, initialEvent = "" }) {
-  const [f, setF] = useState({ evento_id: initialEvent || (events.length === 1 ? events[0].id : ""), date: "", mansione: "", team_id: "", gruppo: "", cat: "all", step: 60 });
+  const [f, setF] = useState({ evento_id: initialEvent || (events.length === 1 ? events[0].id : ""), date: "", team_id: "", gruppo: "", cat: "all", step: 60 });
   const [view, setView] = useState("day");
   const [data, setData] = useState(null);
   const [slot, setSlot] = useState(null);
@@ -71,15 +72,14 @@ export default function CoverageTab({ events, teams, settings, version, onOpenPe
     api.get("/staff-coverage", { params }).then(({ data: d }) => { setData(d); if (!f.date) setF((p) => ({ ...p, date: d.date })); })
       .catch((e) => toast.error(formatApiError(e.response?.data?.detail)));
   }, [params, version, tick]); // eslint-disable-line react-hooks/exhaustive-deps
-  const evTeams = teams.filter((t) => t.evento_id === f.evento_id);
-  const groups = settings?.gruppi_appartenenza || [];
+  const evTeams = sortIt(teams.filter((t) => t.evento_id === f.evento_id), (t) => t.nome);
+  const groups = sortIt(settings?.gruppi_appartenenza || []);
   const ev = events.find((e) => e.id === f.evento_id);
   return (
     <div className="space-y-4" data-testid="coverage-tab">
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
-        <select className={fsel} value={f.evento_id} onChange={set("evento_id")} data-testid="cov-event"><option value="">Seleziona evento…</option>{events.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
+        <select className={fsel} value={f.evento_id} onChange={set("evento_id")} data-testid="cov-event"><option value="">Seleziona evento…</option>{sortIt(events, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
         {view === "day" && <select className={fsel} value={f.date} onChange={set("date")} data-testid="cov-date" disabled={!data}>{(data?.days || []).map((d) => <option key={d} value={d}>{fmtDay(d)}</option>)}{data && !data.days.includes(f.date) && f.date && <option value={f.date}>{fmtDay(f.date)}</option>}</select>}
-        <select className={fsel} value={f.mansione} onChange={set("mansione")} data-testid="cov-mansione"><option value="">Tutte le mansioni</option>{(data?.mansioni || []).map((m) => <option key={m} value={m}>{m}</option>)}</select>
         <select className={fsel} value={f.team_id} onChange={set("team_id")} data-testid="cov-team"><option value="">Tutti i team</option>{evTeams.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
         <select className={fsel} value={f.gruppo} onChange={set("gruppo")} data-testid="cov-gruppo"><option value="">Tutti i gruppi</option>{groups.map((g) => <option key={g} value={g}>{g}</option>)}</select>
         <select className={fsel} value={f.cat} onChange={set("cat")} data-testid="cov-cat"><option value="all">Staff e Volontari</option><option value="staff">Solo Staff</option><option value="volontari">Solo Volontari</option></select>

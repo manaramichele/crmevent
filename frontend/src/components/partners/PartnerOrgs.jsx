@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,8 @@ function Attribution({ partners, onDone }) {
   return (
     <Card title="Modifica attribuzione manuale" testid="partner-attribution">
       <div className="p-4 grid sm:grid-cols-4 gap-2">
-        <select className={sel} value={f.org_id} onChange={(e) => setF({ ...f, org_id: e.target.value })} data-testid="attr-org"><option value="">Organizzazione…</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
-        <select className={sel} value={f.partner_id} onChange={(e) => setF({ ...f, partner_id: e.target.value })} data-testid="attr-partner"><option value="">Nessun partner (rimuovi)</option>{partners.map((p) => <option key={p.id} value={p.id}>{pname(p)} · {p.code}</option>)}</select>
+        <select className={sel} value={f.org_id} onChange={(e) => setF({ ...f, org_id: e.target.value })} data-testid="attr-org"><option value="">Organizzazione…</option>{sortIt(orgs, (o) => o.nome).map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
+        <select className={sel} value={f.partner_id} onChange={(e) => setF({ ...f, partner_id: e.target.value })} data-testid="attr-partner"><option value="">Nessun partner (rimuovi)</option>{sortIt(partners, pname).map((p) => <option key={p.id} value={p.id}>{pname(p)} · {p.code}</option>)}</select>
         <Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Motivo della modifica (obbligatorio)" data-testid="attr-note" />
         <Button disabled={!f.org_id || f.note.trim().length < 3} onClick={save} className="bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900" data-testid="attr-save">Salva attribuzione</Button>
       </div>
