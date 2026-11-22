@@ -1,0 +1,23 @@
+{
+  "summary": "Regression check of the /staff-volontari white-page fix (const settings = useSettings() in PeopleTable). Tested only in the Emergent preview; production was not called. Setup: TEST org A with 2 events, 5 persons with taglie XL, M, S, S, L (staff, volunteer and unclassified), and saved availability (PUT /persons/{pid}/availability/{eid}). TEST org B has 1 person with taglia XXL. With >=2 distinct taglie the page renders and there are 0 pageerrors. All 7 tabs render. Taglia filter order is S, M, L, XL. The event filter and ?evento=<id> both filter rows. The edit mask shows mask-section-disponibilita with the saved fasce prechecked (D1 Mattina; D2 Mattina+Pomeriggio). Mobile 390px renders. Super Admin switching org A -> B -> A via org-switcher-select shows only that org's people. Coverage tab with an event selected renders the hourly grid. All TEST orgs, users and data were deleted afterwards (verified count 0).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/ui_iter205_setup.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is correct: useSettings() is called unconditionally in PeopleTable with no early return before it, so hook order is stable.",
+    "Taglia filter options come from all rows, not only the rows of the current tab: the Volontari tab also lists XL and L. Only cosmetic, not a bug.",
+    "Persons.jsx is a large file (>500 lines). Consider splitting PeopleTable into its own module. ESLint does not run standalone (ESLint 9 has no flat config), so an undefined variable like this can only be caught at runtime. Adding a no-undef lint check to CI would catch this class of bug."
+  ],
+  "updated_files": ["/app/backend/tests/ui_iter205_setup.py"],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100%"},
+  "seed_data_creation": "Created 2 TEST_UI205 orgs/users with events/persons/staff links/availability via ui_iter205_setup.py; all removed with `python ui_iter205_setup.py clean` (org_id scoped).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "UI fixture: cd /app/backend/tests && python ui_iter205_setup.py (writes /tmp/ui205.json); `python ui_iter205_setup.py clean` removes it. Log in via page.request.post /api/auth/login then goto /staff-volontari. For Super Admin, set localStorage acting_org_id and switch with the native select [data-testid=org-switcher-select]. people-event-filter is a Radix Select (role=option). The only 4xx seen was 401 /api/auth/me on the initial unauthenticated load, which is expected.",
+  "rca of the issue": "ReferenceError: settings is not defined. PeopleTable's sizeIdx used `settings` from the outer component's scope and is called during the taglia sort. It only runs when there are >=2 distinct taglie, so the page crashed and the React tree unmounted (white page). Verified fixed: no pageerror with 4 distinct taglie in org A."
+}

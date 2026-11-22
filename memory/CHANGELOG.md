@@ -1390,3 +1390,7 @@ Task 2 — Creatività manuale:
 - Copertura oraria: rimosso filtro Mansione; team/eventi/gruppi in ordine alfabetico.
 - lib/sortOptions.js (Intl.Collator it) applicato ai menu di eventi, team, organizzazioni, mansioni, gruppi, aziende, categorie, postazioni, settori ecc.; stati/priorita/giorni invariati; taglie in ordine logico.
 - Test iteration_204: backend 13/14 (fix 500 su fasce non lista -> 422), frontend 100%.
+
+## 2026-11-22 - FIX pagina bianca Staff / Volontari
+- Causa: Persons.jsx PeopleTable usava `settings` non definita (ordinamento taglie) -> ReferenceError con >=2 taglie diverse. Presente anche nel bundle pubblicato su Aruba (main.dc71b794.js).
+- Fix: const settings = useSettings() dentro PeopleTable. Test iteration_205 frontend 100%. Non pubblicato su Aruba.
