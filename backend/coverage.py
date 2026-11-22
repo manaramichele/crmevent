@@ -77,11 +77,28 @@ class FasciaNeedIn(BaseModel):
 FX_LABEL = {"mattina": "Mattina", "pomeriggio": "Pomeriggio"}
 
 
+class TeamNeedIn(BaseModel):
+    evento_id: str
+    date: str = Field(min_length=10, max_length=10)
+    fascia: str = Field(pattern="^(mattina|pomeriggio)$")
+    team_id: str
+    needed: int = Field(ge=0, le=10000)
+
+
+class AssignIn(BaseModel):
+    evento_id: str
+    date: str = Field(min_length=10, max_length=10)
+    fascia: str = Field(pattern="^(mattina|pomeriggio)$")
+    team_id: str
+    persona_id: str
+    force: bool = False
+
+
 class BulkFasciaIn(BaseModel):
     evento_id: str
     date: str = Field(min_length=10, max_length=10)
     fascia: str = Field(pattern="^(mattina|pomeriggio)$")
-    mansioni: List[str] = Field(min_length=1, max_length=50)
+    team_ids: List[str] = Field(min_length=1, max_length=200)
     token: Optional[str] = None
 
 
@@ -168,7 +185,7 @@ def build(db, deps: dict):
             pdays = {dd.get("date"): dd for dd in (av or {}).get("days") or [] if dd.get("date") and dd.get("disponibile") is not False}
             out.append({"has_av": bool(av), "days": pdays, "id": pid, "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "cellulare": p.get("cellulare") or "",
                         "taglia": p.get("taglia") or "", "gruppo": p.get("gruppo_appartenenza") or "", "mansioni": roles, "preferenza": pref,
-                        "team": ", ".join(sorted({teams[t] for t in tids if t in teams})),
+                        "team": ", ".join(sorted({teams[t] for t in tids if t in teams})), "team_ids": sorted(tids),
                         "categoria": "Staff" if cats & STAFF_CATS else ("Volontario" if "volontario" in cats else "Da classificare"),
                         "assigned": bool(roles if not mansione else mansione in roles), "iv": _merge(iv), "tbc": tbc})
         out.sort(key=lambda x: (_fold(x["cognome"]), _fold(x["nome"])))
@@ -331,46 +348,108 @@ def build(db, deps: dict):
         return out
 
     async def _fasce(org, evento_id, team_id=None, gruppo=None, cat="all"):
-        ev, people = await _load(org, evento_id, None, team_id, gruppo, cat)
-        needs = {(n["date"], n["fascia"]): int(n["needed"]) for n in await db.coverage_fascia_needs.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(5000)}
-        shifts = {}
-        for s in await db.shifts.find({"org_id": org, "evento_id": evento_id, "persona_id": {"$nin": [None, ""]}}, {"_id": 0, "persona_id": 1, "data": 1, "ora_inizio": 1, "ora_fine": 1}).to_list(20000):
-            shifts.setdefault((s["persona_id"], str(s.get("data") or "")[:10]), []).append(s)
-        pct, rows = await _yellow(org), []
+        """Copertura per giorno × fascia × Team: disponibili (confermati del team), assegnati (coverage_assignments), necessari, mancanti."""
+        ev, people = await _load(org, evento_id, None, None, gruppo, cat)
+        all_teams = sorted(await db.teams.find({"org_id": org, "evento_id": evento_id}, {"_id": 0, "id": 1, "nome": 1}).to_list(2000), key=lambda t: _fold(t.get("nome")))
+        tname = {t["id"]: t.get("nome") or "" for t in all_teams}
+        teams = [t for t in all_teams if not team_id or t["id"] == team_id]
+        needs = {(n["date"], n["fascia"], n["team_id"]): int(n["needed"]) for n in await db.coverage_team_needs.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(20000)}
+        asg = {(x["date"], x["fascia"], x["persona_id"]): x for x in await db.coverage_assignments.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(50000)}
+        pmap = {p["id"]: p for p in people}
+        rows = []
         for d in avail_days(ev):
             for s in d.get("fasce") or []:
                 a, b = _hm(s.get("start")), _hm(s.get("end"))
                 if a is not None and b is not None and b <= a:
                     b += 1440
-                ppl = []
-                for p in people:
-                    c = _classify(p, d["date"], s["id"], a, b)
-                    if not c:
-                        continue
-                    tur = [f"{x.get('ora_inizio') or '?'}–{x.get('ora_fine') or '?'}" for x in shifts.get((p["id"], d["date"]), [])
-                           if a is None or b is None or _hm(x.get("ora_inizio")) is None or _hm(x.get("ora_fine")) is None
-                           or (_hm(x.get("ora_inizio")) < b and (_hm(x.get("ora_fine")) or 1440) > a)]
-                    ppl.append({k: p[k] for k in ("id", "nome", "cognome", "gruppo", "mansioni", "preferenza", "team", "categoria")} |
-                               {"cov": c[0], "orario": c[1], "legacy": c[2], "changed": c[3], "turni": tur,
-                                "assigned": c[0] == "complete" and bool(p["mansioni"] or p["team"])})
-                av = [x for x in ppl if x["cov"] == "complete"]
-                n = needs.get((d["date"], s["id"])) or None
-                status = None
-                if n:
-                    status = "red" if len(av) < n else ("yellow" if len(av) < n + max(1, math.ceil(n * pct / 100)) else "green")
-                rows.append({"date": d["date"], "fascia": s["id"], "label": FX_LABEL[s["id"]], "start": s.get("start"), "end": s.get("end"),
-                             "available": len(av), "partial": sum(x["cov"] == "partial" for x in ppl), "tbc": sum(x["cov"] == "tbc" for x in ppl),
-                             "assigned": sum(x["assigned"] for x in ppl), "needed": n, "status": status,
-                             "changed": sum(x["changed"] for x in ppl), "people": ppl})
-        return ev, rows
+                for t in teams:
+                    ppl = []
+                    for p in people:
+                        if t["id"] not in p["team_ids"]:
+                            continue
+                        c = _classify(p, d["date"], s["id"], a, b) or ("none", "Non disponibile", False, False)
+                        x = asg.get((d["date"], s["id"], p["id"]))
+                        mine = bool(x and x["team_id"] == t["id"])
+                        ppl.append({k: p[k] for k in ("id", "nome", "cognome", "gruppo", "mansioni", "categoria")} |
+                                   {"cov": c[0], "orario": c[1], "legacy": c[2], "changed": c[3], "assigned": mine, "forced": bool(mine and x.get("forced")),
+                                    "assigned_other": tname.get(x["team_id"], "altro team") if x and not mine else None})
+                    orphans = sum(1 for (dd, ff, pid), x in asg.items() if dd == d["date"] and ff == s["id"] and x["team_id"] == t["id"]
+                                  and (pid not in pmap or t["id"] not in pmap[pid]["team_ids"]))
+                    n = needs.get((d["date"], s["id"], t["id"])) or None
+                    nas = sum(x["assigned"] for x in ppl)
+                    rows.append({"date": d["date"], "fascia": s["id"], "label": FX_LABEL[s["id"]], "start": s.get("start"), "end": s.get("end"),
+                                 "team_id": t["id"], "team": t.get("nome") or "", "available": sum(x["cov"] == "complete" for x in ppl),
+                                 "partial": sum(x["cov"] == "partial" for x in ppl), "tbc": sum(x["cov"] == "tbc" for x in ppl), "assigned": nas,
+                                 "needed": n, "missing": max(0, n - nas) if n else None, "status": ("green" if nas >= n else "red") if n else None,
+                                 "orphans": orphans, "changed": sum(x["changed"] for x in ppl),
+                                 "people": sorted(ppl, key=lambda x: (_fold(x["cognome"]), _fold(x["nome"])))})
+        return ev, rows, all_teams
 
     @r.get("/staff-coverage/fasce")
     async def fasce(evento_id: str, team_id: Optional[str] = None, gruppo: Optional[str] = None, cat: str = "all", user: dict = Depends(require)):
         org = user["org_id"]
-        ev, rows = await _fasce(org, evento_id, team_id or None, gruppo or None, cat)
+        ev, rows, teams = await _fasce(org, evento_id, team_id or None, gruppo or None, cat)
         _, allp = await _load(org, evento_id)
-        mans = sorted({(l.get("ruolo") or "").strip() for l in await db.staff.find({"org_id": org, "evento_id": evento_id}, {"_id": 0, "ruolo": 1}).to_list(20000)} - {""}, key=str.lower)
-        return {"evento": {"id": ev["id"], "nome": ev.get("nome")}, "rows": rows, "legacy": _legacy(allp), "mansioni": mans, "yellow_margin_pct": await _yellow(org)}
+        q = {"org_id": org, "evento_id": evento_id}
+        warn = {"mansione_needs": await db.coverage_needs.count_documents(q), "fascia_needs": await db.coverage_fascia_needs.count_documents(q),
+                "no_team": [{"id": p["id"], "nome": p["nome"], "cognome": p["cognome"], "mansioni": p["mansioni"]} for p in allp if not p["team_ids"]]}
+        return {"evento": {"id": ev["id"], "nome": ev.get("nome")}, "rows": rows, "teams": teams, "legacy": _legacy(allp), "warnings": warn}
+
+    async def _slot_check(org, evento_id, date_, fascia, team_id):
+        ev = await db.events.find_one({"org_id": org, "id": evento_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(status_code=404, detail="Evento non trovato")
+        if not await db.teams.find_one({"org_id": org, "evento_id": evento_id, "id": team_id}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Team non trovato per questo evento")
+        day = next((d for d in avail_days(ev) if d["date"] == date_), None)
+        sl = next((s for s in (day or {}).get("fasce") or [] if s["id"] == fascia), None)
+        if not sl:
+            raise HTTPException(status_code=400, detail="Fascia non attiva in questo giorno")
+        return ev, sl
+
+    @r.put("/staff-coverage/team-needs")
+    async def team_need_put(body: TeamNeedIn, user: dict = Depends(require)):
+        org = user["org_id"]
+        await _slot_check(org, body.evento_id, body.date, body.fascia, body.team_id)
+        q = {"org_id": org, "evento_id": body.evento_id, "date": body.date, "fascia": body.fascia, "team_id": body.team_id}
+        if body.needed:
+            await db.coverage_team_needs.update_one(q, {"$set": {**q, "needed": body.needed, "updated_at": datetime.now(ROME).isoformat()}}, upsert=True)
+        else:
+            await db.coverage_team_needs.delete_one(q)
+        return {"ok": True, "needed": body.needed or None}
+
+    @r.post("/staff-coverage/assign")
+    async def assign(body: AssignIn, user: dict = Depends(require)):
+        org = user["org_id"]
+        ev, sl = await _slot_check(org, body.evento_id, body.date, body.fascia, body.team_id)
+        _, people = await _load(org, body.evento_id)
+        p = next((x for x in people if x["id"] == body.persona_id), None)
+        if not p:
+            raise HTTPException(status_code=400, detail="Solo Staff e Volontari confermati per l'evento possono essere assegnati")
+        if body.team_id not in p["team_ids"]:
+            raise HTTPException(status_code=400, detail="La persona non fa parte di questo Team")
+        a, b = _hm(sl.get("start")), _hm(sl.get("end"))
+        if a is not None and b is not None and b <= a:
+            b += 1440
+        c = _classify(p, body.date, body.fascia, a, b)
+        q = {"org_id": org, "evento_id": body.evento_id, "date": body.date, "fascia": body.fascia, "persona_id": body.persona_id}
+        cur = await db.coverage_assignments.find_one(q, {"_id": 0})
+        if not body.force:
+            if cur and cur["team_id"] != body.team_id:
+                t = await db.teams.find_one({"org_id": org, "id": cur["team_id"]}, {"_id": 0, "nome": 1}) or {}
+                raise HTTPException(status_code=409, detail={"code": "other_team", "message": f"Già assegnata al Team {t.get('nome') or '?'} in questa fascia: confermi lo spostamento?"})
+            if not c or c[0] != "complete":
+                why = {"partial": f"copre solo in parte la fascia ({c[1]})" if c else "", "tbc": "orario da verificare"}.get(c[0] if c else "", "non ha dichiarato disponibilità per questa fascia")
+                raise HTTPException(status_code=409, detail={"code": "availability", "message": f"{p['cognome']} {p['nome']} {why}: assegnare comunque?"})
+        now = datetime.now(ROME).isoformat()
+        await db.coverage_assignments.update_one(q, {"$set": {**q, "team_id": body.team_id, "forced": not (c and c[0] == "complete"), "updated_at": now, "updated_by": user.get("email")},
+                                                     "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}}, upsert=True)
+        return {"ok": True}
+
+    @r.delete("/staff-coverage/assign")
+    async def unassign(evento_id: str, date: str, fascia: str, persona_id: str, user: dict = Depends(require)):
+        res = await db.coverage_assignments.delete_one({"org_id": user["org_id"], "evento_id": evento_id, "date": date, "fascia": fascia, "persona_id": persona_id})
+        return {"ok": True, "removed": res.deleted_count}
 
     @r.put("/staff-coverage/fascia-needs")
     async def fascia_need_put(body: FasciaNeedIn, user: dict = Depends(require)):
@@ -426,7 +505,7 @@ def build(db, deps: dict):
             return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             headers={"Content-Disposition": f'attachment; filename="CRMEvent_Disponibilita_{_slug(ev.get("nome"))}.xlsx"'})
         if mode in ("fasce", "fasce_names"):
-            ev, rows = await _fasce(org, evento_id, team_id or None, gruppo or None, cat)
+            ev, rows, _ = await _fasce(org, evento_id, team_id or None, gruppo or None, cat)
             if date:
                 rows = [x for x in rows if x["date"] == date]
             pdf = _pdf_fasce(ev, o.get("nome") or "", rows, names=(mode == "fasce_names"))
@@ -460,13 +539,13 @@ def build(db, deps: dict):
         if not sl or not sl.get("start") or not sl.get("end"):
             raise HTTPException(status_code=400, detail=f"{FX_LABEL[body.fascia]} non attiva o senza orari in questo giorno: configurala nella scheda evento")
         other = slots.get("pomeriggio" if body.fascia == "mattina" else "mattina")
-        want = {m.strip().lower() for m in body.mansioni if m.strip()}
-        if not want:
-            raise HTTPException(status_code=400, detail="Seleziona almeno una mansione")
+        tn = {t["id"]: t.get("nome") or "" for t in await db.teams.find({"org_id": org, "evento_id": ev["id"], "id": {"$in": body.team_ids}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)}
+        if not tn:
+            raise HTTPException(status_code=400, detail="Seleziona almeno un Team dell'evento")
         people = {}
-        for l in await db.staff.find({"org_id": org, "evento_id": ev["id"]}, {"_id": 0, "persona_id": 1, "ruolo": 1, "categoria": 1, "stato": 1}).to_list(20000):
-            if l.get("persona_id") and (l.get("ruolo") or "").strip().lower() in want and l.get("categoria") in CONFIRMED_CATS and l.get("stato") == "confermato":
-                people.setdefault(l["persona_id"], set()).add(l["ruolo"].strip())
+        for l in await db.staff.find({"org_id": org, "evento_id": ev["id"], "team_id": {"$in": list(tn)}}, {"_id": 0, "persona_id": 1, "team_id": 1, "categoria": 1, "stato": 1}).to_list(20000):
+            if l.get("persona_id") and l.get("categoria") in CONFIRMED_CATS and l.get("stato") == "confermato":
+                people.setdefault(l["persona_id"], set()).add(tn[l["team_id"]])
         pers = {p["id"]: p for p in await db.persons.find({"org_id": org, "id": {"$in": list(people)}}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1, "cellulare": 1}).to_list(20000)}
         avs = {}
         for a in await db.availabilities.find({"org_id": org, "evento_id": ev["id"], "persona_id": {"$in": list(people)}}, {"_id": 0}).to_list(50000):
@@ -479,7 +558,7 @@ def build(db, deps: dict):
             p = pers.get(pid)
             if not p:
                 continue
-            it = {"id": pid, "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "mansioni": sorted(ms)}
+            it = {"id": pid, "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "teams": sorted(ms)}
             cur = avs.get(pid)
             days = list((cur or {}).get("days") or [])
             d = next((x for x in days if x.get("date") == body.date), None)
@@ -516,7 +595,7 @@ def build(db, deps: dict):
         cnt = {k: sum(x["action"] == k for x in items) for k in ("create", "update", "already", "skip")}
         return {"evento": ev.get("nome"), "date": body.date, "fascia": body.fascia, "label": FX_LABEL[body.fascia], "start": slot["start"], "end": slot["end"],
                 "token": tok, "total": len(items), "to_update": cnt["create"] + cnt["update"], "already": cnt["already"], "skipped": cnt["skip"],
-                "people": [{k: x.get(k) for k in ("id", "nome", "cognome", "mansioni", "action", "label")} for x in items]}
+                "people": [{k: x.get(k) for k in ("id", "nome", "cognome", "teams", "action", "label")} for x in items]}
 
     @r.post("/staff-coverage/bulk-fascia/preview")
     async def bulk_preview(body: BulkFasciaIn, user: dict = Depends(require)):
@@ -546,8 +625,8 @@ def build(db, deps: dict):
                                                     "days_edited_by": user.get("email"), "days_edited_at": now, "created_at": now, "updated_at": now})
                 done += 1
         await record_audit(user, "availability_bulk_update", org_id=org,
-                           detail=f"{ev.get('nome')}: {FX_LABEL[body.fascia]} {slot['start']}–{slot['end']} del {body.date} a {done} persone ({', '.join(body.mansioni)})",
-                           meta={"evento_id": ev["id"], "date": body.date, "fascia": body.fascia, "mansioni": body.mansioni, "persone": [x["id"] for x in items if x["action"] in ("create", "update")]})
+                           detail=f"{ev.get('nome')}: {FX_LABEL[body.fascia]} {slot['start']}–{slot['end']} del {body.date} a {done} persone (Team: {', '.join(sorted({t for x in items for t in x['teams']}))})",
+                           meta={"evento_id": ev["id"], "date": body.date, "fascia": body.fascia, "team_ids": body.team_ids, "persone": [x["id"] for x in items if x["action"] in ("create", "update")]})
         return {"ok": True, "updated": done}
 
     return {"router": r}
@@ -591,27 +670,27 @@ def _pdf_fasce(ev, org_name, rows, names=False):
 
     story = [Paragraph("Copertura per fasce" + (" · elenco nominativo" if names else ""), ss["Title"].clone("fh1", alignment=0, fontSize=16, leading=20)),
              Paragraph(f"<b>{escape(ev.get('nome') or '')}</b>" + (f" · {escape(org_name)}" if org_name else ""), ss["BodyText"]),
-             Paragraph("Disponibili = copertura completa della fascia; parziali e da verificare sono indicati a parte. Assegnati = disponibili con mansione o team.", sub), Spacer(1, 6)]
-    data = [[Paragraph(h, hcell) for h in ("Giorno", "Fascia", "Orario", "Disponibili", "Parziali", "Da verificare", "Assegnati", "Necessari", "Stato")]]
+             Paragraph("Per Team: Disponibili = confermati del Team che coprono l'intera fascia; Assegnati = persone assegnate al Team nella fascia; Mancanti = Necessari - Assegnati.", sub), Spacer(1, 6)]
+    data = [[Paragraph(h, hcell) for h in ("Giorno", "Fascia", "Orario", "Team", "Disponibili", "Assegnati", "Necessari", "Mancanti")]]
     st = []
     for j, x in enumerate(rows, 1):
-        lab, bg = STATUS.get(x["status"], ("—", None))
-        data.append([dl(x["date"]), x["label"], f"{x['start'] or '?'}–{x['end'] or '?'}", str(x["available"]), str(x["partial"]), str(x["tbc"]),
-                     str(x["assigned"]), str(x["needed"] or "—"), lab])
-        if bg:
-            st.append(("BACKGROUND", (8, j), (8, j), colors.HexColor(bg)))
-    story.append(tbl(data, [W * w for w in (0.12, 0.12, 0.13, 0.1, 0.09, 0.11, 0.1, 0.1, 0.13)], st))
+        data.append([dl(x["date"]), x["label"], f"{x['start'] or '?'}–{x['end'] or '?'}", Paragraph(escape(x["team"]), cell), str(x["available"]),
+                     str(x["assigned"]), str(x["needed"] or "—"), str(x["missing"]) if x["missing"] is not None else "—"])
+        if x["status"]:
+            st.append(("BACKGROUND", (7, j), (7, j), colors.HexColor(STATUS[x["status"]][1])))
+    story.append(tbl(data, [W * w for w in (0.12, 0.11, 0.12, 0.21, 0.11, 0.11, 0.11, 0.11)], st))
     if names:
         for x in rows:
-            if not x["people"]:
+            ppl = [p for p in x["people"] if p["assigned"] or p["cov"] != "none"]
+            if not ppl:
                 continue
-            story.append(Paragraph(f"{dl(x['date'])} · {x['label']} {x['start'] or ''}–{x['end'] or ''} · {x['available']} disponibili", gh))
-            d = [[Paragraph(h, hcell) for h in ("Cognome e nome", "Team", "Gruppo", "Mansione", "Disponibilità", "Note")]]
-            for p in x["people"]:
-                note = ", ".join(filter(None, ["Da aggiornare" if p["legacy"] else "", "Assegnato" if p["assigned"] else "", ("Turno " + ", ".join(p["turni"])) if p["turni"] else ""]))
-                d.append([Paragraph(escape(v or "—"), cell) for v in (f"{p['cognome']} {p['nome']}".strip(), p["team"], p["gruppo"], ", ".join(p["mansioni"]),
-                                                                         f"{COV[p['cov']]} · {p['orario']}", note)])
-            story.append(tbl(d, [W * w for w in (0.22, 0.14, 0.14, 0.16, 0.18, 0.16)]))
+            story.append(Paragraph(f"{dl(x['date'])} · {x['label']} {x['start'] or ''}–{x['end'] or ''} · {escape(x['team'])} · {x['assigned']} assegnati", gh))
+            d = [[Paragraph(h, hcell) for h in ("Cognome e nome", "Gruppo", "Disponibilità", "Assegnazione", "Note")]]
+            for p in ppl:
+                note = ", ".join(filter(None, ["Da aggiornare" if p["legacy"] else "", "Fuori disponibilità" if p["forced"] else "", f"Assegnato a {p['assigned_other']}" if p["assigned_other"] else ""]))
+                d.append([Paragraph(escape(v or "—"), cell) for v in (f"{p['cognome']} {p['nome']}".strip(), p["gruppo"], f"{COV.get(p['cov'], 'Non disponibile')} · {p['orario']}",
+                                                                         "Assegnato" if p["assigned"] else "—", note)])
+            story.append(tbl(d, [W * w for w in (0.26, 0.16, 0.24, 0.14, 0.2)]))
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=16 * mm,
                       title=f"Copertura per fasce · {ev.get('nome') or ''}", author="CRMEvent").build(story, onFirstPage=footer, onLaterPages=footer)

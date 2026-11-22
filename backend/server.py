@@ -10727,6 +10727,12 @@ async def deleted_requests_restore(batch_id: str, user: dict = Depends(_require_
     rows = await db.deleted_requests.find({"org_id": user["org_id"], "batch_id": batch_id}, {"_id": 0}).to_list(5000)
     if not rows:
         raise HTTPException(status_code=404, detail="Richiesta eliminata non trovata")
+    pdoc = next((r["doc"] for r in rows if r["src"] == "persons"), None)
+    if pdoc:
+        alt = [c for c in ({"email": {"$regex": f"^{re.escape(pdoc['email'].strip())}$", "$options": "i"}} if pdoc.get("email") else None,
+                           {"cellulare": pdoc["cellulare"]} if pdoc.get("cellulare") else None) if c]
+        if alt and await db.persons.find_one({"org_id": user["org_id"], "id": {"$ne": pdoc["id"]}, "$or": alt}, {"_id": 1}):
+            raise HTTPException(status_code=409, detail="La persona si è registrata di nuovo dopo l'eliminazione: la richiesta è già presente, il ripristino creerebbe un duplicato")
     for r in sorted(rows, key=lambda x: 0 if x["src"] == "persons" else 1):
         d = r["doc"]
         if await db[r["src"]].find_one({"org_id": d["org_id"], "id": d["id"]}, {"_id": 1}):

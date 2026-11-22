@@ -1,0 +1,31 @@
+{
+  "summary": "Retest of the iteration_207 fixes on TEST_DcOrg. Backend: 16/17 pytest pass (new file 11/12 + iter207 regression 6/6). UI: all requested flows pass. (1) PersonMask Stato select (mask-assign-stato-0) has the 7 options in order. Da classificare UiCov set to Volontario + Confermato and saved: fx-avail M/P went 0->1 and the person is in the fx-open dialog. Rinunciato: 0/0, person gone. Staff + Confermato: 1/1, no double count. New rows (Aggiungi Volontario and mask-add-event) default to Da contattare. (2) Mobile 390px: m-delete-request-{id} is visible on Da classificare cards. The dialog (bottom sheet) has the correct text. Annulla keeps the card. Confirm removes it, the count goes 6->5, and no card detail dialog opens from click bubbling. (3) Restore duplicate: fixed when the person is kept (has another event). Delete request, re-register via the public form with the same email, then restore: still exactly 1 EV1 link and 1 availability. Re-linking via the API also works. NOT fixed for an orphan person, which is the usual Da classificare case: delete request (person deleted), re-register via the public form (new person created because the email is gone), then restore. Result: 2 persons with the same email and 2 EV1 Da classificare links. (4) Bulk fascia preview: API and UI (cov-bulk-open) list only confirmed Staff/Volontari. A Da classificare+confermato person and a volontario da_contattare with the same mansione are excluded. Regression: desktop delete (two-event select, confirm), org admin has no 'Richieste eliminate', SA restore via UI + toast, the Staff/Volontari/Da classificare/Team/Gruppi/Turni/Copertura tabs (no page errors), and cov-print-fasce / cov-print-fasce-names downloads all pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/deleted-requests/{batch}/restore", "issue": "The duplicate check is by persona_id+evento_id only. When the deleted request was an orphan (person removed) and the same person re-registers via the public form, a NEW person id is created. Restore then re-inserts the old person + old link, giving 2 persons with the same email/cellulare and 2 Da classificare links on the same event. Reproduced in test_restore_orphan_after_public_form (persons_with_email=2, ev1_links=2). Suggest: before restoring a person doc, look for an existing person in the org with the same email/cellulare/codice_fiscale. If one exists, skip the person insert and remap staff/availabilities to it, or skip them when that person already has a link/availability for the event. Or return a 409 telling SA the person re-registered."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PersonMask", "issues": ["Data di nascita still uses the native date input (pre-existing, noted in 207)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter208_restore_bulk.py", "/app/backend/tests/test_iter207_da_classificare_delete.py", "/app/backend/tests/ui_iter208_setup.py", "/app/test_reports/pytest/pytest_iter208.xml"],
+  "action_items": [
+    "MEDIUM: deleted_requests_restore orphan case: dedupe the restored person against an existing person (email/cellulare/CF) created after deletion, e.g. by public-form re-registration. Otherwise you get a duplicate anagrafica and 2 Da classificare links for the same event."
+  ],
+  "critical_code_review_comments": [
+    "server.py restore: the staff/availability skip uses d.get('persona_id') of the OLD person. It cannot detect a re-registered person with a new id (see above).",
+    "PersonMask: existing rows with an unknown/legacy stato value would display as the first option (no fallback option). Today the DB only has confermato/da_contattare/disponibile/rinunciato, so this is OK.",
+    "server.py is >10k lines (pre-existing): consider splitting the deleted_requests and public availability modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter208_restore_bulk.py", "/app/backend/tests/ui_iter208_setup.py"],
+  "success_rate": {"backend": "94% (16/17)", "frontend": "100%"},
+  "seed_data_creation": "All TEST_ persons/links/availabilities/deleted_requests created by these runs were removed by id (pytest fixture + ui_iter207/208_setup.py cleanup). 2 deleted_requests docs for batch 7c0340ae... (person 'Altro TEST_Altro', 22:36) existed before this run and were left untouched. The public-form submissions used test emails on the TEST_Ev Dc active link. The link was not regenerated.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_iter208_restore_bulk.py backend/tests/test_iter207_da_classificare_delete.py -n 0. Only test_restore_orphan_after_public_form fails (orphan restore dedupe). UI setup: python ui_iter208_setup.py setup|cleanup (BkOk/BkDc/BkUn with mansione TEST_M208UI, MobDel Da classificare) and ui_iter207_setup.py (UiDel/UiTwo/UiCov). Login as org admin, dismiss welcome-demo-skip / cookie-accept-all. For SA, set localStorage acting_org_id=42744eae0ca84875b89d86a80e7bd985. Route /staff-volontari."
+}
