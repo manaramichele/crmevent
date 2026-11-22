@@ -11318,20 +11318,16 @@ async def pub_avail_submit(code: str, body: PubAvailIn, request: Request):
         if d["date"] not in day_meta:
             continue
         meta = day_meta[d["date"]]
-        if isinstance(d.get("fasce"), list):
-            opts = {s["id"]: s for s in meta.get("fasce") or []}
-            sel = [opts[x] for x in dict.fromkeys(d["fasce"]) if x in opts]
-            if not sel:
-                raise HTTPException(status_code=400, detail=f"Seleziona Mattina e/o Pomeriggio per {meta['label']}.")
-            st = [s["start"] for s in sel if s.get("start")]
-            en = [s["end"] for s in sel if s.get("end")]
-            days_clean.append({"date": d["date"], "fase": meta["fase"],
-                               "fasce": [{"id": s["id"], "start": s.get("start"), "end": s.get("end")} for s in sel],
-                               "dalle": min(st) if len(st) == len(sel) else None, "alle": max(en) if len(en) == len(sel) else None})
-            continue
+        opts = {s["id"]: s for s in meta.get("fasce") or []}
+        req = set(d.get("fasce") or []) if isinstance(d.get("fasce"), list) else set()
+        sel = [opts[x] for x in ("mattina", "pomeriggio") if x in req and x in opts]
+        if not sel:
+            raise HTTPException(status_code=400, detail=f"Seleziona Mattina e/o Pomeriggio per {meta['label']}.")
+        st = [s["start"] for s in sel if s.get("start")]
+        en = [s["end"] for s in sel if s.get("end")]
         days_clean.append({"date": d["date"], "fase": meta["fase"],
-                           "dalle": (d.get("dalle") or "").strip() or None,
-                           "alle": (d.get("alle") or "").strip() or None})
+                           "fasce": [{"id": s["id"], "start": s.get("start"), "end": s.get("end")} for s in sel],
+                           "dalle": min(st) if len(st) == len(sel) else None, "alle": max(en) if len(en) == len(sel) else None})
     if not days_clean:
         raise HTTPException(status_code=400, detail="Seleziona almeno un giorno dell'evento.")
     if not any(d["fase"] == "evento" for d in days_clean):

@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the Mattina/Pomeriggio availability slots (fasce_disponibilita) and the Staff / Volontari action from the event list. Backend: 11 of 11 pytest tests pass (test_iter203_fasce_disponibilita.py). Covered: event create with per-day slots; 422 when end <= start and when slots overlap (an overlap with a disabled slot is allowed); public GET hides a disabled slot and a day with no config shows both slots without times; public submit for Mattina only, Pomeriggio only, both, multi-day with the allestimento/evento/disallestimento phase; the stored shape {date, fase, fasce, dalle=min, alle=max}; 400 for a disabled slot and for empty fasce; resubmitting with the same email adds no second person or availability; legacy dalle/alle plus fasce counted correctly in Copertura oraria (full and partial); volunteer PDF with the Disponibilità dal/al columns; fasce-stale 0 -> 2 -> fasce-sync updated 2 -> 0, with selections kept and legacy records untouched; other org -> 404. Frontend (Playwright, desktop 1920 and mobile 390): desktop bar order is Staff / Volontari | Disponibilità | Pipeline | Percorsi | Altre, and Altre holds Calendario, Duplica evento and Briefing. The mobile Azioni menu contains Staff / Volontari and navigates correctly. /staff-volontari?evento=<id> shows the banner, the event stays selected across Staff, Volontari, Da classificare, Team, Turni and Copertura. 'Mostra tutti gli eventi' clears the param, 'Torna agli eventi' goes to /eventi, and an unknown or other-org id (ev_qa_1) is ignored. In the event form: client errors appear for end<start and overlap, a save with overlap shows the server 422 toast and keeps the dialog open, Copia su tutti i giorni works, the disabled slot persists, and the stale warning plus Aggiorna orari works (toast '2 disponibilità aggiornate'). Public form at 390px: times shown, disabled slot hidden, no time inputs, a day with no slot is blocked by toast, then submit succeeds with no horizontal overflow. Person mask shows '09/06: Mattina (08:00–12:00), 10/06: Mattina e Pomeriggio (07:00–12:30, 13:00–20:00)'. Coverage UI for 10/06 shows the expected counts, including partial 12:00-13:00. One HIGH desktop layout bug was found (below). All TEST data was deleted.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "The 'at least one slot per day' rule only runs when the day carries a 'fasce' list. A payload without 'fasce' still saves free dalle/alle (tested: 03:00-23:00 accepted, 200). Old cached clients or crafted requests can bypass the fixed slots. Suggest: when the event has fasce (or always), require 'fasce' and ignore dalle/alle."},
+      {"endpoint": "POST /api/public/availability/{code}", "issue": "Saved fasce keep the client's order (['pomeriggio','mattina'] is stored as is), so the person mask shows 'Pomeriggio e Mattina (13:00–20:00, 07:00–12:30)'. Suggest sorting sel by ('mattina','pomeriggio')."},
+      {"endpoint": "POST /api/public/availability/{code} (rate limit)", "issue": "This was already there before this change. _client_ip trusts the first X-Forwarded-For value, which the client controls. Sending a different X-Forwarded-For per request bypassed the 6/min per-IP limit (7 submits in about 4s with no 429)."},
+      {"endpoint": "PUT /api/events/{id}", "issue": "The 422 detail is passed on as 'Value error, 2030-06-11: Mattina e Pomeriggio si sovrappongono'. Strip the 'Value error, ' prefix for the UI toast."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DaySlotsField in the event edit dialog (desktop >= 1024px)", "issue": "The row switches to flex-row at the lg breakpoint, which follows the viewport, but the dialog is only about 672px wide. Each day row overflows: field scrollWidth 914 vs clientWidth 622. The Pomeriggio end time is cut off and the 'Copia su tutti i giorni' button sits at x=1382-1547, outside the dialog (dialog right edge is x=1296), so on desktop the user cannot see or click it. Fix: drop the lg:flex-row layout (keep flex-col, or use flex-wrap with the label on its own line), or use a container query.", "selector": "[data-testid^='dayslots-copy-'], [data-testid$='-pomeriggio-end']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PersonMask availability text", "issues": ["The spec asks for a weekday prefix ('Sab 19/12: ...'), but dm() renders only '19/12'"]},
+      {"screen": "DaySlotsField mobile 390", "issues": ["The 104px time inputs slightly clip the native clock icon. Minor."]},
+      {"screen": "Event form", "issues": ["Client-side dayslots-errors does not block Salva. The request goes to the server and comes back 422 (handled, dialog stays open). You could disable Salva while errs.length > 0."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter203_fasce_disponibilita.py", "/app/test_reports/pytest/pytest_iter203.xml"],
+  "action_items": [
+    "HIGH: fix the DaySlotsField row overflow inside the event dialog on desktop: Copia su tutti i giorni and the Pomeriggio end input fall outside the dialog",
+    "Public submit: require 'fasce' for each selected day and stop accepting free dalle/alle; sort fasce mattina -> pomeriggio",
+    "Strip the pydantic 'Value error, ' prefix from the 422 toast",
+    "Optional: weekday prefix in the PersonMask availability text; fix rate-limit IP spoofing through X-Forwarded-For"
+  ],
+  "critical_code_review_comments": [
+    "DaySlotsField: layout uses viewport breakpoints (lg:) inside a fixed-width dialog, which causes the overflow.",
+    "DaySlotsField copyAll rebuilds the whole value from the visible days only. Fine, but keys for days removed after a date change stay in events.fasce_disponibilita (the backend validator does not drop dates outside the event range, unlike giorni_descrizioni).",
+    "Stale warning loads only on mount and appears on reopen after saving, which is acceptable.",
+    "server.py is more than 14k lines and should be split into modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter203_fasce_disponibilita.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "about 92%: all flows work; 1 HIGH desktop layout bug"},
+  "seed_data_creation": "TEST_Fasce <tag> event in the Demo org, avail link, 7 persons, availabilities and staff links were created through the API and public form, then deleted by event id and person ids (verified 0 leftovers). The pytest file cleans up after itself; set KEEP_FX=1 to keep its data for UI checks (state goes to /tmp/fx_state.txt).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest tests/test_iter203_fasce_disponibilita.py -p no:xdist -o addopts=''. Public submits use different X-Forwarded-For values, which avoids the 6/min rate limit. The cookie banner blocks clicks: click 'Accept all' first. Use :visible for staffvol-/more-actions-/edit-event- testids (a mobile duplicate exists). The event dialog testid is event-dialog and the save button is event-save. Not verified: the Gruppi tab event preselect (groups-event-filter did not render in Demo for the TEST event, probably no groups). The code passes initialEvent=effEv."
+}

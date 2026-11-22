@@ -47,19 +47,19 @@ export default function DaySlotsField({ days, value, onChange, eventId }) {
     <div className="space-y-2" data-testid="field-fasce_disponibilita">
       {eventId && <Stale eventId={eventId} />}
       {days.map((d) => (
-        <div key={d.date} className="rounded-lg border border-slate-200 p-2.5 flex flex-col lg:flex-row lg:items-center gap-2" data-testid={`dayslots-${d.date}`}>
-          <div className="text-xs font-medium text-slate-600 capitalize lg:w-44">{d.label}</div>
+        <div key={d.date} className="rounded-lg border border-slate-200 p-2.5 flex flex-wrap items-center gap-x-4 gap-y-2" data-testid={`dayslots-${d.date}`}>
+          <div className="text-xs font-medium text-slate-600 capitalize w-full">{d.label}</div>
           {SLOTS.map(([s, l]) => {
             const c = get(d.date, s);
             return (
               <div key={s} className={`flex items-center gap-1.5 ${c.attiva ? "" : "opacity-50"}`}>
                 <label className="flex items-center gap-1 text-xs text-slate-700 w-24"><input type="checkbox" checked={c.attiva} onChange={(e) => set(d.date, s, { attiva: e.target.checked })} data-testid={`dayslots-${d.date}-${s}-on`} />{l}</label>
-                <Input type="time" className="h-8 w-[104px]" disabled={!c.attiva} value={c.start || ""} onChange={(e) => set(d.date, s, { start: e.target.value })} data-testid={`dayslots-${d.date}-${s}-start`} />
+                <Input type="time" className="h-8 w-[118px]" disabled={!c.attiva} value={c.start || ""} onChange={(e) => set(d.date, s, { start: e.target.value })} data-testid={`dayslots-${d.date}-${s}-start`} />
                 <span className="text-slate-400">–</span>
-                <Input type="time" className="h-8 w-[104px]" disabled={!c.attiva} value={c.end || ""} onChange={(e) => set(d.date, s, { end: e.target.value })} data-testid={`dayslots-${d.date}-${s}-end`} />
+                <Input type="time" className="h-8 w-[118px]" disabled={!c.attiva} value={c.end || ""} onChange={(e) => set(d.date, s, { end: e.target.value })} data-testid={`dayslots-${d.date}-${s}-end`} />
               </div>);
           })}
-          {days.length > 1 && <Button type="button" variant="ghost" size="sm" className="h-8 text-xs lg:ml-auto" onClick={() => copyAll(d.date)} data-testid={`dayslots-copy-${d.date}`}><Copy className="w-3.5 h-3.5 mr-1" />Copia su tutti i giorni</Button>}
+          {days.length > 1 && <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => copyAll(d.date)} data-testid={`dayslots-copy-${d.date}`}><Copy className="w-3.5 h-3.5 mr-1" />Copia su tutti i giorni</Button>}
         </div>))}
       {errs.length > 0 && <ul className="text-xs text-red-600 list-disc pl-5" data-testid="dayslots-errors">{errs.map((e) => <li key={e}>{e}</li>)}</ul>}
       <p className="text-[11px] text-slate-400">Il volontario sceglie solo Mattina e/o Pomeriggio: gli orari sono informativi. Le fasce non attive non compaiono nel modulo.</p>
