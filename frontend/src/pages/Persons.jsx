@@ -32,6 +32,7 @@ import PersonMask, { PROVENIENZA } from "@/components/PersonMask";
 import ExportPdfButton from "@/components/ExportPdfButton";
 import GroupsTab from "@/components/GroupsTab";
 import CoverageTab from "@/components/coverage/CoverageTab";
+import { DeleteRequestButton, DeletedRequestsButton } from "@/components/DaClassificareActions";
 import { sortIt } from "@/lib/sortOptions";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
@@ -180,6 +181,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   );
   const actionsCell = (r) => (
     <div className="flex items-center justify-end gap-0.5">
+      {tab === "da_classificare" && <DeleteRequestButton person={r} events={events} onDone={onReload}
+        eventIds={[...new Set((r.assegnazioni || []).filter((a) => a.categoria === "da_classificare" && (evFilter === "all" || a.evento_id === evFilter)).map((a) => a.evento_id))]} />}
       {onInvite && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title={r.last_invite_at ? "Reinvia invito" : "Invita"} onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>}
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Modifica" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
       {canDelete && delDialog(r, <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" title="Elimina" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button>, `confirm-delete-person-${r.id}`)}
@@ -528,6 +531,7 @@ export default function Persons({ mode = "anagrafiche" }) {
           </TabsList>
           {["staff", "volontari", "da_classificare"].map((t) => (
             <TabsContent key={t} value={t}>
+              {t === "da_classificare" && user?.role === "superadmin" && <div className="flex justify-end mb-2"><DeletedRequestsButton onRestored={reload} /></div>}
               <PeopleTable tab={t} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} evValue={effEv} onEvChange={setPageEv} {...peopleProps} />
             </TabsContent>
           ))}

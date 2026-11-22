@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 ROME = ZoneInfo("Europe/Rome")
 TIFFANY = "#0ABAB5"
 STAFF_CATS = {"staff", "collaboratore"}
+CONFIRMED_CATS = STAFF_CATS | {"volontario"}
 
 
 def _fold(s):
@@ -103,14 +104,16 @@ def build(db, deps: dict):
         ev = await db.events.find_one({"org_id": org, "id": evento_id}, {"_id": 0})
         if not ev:
             raise HTTPException(status_code=404, detail="Evento non trovato")
-        links = await db.staff.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(20000)
-        avs = await db.availabilities.find({"org_id": org, "evento_id": evento_id, "persona_id": {"$ne": None}}, {"_id": 0}).to_list(20000)
+        links = [x for x in await db.staff.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(20000)
+                 if x.get("categoria") in CONFIRMED_CATS and x.get("stato") == "confermato"]  # solo Staff/Volontari confermati per QUESTO evento
+        conf = {x["persona_id"] for x in links if x.get("persona_id")}
+        avs = await db.availabilities.find({"org_id": org, "evento_id": evento_id, "persona_id": {"$in": list(conf)}}, {"_id": 0}).to_list(20000)
         latest = {}
         for a in avs:  # la disponibilità più recente sostituisce le precedenti della stessa persona
             k = a["persona_id"]
             if k not in latest or str(a.get("updated_at") or a.get("created_at") or "") > str(latest[k].get("updated_at") or latest[k].get("created_at") or ""):
                 latest[k] = a
-        pids = {x["persona_id"] for x in links} | set(latest)
+        pids = conf
         persons = {p["id"]: p for p in await db.persons.find({"org_id": org, "id": {"$in": list(pids)}, "archiviato": {"$ne": True}},
                                                               {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "cellulare": 1, "taglia": 1, "gruppo_appartenenza": 1}).to_list(20000)}
         teams = {t["id"]: t.get("nome") for t in await db.teams.find({"org_id": org, "evento_id": evento_id}, {"_id": 0, "id": 1, "nome": 1}).to_list(2000)}
@@ -121,9 +124,6 @@ def build(db, deps: dict):
         for pid, p in persons.items():
             ls, av = by_p.get(pid, []), latest.get(pid)
             cats = {x.get("categoria") for x in ls}
-            if not ls and av:  # solo modulo disponibilità: usa il ruolo dichiarato
-                re_ = _fold(av.get("ruolo_evento"))
-                cats = {"staff"} if re_.startswith("staff") else ({"volontario"} if re_.startswith("volont") else set())
             roles = sorted({x["ruolo"] for x in ls if x.get("ruolo")})
             pref = (av or {}).get("preferenza_attivita") or next((x.get("preferenza") for x in ls if x.get("preferenza")), None)
             tids = {x.get("team_id") for x in ls if x.get("team_id")}

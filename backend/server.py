@@ -6798,6 +6798,8 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 AUDIT_ACTION_LABELS = {
     "availability_bulk_update": "Aggiornamento massivo disponibilità",
     "person_availability_edited": "Disponibilità modificata",
+    "da_classificare_deleted": "Richiesta Da classificare eliminata",
+    "da_classificare_restored": "Richiesta Da classificare ripristinata",
     "access_reminder_sent": "Promemoria accessi inviato",
     "access_reminder_failed": "Promemoria accessi non inviato",
     "access_reminders_config": "Promemoria accessi: impostazioni",
@@ -10661,6 +10663,78 @@ async def person_avail_update(person_id: str, event_id: str, body: PersonAvailIn
             "days_edited_by": admin.get("email"), "days_edited_at": now, "created_at": now, "updated_at": now})
     await record_audit(admin, "person_availability_edited", org_id=admin["org_id"], detail=f"{p.get('cognome') or ''} {p.get('nome') or ''} · {ev.get('nome')}: {len(out)} giorni")
     return {"ok": True, "availability_id": aid, "days": out}
+
+
+class DaClassDeleteIn(BaseModel):
+    persona_id: str
+    evento_id: str
+
+
+async def _move_docs(src: str, dst: str, q: dict, extra: dict) -> int:
+    docs = await db[src].find(q, {"_id": 0}).to_list(5000)
+    if docs:
+        await db[dst].insert_many([{"doc": d, "src": src, **extra} for d in docs])
+        await db[src].delete_many({"org_id": q["org_id"], "id": {"$in": [d["id"] for d in docs]}})
+    return len(docs)
+
+
+@api.post("/da-classificare/delete")
+async def da_classificare_delete(body: DaClassDeleteIn, admin: dict = Depends(require_admin)):
+    """Eliminazione logica di una richiesta Da classificare (recuperabile dal Super Admin). Nessuna email inviata."""
+    org = admin["org_id"]
+    ev = await db.events.find_one(oq(admin, id=body.evento_id), {"_id": 0, "id": 1, "nome": 1})
+    p = await db.persons.find_one(oq(admin, id=body.persona_id), {"_id": 0, "id": 1, "nome": 1, "cognome": 1})
+    if not ev or not p:
+        raise HTTPException(status_code=404, detail="Persona o evento non trovati")
+    q = {"org_id": org, "persona_id": p["id"], "evento_id": ev["id"]}
+    if not await db.staff.find_one({**q, "categoria": "da_classificare"}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Nessuna richiesta Da classificare per questo evento")
+    batch, now = new_id(), now_iso()
+    extra = {"batch_id": batch, "org_id": org, "persona_id": p["id"], "evento_id": ev["id"], "evento_nome": ev.get("nome"),
+             "persona_nome": f"{p.get('nome') or ''} {p.get('cognome') or ''}".strip(), "deleted_at": now, "deleted_by": admin.get("email")}
+    n_links = await _move_docs("staff", "deleted_requests", {**q, "categoria": "da_classificare"}, extra)
+    n_av = 0
+    if not await db.staff.find_one(q, {"_id": 1}):  # nessun ruolo confermato rimasto per l'evento: anche le disponibilità escono
+        n_av = await _move_docs("availabilities", "deleted_requests", q, extra)
+    person_deleted = False
+    if not await _person_has_history(org, p["id"]):
+        await _move_docs("persons", "deleted_requests", {"org_id": org, "id": p["id"]}, extra)
+        person_deleted = True
+    await record_audit(admin, "da_classificare_deleted", org_id=org,
+                       detail=f"{extra['persona_nome']} · {ev.get('nome')}" + (" · anagrafica eliminata (recuperabile)" if person_deleted else ""),
+                       meta={"batch_id": batch, "persona_id": p["id"], "evento_id": ev["id"], "links": n_links, "availabilities": n_av, "person_deleted": person_deleted})
+    return {"ok": True, "batch_id": batch, "person_deleted": person_deleted}
+
+
+async def _require_sa_org(user: dict = Depends(require_admin)) -> dict:
+    if user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Accesso riservato al Super Admin CRMEvent")
+    return user
+
+
+@api.get("/admin/deleted-requests")
+async def deleted_requests_list(user: dict = Depends(_require_sa_org)):
+    rows = await db.deleted_requests.find({"org_id": user["org_id"]}, {"_id": 0, "doc": 0}).sort("deleted_at", -1).to_list(5000)
+    out = {}
+    for r in rows:
+        b = out.setdefault(r["batch_id"], {k: r.get(k) for k in ("batch_id", "persona_nome", "evento_nome", "deleted_at", "deleted_by")} | {"items": []})
+        b["items"].append(r["src"])
+    return list(out.values())
+
+
+@api.post("/admin/deleted-requests/{batch_id}/restore")
+async def deleted_requests_restore(batch_id: str, user: dict = Depends(_require_sa_org)):
+    rows = await db.deleted_requests.find({"org_id": user["org_id"], "batch_id": batch_id}, {"_id": 0}).to_list(5000)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Richiesta eliminata non trovata")
+    for r in sorted(rows, key=lambda x: 0 if x["src"] == "persons" else 1):
+        d = r["doc"]
+        if not await db[r["src"]].find_one({"org_id": d["org_id"], "id": d["id"]}, {"_id": 1}):
+            await db[r["src"]].insert_one(dict(d))
+    await db.deleted_requests.delete_many({"org_id": user["org_id"], "batch_id": batch_id})
+    await record_audit(user, "da_classificare_restored", org_id=user["org_id"], detail=f"{rows[0].get('persona_nome')} · {rows[0].get('evento_nome')}", meta={"batch_id": batch_id})
+    return {"ok": True}
+
 
 
 
