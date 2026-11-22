@@ -15,7 +15,7 @@ import contextlib
 from collections import defaultdict
 import support_service
 from datetime import datetime, timezone, timedelta
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from zoneinfo import ZoneInfo
 
 import jwt
@@ -10590,8 +10590,14 @@ async def fasce_giorni(event_id: str, admin: dict = Depends(require_admin)):
     return {"days": _avail_days(ev)}
 
 
+class PersonAvailDay(BaseModel):
+    date: str = Field(min_length=10, max_length=10)
+    fasce: List[Literal["mattina", "pomeriggio"]] = []
+    keep: bool = False
+
+
 class PersonAvailIn(BaseModel):
-    days: List[dict] = []
+    days: List[PersonAvailDay] = []
 
 
 @api.put("/persons/{person_id}/availability/{event_id}")
@@ -10608,7 +10614,8 @@ async def person_avail_update(person_id: str, event_id: str, body: PersonAvailIn
     old = {d.get("date"): d for d in ((cur or {}).get("days") or [])}
     meta = {d["date"]: d for d in _avail_days(ev)}
     out, seen = [], set()
-    for d in body.days or []:
+    for dd in body.days or []:
+        d = dd.model_dump()
         iso = d.get("date")
         if not iso or iso in seen:
             continue

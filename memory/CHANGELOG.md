@@ -1383,3 +1383,10 @@ Task 2 — Creatività manuale:
 - Evento: fasce_disponibilita {date:{mattina|pomeriggio:{attiva,start,end}}} con validazione (fine>inizio, nessuna sovrapposizione); DaySlotsField (copia su tutti i giorni, avviso disponibilita con orari superati + Aggiorna orari: GET /events/{id}/fasce-stale, POST /fasce-sync).
 - Modulo pubblico: per giorno checkbox Mattina/Pomeriggio con orari informativi, fasce disattivate nascoste; server richiede almeno una fascia per giorno; days salvati con fasce [{id,start,end}] + dalle/alle (min/max) per compatibilita PDF; storiche intatte. Copertura oraria usa ogni fascia.
 - Test: iteration_203 backend 11/11, frontend 92%; poi corretti layout fasce nel dialogo, fasce obbligatorie e ordinate, prefisso Value error, giorno della settimana nella scheda. Non pubblicato.
+
+## 2026-11-22 - Disponibilita in Modifica anagrafica + Copertura senza Mansione + ordinamento menu (solo sviluppo)
+- Backend: GET /events/{id}/fasce-giorni; PUT /persons/{pid}/availability/{eid} (stesso archivio availabilities, ultimo record persona+evento+org; crea record origine=anagrafica se assente; keep:true preserva giorni a orario libero; validazione Pydantic).
+- PersonMask sezione D Disponibilita (PersonAvailability.jsx): checkbox Mattina/Pomeriggio con orari evento, preselezione da modulo pubblico, storiche: match esatto preselezionato, altrimenti box orario originale con sostituzione/Mantieni originale.
+- Copertura oraria: rimosso filtro Mansione; team/eventi/gruppi in ordine alfabetico.
+- lib/sortOptions.js (Intl.Collator it) applicato ai menu di eventi, team, organizzazioni, mansioni, gruppi, aziende, categorie, postazioni, settori ecc.; stati/priorita/giorni invariati; taglie in ordine logico.
+- Test iteration_204: backend 13/14 (fix 500 su fasce non lista -> 422), frontend 100%.
