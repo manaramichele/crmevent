@@ -1408,3 +1408,7 @@ Task 2 — Creatività manuale:
 
 ## 2026-11-22 - Script Maratona di Pisa: Domenica 20/12 Mattina ad Addetti ristoro e Pacer
 - backend/scripts/aruba_pisa_sunday_morning.py: anteprima in sola lettura (evento e organizzazione per ID, mansioni equivalenti, conteggi, elenco persone, casi da verificare) e applicazione con --apply --token --actor (backup JSON, scrittura solo se il record non e cambiato, days_history, Audit Log per persona e riepilogo, controllo finale, rieseguibile senza duplicati). Provato su dati TEST nel database di sviluppo e poi cancellato. Non eseguito su Aruba.
+
+## 2026-11-22 - Copertura oraria: Assegna fascia per mansione
+- coverage.py: POST /staff-coverage/bulk-fascia/preview e /apply (mansioni scelte, giorno, fascia; stesse regole dello script Pisa: aggiunge senza togliere, vecchio formato convertito con storico, esclusi non disponibili e vecchi orari che coprono l altra fascia; codice anteprima, 409 se i dati cambiano, Audit Log availability_bulk_update). GET /staff-coverage/fasce restituisce anche mansioni.
+- CoverageBulkDialog.jsx: scelta giorno/fascia/mansioni, anteprima con conteggi ed elenco, conferma. Verificato con script API e screenshot (desktop e mobile).

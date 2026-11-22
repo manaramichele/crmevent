@@ -61,7 +61,7 @@ function Bars({ data, onPick }) {
   );
 }
 
-export default function CoverageTab({ events, teams, settings, version, onOpenPerson, initialEvent = "" }) {
+export default function CoverageTab({ events, teams, settings, version, onOpenPerson, onChanged, initialEvent = "" }) {
   const [f, setF] = useState({ evento_id: initialEvent || (events.length === 1 ? events[0].id : ""), date: "", team_id: "", gruppo: "", cat: "all", step: 60 });
   const [view, setView] = useState("fasce");
   const [fday, setFday] = useState("");
@@ -110,7 +110,7 @@ export default function CoverageTab({ events, teams, settings, version, onOpenPe
             <Button variant="outline" size="sm" onClick={() => downloadCoverage({ ...params, kind: "xlsx" }, "Disponibilita.xlsx")} data-testid="cov-export-xlsx"><FileSpreadsheet className="w-4 h-4 mr-1" />Excel</Button>
           </div>
         </div>
-        {view === "fasce" ? <CoverageFasce params={fxParams} day={fday} version={version} onOpenPerson={onOpenPerson} /> : view === "day" ? (<>
+        {view === "fasce" ? <CoverageFasce params={fxParams} day={fday} version={version} onOpenPerson={onOpenPerson} onChanged={onChanged} /> : view === "day" ? (<>
           <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
             <Kpi id="day" label="Disponibili nel giorno" value={data.kpis.day_people} />
             <Kpi id="max" label="Max contemporanei" value={data.kpis.max} />

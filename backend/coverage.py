@@ -1,11 +1,13 @@
 """Copertura oraria Staff / Volontari: calcolata al volo da disponibilità (availabilities.days) e assegnazioni (staff) esistenti."""
+import hashlib
 import io
+import json
 import math
 import re
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -74,6 +76,14 @@ class FasciaNeedIn(BaseModel):
 FX_LABEL = {"mattina": "Mattina", "pomeriggio": "Pomeriggio"}
 
 
+class BulkFasciaIn(BaseModel):
+    evento_id: str
+    date: str = Field(min_length=10, max_length=10)
+    fascia: str = Field(pattern="^(mattina|pomeriggio)$")
+    mansioni: List[str] = Field(min_length=1, max_length=50)
+    token: Optional[str] = None
+
+
 class ConfigIn(BaseModel):
     yellow_margin_pct: int = Field(ge=0, le=100)
 
@@ -82,6 +92,7 @@ def build(db, deps: dict):
     r = APIRouter(prefix="/api")
     require = deps["require_admin"]
     avail_days = deps["avail_days"]
+    record_audit = deps["record_audit"]
 
     async def _yellow(org):
         st = await db.settings.find_one({"id": org}, {"_id": 0, "coverage_yellow_pct": 1}) or {}
@@ -358,7 +369,8 @@ def build(db, deps: dict):
         org = user["org_id"]
         ev, rows = await _fasce(org, evento_id, team_id or None, gruppo or None, cat)
         _, allp = await _load(org, evento_id)
-        return {"evento": {"id": ev["id"], "nome": ev.get("nome")}, "rows": rows, "legacy": _legacy(allp), "yellow_margin_pct": await _yellow(org)}
+        mans = sorted({(l.get("ruolo") or "").strip() for l in await db.staff.find({"org_id": org, "evento_id": evento_id}, {"_id": 0, "ruolo": 1}).to_list(20000)} - {""}, key=str.lower)
+        return {"evento": {"id": ev["id"], "nome": ev.get("nome")}, "rows": rows, "legacy": _legacy(allp), "mansioni": mans, "yellow_margin_pct": await _yellow(org)}
 
     @r.put("/staff-coverage/fascia-needs")
     async def fascia_need_put(body: FasciaNeedIn, user: dict = Depends(require)):
@@ -435,6 +447,108 @@ def build(db, deps: dict):
         pdf = _pdf(ev, o.get("nome") or "", date, sections, names=(mode == "names"))
         return Response(content=pdf, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="CRMEvent_Copertura_{_slug(ev.get("nome"))}_{date}.pdf"'})
+
+    async def _bulk_plan(org, body):
+        ev = await db.events.find_one({"org_id": org, "id": body.evento_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(status_code=404, detail="Evento non trovato")
+        day = next((d for d in avail_days(ev) if d["date"] == body.date), None)
+        if not day:
+            raise HTTPException(status_code=400, detail="Il giorno non appartiene all'evento")
+        slots = {s["id"]: s for s in day.get("fasce") or []}
+        sl = slots.get(body.fascia)
+        if not sl or not sl.get("start") or not sl.get("end"):
+            raise HTTPException(status_code=400, detail=f"{FX_LABEL[body.fascia]} non attiva o senza orari in questo giorno: configurala nella scheda evento")
+        other = slots.get("pomeriggio" if body.fascia == "mattina" else "mattina")
+        want = {m.strip().lower() for m in body.mansioni if m.strip()}
+        if not want:
+            raise HTTPException(status_code=400, detail="Seleziona almeno una mansione")
+        people = {}
+        for l in await db.staff.find({"org_id": org, "evento_id": ev["id"]}, {"_id": 0, "persona_id": 1, "ruolo": 1}).to_list(20000):
+            if l.get("persona_id") and (l.get("ruolo") or "").strip().lower() in want:
+                people.setdefault(l["persona_id"], set()).add(l["ruolo"].strip())
+        pers = {p["id"]: p for p in await db.persons.find({"org_id": org, "id": {"$in": list(people)}}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1, "cellulare": 1}).to_list(20000)}
+        avs = {}
+        for a in await db.availabilities.find({"org_id": org, "evento_id": ev["id"], "persona_id": {"$in": list(people)}}, {"_id": 0}).to_list(50000):
+            c = avs.get(a["persona_id"])
+            if not c or str(a.get("updated_at") or a.get("created_at") or "") > str(c.get("updated_at") or c.get("created_at") or ""):
+                avs[a["persona_id"]] = a
+        slot = {"id": sl["id"], "start": sl["start"], "end": sl["end"]}
+        items = []
+        for pid, ms in people.items():
+            p = pers.get(pid)
+            if not p:
+                continue
+            it = {"id": pid, "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "mansioni": sorted(ms)}
+            cur = avs.get(pid)
+            days = list((cur or {}).get("days") or [])
+            d = next((x for x in days if x.get("date") == body.date), None)
+            new_day = {"date": body.date, "fase": day["fase"], "fasce": [slot], "dalle": sl["start"], "alle": sl["end"]}
+            if not cur:
+                it.update(action="create", label="Nuova disponibilità", days=[new_day])
+            elif d is None:
+                it.update(action="update", label="Aggiunto il giorno", days=sorted(days + [new_day], key=lambda x: x.get("date") or ""))
+            elif d.get("disponibile") is False:
+                it.update(action="skip", label="Ha dichiarato di non essere disponibile in questo giorno")
+            elif d.get("fasce"):
+                if any(f.get("id") == body.fascia for f in d["fasce"]):
+                    it.update(action="already", label="Ha già questa fascia")
+                else:
+                    nf = sorted([slot] + list(d["fasce"]), key=lambda f: 0 if f.get("id") == "mattina" else 1)
+                    st, en = [f.get("start") for f in nf], [f.get("end") for f in nf]
+                    nd = {**d, "fasce": nf, "dalle": min(st) if all(st) else None, "alle": max(en) if all(en) else None}
+                    it.update(action="update", label=f"Aggiunta {FX_LABEL[body.fascia]}", days=[nd if x is d else x for x in days])
+            else:
+                x0, x1 = _hm(d.get("dalle")), _hm(d.get("alle"))
+                o0, o1 = (_hm(other.get("start")), _hm(other.get("end"))) if other else (None, None)
+                orig = f"{d.get('dalle') or '?'}–{d.get('alle') or '?'}"
+                if None not in (x0, x1, o0, o1) and min(x1 if x1 > x0 else x1 + 1440, o1) > max(x0, o0):
+                    it.update(action="skip", label=f"Vecchio orario {orig} copre anche l'altra fascia: aggiorna dalla scheda")
+                else:
+                    it.update(action="update", label=f"Vecchio orario {orig} → {FX_LABEL[body.fascia]}", days=[new_day if x is d else x for x in days], legacy=d)
+            it["av_id"], it["av_upd"] = (cur or {}).get("id"), (cur or {}).get("updated_at")
+            items.append(it)
+        items.sort(key=lambda x: (x["cognome"].lower(), x["nome"].lower()))
+        tok = hashlib.sha1(json.dumps([[x["id"], x["action"], x["av_id"], x["av_upd"]] for x in items] + [body.date, body.fascia, slot["start"], slot["end"]], default=str).encode()).hexdigest()[:12]
+        return ev, slot, items, tok
+
+    def _bulk_out(ev, slot, items, tok, body):
+        cnt = {k: sum(x["action"] == k for x in items) for k in ("create", "update", "already", "skip")}
+        return {"evento": ev.get("nome"), "date": body.date, "fascia": body.fascia, "label": FX_LABEL[body.fascia], "start": slot["start"], "end": slot["end"],
+                "token": tok, "total": len(items), "to_update": cnt["create"] + cnt["update"], "already": cnt["already"], "skipped": cnt["skip"],
+                "people": [{k: x.get(k) for k in ("id", "nome", "cognome", "mansioni", "action", "label")} for x in items]}
+
+    @r.post("/staff-coverage/bulk-fascia/preview")
+    async def bulk_preview(body: BulkFasciaIn, user: dict = Depends(require)):
+        ev, slot, items, tok = await _bulk_plan(user["org_id"], body)
+        return _bulk_out(ev, slot, items, tok, body)
+
+    @r.post("/staff-coverage/bulk-fascia/apply")
+    async def bulk_apply(body: BulkFasciaIn, user: dict = Depends(require)):
+        org = user["org_id"]
+        ev, slot, items, tok = await _bulk_plan(org, body)
+        if body.token != tok:
+            raise HTTPException(status_code=409, detail="I dati sono cambiati dopo l'anteprima: ripeti l'anteprima")
+        done, now = 0, datetime.now(ROME).isoformat()
+        for x in items:
+            if x["action"] == "update":
+                upd = {"$set": {"days": x["days"], "updated_at": now, "days_edited_by": user.get("email"), "days_edited_at": now}}
+                if x.get("legacy"):
+                    upd["$push"] = {"days_history": {**x["legacy"], "sostituito_il": now, "sostituito_da": user.get("email")}}
+                res = await db.availabilities.update_one({"org_id": org, "id": x["av_id"], "updated_at": x["av_upd"]}, upd)
+                done += res.modified_count
+            elif x["action"] == "create":
+                if await db.availabilities.find_one({"org_id": org, "evento_id": ev["id"], "persona_id": x["id"]}, {"_id": 1}):
+                    continue
+                p = await db.persons.find_one({"org_id": org, "id": x["id"]}, {"_id": 0, "nome": 1, "cognome": 1, "email": 1, "cellulare": 1, "data_nascita": 1}) or {}
+                await db.availabilities.insert_one({"id": uuid.uuid4().hex, "org_id": org, "evento_id": ev["id"], "persona_id": x["id"], **p,
+                                                    "ruolo_evento": "staff", "stato": "confermata", "origine": "assegnazione_massiva", "days": x["days"], "brevo_status": "skipped",
+                                                    "days_edited_by": user.get("email"), "days_edited_at": now, "created_at": now, "updated_at": now})
+                done += 1
+        await record_audit(user, "availability_bulk_update", org_id=org,
+                           detail=f"{ev.get('nome')}: {FX_LABEL[body.fascia]} {slot['start']}–{slot['end']} del {body.date} a {done} persone ({', '.join(body.mansioni)})",
+                           meta={"evento_id": ev["id"], "date": body.date, "fascia": body.fascia, "mansioni": body.mansioni, "persone": [x["id"] for x in items if x["action"] in ("create", "update")]})
+        return {"ok": True, "updated": done}
 
     return {"router": r}
 

@@ -6796,6 +6796,8 @@ async def my_message_ack(mid: str, user: dict = Depends(require_admin)):
 # Append-only trail of privileged Super Admin actions. No API surface mutates/deletes it.
 # NEVER store passwords, tokens, secrets or payment data here — only non-sensitive metadata.
 AUDIT_ACTION_LABELS = {
+    "availability_bulk_update": "Aggiornamento massivo disponibilità",
+    "person_availability_edited": "Disponibilità modificata",
     "access_reminder_sent": "Promemoria accessi inviato",
     "access_reminder_failed": "Promemoria accessi non inviato",
     "access_reminders_config": "Promemoria accessi: impostazioni",
@@ -14392,7 +14394,7 @@ app.include_router(ANA["router"])
 OPT = option_lists.build(db, {"require_admin": require_admin, "get_settings": _org_settings, "allows": P.allows, "default_settings": default_settings})
 app.include_router(OPT["router"])
 app.include_router(people_pdf.build(db, {"require_admin": require_admin, "resolve_attachment": _resolve_attachment, "read_file_rec": _read_file_rec, "fallback_logo": _LOGO_PATH})["router"])
-app.include_router(coverage.build(db, {"require_admin": require_admin, "avail_days": _avail_days})["router"])
+app.include_router(coverage.build(db, {"require_admin": require_admin, "avail_days": _avail_days, "record_audit": record_audit})["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})
