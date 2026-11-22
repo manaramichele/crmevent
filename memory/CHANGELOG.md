@@ -1405,3 +1405,6 @@ Task 2 — Creatività manuale:
 - Frontend: vista predefinita Mattina / Pomeriggio (CoverageFasce.jsx + CoverageFasceDialogs.jsx), filtro giorno, elenco persone per fascia con filtro Tutti/Aggiornati/Da aggiornare, elenco da aggiornare con apertura Modifica anagrafica. Viste Orario dettagliato e Piu giorni mantenute.
 - Maschera: badge Da aggiornare; giorni che coincidono esattamente con una fascia proposti ma convertiti solo con Conferma proposta o modifica. PUT /persons/{pid}/availability/{eid} conserva i vecchi orari sostituiti in days_history.
 - Test iteration_206: backend 11/11, frontend 95%; corretti assegnati (solo completi), proposta non auto-convertita, validazione necessari, titolo dialog mobile.
+
+## 2026-11-22 - Script Maratona di Pisa: Domenica 20/12 Mattina ad Addetti ristoro e Pacer
+- backend/scripts/aruba_pisa_sunday_morning.py: anteprima in sola lettura (evento e organizzazione per ID, mansioni equivalenti, conteggi, elenco persone, casi da verificare) e applicazione con --apply --token --actor (backup JSON, scrittura solo se il record non e cambiato, days_history, Audit Log per persona e riepilogo, controllo finale, rieseguibile senza duplicati). Provato su dati TEST nel database di sviluppo e poi cancellato. Non eseguito su Aruba.
