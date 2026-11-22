@@ -195,6 +195,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const gruppoOpts = [...new Set(rows.map((r) => r.gruppo_appartenenza).filter(Boolean))].sort((a, b) => a.localeCompare(b, "it"));
   const teamOpts = [...new Map(rows.flatMap((r) => (r.assegnazioni || []).filter((a) => a.team_id && (evFilter === "all" || a.evento_id === evFilter)).map((a) => [a.team_id, teamName(a.team_id)])).filter(([, n]) => n)).entries()].sort((a, b) => a[1].localeCompare(b[1], "it"));
   const mansOpts = [...new Set(rows.flatMap((r) => (r.assegnazioni || []).map((a) => a.ruolo).filter(Boolean)))].sort((a, b) => a.localeCompare(b, "it"));
+  const settings = useSettings();
   const SIZE_ORD = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL", "5XL"];
   const sizeIdx = (t) => { const i = (settings?.taglie || []).indexOf(t); return i >= 0 ? i : 100 + (SIZE_ORD.indexOf(String(t).toUpperCase()) + 1 || 50); };
   const tagliaOpts = [...new Set(rows.map((r) => r.taglia).filter(Boolean))].sort((a, b) => sizeIdx(a) - sizeIdx(b) || String(a).localeCompare(String(b), "it"));
