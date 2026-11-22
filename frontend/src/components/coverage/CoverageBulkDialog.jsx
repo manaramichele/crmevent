@@ -55,7 +55,7 @@ export default function CoverageBulkDialog({ open, onClose, eventoId, rows, mans
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="bulk-dialog">
         <DialogHeader><DialogTitle>Assegna una fascia per mansione</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-500">Aggiunge la fascia scelta a tutte le persone dell'evento con le mansioni selezionate. Le altre disponibilità, i team e le mansioni restano invariati.</p>
+        <p className="text-sm text-slate-500">Aggiunge la fascia scelta a tutte le persone confermate (Staff o Volontari con stato Confermato) con le mansioni selezionate. Le altre disponibilità, i team e le mansioni restano invariati.</p>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-xs text-slate-600 space-y-1">Giorno<select className={sel} value={f.date} onChange={(e) => set("date", e.target.value)} data-testid="bulk-date">{days.map((d) => <option key={d} value={d}>{fmtD(d)}</option>)}</select></label>
           <label className="text-xs text-slate-600 space-y-1">Fascia<select className={sel} value={f.fascia} onChange={(e) => set("fascia", e.target.value)} data-testid="bulk-fascia">

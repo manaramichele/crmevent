@@ -1,0 +1,41 @@
+{
+  "summary": "Tested 'Elimina richiesta' (Da classificare), Super Admin restore, and Copertura oraria counting only confirmed people on TEST_DcOrg. Backend: 6/6 pytest pass. They cover the coverage lifecycle (da_classificare -> volontario confermato -> rinunciato -> staff confermato -> da_classificare), seed people never in fasce/legacy, 404 for no request or unknown person/event, deleting a request when the person is also confirmed on EV2 (person kept, EV2 coverage unchanged), deleting an orphan (person moved; 403 for org admin on list/restore; SA list shows staff+persons+availabilities; restore brings everything back; second restore 404), and audit da_classificare_deleted/restored. UI desktop: the Da classificare row shows 'Elimina richiesta' next to invite/edit/delete. The dialog text is exact ('Vuoi eliminare la richiesta di UiDel TEST_UiDel per l'evento TEST_Ev Dc? ...'). Annulla closes without deleting. A person with 2 events gets the event select, and the text follows the chosen event. Confirm removes the row, the count goes 5->4 and the toast 'Richiesta e anagrafica eliminate' shows. Org admin does not see 'Richieste eliminate'. As SA (acting org TEST_DcOrg) the list shows the batches and Ripristina brings the row back (count 3->4). Coverage UI: classifying via the edit mask as Volontario keeps stato da_contattare, so fx-avail stays 0. After setting stato confermato (only possible via API), fx-avail M/P = 1, the fx-open list shows TEST_UiCov, and switching to Staff keeps 1. Exports (xlsx fasce/summary) contain only the confirmed person. cov-print-fasce and cov-print-fasce-names download. Staff/Volontari/Team/Gruppi/Turni tabs load without errors. Found 1 major UX gap (no UI to set stato), 1 mobile gap and 1 minor restore bug.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/deleted-requests/{batch}/restore", "issue": "Restore only checks doc id. If a new da_classificare link was created for the same person+event after deletion (e.g. a new public-form submission), restore creates a DUPLICATE da_classificare link on the same event. Reproduced: links after restore = [('da_classificare','da_contattare') x2]. PUT /staff forbids this duplicate (409). Same risk for availabilities."},
+      {"endpoint": "POST /api/staff-coverage/bulk-fascia/preview|apply (coverage.py ~l.467)", "issue": "Candidate people are taken from every staff link with a matching ruolo, with no categoria/stato filter. So Da classificare or unconfirmed people can get their availability bulk-updated, although they never appear in coverage. Consider applying the same CONFIRMED_CATS + stato=='confermato' filter."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Persons.jsx mobile cards (md:hidden, l.270-275)", "issue": "The 'Elimina richiesta' action is missing on mobile/tablet (<768px). It exists only in the desktop table actionsCell (it is in the DOM but not visible at 390px), so mobile users cannot delete Da classificare requests.", "selector": "[data-testid^=delete-request-] inside person-card-*", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Confirming a person for Copertura oraria", "issue": "Coverage now needs staff.stato == 'confermato', but there is NO admin UI to set a link's stato. PersonMask has only Ruolo (categoria), and new links from the mask/Aggiungi Staff/Volontario are created with stato 'da_contattare'. STATO/STATO_COLOR in Persons.jsx are defined but never rendered, and PersonDetailDialog has no stato select. Result: anyone added manually, or a public-form registration whose availability is not 'confermata', can never enter Copertura from the UI. Only public-form people (stato copied as confermato) or API edits count. The review asks to verify 'via the edit mask (categoria + stato)', but the mask has no stato field. Existing orgs whose staff are 'da_contattare'/'disponibile' will see their coverage drop to 0.", "affected_selectors": ["mask-assign-cat-{i}", "fx-avail-{date}-{fascia}"]}
+    ],
+    "design_issues": [
+      {"screen": "PersonMask", "issues": ["Data di nascita uses the native browser date input (mm/dd/yyyy) instead of the shadcn calendar (pre-existing)", "Once a person is classified, the Ruolo select no longer offers 'Da classificare', so there is no UI way back to Da classificare (may be intended)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter207_da_classificare_delete.py", "/app/backend/tests/ui_iter207_setup.py", "/app/test_reports/pytest/pytest_iter207.xml"],
+  "action_items": [
+    "HIGH: Add a per-event 'Stato' select (Da contattare/Disponibile/Confermato/Rinunciato/...) in PersonMask event rows (e.g. data-testid mask-assign-stato-{i}) and/or a status badge+quick change in the Staff/Volontari tables. Otherwise no UI user can confirm people, and Copertura stays empty for manually added staff. Decide whether classifying from Da classificare to Staff/Volontario should default to confermato.",
+    "MEDIUM: Add the DeleteRequestButton to the mobile card actions (Persons.jsx ~l.270) when tab === 'da_classificare'.",
+    "LOW: In restore, skip or merge staff/availability docs when a link with the same persona_id+evento_id+categoria already exists, to avoid duplicates.",
+    "LOW: Apply the confirmed filter to bulk-fascia candidates."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 14.6k lines; the da-classificare delete/restore block should live in its own module like coverage.py.",
+    "da_classificare_delete moves the availabilities only when no other staff link remains on that event. Good, but a rinunciato/team link keeps the availability (acceptable).",
+    "_require_sa_org depends on require_admin, so SA needs X-Org-Id. OK, and the list is org-scoped.",
+    "A leftover batch 'Altro TEST_Altro · TEST_Ev Dc' (deleted 22:36 by the main agent) is still in deleted_requests. I left it untouched."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter207_da_classificare_delete.py", "/app/backend/tests/ui_iter207_setup.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "~85% (desktop flows pass; mobile action missing; no stato UI)"},
+  "seed_data_creation": "Created TEST_UiDel/TEST_UiTwo/TEST_UiCov and pytest TEST_CovA/Two/Solo persons in TEST_DcOrg. All were deleted by id afterwards (persons, staff, availabilities, deleted_requests). Seed persons are unchanged: Altro volontario/confermato on EV2, Entrambe staff/rinunciato, Mattina da_classificare/confermato, Legacy da_classificare/da_contattare. Audit log entries from the tests remain.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest /app/backend/tests/test_iter207_da_classificare_delete.py -n 0 (it cleans up after itself). For UI: python ui_iter207_setup.py setup|cleanup creates 3 Da classificare persons (ids in /tmp/ui207.json). Dismiss welcome-demo-skip and cookie-accept-all before clicking. For SA, set localStorage acting_org_id=42744eae0ca84875b89d86a80e7bd985 after login. Coverage API: GET /api/staff-coverage/fasce?evento_id=. Retest the stato UI once it is added.",
+  "test_credentials": "Org admin test_dc_3e68a3@example.com / TestPass123!; SA manara.michele.pro@gmail.com / CrmEvent2026! (X-Org-Id 42744eae0ca84875b89d86a80e7bd985)"
+}

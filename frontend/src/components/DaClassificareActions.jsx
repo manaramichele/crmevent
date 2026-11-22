@@ -5,7 +5,7 @@ import { Trash2, RotateCcw, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 
-export function DeleteRequestButton({ person, eventIds, events, onDone }) {
+export function DeleteRequestButton({ person, eventIds, events, onDone, testid }) {
   const [open, setOpen] = useState(false);
   const [ev, setEv] = useState(eventIds[0] || "");
   const [busy, setBusy] = useState(false);
@@ -23,7 +23,7 @@ export function DeleteRequestButton({ person, eventIds, events, onDone }) {
   if (!eventIds.length) return null;
   return (
     <>
-      <Button variant="ghost" size="sm" className="h-8 px-2 text-slate-500 hover:text-red-600" onClick={() => { setEv(eventIds[0]); setOpen(true); }} data-testid={`delete-request-${person.id}`}>
+      <Button variant="ghost" size="sm" className="h-8 px-2 text-slate-500 hover:text-red-600" onClick={() => { setEv(eventIds[0]); setOpen(true); }} data-testid={testid || `delete-request-${person.id}`}>
         <Trash2 className="w-4 h-4 mr-1" />Elimina richiesta
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

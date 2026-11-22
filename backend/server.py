@@ -10729,8 +10729,13 @@ async def deleted_requests_restore(batch_id: str, user: dict = Depends(_require_
         raise HTTPException(status_code=404, detail="Richiesta eliminata non trovata")
     for r in sorted(rows, key=lambda x: 0 if x["src"] == "persons" else 1):
         d = r["doc"]
-        if not await db[r["src"]].find_one({"org_id": d["org_id"], "id": d["id"]}, {"_id": 1}):
-            await db[r["src"]].insert_one(dict(d))
+        if await db[r["src"]].find_one({"org_id": d["org_id"], "id": d["id"]}, {"_id": 1}):
+            continue
+        if r["src"] == "staff" and await db.staff.find_one({"org_id": d["org_id"], "persona_id": d.get("persona_id"), "evento_id": d.get("evento_id")}, {"_id": 1}):
+            continue  # nel frattempo la persona ha un nuovo collegamento a questo evento: nessun duplicato
+        if r["src"] == "availabilities" and await db.availabilities.find_one({"org_id": d["org_id"], "persona_id": d.get("persona_id"), "evento_id": d.get("evento_id")}, {"_id": 1}):
+            continue
+        await db[r["src"]].insert_one(dict(d))
     await db.deleted_requests.delete_many({"org_id": user["org_id"], "batch_id": batch_id})
     await record_audit(user, "da_classificare_restored", org_id=user["org_id"], detail=f"{rows[0].get('persona_nome')} · {rows[0].get('evento_nome')}", meta={"batch_id": batch_id})
     return {"ok": True}

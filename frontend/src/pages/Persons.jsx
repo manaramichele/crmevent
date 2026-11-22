@@ -179,10 +179,10 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         <AlertDialogFooter><AlertDialogCancel data-testid={`cancel-delete-person-${r.id}`}>Annulla</AlertDialogCancel><AlertDialogAction className="bg-red-500 hover:bg-red-600" onClick={() => onDelete(r)} data-testid={testid}>Elimina</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
     </AlertDialog>
   );
+  const dcEvents = (r) => [...new Set((r.assegnazioni || []).filter((a) => a.categoria === "da_classificare" && (evFilter === "all" || a.evento_id === evFilter)).map((a) => a.evento_id))];
   const actionsCell = (r) => (
     <div className="flex items-center justify-end gap-0.5">
-      {tab === "da_classificare" && <DeleteRequestButton person={r} events={events} onDone={onReload}
-        eventIds={[...new Set((r.assegnazioni || []).filter((a) => a.categoria === "da_classificare" && (evFilter === "all" || a.evento_id === evFilter)).map((a) => a.evento_id))]} />}
+      {tab === "da_classificare" && <DeleteRequestButton person={r} events={events} onDone={onReload} eventIds={dcEvents(r)} />}
       {onInvite && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title={r.last_invite_at ? "Reinvia invito" : "Invita"} onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>}
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Modifica" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
       {canDelete && delDialog(r, <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" title="Elimina" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button>, `confirm-delete-person-${r.id}`)}
@@ -272,6 +272,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
                 {onInvite && <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>{r.last_invite_at ? "Reinvia" : "Invita"}</TextAction>}
                 <TextAction icon={Pencil} onClick={() => onEdit(r)} data-testid={`m-edit-person-${r.id}`}>Modifica</TextAction>
                 {canDelete && delDialog(r, <TextAction icon={Trash2} danger data-testid={`m-delete-person-${r.id}`}>Elimina</TextAction>, `m-confirm-delete-person-${r.id}`)}
+                {tab === "da_classificare" && <DeleteRequestButton person={r} events={events} onDone={onReload} eventIds={dcEvents(r)} testid={`m-delete-request-${r.id}`} />}
               </div>
             </div>
           ))}

@@ -464,8 +464,8 @@ def build(db, deps: dict):
         if not want:
             raise HTTPException(status_code=400, detail="Seleziona almeno una mansione")
         people = {}
-        for l in await db.staff.find({"org_id": org, "evento_id": ev["id"]}, {"_id": 0, "persona_id": 1, "ruolo": 1}).to_list(20000):
-            if l.get("persona_id") and (l.get("ruolo") or "").strip().lower() in want:
+        for l in await db.staff.find({"org_id": org, "evento_id": ev["id"]}, {"_id": 0, "persona_id": 1, "ruolo": 1, "categoria": 1, "stato": 1}).to_list(20000):
+            if l.get("persona_id") and (l.get("ruolo") or "").strip().lower() in want and l.get("categoria") in CONFIRMED_CATS and l.get("stato") == "confermato":
                 people.setdefault(l["persona_id"], set()).add(l["ruolo"].strip())
         pers = {p["id"]: p for p in await db.persons.find({"org_id": org, "id": {"$in": list(people)}}, {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1, "cellulare": 1}).to_list(20000)}
         avs = {}
