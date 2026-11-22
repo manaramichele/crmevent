@@ -32,6 +32,7 @@ import PersonMask, { PROVENIENZA } from "@/components/PersonMask";
 import ExportPdfButton from "@/components/ExportPdfButton";
 import GroupsTab from "@/components/GroupsTab";
 import CoverageTab from "@/components/coverage/CoverageTab";
+import { sortIt } from "@/lib/sortOptions";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
@@ -194,7 +195,9 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const gruppoOpts = [...new Set(rows.map((r) => r.gruppo_appartenenza).filter(Boolean))].sort((a, b) => a.localeCompare(b, "it"));
   const teamOpts = [...new Map(rows.flatMap((r) => (r.assegnazioni || []).filter((a) => a.team_id && (evFilter === "all" || a.evento_id === evFilter)).map((a) => [a.team_id, teamName(a.team_id)])).filter(([, n]) => n)).entries()].sort((a, b) => a[1].localeCompare(b[1], "it"));
   const mansOpts = [...new Set(rows.flatMap((r) => (r.assegnazioni || []).map((a) => a.ruolo).filter(Boolean)))].sort((a, b) => a.localeCompare(b, "it"));
-  const tagliaOpts = [...new Set(rows.map((r) => r.taglia).filter(Boolean))];
+  const SIZE_ORD = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL", "5XL"];
+  const sizeIdx = (t) => { const i = (settings?.taglie || []).indexOf(t); return i >= 0 ? i : 100 + (SIZE_ORD.indexOf(String(t).toUpperCase()) + 1 || 50); };
+  const tagliaOpts = [...new Set(rows.map((r) => r.taglia).filter(Boolean))].sort((a, b) => sizeIdx(a) - sizeIdx(b) || String(a).localeCompare(String(b), "it"));
   const fsel = "h-10 w-full sm:w-48 rounded-md border border-slate-200 bg-white px-2 text-sm";
   return (
     <div>
@@ -209,7 +212,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
               <SelectTrigger><SelectValue placeholder="Tutti gli eventi" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tutti gli eventi</SelectItem>
-                {events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+                {sortIt(events, (e) => e.nome).map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -221,7 +224,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         )}
         {isStaffTab && <select className={fsel} value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} data-testid="people-team-filter"><option value="all">Tutti i team</option><option value="none">Senza team</option>{teamOpts.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>}
         {isStaffTab && <select className={fsel} value={mansFilter} onChange={(e) => setMansFilter(e.target.value)} data-testid="people-mansione-filter"><option value="all">Tutte le mansioni</option><option value="none">Senza mansione</option>{mansOpts.map((m) => <option key={m} value={m}>{m}</option>)}</select>}
-        {isStaffTab && <select className={fsel} value={provFilter} onChange={(e) => setProvFilter(e.target.value)} data-testid="people-provenienza-filter"><option value="all">Tutte le provenienze</option>{Object.entries(PROVENIENZA).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
+        {isStaffTab && <select className={fsel} value={provFilter} onChange={(e) => setProvFilter(e.target.value)} data-testid="people-provenienza-filter"><option value="all">Tutte le provenienze</option>{sortIt(Object.entries(PROVENIENZA), (x) => x[1]).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {isStaffTab && <select className="h-10 w-full sm:w-36 rounded-md border border-slate-200 bg-white px-2 text-sm" value={tagliaFilter} onChange={(e) => setTagliaFilter(e.target.value)} data-testid="people-taglia-filter"><option value="all">Tutte le taglie</option><option value="none">Senza taglia</option>{tagliaOpts.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
         {isStaffTab && !groupMode && <select className={fsel} value={gruppoFilter} onChange={(e) => setGruppoFilter(e.target.value)} data-testid="people-gruppo-filter"><option value="all">Tutti i gruppi</option><option value="none">Nessun gruppo</option>{gruppoOpts.map((g) => <option key={g} value={g}>{g}</option>)}</select>}
         {(tab === "staff" || tab === "volontari") && <ExportPdfButton section={tab} eventoId={evFilter !== "all" ? evFilter : null} eventName={evFilter !== "all" ? evName(evFilter) : ""} personIds={displayRows.map((r) => r.id)} scopeLabel={`${displayRows.length} ${displayRows.length === 1 ? "persona" : "persone"} con i filtri attuali`} />}
@@ -230,7 +233,7 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-tiffany/40 bg-tiffany-light/40 px-3 py-2 text-sm" data-testid="bulk-mansione-bar">
           <span className="font-medium">{selectedRows.length} selezionati</span>
           <Button size="sm" variant="outline" onClick={() => confirmPrefs(selectedRows)} data-testid="bulk-confirm-prefs"><Check className="w-4 h-4 mr-1" />Conferma preferenze</Button>
-          <select className="h-9 rounded-md border border-slate-200 bg-white px-2" value={bulkRole} onChange={(e) => setBulkRole(e.target.value)} data-testid="bulk-mansione-select"><option value="">Mansione…</option>{ruoli.map((x) => <option key={x} value={x}>{x}</option>)}</select>
+          <select className="h-9 rounded-md border border-slate-200 bg-white px-2" value={bulkRole} onChange={(e) => setBulkRole(e.target.value)} data-testid="bulk-mansione-select"><option value="">Mansione…</option>{sortIt(ruoli).map((x) => <option key={x} value={x}>{x}</option>)}</select>
           <Button size="sm" disabled={!bulkRole} onClick={() => assign(selectedRows, bulkRole)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900" data-testid="bulk-mansione-apply">Assegna a {selectedRows.length}</Button>
           <Button size="sm" variant="ghost" onClick={() => setSel(new Set())} data-testid="bulk-clear">Annulla selezione</Button>
         </div>

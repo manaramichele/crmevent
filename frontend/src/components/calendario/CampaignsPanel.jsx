@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,10 +89,10 @@ function CampaignBuilder({ meta, templates }) {
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 text-sm" data-testid="cal-campaign-builder">
       <div className="font-semibold">Nuova campagna</div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-        <select className={SEL} value={f.template_id} onChange={set("template_id")} data-testid="cal-campaign-template">{templates.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
+        <select className={SEL} value={f.template_id} onChange={set("template_id")} data-testid="cal-campaign-template">{sortIt(templates, (t) => t.nome).map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
         <Input type="date" value={f.dal} onChange={set("dal")} className="h-9" title="Data comunicazione dal" data-testid="cal-campaign-dal" />
         <Input type="date" value={f.al} onChange={set("al")} className="h-9" title="Data comunicazione al" data-testid="cal-campaign-al" />
-        <select className={SEL} value={f.disciplina} onChange={set("disciplina")} data-testid="cal-campaign-disciplina"><option value="">Tutte le discipline</option>{Object.keys(meta.discipline).map((d) => <option key={d} value={d}>{DISC_LABEL[d]}</option>)}</select>
+        <select className={SEL} value={f.disciplina} onChange={set("disciplina")} data-testid="cal-campaign-disciplina"><option value="">Tutte le discipline</option>{sortIt(Object.keys(meta.discipline), (d) => DISC_LABEL[d]).map((d) => <option key={d} value={d}>{DISC_LABEL[d]}</option>)}</select>
         <Input value={f.regione} onChange={set("regione")} placeholder="Regione" className="h-9" data-testid="cal-campaign-regione" />
       </div>
       <p className="text-xs text-slate-500">Eventi confermati o conclusi la cui data di comunicazione (fine evento + giorni impostati) cade nel periodo. Senza date: ultimi 60 giorni fino a oggi.</p>

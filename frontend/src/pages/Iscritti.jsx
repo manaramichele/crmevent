@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import { Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
@@ -28,7 +29,7 @@ function Filters({ f, setF, eds }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value, page: 1 });
   return (
     <div className="grid grid-cols-2 lg:grid-cols-7 gap-2" data-testid="iscritti-filters">
-      <select className={SEL} value={f.event_id} onChange={set("event_id")} data-testid="filter-event"><option value="">Tutti gli eventi</option>{events.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
+      <select className={SEL} value={f.event_id} onChange={set("event_id")} data-testid="filter-event"><option value="">Tutti gli eventi</option>{sortIt(events, (x) => x[1]).map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
       <select className={SEL} value={f.anno} onChange={set("anno")} data-testid="filter-anno"><option value="">Tutti gli anni</option>{anni.map((a) => <option key={a}>{a}</option>)}</select>
       <select className={SEL} value={f.edizione_id} onChange={set("edizione_id")} data-testid="filter-edizione"><option value="">Tutte le edizioni</option>{eds.filter((e) => (!f.event_id || e.event_id === f.event_id) && (!f.anno || String(e.anno) === f.anno)).map((e) => <option key={e.id} value={e.id}>{e.event_nome} {e.anno} {e.edizione}</option>)}</select>
       <Input list="gare-filter" placeholder="Gara/distanza" value={f.gara} onChange={set("gara")} data-testid="filter-gara" /><datalist id="gare-filter">{gare.map((g) => <option key={g} value={g} />)}</datalist>

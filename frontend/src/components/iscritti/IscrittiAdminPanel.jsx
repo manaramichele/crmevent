@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ export function IscrittiAdminPanel() {
     <div className="space-y-4" data-testid="iscritti-admin">
       <p className="text-sm text-slate-600">Prezzo Marketplace: {d.service?.price ? `${d.service.price} € / ${d.service.price_type === "yearly" ? "anno" : "mese"}` : "non configurato"} · si modifica nel tab Catalogo (servizio «Elenco Iscritti»).</p>
       <div className="flex flex-wrap gap-2">
-        <select className="h-10 rounded-md border border-slate-200 px-3 text-sm bg-white min-w-0 max-w-full" value={pick} onChange={(e) => setPick(e.target.value)} data-testid="iscritti-admin-org"><option value="">Attiva gratuitamente per un'organizzazione...</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
+        <select className="h-10 rounded-md border border-slate-200 px-3 text-sm bg-white min-w-0 max-w-full" value={pick} onChange={(e) => setPick(e.target.value)} data-testid="iscritti-admin-org"><option value="">Attiva gratuitamente per un'organizzazione...</option>{sortIt(orgs, (o) => o.nome).map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
         <Button disabled={!pick} onClick={() => act(`/platform/iscritti/orgs/${pick}/activate`, { active: true }, "Modulo attivato")} data-testid="iscritti-admin-activate">Attiva</Button>
         <Button variant="outline" onClick={async () => { try { const { data } = await api.post("/platform/iscritti/demo-seed"); toast.success(`Demo popolata: ${data.iscritti} iscritti · ${data.totale_partecipazioni} partecipazioni`); load(); } catch (e) { err(e); } }} data-testid="iscritti-admin-demo-seed">Popola organizzazione Demo</Button>
       </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader, StatusBadge, TextAction, DeleteConfirm } from "@/components/crm";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -58,7 +59,7 @@ function AudienceFields({ a, setA, services }) {
         <option value="all">Tutte le organizzazioni</option><option value="superadmin">Solo Super Admin</option><option value="plans">Solo alcuni piani</option><option value="service">Organizzazioni con un modulo Marketplace attivo</option><option value="service_missing">Organizzazioni che non hanno ancora un modulo (promozione)</option>
       </select>
       {a.type === "plans" && <div className="flex gap-3 text-sm">{["bronze", "silver", "gold"].map((p) => <label key={p} className="flex items-center gap-1.5"><input type="checkbox" checked={a.plans.includes(p)} onChange={() => togglePlan(p)} data-testid={`news-audience-plan-${p}`} />{p.toUpperCase()}</label>)}</div>}
-      {(a.type === "service" || a.type === "service_missing") && <select className={SEL} value={a.service || ""} onChange={(e) => setA({ ...a, service: e.target.value })} data-testid="news-audience-service"><option value="">Scegli il modulo…</option>{services.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}</select>}
+      {(a.type === "service" || a.type === "service_missing") && <select className={SEL} value={a.service || ""} onChange={(e) => setA({ ...a, service: e.target.value })} data-testid="news-audience-service"><option value="">Scegli il modulo…</option>{sortIt(services, (s) => s.name).map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}</select>}
     </div>
   );
 }

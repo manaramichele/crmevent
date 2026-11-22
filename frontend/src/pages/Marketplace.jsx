@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import { useSearchParams, Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader } from "@/components/crm";
@@ -150,7 +151,7 @@ function Detail({ s, canPurchase, onClose, onToggle, onChanged }) {
           : !s.purchasable_now ? <div className="flex items-center gap-2 text-sm text-slate-600 font-medium" data-testid="mkt-detail-unavailable"><Clock className="w-4 h-4" />{s.status === "coming_soon" ? "Prossimamente disponibile" : s.reason}</div>
             : !canPurchase ? <p className="text-sm text-slate-600" data-testid="mkt-detail-noperm">L'acquisto è riservato all'Admin Organizzatore o agli utenti autorizzati.</p>
               : (<div className="space-y-3">
-                {s.scope === "event" && <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm" data-testid="mkt-detail-event"><option value="">Seleziona l'evento…</option>{events.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>}
+                {s.scope === "event" && <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm" data-testid="mkt-detail-event"><option value="">Seleziona l'evento…</option>{sortIt(events, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>}
                 <Button disabled={busy || (s.scope === "event" && !eventId)} onClick={buy} className="w-full h-11 bg-[#0ABAB5] hover:bg-[#09A8A3] text-slate-900 font-semibold" data-testid="mkt-detail-buy">{busy ? "Attendi..." : s.free || s.demo_free ? "Attiva gratuitamente" : "Conferma e vai al pagamento"}</Button>
               </div>)}
         {s.active && !ADDON_PRODUCT[s.key] && <ActivePurchase s={s} canPurchase={canPurchase} onChanged={onChanged} />}

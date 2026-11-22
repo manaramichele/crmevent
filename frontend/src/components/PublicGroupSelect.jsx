@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -33,7 +34,7 @@ export default function PublicGroupSelect({ code, value, onChange, options, onOp
         <SelectTrigger data-testid="pf-gruppo"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value={NO_GROUP} className="italic" data-testid="pf-gruppo-none"><span className="italic">{t("groupNone")}</span></SelectItem>
-          {options.map((g) => <SelectItem key={g} value={g} data-testid={`pf-gruppo-opt-${g}`}>{g}</SelectItem>)}
+          {sortIt(options).map((g) => <SelectItem key={g} value={g} data-testid={`pf-gruppo-opt-${g}`}>{g}</SelectItem>)}
           <SelectItem value={ADD} className="font-medium text-tiffany-fg" data-testid="pf-gruppo-add">{t("groupAdd")}</SelectItem>
         </SelectContent>
       </Select>

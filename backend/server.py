@@ -15,7 +15,7 @@ import contextlib
 from collections import defaultdict
 import support_service
 from datetime import datetime, timezone, timedelta
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from zoneinfo import ZoneInfo
 
 import jwt
@@ -10580,6 +10580,81 @@ async def fasce_sync(event_id: str, admin: dict = Depends(require_admin)):
             n += 1
     await record_audit(admin, "availability_slots_synced", org_id=admin["org_id"], detail=f"{ev.get('nome')}: {n} disponibilità aggiornate")
     return {"updated": n}
+
+
+@api.get("/events/{event_id}/fasce-giorni")
+async def fasce_giorni(event_id: str, admin: dict = Depends(require_admin)):
+    ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    return {"days": _avail_days(ev)}
+
+
+class PersonAvailDay(BaseModel):
+    date: str = Field(min_length=10, max_length=10)
+    fasce: List[Literal["mattina", "pomeriggio"]] = []
+    keep: bool = False
+
+
+class PersonAvailIn(BaseModel):
+    days: List[PersonAvailDay] = []
+
+
+@api.put("/persons/{person_id}/availability/{event_id}")
+async def person_avail_update(person_id: str, event_id: str, body: PersonAvailIn, admin: dict = Depends(require_admin)):
+    """Modifica disponibilità dall'anagrafica: aggiorna lo stesso record del modulo pubblico (persona+evento+organizzazione)."""
+    ev = await db.events.find_one(oq(admin, id=event_id), {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento non trovato")
+    p = await db.persons.find_one(oq(admin, id=person_id), {"_id": 0, "id": 1, "nome": 1, "cognome": 1, "email": 1, "cellulare": 1, "data_nascita": 1})
+    if not p:
+        raise HTTPException(status_code=404, detail="Persona non trovata")
+    avs = await db.availabilities.find(oq(admin, evento_id=event_id, persona_id=person_id), {"_id": 0}).to_list(50)
+    cur = max(avs, key=lambda a: str(a.get("updated_at") or a.get("created_at") or "")) if avs else None
+    old = {d.get("date"): d for d in ((cur or {}).get("days") or [])}
+    meta = {d["date"]: d for d in _avail_days(ev)}
+    out, seen = [], set()
+    for dd in body.days or []:
+        d = dd.model_dump()
+        iso = d.get("date")
+        if not iso or iso in seen:
+            continue
+        seen.add(iso)
+        if d.get("keep"):
+            if iso in old:
+                out.append(old[iso])
+            continue
+        if iso not in meta:
+            raise HTTPException(status_code=400, detail=f"Il giorno {iso} non appartiene all'evento")
+        opts = {s["id"]: s for s in meta[iso].get("fasce") or []}
+        req = set(d.get("fasce") or [])
+        sel = [opts[x] for x in ("mattina", "pomeriggio") if x in req and x in opts]
+        if not sel:
+            continue
+        st = [s["start"] for s in sel if s.get("start")]
+        en = [s["end"] for s in sel if s.get("end")]
+        out.append({"date": iso, "fase": meta[iso]["fase"], "fasce": [{"id": s["id"], "start": s.get("start"), "end": s.get("end")} for s in sel],
+                    "dalle": min(st) if len(st) == len(sel) else None, "alle": max(en) if len(en) == len(sel) else None})
+    out.sort(key=lambda d: d.get("date") or "")
+    now = now_iso()
+    if cur:
+        await db.availabilities.update_one(oq(admin, id=cur["id"]), {"$set": {"days": out, "updated_at": now, "days_edited_by": admin.get("email"), "days_edited_at": now}})
+        aid = cur["id"]
+    else:
+        if not out:
+            return {"ok": True, "days": []}
+        link = await db.staff.find_one(oq(admin, evento_id=event_id, persona_id=person_id), {"_id": 0, "categoria": 1})
+        cat = (link or {}).get("categoria")
+        aid = new_id()
+        await db.availabilities.insert_one({
+            "id": aid, "org_id": admin["org_id"], "evento_id": event_id, "persona_id": person_id,
+            "nome": p.get("nome"), "cognome": p.get("cognome"), "email": p.get("email"), "cellulare": p.get("cellulare"),
+            "data_nascita": p.get("data_nascita"), "ruolo_evento": "volontario" if cat == "volontario" else ("staff" if cat in ("staff", "collaboratore") else "da_definire"),
+            "stato": "confermata", "origine": "anagrafica", "days": out, "brevo_status": "skipped",
+            "days_edited_by": admin.get("email"), "days_edited_at": now, "created_at": now, "updated_at": now})
+    await record_audit(admin, "person_availability_edited", org_id=admin["org_id"], detail=f"{p.get('cognome') or ''} {p.get('nome') or ''} · {ev.get('nome')}: {len(out)} giorni")
+    return {"ok": True, "availability_id": aid, "days": out}
+
 
 
 def _avail_link_url(code: str) -> str:

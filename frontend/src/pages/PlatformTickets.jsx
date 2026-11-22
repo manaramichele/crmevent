@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/crm";
 import { Button } from "@/components/ui/button";
@@ -119,7 +120,7 @@ export default function PlatformTickets() {
       <Counters counts={data?.counts} reopen={data?.reopen_requests} status={f.status} setStatus={set("status")} />
       <div className="flex flex-wrap gap-2 mb-4">
         <div className="relative flex-1 min-w-[200px]"><Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca per ID, oggetto, organizzazione, utente" className="pl-9" data-testid="sa-tickets-search" /></div>
-        <select value={f.org_id} onChange={set("org_id")} className={sel} data-testid="sa-tickets-filter-org"><option value="">Tutte le organizzazioni</option>{(data?.orgs || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
+        <select value={f.org_id} onChange={set("org_id")} className={sel} data-testid="sa-tickets-filter-org"><option value="">Tutte le organizzazioni</option>{sortIt(data?.orgs, (o) => o.name).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
         <select value={f.category} onChange={set("category")} className={sel} data-testid="sa-tickets-filter-category"><option value="">Tutte le categorie</option>{Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <select value={f.status} onChange={set("status")} className={sel} data-testid="sa-tickets-filter-status"><option value="">Tutti gli stati</option>{Object.entries(STATUS_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}<option value="riapertura">Riapertura richiesta</option></select>
         <Input type="date" value={f.from} onChange={set("from")} className="w-auto" aria-label="Dal" data-testid="sa-tickets-filter-from" />

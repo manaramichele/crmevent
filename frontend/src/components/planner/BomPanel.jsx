@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -81,8 +82,8 @@ function Filters({ rows, f, setF, statuses }) {
   const sel = "h-8 rounded-md border border-slate-200 px-1 text-xs";
   return (
     <div className="flex flex-wrap gap-2" data-testid="bom-filters">
-      <select value={f.cat} onChange={(e) => setF({ ...f, cat: e.target.value })} className={sel} data-testid="bom-filter-cat"><option value="">Tutte le categorie</option>{cats.map((c) => <option key={c}>{c}</option>)}</select>
-      <select value={f.sup} onChange={(e) => setF({ ...f, sup: e.target.value })} className={sel} data-testid="bom-filter-sup"><option value="">Tutti i fornitori</option>{sups.map((c) => <option key={c}>{c}</option>)}</select>
+      <select value={f.cat} onChange={(e) => setF({ ...f, cat: e.target.value })} className={sel} data-testid="bom-filter-cat"><option value="">Tutte le categorie</option>{sortIt(cats).map((c) => <option key={c}>{c}</option>)}</select>
+      <select value={f.sup} onChange={(e) => setF({ ...f, sup: e.target.value })} className={sel} data-testid="bom-filter-sup"><option value="">Tutti i fornitori</option>{sortIt(sups).map((c) => <option key={c}>{c}</option>)}</select>
       {statuses && <select value={f.st} onChange={(e) => setF({ ...f, st: e.target.value })} className={sel} data-testid="bom-filter-status"><option value="">Tutti gli stati</option>{Object.entries(statuses).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
     </div>
   );

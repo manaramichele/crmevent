@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import { useSearchParams } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { toast } from "sonner";
@@ -44,7 +45,7 @@ function LogoTable({ rows, onSet }) {
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca evento" className="sm:max-w-xs" data-testid="logos-search" />
-        <select value={org} onChange={(e) => setOrg(e.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" data-testid="logos-filter-org"><option value="">Tutte le organizzazioni</option>{orgs.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
+        <select value={org} onChange={(e) => setOrg(e.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" data-testid="logos-filter-org"><option value="">Tutte le organizzazioni</option>{sortIt(orgs, (x) => x[1]).map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
         <select value={st} onChange={(e) => setSt(e.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" data-testid="logos-filter-status"><option value="">Tutti gli stati</option>{Object.entries(ST).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}</select>
         <span className="self-center text-xs text-slate-500" data-testid="logos-count">{list.length} eventi con logo</span>
       </div>

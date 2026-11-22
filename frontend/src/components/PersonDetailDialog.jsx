@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { StatusBadge, fileUrl, calcAge } from "@/components/crm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -239,7 +240,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <Select value={pf.evento_id || ""} onValueChange={(v) => setPf((f) => ({ ...f, evento_id: v }))}>
                         <SelectTrigger data-testid="presence-event"><SelectValue placeholder="Evento" /></SelectTrigger>
-                        <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
+                        <SelectContent>{sortIt(events, (e) => e.nome).map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select>
                       <Select value={pf.categoria} onValueChange={(v) => setPf((f) => ({ ...f, categoria: v }))}>
                         <SelectTrigger data-testid="presence-cat"><SelectValue placeholder="Ruolo evento" /></SelectTrigger>
                         <SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="volontario">Volontario</SelectItem></SelectContent></Select>
@@ -337,7 +338,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                       <div className="sm:col-span-3"><Label className="text-xs text-slate-600">Evento *</Label>
                         <Select value={shiftForm.evento_id || ""} onValueChange={(v) => setShiftForm((f) => ({ ...f, evento_id: v, team_id: "" }))}>
                           <SelectTrigger data-testid="shift-event"><SelectValue placeholder="Evento" /></SelectTrigger>
-                          <SelectContent>{events.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select></div>
+                          <SelectContent>{sortIt(events, (e) => e.nome).map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select></div>
                       <div><Label className="text-xs text-slate-600">Data</Label><Input type="date" value={shiftForm.data} onChange={(e) => setShiftForm((f) => ({ ...f, data: e.target.value }))} data-testid="shift-data" /></div>
                       <div><Label className="text-xs text-slate-600">Ora inizio</Label><Input type="time" value={shiftForm.ora_inizio} onChange={(e) => setShiftForm((f) => ({ ...f, ora_inizio: e.target.value }))} data-testid="shift-ora-inizio" /></div>
                       <div><Label className="text-xs text-slate-600">Ora fine</Label><Input type="time" value={shiftForm.ora_fine} onChange={(e) => setShiftForm((f) => ({ ...f, ora_fine: e.target.value }))} data-testid="shift-ora-fine" /></div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import api, { formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -36,7 +37,7 @@ function PlannerBuy({ s, load, onDone }) {
       {s.included > 0 && (
         <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 space-y-2" data-testid="planner-included">
           <div>Piano {s.plan_label}: <b>1 evento incluso</b>{incl.length ? <> · attivo su <b>{incl.map((e) => e.nome).join(", ")}</b></> : ""}</div>
-          {s.included_free > 0 && <div className="flex gap-2"><select value={eventId} onChange={(e) => setEventId(e.target.value)} className="flex-1 h-9 rounded-lg border border-slate-200 px-2 text-sm" data-testid="planner-included-event"><option value="">Scegli l'evento incluso…</option>{evs.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
+          {s.included_free > 0 && <div className="flex gap-2"><select value={eventId} onChange={(e) => setEventId(e.target.value)} className="flex-1 h-9 rounded-lg border border-slate-200 px-2 text-sm" data-testid="planner-included-event"><option value="">Scegli l'evento incluso…</option>{sortIt(evs, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
             <Button size="sm" disabled={!eventId || busy} onClick={act} data-testid="planner-included-activate">Attiva</Button></div>}
         </div>)}
       <div className="text-xs text-slate-500">{s.included > 0 ? "Per usarlo su tutti gli altri eventi attiva l'abbonamento:" : "Abbonamento valido per tutti gli eventi dell'organizzazione."}</div>
@@ -75,7 +76,7 @@ function EventMapBuy({ s, load, onDone, initialEvent }) {
     <div className="space-y-3" data-testid="addon-buy-eventmap">
       <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 space-y-2" data-testid="addon-buy-summary">
         <div>Attivazioni incluse nel piano {s.plan_label || "attuale"}: <b data-testid="eventmap-included">{s.included_used}/{s.included}</b>{s.grant_free > 0 && <> · attivazioni omaggio: <b>{s.grant_free}</b></>} · crediti video disponibili: <b data-testid="eventmap-videos">{s.videos_available}</b></div>
-        {free && <div className="flex gap-2"><select value={eventId} onChange={(e) => setEventId(e.target.value)} className="flex-1 h-9 rounded-lg border border-slate-200 px-2 text-sm" data-testid="addon-buy-event"><option value="">Scegli l'evento…</option>{evs.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
+        {free && <div className="flex gap-2"><select value={eventId} onChange={(e) => setEventId(e.target.value)} className="flex-1 h-9 rounded-lg border border-slate-200 px-2 text-sm" data-testid="addon-buy-event"><option value="">Scegli l'evento…</option>{sortIt(evs, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
           <Button size="sm" disabled={!eventId || busy} onClick={act} data-testid="eventmap-included-activate">Attiva inclusa</Button></div>}
       </div>
       {sub ? (
@@ -135,7 +136,7 @@ export default function AddonBuy({ product, eventId: initialEvent, onDone }) {
         </select>) : <p className="text-sm text-slate-500" data-testid="addon-buy-no-packages">Pacchetti in definizione: a breve disponibili.</p>)}
       <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm" data-testid="addon-buy-event">
         <option value="">{product === "eventmap" && !free ? "Evento da attivare subito (facoltativo)…" : "Seleziona l'evento…"}</option>
-        {evs.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
+        {sortIt(evs, (e) => e.nome).map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
       </select>
       {!free && <div className="text-sm" data-testid="addon-buy-price">Prezzo: <b>{price != null ? `${eur(price)} €` : "in definizione"}</b>{product === "planner" && " per evento"}</div>}
       <Button disabled={busy || (free ? !eventId : (price == null || (product === "planner" ? !eventId : !pkg)))} onClick={go}

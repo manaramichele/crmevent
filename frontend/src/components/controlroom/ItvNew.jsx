@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sortIt } from "@/lib/sortOptions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,8 +61,8 @@ export function ItvNew({ open, onOpenChange, d, initial, onSubmit }) {
             <div className="text-xs font-semibold text-slate-600">Posizione o riferimento operativo *</div>
             {v.lng != null && <div className="flex items-center gap-2 text-xs text-emerald-700" data-testid="cr-itv-new-coords"><MapPin className="h-3.5 w-3.5" />{v.lat.toFixed(5)}, {v.lng.toFixed(5)}<button type="button" className="text-slate-400 underline" onClick={() => setV((o) => ({ ...o, lng: null, lat: null }))}>rimuovi</button></div>}
             <div className="grid gap-2 sm:grid-cols-3">
-              <select className={S} value={v.post_id || ""} onChange={(e) => set("post_id", e.target.value || null)} data-testid="cr-itv-new-post"><option value="">Postazione…</option>{d.posts.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
-              <select className={S} value={v.sector_id || ""} onChange={(e) => set("sector_id", e.target.value || null)} data-testid="cr-itv-new-sector"><option value="">Settore…</option>{d.sectors.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select>
+              <select className={S} value={v.post_id || ""} onChange={(e) => set("post_id", e.target.value || null)} data-testid="cr-itv-new-post"><option value="">Postazione…</option>{sortIt(d.posts, (p) => p.nome).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
+              <select className={S} value={v.sector_id || ""} onChange={(e) => set("sector_id", e.target.value || null)} data-testid="cr-itv-new-sector"><option value="">Settore…</option>{sortIt(d.sectors, (s) => s.nome).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select>
               <Input type="number" step="0.1" min="0" placeholder="Km" value={v.km ?? ""} onChange={(e) => set("km", e.target.value === "" ? null : Number(e.target.value))} data-testid="cr-itv-new-km" />
             </div>
             <Input placeholder="Indirizzo o riferimento (es. curva dopo il ponte)" value={v.riferimento || ""} onChange={(e) => set("riferimento", e.target.value)} data-testid="cr-itv-new-ref" />
