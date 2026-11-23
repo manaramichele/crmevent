@@ -525,10 +525,10 @@ export default function Persons({ mode = "anagrafiche" }) {
             <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
             <TabsTrigger value="volontari" data-testid="tab-volontari">Volontari</TabsTrigger>
             <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare{daClassificare > 0 && <span className="ml-1.5 rounded-full bg-amber-100 text-amber-800 px-1.5 text-[11px] font-bold" data-testid="da-classificare-count">{daClassificare}</span>}</TabsTrigger>
-            <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
-            <TabsTrigger value="gruppi" data-testid="tab-gruppi">Gruppi</TabsTrigger>
-            <TabsTrigger value="copertura" data-testid="tab-copertura">Copertura oraria</TabsTrigger>
-            <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>
+            {can(user, "team_gruppi") && <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>}
+            {can(user, "team_gruppi") && <TabsTrigger value="gruppi" data-testid="tab-gruppi">Gruppi</TabsTrigger>}
+            {can(user, "copertura") && <TabsTrigger value="copertura" data-testid="tab-copertura">Copertura oraria</TabsTrigger>}
+            {can(user, "turni") && <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>}
           </TabsList>
           {["staff", "volontari", "da_classificare"].map((t) => (
             <TabsContent key={t} value={t}>

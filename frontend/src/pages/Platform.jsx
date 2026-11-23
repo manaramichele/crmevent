@@ -54,7 +54,7 @@ export default function Platform() {
   const [delUser, setDelUser] = useState(null);
   const [working, setWorking] = useState(false);
 
-  const loadUsers = () => api.get("/platform/users").then(({ data }) => setUsers(data)).catch(() => {});
+  const loadUsers = () => api.get("/platform/users").then(({ data }) => setUsers(data.filter((u) => !u.is_invite))).catch(() => {});
   const loadAll = () => Promise.allSettled([api.get("/platform/stats"), api.get("/platform/organizations"), api.get("/platform/subscriptions"), api.get("/platform/users")])
     .then(([a, b, c, d]) => {
       if (a.status === "fulfilled") setStats(a.value.data);

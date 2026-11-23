@@ -50,6 +50,7 @@ import anagrafica
 import option_lists
 import people_pdf
 import coverage
+import collab_access
 import plan_addons
 import planner
 import addons
@@ -309,7 +310,7 @@ async def _enforce_plan(request: Request, org_id: str, org_role: str) -> None:
     tpl = getattr(request.scope.get("route"), "path", "") or ""
     tpl = tpl[4:] if tpl.startswith("/api") else tpl
     secs, _ = P.route_rule(tpl, request.method)
-    SAAS["check"](st, secs, request.method, tpl)
+    SAAS["check"](st, P.plan_sections(secs), request.method, tpl)
 
 
 # Collezioni con id di oggetto collegato a un evento: (param path, collezione, campo evento)
@@ -325,7 +326,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     if org_role in ("admin_org", "superadmin"):
         return {"admin": True, "event_ids": None}
     mq = {"user_id": user["user_id"], "org_id": org_id} if user.get("support") else {"user_id": user["user_id"], "org_id": org_id, "active": True}
-    mem = await db.memberships.find_one(mq, {"_id": 0, "role": 1, "permissions": 1, "persona_id": 1}) or {"role": org_role}
+    mem = await db.memberships.find_one(mq, {"_id": 0, "role": 1, "permissions": 1, "persona_id": 1, "event_states": 1}) or {"role": org_role}
     eff = P.effective(mem)
     if eff.get("admin"):
         return {"admin": True, "event_ids": None}
@@ -345,12 +346,16 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
             raise HTTPException(status_code=403, detail="Funzione riservata all'Admin Organizzatore")
         else:
             raise HTTPException(status_code=403, detail="Non hai i permessi per questa operazione")
+    flag = P.flag_for(tpl, request.method)
+    if flag and not eff.get(flag):
+        raise HTTPException(status_code=403, detail=f"Serve il permesso specifico «{P.FLAGS[flag]}»")
     ids = None if eff["events"] == "all" else list(eff["events"])
     team_ids = list(led) if via_tl else await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"), led)
     perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
             "teams": eff.get("teams") or {}, "send_invites": eff.get("send_invites", False),
             "marketplace_purchase": eff.get("marketplace_purchase", False), "subscription_manage": eff.get("subscription_manage", False),
-            "team_leader": eff.get("team_leader") or {}, "led_team_ids": led, "via_tl": via_tl}
+            "team_leader": eff.get("team_leader") or {}, "led_team_ids": led, "via_tl": via_tl,
+            **{f: eff.get(f, False) for f in P.FLAGS}}
     pp = request.path_params
     nf = HTTPException(status_code=404, detail="Elemento non trovato")
     seg = tpl.split("/")[1] if tpl.count("/") >= 1 else ""
@@ -372,7 +377,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
             raise HTTPException(status_code=404, detail="Persona non trovata")
     if ids is None:
         return perm
-    eid = pp.get("event_id") or request.query_params.get("evento_id") or request.query_params.get("event_id")
+    eid = pp.get("event_id") or pp.get("eid") or request.query_params.get("evento_id") or request.query_params.get("event_id")
     if eid and eid not in ids:
         raise nf
     checks = []
@@ -4356,6 +4361,10 @@ class PermUpdateIn(BaseModel):
     send_invites: Optional[bool] = None
     marketplace_purchase: Optional[bool] = None
     team_leader: Optional[dict] = None
+    bulk_delete: Optional[bool] = None
+    export_personal: Optional[bool] = None
+    manage_permissions: Optional[bool] = None
+    send_communications: Optional[bool] = None
     persona_id: Optional[str] = None  # "" = scollega
     reset: bool = False
 
@@ -4372,7 +4381,8 @@ def _perm_summary(role: str, perm: dict) -> str:
     tl = perm.get("team_leader") or {}
     inv = ("inviti email: sì" if perm.get("send_invites") else "inviti email: no") + \
         (" · acquisti Marketplace: sì" if perm.get("marketplace_purchase") else "") + \
-        f" · Team Leader: componenti {'modifica' if tl.get('edit_members') else 'sola lettura'}, turni {'sì' if tl.get('manage_shifts') else 'no'}"
+        f" · Team Leader: componenti {'modifica' if tl.get('edit_members') else 'sola lettura'}, turni {'sì' if tl.get('manage_shifts') else 'no'}" + \
+        "".join(f" · {lbl}: sì" for f, lbl in P.FLAGS.items() if perm.get(f))
     return f"{P.ROLES.get(role, role)} · {evs} · {tms} · {inv} · " + ("; ".join(parts) or "nessuna sezione")
 
 
@@ -4421,14 +4431,16 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
         await _guard_last_admin(org, target_id)
     if new_role == "admin_org" or body.reset:
         new_perm = {}
-    elif any(x is not None for x in (body.sections, body.events, body.teams, body.send_invites, body.marketplace_purchase, body.team_leader)):
+    elif any(x is not None for x in (body.sections, body.events, body.teams, body.send_invites, body.marketplace_purchase, body.team_leader,
+                                     *(getattr(body, f) for f in P.FLAGS))):
         cur = P.effective({**m, "role": new_role})
         raw = {"sections": body.sections if body.sections is not None else cur["sections"],
                "events": body.events if body.events is not None else cur["events"],
                "teams": body.teams if body.teams is not None else cur.get("teams"),
                "send_invites": body.send_invites if body.send_invites is not None else cur.get("send_invites", False),
                "marketplace_purchase": body.marketplace_purchase if body.marketplace_purchase is not None else cur.get("marketplace_purchase", False),
-               "team_leader": body.team_leader if body.team_leader is not None else cur.get("team_leader")}
+               "team_leader": body.team_leader if body.team_leader is not None else cur.get("team_leader"),
+               **{f: getattr(body, f) if getattr(body, f) is not None else cur.get(f, False) for f in P.FLAGS}}
         new_perm = P.normalize_permissions(raw, new_role)
         if new_perm["teams"]["ids"]:
             valid_t = set(await db.teams.distinct("id", {"org_id": oid, "id": {"$in": new_perm["teams"]["ids"]}}))
@@ -4724,7 +4736,9 @@ async def _user_row(u: dict) -> dict:
     for m in mems:
         o = await db.organizations.find_one({"id": m["org_id"]}, {"_id": 0, "nome": 1, "id": 1})
         memberships.append({"org_id": m["org_id"], "org_nome": (o or {}).get("nome"),
-                            "role": m.get("role"), "active": m.get("active", True)})
+                            "role": m.get("role"), "active": m.get("active", True),
+                            "events": P.effective(m).get("events") if m.get("role") == "collaboratore" else "all",
+                            "event_states": {k: (v or {}).get("status") for k, v in (m.get("event_states") or {}).items()}})
         if o:
             org_names.append(o.get("nome"))
     primary = None
@@ -4738,6 +4752,8 @@ async def _user_row(u: dict) -> dict:
             "last_login_at": u.get("last_login_at"), "auth_provider": u.get("auth_provider"),
             "person_id": u.get("person_id"), "primary_org": primary,
             "org_names": sorted(set(n for n in org_names if n)), "memberships": memberships,
+            "kind": "collaboratore" if mems and all(m.get("role") == "collaboratore" for m in mems) else "utente",
+            "deactivated_at": u.get("deactivated_at"), "deactivation_reason": u.get("deactivation_reason"),
             "is_superadmin": u.get("role") == "superadmin"}
 
 
@@ -4814,6 +4830,20 @@ async def support_stop(request: Request, response: Response, sa: dict = Depends(
 async def platform_users(q: Optional[str] = None, admin: dict = Depends(require_superadmin)):
     users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(10000)
     rows = [await _user_row(u) for u in users]
+    emails = {(u.get("email") or "").lower() for u in users}
+    seen = set()
+    for inv in await db.org_invites.find({"status": {"$ne": "accepted"}}, {"_id": 0, "token": 0}).sort("created_at", -1).to_list(5000):
+        em = (inv.get("email") or "").lower()
+        st = _invite_status(inv)
+        if em in emails or (em, inv["org_id"]) in seen or st == "revoked":
+            continue
+        seen.add((em, inv["org_id"]))
+        o = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0, "nome": 1}) or {}
+        rows.append({"user_id": f"invite:{inv['id']}", "invite_id": inv["id"], "is_invite": True, "invite_status": st, "email": em,
+                     "nome": inv.get("nome") or "", "cognome": inv.get("cognome") or "", "name": f"{inv.get('nome') or ''} {inv.get('cognome') or ''}".strip(),
+                     "active": False, "kind": "collaboratore" if inv.get("role") == "collaboratore" else "utente",
+                     "org_names": [o.get("nome")] if o.get("nome") else [], "memberships": [{"org_id": inv["org_id"], "org_nome": o.get("nome"), "role": inv.get("role"), "active": False}],
+                     "role_label": ORG_ROLE_LABELS.get(inv.get("role"), inv.get("role")), "created_at": inv.get("created_at"), "expires_at": inv.get("expires_at")})
     if q:
         ql = q.lower()
         rows = [r for r in rows if ql in (r.get("email") or "").lower() or ql in (r.get("name") or "").lower()]
@@ -4835,7 +4865,10 @@ async def platform_user_update(user_id: str, body: UserUpdateIn, admin: dict = D
         blocking = await _blocking_admin_orgs(user_id)
         if blocking:
             raise HTTPException(status_code=400, detail=f"È l'unico Admin Organizzazione di: {', '.join(blocking)}. Assegna un altro Admin prima di disabilitare l'account.")
-    await db.users.update_one({"user_id": user_id}, {"$set": {"active": body.active, "updated_at": now_iso()}})
+    st = {"active": True, "reactivated_at": now_iso()} if body.active else {"active": False, "deactivated_at": now_iso(), "deactivated_by": admin.get("email")}
+    await db.users.update_one({"user_id": user_id}, {"$set": {**st, "updated_at": now_iso()}})
+    if not body.active:
+        await db.user_sessions.delete_many({"user_id": user_id})  # blocca subito le sessioni attive
     await record_audit(admin, "account_enabled" if body.active else "account_disabled",
                        org_id=u.get("org_id"), target_email=u.get("email"), target_name=u.get("name"),
                        detail="Accesso " + ("riattivato" if body.active else "disabilitato"))
@@ -6845,6 +6878,12 @@ AUDIT_ACTION_LABELS = {
     "lead_linked": "Collegamento account a Lead",
     "account_disabled": "Disabilitazione account",
     "account_enabled": "Riattivazione account",
+    "collab_invited": "Invito collaboratore evento",
+    "collab_event_assigned": "Assegnazione evento a collaboratore",
+    "collab_permissions_changed": "Modifica permessi collaboratore",
+    "collab_event_revoked": "Revoca accesso evento",
+    "collab_event_disabled": "Disattivazione accesso evento",
+    "collab_event_restored": "Ripristino accesso evento",
     "account_deleted": "Eliminazione account",
     "org_disabled": "Disabilitazione organizzazione",
     "org_enabled": "Riattivazione organizzazione",
@@ -14480,6 +14519,10 @@ OPT = option_lists.build(db, {"require_admin": require_admin, "get_settings": _o
 app.include_router(OPT["router"])
 app.include_router(people_pdf.build(db, {"require_admin": require_admin, "resolve_attachment": _resolve_attachment, "read_file_rec": _read_file_rec, "fallback_logo": _LOGO_PATH})["router"])
 app.include_router(coverage.build(db, {"require_admin": require_admin, "avail_days": _avail_days, "record_audit": record_audit})["router"])
+app.include_router(collab_access.build(db, {"require_admin": require_admin, "require_superadmin": require_base_superadmin, "record_audit": record_audit,
+                                            "now_iso": now_iso, "new_id": new_id, "create_invite": _create_invite, "send_invite_email": _send_invite_email,
+                                            "invite_status": _invite_status, "org_or_404": _org_or_404, "guard_last_admin": _guard_last_admin,
+                                            "check_limit": lambda o, k: SAAS["check_limit"](o, k), "blocking_admin_orgs": _blocking_admin_orgs})["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})

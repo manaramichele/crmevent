@@ -5,8 +5,34 @@ SECTIONS = [
     ("dashboard", "Dashboard"), ("eventi", "Eventi"), ("staff", "Staff / Volontari"),
     ("aziende", "Aziende"), ("anagrafiche", "Anagrafiche"), ("ospitalita", "Ospitalità & Pasti"),
     ("sponsor", "Sponsor & Partner"), ("attivita", "Attività"), ("followup", "Follow-up"),
-    ("briefing", "Briefing"), ("mappe", "Mappe / GPX"), ("pipeline", "Pipeline Evento"),
+    ("briefing", "Briefing"), ("mappe", "Percorsi / Mappe GPX"), ("pipeline", "Pipeline Evento"),
+    ("team_gruppi", "Team e Gruppi"), ("copertura", "Copertura oraria"), ("turni", "Turni"),
+    ("planner", "Event Planner"), ("eventmap", "Event Map"), ("controlroom", "Control Room"),
 ]
+# Sezioni aggiunte dopo: se assenti nei permessi salvati ereditano l'accesso che la persona aveva già.
+INHERIT = {"team_gruppi": "staff", "copertura": "staff", "turni": "staff", "planner": "eventi:view", "eventmap": "*", "controlroom": "*"}
+# Le nuove sezioni seguono la funzionalità di piano della sezione madre.
+PLAN_PARENT = {"team_gruppi": "staff", "copertura": "staff", "turni": "staff", "planner": "eventi", "eventmap": "eventi", "controlroom": "eventi"}
+# Permessi delicati: sempre separati, spenti di default (Admin Organizzatore escluso).
+FLAGS = {"bulk_delete": "Eliminazione massiva", "export_personal": "Esportazione dati personali",
+         "manage_permissions": "Gestione permessi collaboratori", "send_communications": "Invio comunicazioni"}
+FLAG_EXACT = {"/da-classificare/delete": "bulk_delete", "/staff/export-pdf": "export_personal", "/staff/groups-pdf": "export_personal",
+              "/staff-coverage/export": "export_personal", "/iscritti/export": "export_personal",
+              "/brevo/availability-test-email": "send_communications", "/integrations/brevo/send-test": "send_communications"}
+
+
+def flag_for(path: str, method: str):
+    if path in FLAG_EXACT:
+        return FLAG_EXACT[path]
+    if "/assignments/export" in path:
+        return "export_personal"
+    if method.upper() == "POST" and path.endswith("/send"):
+        return "send_communications"
+    return None
+
+
+def plan_sections(secs):
+    return tuple(sorted({PLAN_PARENT.get(s, s) for s in secs})) if isinstance(secs, tuple) else secs
 SECTION_KEYS = [k for k, _ in SECTIONS]
 # Sezioni non più mostrate nell'interfaccia (dati e permessi conservati).
 HIDDEN_SECTIONS = {"anagrafiche", "attivita", "followup"}
@@ -63,10 +89,13 @@ ROUTE_RULES = [
     ("/demo/", "*", None),
     ("/marketplace", "*", None),
     ("/addons", "*", None),
-    ("/eventmap", "*", None),
+    ("/eventmap", "eventmap", None),
     ("/iscritti", "*", None),
     ("/saas/", "*", None),
     ("/controlroom/events/{event_id}/ops", "*", None),  # permessi e acquisto verificati in controlroom_ops
+    ("/controlroom", "controlroom", None),
+    ("/planner", "planner", None),
+    ("/events/{event_id}/collaborators", "*", None),  # verifica dedicata in collab_access (manage_permissions)
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),
     ("/events/{event_id}/upgrade", None, None),
@@ -89,9 +118,10 @@ ROUTE_RULES = [
     ("/events/{event_id}/availabilit", "staff", None),
     ("/availabilities", "staff", None),
     ("/staff/export-pdf", "staff", "view"),
+    ("/staff-coverage", "copertura", None),
     ("/staff", "staff", None),
-    ("/teams", "staff", None),
-    ("/shifts", "staff", None),
+    ("/teams", "team_gruppi", None),
+    ("/shifts", "turni", None),
     ("/brevo/availability-template-preview", "staff", "view"),
     ("/maps", "mappe", None),
     ("/events", "eventi", None),
@@ -121,9 +151,11 @@ READ_ANY_EXACT = {"/settings", "/credits/balance", "/credits/services", "/events
 def default_permissions(role: str) -> dict:
     if role == "collaboratore":
         return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all",
-                "teams": default_teams(role), "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None)}
+                "teams": default_teams(role), "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None),
+                **{f: False for f in FLAGS}}
     return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role),
-            "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None)}
+            "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None),
+            **{f: False for f in FLAGS}}
 
 
 def normalize_teams(raw, role: str) -> dict:
@@ -140,8 +172,13 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
     if not isinstance(raw, dict) or not isinstance(raw.get("sections"), dict):
         return default_permissions(role)
     secs = {}
+    src = dict(raw["sections"])
+    for k, parent in INHERIT.items():
+        if k not in src:
+            p, _, only = parent.partition(":")
+            src[k] = list(ACTIONS) if p == "*" else [a for a in (src.get(p) or []) if not only or a == only]
     for k in SECTION_KEYS:
-        acts = [a for a in ACTIONS if a in (raw["sections"].get(k) or [])]
+        acts = [a for a in ACTIONS if a in (src.get(k) or [])]
         if acts and "view" not in acts:
             acts = ["view"] + acts
         secs[k] = acts
@@ -151,7 +188,7 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
     return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role),
             "send_invites": raw.get("send_invites") is True, "marketplace_purchase": raw.get("marketplace_purchase") is True,
             "subscription_manage": raw.get("subscription_manage") is True,
-            "team_leader": normalize_tl(raw.get("team_leader"))}
+            "team_leader": normalize_tl(raw.get("team_leader")), **{f: raw.get(f) is True for f in FLAGS}}
 
 
 def effective(membership: dict) -> dict:
@@ -159,6 +196,9 @@ def effective(membership: dict) -> dict:
     if role == "admin_org":
         return {"admin": True, "role": role}
     p = normalize_permissions((membership or {}).get("permissions"), role)
+    states = (membership or {}).get("event_states") or {}
+    if p["events"] != "all" and states:  # eventi disattivati/revocati: esclusi dall'accesso, configurazione conservata
+        p["events"] = [e for e in p["events"] if (states.get(e) or {}).get("status") not in ("disabled", "revoked")]
     return {"admin": False, "role": role, **p}
 
 

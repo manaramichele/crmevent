@@ -9,6 +9,7 @@ import { RotateCcw, History } from "lucide-react";
 const fmt = (iso) => { try { return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 export const orgHeaders = (orgId) => (orgId ? { headers: { "X-Org-Id": orgId } } : undefined);
 const SECTION_LBL = "text-xs font-semibold uppercase text-slate-500";
+const SENSITIVE = { bulk_delete: "Eliminazione massiva", export_personal: "Esportazione dati personali", manage_permissions: "Gestione permessi collaboratori", send_communications: "Invio comunicazioni" };
 
 export function usePermMeta(orgId) {
   const [meta, setMeta] = useState(null);
@@ -148,6 +149,7 @@ function TeamLeaderPerms({ perm, setPerm }) {
         <OnOff label="Invio inviti email" hint="Area personale di Staff e Volontari accessibili" value={!!perm.send_invites} onChange={(send_invites) => setPerm((p) => ({ ...p, send_invites }))} testid="perm-send-invites" />
         <OnOff label="Acquisto servizi Marketplace" hint="Può acquistare servizi extra per l'organizzazione" value={!!perm.marketplace_purchase} onChange={(marketplace_purchase) => setPerm((p) => ({ ...p, marketplace_purchase }))} testid="perm-marketplace-purchase" />
         <OnOff label="Gestione abbonamento" hint="Può attivare, rinnovare o cambiare il piano CRMEvent dell'organizzazione" value={!!perm.subscription_manage} onChange={(subscription_manage) => setPerm((p) => ({ ...p, subscription_manage }))} testid="perm-subscription-manage" />
+        {Object.entries(SENSITIVE).map(([k, l]) => <OnOff key={k} label={l} hint="Permesso delicato, spento di default" value={!!perm[k]} onChange={(v) => setPerm((p) => ({ ...p, [k]: v }))} testid={`perm-${k}`} />)}
       </div>
       <p className="text-xs text-slate-400">Valgono solo per i Team di cui l'utente è Team Leader e decadono automaticamente se viene sostituito. Gli inviti non permettono di creare utenti CRM, cambiare ruoli o assegnare permessi.</p>
     </div>
@@ -156,7 +158,7 @@ function TeamLeaderPerms({ perm, setPerm }) {
 
 export const initialPerm = (meta, p) => {
   const base = !p || p.admin ? meta.defaults.user : p;
-  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] }, send_invites: !!base.send_invites, marketplace_purchase: !!base.marketplace_purchase, subscription_manage: !!base.subscription_manage, team_leader: base.team_leader || { edit_members: false, manage_shifts: false } };
+  return { sections: base.sections, events: base.events, teams: base.teams || { scope: "all", ids: [] }, send_invites: !!base.send_invites, marketplace_purchase: !!base.marketplace_purchase, subscription_manage: !!base.subscription_manage, team_leader: base.team_leader || { edit_members: false, manage_shifts: false }, ...Object.fromEntries(Object.keys(SENSITIVE).map((k) => [k, !!base[k]])) };
 };
 
 export function PermFields({ meta, role, perm, setPerm, personaId, setPersonaId }) {

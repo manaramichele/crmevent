@@ -5,9 +5,10 @@ export const isOrgAdmin = (u) => !!u && (u.role === "superadmin" || u.org_role =
 
 // Funzionalità soggette al piano (BRONZE / SILVER / GOLD). Super Admin escluso.
 const PLAN_SECTIONS = ["dashboard", "eventi", "staff", "pipeline", "aziende", "anagrafiche", "attivita", "mappe", "ospitalita", "sponsor", "briefing", "followup"];
+const PLAN_PARENT = { teams: "staff", turni: "staff", team_gruppi: "staff", copertura: "staff", planner: "eventi", eventmap: "eventi", controlroom: "eventi" };
 export const planBlocks = (u, section) => {
   if (!u?.saas?.enabled || u.role === "superadmin") return false;
-  const sec = section === "teams" || section === "turni" ? "staff" : section;
+  const sec = PLAN_PARENT[section] || section;
   return PLAN_SECTIONS.includes(sec) && !(u.saas.features || []).includes(sec);
 };
 export const planReadonly = (u) => !!u?.saas?.enabled && u.role !== "superadmin" && !u.saas.writable;
@@ -16,7 +17,7 @@ export const planReadonly = (u) => !!u?.saas?.enabled && u.role !== "superadmin"
 const tlCan = (u, section, action) => {
   if (!(u.led_team_ids || []).length) return false;
   const tl = u.permissions?.team_leader || {};
-  if (["staff", "teams", "turni", "dashboard"].includes(section) && action === "view") return true;
+  if (["staff", "teams", "team_gruppi", "turni", "dashboard"].includes(section) && action === "view") return true;
   if (section === "staff" && (action === "edit" || action === "delete")) return !!tl.edit_members;
   if (section === "turni") return !!tl.manage_shifts;
   return false;
@@ -30,8 +31,9 @@ export const can = (u, section, action = "view") => {
   if (isOrgAdmin(u)) return true;
   const p = u.permissions;
   if (!p || p.admin) return true;
-  const sec = section === "teams" || section === "turni" ? "staff" : section;
-  return (p.sections?.[sec] || []).includes(action) || tlCan(u, section, action);
+  const sec = section === "teams" ? "team_gruppi" : section;
+  const acts = p.sections?.[sec] ?? (PLAN_PARENT[sec] === "staff" ? p.sections?.staff : undefined);
+  return (acts || []).includes(action) || tlCan(u, section, action);
 };
 
 export const canSendInvites = (u) => !!u && (isOrgAdmin(u) || !!u.permissions?.admin || !!u.permissions?.send_invites);

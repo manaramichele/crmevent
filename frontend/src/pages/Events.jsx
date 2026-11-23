@@ -12,10 +12,11 @@ import {
 import { toast } from "sonner";
 import { Rocket, Image as ImageIcon } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal, Copy, Users } from "lucide-react";
+import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal, Copy, Users, UserPlus } from "lucide-react";
 import { DuplicateEventDialog } from "@/components/events/DuplicateEventDialog";
 import { useAuth } from "@/context/AuthContext";
-import { can } from "@/lib/perms";
+import { can, isOrgAdmin } from "@/lib/perms";
+import EventCollaborators from "@/components/collab/EventCollaborators";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -287,7 +288,7 @@ function MapsDialog({ eventId, open, onOpenChange }) {
   );
 }
 
-function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, onDuplicate }) {
+function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, onDuplicate, onCollab }) {
   const all = [
     { key: "staffvol", label: "Staff / Volontari", Icon: Users, run: () => navigate(`/staff-volontari?evento=${row.id}`), title: "Staff e Volontari di questo evento" },
     { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
@@ -297,10 +298,11 @@ function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, open
     { key: "maps", label: "Percorsi", Icon: MapIcon, run: () => setMapsFor(row.id), title: "Mappe & Percorsi" },
     { key: "calsync", label: "Calendario", Icon: CalendarPlus, run: () => syncCal(row), title: "Aggiungi a Google Calendar" },
     ...(onDuplicate ? [{ key: "duplicate", label: "Duplica evento", Icon: Copy, run: () => onDuplicate(row), title: "Duplica evento" }] : []),
+    ...(onCollab ? [{ key: "collab", label: "Collaboratori", Icon: UserPlus, run: () => onCollab(row), title: "Collaboratori dell'evento" }] : []),
   ];
   const byKey = (k) => all.find((a) => a.key === k);
   const primary = ["staffvol", "availability", "pipeline", "maps"].map(byKey);
-  const secondary = ["calsync", "duplicate", "event-credits", "briefing"].map(byKey).filter(Boolean);
+  const secondary = ["collab", "calsync", "duplicate", "event-credits", "briefing"].map(byKey).filter(Boolean);
 
   return (
     <>
@@ -375,8 +377,10 @@ export default function Events() {
   const [availFor, setAvailFor] = useState(null);
   const [delRow, setDelRow] = useState(null);
   const [dupRow, setDupRow] = useState(null);
+  const [collabRow, setCollabRow] = useState(null);
   const [ver, setVer] = useState(0);
   const { user } = useAuth();
+  const canCollab = !!user && (isOrgAdmin(user) || !!user.permissions?.admin || !!user.permissions?.manage_permissions);
   const canDup = !!user && (user.role === "superadmin" || (can(user, "eventi", "create") && !(user.permissions?.events && user.permissions.events !== "all")));
   if (settings === false) return <p className="text-sm text-red-600" data-testid="events-load-error">Impossibile caricare gli eventi. <button type="button" onClick={() => window.location.reload()} className="underline font-semibold" data-testid="events-retry">Riprova</button></p>;
   if (!settings) return <div className="text-slate-400" data-testid="events-loading">Caricamento...</div>;
@@ -443,9 +447,10 @@ export default function Events() {
         rowActions={(row, helpers) => (
           <EventRowActions row={row} navigate={navigate}
             setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal}
-            openEdit={helpers.openEdit} onRequestDelete={() => setDelRow({ row, del: helpers.onDelete })} onDuplicate={canDup ? setDupRow : null} />
+            openEdit={helpers.openEdit} onRequestDelete={() => setDelRow({ row, del: helpers.onDelete })} onDuplicate={canDup ? setDupRow : null} onCollab={canCollab ? setCollabRow : null} />
         )} />
       {dupRow && <DuplicateEventDialog row={dupRow} onClose={() => setDupRow(null)} onDone={() => { setDupRow(null); setVer((v) => v + 1); }} />}
+      {collabRow && <EventCollaborators event={collabRow} onClose={() => setCollabRow(null)} />}
       {mapsFor && <MapsDialog eventId={mapsFor} open={!!mapsFor} onOpenChange={(o) => !o && setMapsFor(null)} />}
       {availFor && <AvailabilityDialog eventId={availFor} open={!!availFor} onOpenChange={(o) => !o && setAvailFor(null)} />}
       <AlertDialog open={!!delRow} onOpenChange={(o) => !o && setDelRow(null)}>

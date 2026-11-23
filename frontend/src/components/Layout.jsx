@@ -35,10 +35,10 @@ const ORG_NAV = [
 ];
 // Moduli operativi: lucchetto se il modulo non è attivo per l'organizzazione (la pagina guida all'attivazione).
 const PLANNER_NAV = [
-  { to: "/event-planner", label: "Event Planner", icon: MapIcon, id: "event-planner", perm: "*", module: "planner" },
-  { to: "/event-map", label: "Event Map", icon: Film, id: "event-map", perm: "*", module: "eventmap" },
+  { to: "/event-planner", label: "Event Planner", icon: MapIcon, id: "event-planner", perm: "planner", module: "planner" },
+  { to: "/event-map", label: "Event Map", icon: Film, id: "event-map", perm: "eventmap", module: "eventmap" },
 ];
-const CR_NAV = [{ to: "/control-room", label: "Control Room", icon: RadioTower, id: "control-room", perm: "eventi", module: "controlroom" }];
+const CR_NAV = [{ to: "/control-room", label: "Control Room", icon: RadioTower, id: "control-room", perm: "controlroom", module: "controlroom" }];
 const ORGANIZATION_NAV = [
   { to: "/organizzazione/moduli", label: "Moduli e Attivazioni", icon: Boxes, id: "org-moduli", perm: "admin" },
 ];
