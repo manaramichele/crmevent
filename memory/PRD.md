@@ -1187,3 +1187,10 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 ## Copertura oraria: grafico ripristinato con suddivisione per Team (2026-11-23)
 - Il grafico originale è di nuovo popolato e diviso per Team. In Copertura contano Staff e Volontari di ogni stato tranne rinunciato e non disponibile; il filtro «Solo stato Confermato» è facoltativo. Dettagli in CHANGELOG. Solo sviluppo: Aruba non ancora aggiornata.
 
+
+## Collaboratori per evento e riattivazione account da Super Admin (2026-11-23)
+- I Collaboratori vengono invitati dalla scheda evento e accedono solo agli eventi e alle sezioni autorizzate, con livello Nessuno, Visualizzazione o Modifica, più 4 permessi delicati.
+- Il Super Admin gestisce lo stato dell'account e gli accessi per organizzazione ed evento (Attivo / Disattivato / Revocato / Invito in attesa). Una revoca non viene mai ripristinata in automatico.
+- Dettagli in CHANGELOG. Solo sviluppo: Aruba non ancora aggiornata.
+- Backlog: avviso «modifica permessi su tutti gli eventi» prima del salvataggio; stato revocato visibile anche nell'elenco eventi del dialog permessi dell'Admin Org.
+

@@ -1,5 +1,17 @@
 # CRMEvent — Changelog
 
+## 2026-11-23 — Collaboratori per evento + gestione accessi Super Admin (solo sviluppo, iteration_211/212)
+- `backend/collab_access.py` (nuovo) espone `/api/events/{id}/collaborators`, per elencare, invitare, modificare i permessi, revocare e reinviare un invito.
+- Per il Super Admin aggiunge `/api/platform/users/{uid}/access|state|memberships/{org}/state|events/{eid}|permissions|invites/{id}/resend`.
+- `permissions.py`: nuove sezioni team_gruppi, copertura, turni, planner, eventmap, controlroom.
+  - Se mancano nei permessi salvati vengono ereditate (staff → team_gruppi/copertura/turni, eventi:view → planner, accesso completo → eventmap e controlroom).
+  - Seguono il piano tramite PLAN_PARENT.
+- 4 permessi delicati (bulk_delete, export_personal, manage_permissions, send_communications), spenti di default e applicati dal server tramite `flag_for`.
+- Le membership hanno `event_states` {eid: disabled|revoked}. "Tutti gli eventi" esclude sempre gli eventi bloccati (`_enforce_perm`). Un evento disattivato si ripristina con i permessi precedenti; uno revocato va riassegnato esplicitamente scegliendo i permessi.
+- La disattivazione dell'account salva data e motivo, cancella le `user_sessions` e blocca subito anche le sessioni JWT (controllo `active`). La riattivazione mantiene lo stesso user_id e le stesse associazioni. Tutte le operazioni vengono registrate nell'audit log, con i permessi prima e dopo.
+- Persone, schede persona e turni di un collaboratore sono filtrati per eventi autorizzati. Nell'interfaccia sono nascoste le azioni non permesse (modifica/elimina evento, Pipeline, Esporta PDF, schede Team/Copertura/Turni).
+- Interfaccia: pulsante «Collaboratori» nel menu «Altre» della riga evento. In Super Admin › Utenti: colonne Tipologia, Eventi autorizzati e Stato accesso, menu Azioni, finestre «Riattiva/Disattiva account» e «Gestisci accessi».
+
 ## 2026-11-23 — Copertura oraria: grafico originale di nuovo popolato + suddivisione per Team (solo sviluppo, iteration_210)
 - Causa del grafico vuoto: `coverage._load` contava solo i record con stato «confermato», quindi chi era da_contattare o disponibile restava escluso e le barre risultavano vuote (componente `Bars` in CoverageTab.jsx, commit fdca098, mai rimosso).
 - Ora sono inclusi Staff e Volontari di ogni stato tranne rinunciato e non_disponibile. Il filtro `cov-stato` (parametro `stato` = attivi | confermati) vale per summary, matrix, to-update ed export. Da classificare resta escluso.

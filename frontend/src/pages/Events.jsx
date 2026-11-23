@@ -331,10 +331,10 @@ function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, open
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="mx-0.5 h-5 w-px bg-slate-200" aria-hidden />
-        <Button variant="ghost" size="icon" title="Modifica" onClick={() => openEdit(row)} data-testid={`edit-event-${row.id}`}
-          className="h-9 w-9 text-slate-500 hover:text-tiffany-active"><Pencil className="w-[18px] h-[18px]" /></Button>
-        <Button variant="ghost" size="icon" title="Elimina" onClick={() => onRequestDelete(row)} data-testid={`delete-event-${row.id}`}
-          className="h-9 w-9 text-slate-500 hover:text-red-500"><Trash2 className="w-[18px] h-[18px]" /></Button>
+        {can(user, "eventi", "edit") && <Button variant="ghost" size="icon" title="Modifica" onClick={() => openEdit(row)} data-testid={`edit-event-${row.id}`}
+          className="h-9 w-9 text-slate-500 hover:text-tiffany-active"><Pencil className="w-[18px] h-[18px]" /></Button>}
+        {can(user, "eventi", "delete") && <Button variant="ghost" size="icon" title="Elimina" onClick={() => onRequestDelete(row)} data-testid={`delete-event-${row.id}`}
+          className="h-9 w-9 text-slate-500 hover:text-red-500"><Trash2 className="w-[18px] h-[18px]" /></Button>}
       </div>
 
       {/* Mobile: un unico pulsante "Azioni" con menu verticale icona + descrizione */}
@@ -352,12 +352,12 @@ function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, open
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => openEdit(row)} className="gap-2 cursor-pointer" data-testid={`m-edit-event-${row.id}`}>
+            {can(user, "eventi", "edit") && <DropdownMenuItem onClick={() => openEdit(row)} className="gap-2 cursor-pointer" data-testid={`m-edit-event-${row.id}`}>
               <Pencil className="w-4 h-4 text-slate-500" />Modifica
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRequestDelete(row)} className="gap-2 cursor-pointer text-red-600 focus:text-red-600" data-testid={`m-delete-event-${row.id}`}>
+            </DropdownMenuItem>}
+            {can(user, "eventi", "delete") && <DropdownMenuItem onClick={() => onRequestDelete(row)} className="gap-2 cursor-pointer text-red-600 focus:text-red-600" data-testid={`m-delete-event-${row.id}`}>
               <Trash2 className="w-4 h-4" />Elimina
-            </DropdownMenuItem>
+            </DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -1,0 +1,46 @@
+{
+  "summary": "Retest of the iteration_211 fixes, backend and frontend, on TEST_Collab Org. Backend: new file test_collab_access_retest.py, 7/8 pass. The regression file test_collab_access.py now uses the reseeded IDs, and its revoked-invite assertion was updated because revoked invites are now hidden by design; 14/14 pass. HIGH-1 is fixed: events='all' keeps revoked and disabled events closed, SA Ripristina still works, and explicitly ticking a revoked event reopens it. HIGH-2 is mostly fixed: /persons and /persons-enriched only return people from authorized events, eventi_ids/eventi_nomi are filtered, and /persons/{id}/detail returns 404 for a person who is only in an unauthorized event. One remaining leak: /persons/{id}/detail for a person in both an authorized and an unauthorized event still lists the unauthorized event (presence plus full event document). Adding an existing collaborator now keeps their permissions. Revoked invites are hidden. Frontend: Aggiungi, Pipeline and Esporta PDF are hidden for the view-only collaborator, but the Modifica/Elimina icons are still shown on /eventi and the edit dialog opens. Staff and Volontari show no leaked rows. Users search matches email. Invite rows no longer show 'org. disattivate'. The legacy Disabilita/Riattiva button opens account-state-dialog. access-org-suspended-<org> shows when org access is disabled and disappears when it is re-enabled. The event Collaboratori dialog, SA Gestisci accessi and the account disable/reactivate cycle all still work.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/persons/{person_id}/detail", "issue": "The person-level scope works (404 if the person is only in unauthorized events). But for a person in authorized e1 AND unauthorized e2, the 'events' array still includes the e2 presence and the full e2 event document (name, dates...). Repro: an admin creates a person with staff links in TEST_Evento Uno and TEST_Evento Due; Carla calls GET /persons/{id}/detail and gets events for both. Fix: filter presences by perm.event_ids (as persons_enriched already does). Shifts in the same endpoint should also be filtered by event.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/org/permissions/{uid} (events='all')", "issue": "When the member has any blocked event, 'all' is saved as a fixed list of the current event IDs. Events created later are NOT accessible: I created TEST_Evento Quattro after events='all' and Carla got 404, then I deleted it. 'Tutti gli eventi' quietly becomes 'the events that exist today', and the org admin dialog will then show 'Solo eventi selezionati'. Better: keep 'all' stored and exclude blocked event_states in effective()/_enforce_perm (which already does this)."},
+      {"endpoint": "POST /api/platform/users/{uid}/memberships/{org}/events/{eid} action=assign", "issue": "An explicit SA reassignment still replaces the collaborator's sections for the whole org (after the regression run, Carla lost dashboard and team_gruppi). This is by design, but the UI should warn about it."},
+      {"endpoint": "POST /api/events/{id}/collaborators", "issue": "Still open from iteration 211: revoked invites leave a Person and a Staff record behind. TEST_Cap and TEST_Hid still show in the collaborator's Staff list for TEST_Evento Uno."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Events.jsx EventRowActions", "issue": "A view-only collaborator (eventi: ['view']) still sees the Modifica (pencil) and Elimina (trash) icons on every row, desktop and mobile menu, and clicking Modifica opens the full 'Modifica evento' form. Aggiungi and Pipeline are hidden correctly. Hide edit and delete with can(user,'eventi','edit'/'delete').", "selector": "[data-testid=edit-event-<id>], [data-testid=delete-event-<id>], [data-testid=m-edit-event-<id>], [data-testid=m-delete-event-<id>]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Platform > Utenti, legacy 'Account utenti' table", "issue": "After disabling through the legacy button (which now opens the dialog correctly), the new users-table above it is not refreshed and still shows 'Attivo'. Platform.jsx onDone only calls loadUsers() for the legacy list. The legacy table also still shows Ruolo 'Utente' for a collaborator.", "affected_selectors": ["[data-testid^=user-toggle-]", "[data-testid^=user-state-]"]}
+    ],
+    "design_issues": [
+      {"screen": "Permissions.jsx perm-dialog EventScope", "issues": ["The event list does not show revoked or disabled status, so the org admin cannot tell that 'Tutti gli eventi' leaves out revoked events, or that ticking a revoked event reassigns it."]},
+      {"screen": "PlatformUsers state column", "issues": ["Grammar: '1 eventi revocati' should be '1 evento revocato'"]},
+      {"screen": "Modifica evento dialog", "issues": ["Uses the browser's native date/time pickers (mm/dd/yyyy) instead of the shadcn calendar (pre-existing)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_collab_access_retest.py", "/app/backend/tests/test_collab_access.py", "/app/test_reports/pytest/pytest_collab_retest.xml", "/app/test_reports/pytest/pytest_collab_regress.xml"],
+  "action_items": [
+    "Filter presences (and shifts) in GET /persons/{id}/detail by perm.event_ids",
+    "Hide Modifica/Elimina on /eventi rows (desktop and mobile menu) when the user lacks eventi edit/delete",
+    "Keep events='all' stored as 'all' and exclude blocked event_states at runtime, so newly created events stay accessible",
+    "Refresh the new users-table after the legacy toggle's AccountStateDialog onDone (or remove the legacy table)",
+    "Optional: show revoked/disabled status in the org admin EventScope list"
+  ],
+  "critical_code_review_comments": [
+    "server.py update_org_permissions: the 'all' -> explicit list conversion freezes the scope. _enforce_perm already excludes blocked events when ids is None, so the conversion is not needed for HIGH-1.",
+    "server.py person_detail: only _link_visible (team) filtering is applied to presences, with no event filter. events_map/presence leak for multi-event people.",
+    "Events.jsx EventRowActions: edit/delete are rendered unconditionally, while pipeline is gated with can(); apply the same gating."
+  ],
+  "updated_files": ["/app/backend/tests/test_collab_access_retest.py (new)", "/app/backend/tests/test_collab_access.py (IDs updated to new seed; revoked-invite assertion changed to 'not listed')"],
+  "success_rate": {"backend": "95% (21/22)", "frontend": "90% (all briefing items pass except view-only edit/delete icons)"},
+  "seed_data_creation": "Temporary: TEST_SoloDue/TEST_UnoDue persons and staff links (deleted by fixture), TEST_Evento Quattro (deleted), TEST_Hid and TEST_Cap invites (revoked; their Staff records remain), TEST_Nuovo invite on Evento Due (revoked). Carla's final state: account active, org access active, e1 and e3 active, e2 revoked. Her sections were changed by the regression SA assign: dashboard and team_gruppi are now none, staff is view+edit.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Org b840476cb2b045368918165143d99a04, Carla user_fbcc64642896, e1=edc1b82f... (Uno), e2=1a84d978... (Due, revoked), e3=0c0be9f5... (Tre). Run both test files with -p no:xdist -o addopts=\"\" and export REACT_APP_BACKEND_URL. The org admin sees a 'Scopri CRMEvent' demo popup on /eventi: click 'Non ora'. Each event-row testid is duplicated (card and table): use :visible.",
+  "rca of the issue": "Detail leak: person_detail builds 'events' from all staff presences filtered only by team visibility, never by perm.event_ids. Edit/delete icons: EventRowActions renders them unconditionally. Frozen 'all': update_org_permissions replaces 'all' with distinct(events) minus revoked when any blocked state exists."
+}

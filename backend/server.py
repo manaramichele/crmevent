@@ -2214,7 +2214,8 @@ async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
                               "company": c})
     if not _can(admin, "anagrafiche"):
         companies = []
-    presences = [x for x in await db.staff.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _link_visible(admin, x)]
+    evs_ok = (admin.get("perm") or {}).get("event_ids")
+    presences = [x for x in await db.staff.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _link_visible(admin, x) and (evs_ok is None or x.get("evento_id") in evs_ok)]
     events = []
     for pr in presences:
         e = await db.events.find_one({"id": pr["evento_id"], "org_id": admin["org_id"]}, {"_id": 0})
@@ -2226,7 +2227,7 @@ async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
         tids &= set(_team_ids(admin))
     teams = [t for t in [await db.teams.find_one({"id": tid, "org_id": admin["org_id"]}, {"_id": 0}) for tid in tids] if t]
     shifts = [s for s in await db.shifts.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
-              if _team_ids(admin) is None or s.get("team_id") in _team_ids(admin)]
+              if (_team_ids(admin) is None or s.get("team_id") in _team_ids(admin)) and (evs_ok is None or s.get("evento_id") in evs_ok)]
     activities = await db.activities.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "attivita") else []
     followups = await db.followups.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "followup") else []
     preferenze = (await AVP["prefs_for"](admin["org_id"], [person_id])).get(person_id, [])
@@ -4466,9 +4467,6 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
             raise HTTPException(status_code=404, detail="Persona non trovata nell'organizzazione")
     before = {"role": m["role"], "permissions": P.effective(m), "persona_id": m.get("persona_id")}
     states = dict(m.get("event_states") or {})
-    blocked = {k for k, v in states.items() if (v or {}).get("status") in ("disabled", "revoked")}
-    if new_perm.get("events") == "all" and blocked:  # "tutti" non riapre accessi disattivati/revocati
-        new_perm["events"] = [e for e in await db.events.distinct("id", {"org_id": oid}) if e not in blocked or (states[e] or {}).get("status") == "disabled"]
     old_evs = P.normalize_permissions(m.get("permissions"), m["role"])["events"]
     for e in (new_perm.get("events") if isinstance(new_perm.get("events"), list) else []):
         if (states.get(e) or {}).get("status") == "revoked" and (old_evs == "all" or e not in old_evs):

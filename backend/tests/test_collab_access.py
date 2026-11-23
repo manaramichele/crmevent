@@ -5,9 +5,9 @@ BASE = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") + "/api"
 SA = ("manara.michele.pro@gmail.com", "CrmEvent2026!")
 ADM = ("test_collab_admin@example.com", "TestCollab2026!")
 COL = ("test_collab_user@example.com", "TestCollab2026!")
-CARLA = "user_23ab8651c50d"
-ORG = "5a80bfbe69a74355a2ec3f0ae81df5f6"
-UNO, DUE, TRE = "fba084fcbe3f41f29a81e4e38cf1ff31", "8c92c85753f34afa84c9c03f453e2fc7", "c2f01d0c203947edafbcc55e988b2e85"
+CARLA = "user_fbcc64642896"
+ORG = "b840476cb2b045368918165143d99a04"
+UNO, DUE, TRE = "edc1b82fbb4c4d6289955d61fe47d747", "0c0be9f5185d4246b8677e344c400308", "1a84d978f8ee483b97ab159a789bc958"  # TRE = evento revocato (Due) nel seed iter 212
 
 
 def login(cred):
@@ -87,8 +87,8 @@ class TestEventCollaborators:
         row = next(x for x in rows(adm, TRE) if x.get("invite_id") == iid)
         assert row["sections"]["staff"] == []
         assert adm.post(f"{BASE}/events/{TRE}/collaborators/{iid}/revoke?kind=invite").status_code == 200
-        row = next(x for x in rows(adm, TRE) if x.get("invite_id") == iid)
-        assert row["invite_status"] == "revoked"
+        # iter 212: inviti revocati non piu' elencati
+        assert not any(x.get("invite_id") == iid for x in rows(adm, TRE))
 
     def test_existing_collab_added_no_duplicate_then_revoked(self, adm):
         r = adm.post(f"{BASE}/events/{TRE}/collaborators", json={"nome": "Carla", "cognome": "Test", "email": COL[0],

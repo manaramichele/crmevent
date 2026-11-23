@@ -15,7 +15,7 @@ function Scope({ acc }) {
       {act.map((m) => (
         <li key={m.org_id} className="rounded-lg border border-slate-200 px-3 py-2">
           <span className="font-medium text-slate-800">{m.org_nome}</span><span className="text-slate-500"> · {m.role_label}</span>
-          {m.role === "collaboratore" && <div className="text-xs text-slate-500 mt-0.5">{m.all_events ? "Tutti gli eventi" : (m.events.filter((e) => e.status === "active").map((e) => e.nome).join(", ") || "Nessun evento attivo")}</div>}
+          {m.role === "collaboratore" && <div className="text-xs text-slate-500 mt-0.5">{m.all_events ? `Tutti gli eventi${m.events.some((e) => e.status !== "active") ? ` tranne: ${m.events.filter((e) => e.status !== "active").map((e) => `${e.nome} (${e.status === "revoked" ? "revocato" : "disattivato"})`).join(", ")}` : ""}` : (m.events.filter((e) => e.status === "active").map((e) => e.nome).join(", ") || "Nessun evento attivo")}</div>}
         </li>
       ))}
     </ul>

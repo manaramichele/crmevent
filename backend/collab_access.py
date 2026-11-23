@@ -80,9 +80,7 @@ def build(db, deps: dict):
         """status None = accesso attivo; disabled = sospeso (config conservata); revoked = tolto dalla lista."""
         p = perm or _perm(m)
         evs = p["events"]
-        if evs == "all" and status:  # esplicita la lista per poter escludere un solo evento
-            evs = await db.events.distinct("id", {"org_id": m["org_id"]})
-        evs = list(evs) if evs != "all" else "all"
+        evs = list(evs) if evs != "all" else "all"  # "tutti" resta tale: gli stati escludono i singoli eventi
         if evs != "all":
             if status == "revoked":
                 evs = [e for e in evs if e != eid]

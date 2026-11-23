@@ -25,7 +25,8 @@ const accessNote = (u) => {
   const m = u.memberships || [];
   const off = m.filter((x) => x.active === false).length;
   const ev = Object.values(Object.assign({}, ...m.map((x) => x.event_states || {})));
-  const parts = [off && `${off} org. disattivate`, ev.filter((s) => s === "disabled").length && `${ev.filter((s) => s === "disabled").length} eventi disattivati`, ev.filter((s) => s === "revoked").length && `${ev.filter((s) => s === "revoked").length} eventi revocati`].filter(Boolean);
+  const n = (k, one, many) => { const c = ev.filter((s) => s === k).length; return c && `${c} ${c === 1 ? one : many}`; };
+  const parts = [off && `${off} ${off === 1 ? "org. disattivata" : "org. disattivate"}`, n("disabled", "evento disattivato", "eventi disattivati"), n("revoked", "evento revocato", "eventi revocati")].filter(Boolean);
   return parts.join(" · ");
 };
 const eventsLabel = (u) => {
@@ -59,7 +60,7 @@ function ChooseOrg({ data, onPick, onClose }) {
   );
 }
 
-export default function PlatformUsers({ embedded = false }) {
+export default function PlatformUsers({ embedded = false, onChanged }) {
   const { startSupport } = useAuth();
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
@@ -69,8 +70,8 @@ export default function PlatformUsers({ embedded = false }) {
   const [choose, setChoose] = useState(null);
   const [stateFor, setStateFor] = useState(null);
   const [accessFor, setAccessFor] = useState(null);
-  const load = () => api.get("/platform/users").then(({ data }) => setUsers(data.filter((u) => !u.is_superadmin))).catch(() => setUsers([]));
-  useEffect(() => { load(); }, []);
+  const load = () => { onChanged?.(); return api.get("/platform/users").then(({ data }) => setUsers(data.filter((u) => !u.is_superadmin))).catch(() => setUsers([])); };
+  useEffect(() => { api.get("/platform/users").then(({ data }) => setUsers(data.filter((u) => !u.is_superadmin))).catch(() => setUsers([])); }, []);
 
   const orgOpts = useMemo(() => [...new Set(users.flatMap((u) => u.org_names || []))].sort((a, b) => a.localeCompare(b)).map((n) => [n, n]), [users]);
   const roleOpts = useMemo(() => [...new Set(users.flatMap(roleLabels))].sort().map((r) => [r, r]), [users]);
