@@ -123,7 +123,7 @@ def build(db, deps: dict):
         if not ev:
             raise HTTPException(status_code=404, detail="Evento non trovato")
         links = [x for x in await db.staff.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(20000)
-                 if x.get("categoria") in CONFIRMED_CATS and x.get("stato") == "confermato"]  # solo Staff/Volontari confermati per QUESTO evento
+                 if _fold(x.get("categoria")) in CONFIRMED_CATS and _fold(x.get("stato")).startswith("conferm")]  # solo Staff/Volontari confermati per QUESTO evento
         conf = {x["persona_id"] for x in links if x.get("persona_id")}
         avs = await db.availabilities.find({"org_id": org, "evento_id": evento_id, "persona_id": {"$in": list(conf)}}, {"_id": 0}).to_list(20000)
         latest = {}
@@ -258,6 +258,7 @@ def build(db, deps: dict):
             ivs = [f"{_fmt(a - d0) if a >= d0 else '(giorno prima) ' + _fmt(a)}–{_fmt(b - d0) if b <= d0 + 1440 else _fmt(b) + ' (giorno dopo)'}" for a, b in p["iv"] if a < d0 + 1440 and b > d0]
             pmap[p["id"]] = {k: p[k] for k in ("id", "nome", "cognome", "cellulare", "taglia", "gruppo", "mansioni", "preferenza", "team", "categoria", "assigned")}
             pmap[p["id"]]["orario"] = ", ".join(ivs) or "Orario da confermare"
+            pmap[p["id"]]["legacy"] = day_iso in p["days"] and not p["days"][day_iso].get("fasce")
         return ev, {"evento": {"id": ev["id"], "nome": ev.get("nome")}, "date": day_iso, "step": step, "slots": slots, "people": pmap,
                     "tbc": [p["id"] for p in tbc],
                     "kpis": {"day_people": len(today), "max": max(counts) if counts else 0, "min": min(counts) if counts else 0,
@@ -340,13 +341,22 @@ def build(db, deps: dict):
         return ("tbc", "Orario da confermare", False, False) if iso in p["tbc"] else None
 
     def _legacy(people):
+        """Confermati da aggiornare: giorni nel vecchio formato/incompleti, oppure nessuna disponibilità indicata."""
         out = []
         for p in people:
             ds = [{"date": iso, "orario": f"{dd.get('dalle') or '?'}–{dd.get('alle') or '?'}" if (dd.get("dalle") or dd.get("alle")) else "Orario non indicato"}
                   for iso, dd in sorted(p["days"].items()) if not dd.get("fasce")]
+            base = {"id": p["id"], "nome": p["nome"], "cognome": p["cognome"], "categoria": p["categoria"], "team": p.get("team") or ""}
             if ds:
-                out.append({"id": p["id"], "nome": p["nome"], "cognome": p["cognome"], "categoria": p["categoria"], "days": ds})
+                out.append(base | {"days": ds, "reason": "Vecchio modulo o orario incompleto"})
+            elif not p["days"] and not p["iv"] and not p["tbc"]:
+                out.append(base | {"days": [], "reason": "Nessuna disponibilità indicata"})
         return out
+
+    @r.get("/staff-coverage/to-update")
+    async def to_update(evento_id: str, team_id: Optional[str] = None, gruppo: Optional[str] = None, cat: str = "all", user: dict = Depends(require)):
+        _, people = await _load(user["org_id"], evento_id, None, team_id or None, gruppo or None, cat)
+        return {"people": _legacy(people)}
 
     async def _fasce(org, evento_id, team_id=None, gruppo=None, cat="all"):
         """Copertura per giorno × fascia × Team: disponibili (confermati del team), assegnati (coverage_assignments), necessari, mancanti."""

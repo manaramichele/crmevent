@@ -89,12 +89,12 @@ export function LegacyDialog({ open, list, onClose, onOpenPerson }) {
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="cov-legacy-dialog">
         <DialogHeader><DialogTitle>Disponibilità da aggiornare ({list.length})</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-500">Persone confermate con giorni comunicati con il vecchio modulo a orario libero. Apri la scheda e scegli Mattina e/o Pomeriggio: i giorni non modificati restano invariati.</p>
+        <p className="text-sm text-slate-500">Staff e Volontari confermati con disponibilità del vecchio modulo, incomplete o non indicate. Apri la scheda e scegli Mattina e/o Pomeriggio: i giorni non modificati restano invariati.</p>
         <div className="divide-y divide-slate-100">
           {[...list].sort(byName).map((p) => (
             <div key={p.id} className="py-2 flex flex-col sm:flex-row sm:items-center gap-2" data-testid={`cov-legacy-person-${p.id}`}>
-              <div className="flex-1"><div className="font-medium text-slate-800">{p.cognome} {p.nome} <span className="text-xs text-slate-400 font-normal">{p.categoria}</span></div>
-                <div className="text-xs text-slate-600">{p.days.map((d) => `${fmtD(d.date)}: ${d.orario}`).join(" · ")}</div></div>
+              <div className="flex-1"><div className="font-medium text-slate-800">{p.cognome} {p.nome} <span className="text-xs text-slate-400 font-normal">{p.categoria}{p.team ? ` · ${p.team}` : ""}</span></div>
+                <div className="text-xs text-slate-600">{p.days.length ? p.days.map((d) => `${fmtD(d.date)}: ${d.orario}`).join(" · ") : <i>{p.reason}</i>}</div></div>
               <Button size="sm" variant="outline" onClick={() => onOpenPerson(p.id)} data-testid={`cov-legacy-edit-${p.id}`}>Modifica anagrafica</Button>
             </div>))}
         </div>
