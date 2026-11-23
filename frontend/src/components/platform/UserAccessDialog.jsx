@@ -82,6 +82,13 @@ export default function UserAccessDialog({ user, onClose, onChanged }) {
           <div className="flex flex-wrap gap-2 items-center text-sm"><span className="text-slate-600">Account:</span><StatusBadge color={acc.active ? "green" : "red"}>{acc.active ? "Attivo" : "Disattivato"}</StatusBadge>
             {!acc.active && acc.deactivated_at && <span className="text-xs text-slate-500">dal {fmt(acc.deactivated_at)}{acc.deactivation_reason ? ` · ${acc.deactivation_reason}` : ""}</span>}
             <span className="text-xs text-slate-400">Ultimo accesso: {fmt(acc.last_login_at)}</span></div>
+          {acc.event_assignments?.length > 0 && <div className="rounded-xl border border-slate-200 p-3" data-testid="access-event-user">
+            <div className="text-xs font-semibold uppercase text-slate-500 mb-1">Utente con link · eventi assegnati (nessun accesso al back-end)</div>
+            {acc.event_assignments.map((a) => <div key={a.id} className="flex flex-wrap items-center gap-2 py-1.5 border-t border-slate-100 first:border-t-0 text-sm" data-testid={`access-eu-${a.id}`}>
+              <span className="flex-1">{a.nome}{a.incarico ? ` · ${a.incarico}` : ""}</span>
+              <StatusBadge color={a.status === "active" ? "green" : "red"}>{a.status === "active" ? "Attivo" : "Revocato"}</StatusBadge></div>)}
+            <p className="text-[11px] text-slate-400 mt-1">Revoche e nuove assegnazioni si gestiscono dall'evento, menu «Utenti (link evento)».</p>
+          </div>}
           {acc.memberships.map((m) => <OrgCard key={m.org_id} m={m} acc={acc} ask={ask} onPerms={(mm) => setPerms({ m: mm, value: fromPerm(mm, acc.flags) })} onAssign={(mm, e) => setPerms({ m: mm, e, value: fromPerm(mm, acc.flags) })} />)}
           {acc.invites.map((i) => <div key={i.id} className="flex items-center gap-2 text-sm rounded-lg border border-dashed border-slate-300 px-3 py-2" data-testid={`access-invite-${i.id}`}>
             <span className="flex-1">{INV[i.status] || i.status} · scade {fmt(i.expires_at)}</span>

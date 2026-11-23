@@ -13,7 +13,7 @@ SECTIONS = [
 INHERIT = {"team_gruppi": "staff", "copertura": "staff", "turni": "staff", "planner": "eventi:view", "eventmap": "*", "controlroom": "*"}
 # Le nuove sezioni seguono la funzionalità di piano della sezione madre.
 PLAN_PARENT = {"team_gruppi": "staff", "copertura": "staff", "turni": "staff", "planner": "eventi", "eventmap": "eventi", "controlroom": "eventi"}
-# Permessi delicati: sempre separati, spenti di default (Admin Organizzatore escluso).
+# Permessi delicati: separati e configurabili; per gli account esistenti (valore assente) restano consentiti come prima.
 FLAGS = {"bulk_delete": "Eliminazione massiva", "export_personal": "Esportazione dati personali",
          "manage_permissions": "Gestione permessi collaboratori", "send_communications": "Invio comunicazioni"}
 FLAG_EXACT = {"/da-classificare/delete": "bulk_delete", "/staff/export-pdf": "export_personal", "/staff/groups-pdf": "export_personal",
@@ -38,7 +38,7 @@ SECTION_KEYS = [k for k, _ in SECTIONS]
 HIDDEN_SECTIONS = {"anagrafiche", "attivita", "followup"}
 ACTIONS = ["view", "create", "edit", "delete"]
 ACTION_LABELS = {"view": "Visualizza", "create": "Crea", "edit": "Modifica", "delete": "Elimina"}
-ROLES = {"admin_org": "Admin Organizzatore", "user": "Utente", "collaboratore": "Collaboratore"}
+ROLES = {"admin_org": "Organizzatore", "user": "Amministratore", "collaboratore": "Collaboratore"}  # solo etichette: i codici tecnici restano invariati
 COLLAB_HIDDEN = {"sponsor", "pipeline"}
 # Accesso ai Team: "all" | "leader" (solo Team di cui è Team Leader) | "selected" (ids + Team di cui è leader).
 # Struttura estendibile in futuro con azioni per Team (es. "actions": [...]).
@@ -96,6 +96,7 @@ ROUTE_RULES = [
     ("/controlroom", "controlroom", None),
     ("/planner", "planner", None),
     ("/events/{event_id}/collaborators", "*", None),  # verifica dedicata in collab_access (manage_permissions)
+    ("/event-users", "eventi", None),
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),
     ("/events/{event_id}/upgrade", None, None),
@@ -152,10 +153,10 @@ def default_permissions(role: str) -> dict:
     if role == "collaboratore":
         return {"sections": {k: ([] if k in COLLAB_HIDDEN else ["view"]) for k in SECTION_KEYS}, "events": "all",
                 "teams": default_teams(role), "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None),
-                **{f: False for f in FLAGS}}
+                **{f: True for f in FLAGS}}
     return {"sections": {k: list(ACTIONS) for k in SECTION_KEYS}, "events": "all", "teams": default_teams(role),
             "send_invites": False, "marketplace_purchase": False, "subscription_manage": False, "team_leader": normalize_tl(None),
-            **{f: False for f in FLAGS}}
+            **{f: True for f in FLAGS}}
 
 
 def normalize_teams(raw, role: str) -> dict:
@@ -188,7 +189,7 @@ def normalize_permissions(raw: Optional[dict], role: str) -> dict:
     return {"sections": secs, "events": ev, "teams": normalize_teams(raw.get("teams"), role),
             "send_invites": raw.get("send_invites") is True, "marketplace_purchase": raw.get("marketplace_purchase") is True,
             "subscription_manage": raw.get("subscription_manage") is True,
-            "team_leader": normalize_tl(raw.get("team_leader")), **{f: raw.get(f) is True for f in FLAGS}}
+            "team_leader": normalize_tl(raw.get("team_leader")), **{f: raw.get(f) is not False for f in FLAGS}}  # assente = come prima (consentito)
 
 
 def effective(membership: dict) -> dict:

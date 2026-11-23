@@ -145,7 +145,7 @@ def build(db, deps: dict):
                          "expires_at": inv.get("expires_at"), "last_login_at": None})
         rows.sort(key=lambda x: (x["name"] or x["email"] or "").lower())
         return {"rows": rows, "sections": [{"key": k, "label": lbl} for k, lbl in P.SECTIONS if k not in P.HIDDEN_SECTIONS],
-                "flags": P.FLAGS, "defaults": P.default_permissions("collaboratore"),
+                "flags": P.FLAGS, "defaults": {**P.default_permissions("collaboratore"), **{f: False for f in P.FLAGS}},
                 "cap": None if cap.get("admin") else {"sections": cap.get("sections"), **{f: cap.get(f) for f in P.FLAGS}}}
 
     @r.post("/events/{event_id}/collaborators")
@@ -180,7 +180,7 @@ def build(db, deps: dict):
             return {"ok": True, "mode": "added"}
         prev = await db.org_invites.find_one({"org_id": org_id, "email": email, "status": "pending"}, {"_id": 0})
         evs = sorted(set(((prev or {}).get("permissions") or {}).get("events") or []) | {event_id}) if prev and isinstance(((prev.get("permissions") or {}).get("events")), list) else [event_id]
-        p = _apply(P.default_permissions("collaboratore"), body, cap)
+        p = _apply({**P.default_permissions("collaboratore"), **{f: False for f in P.FLAGS}}, body, cap)
         p["events"] = evs
         inv = await deps["create_invite"](org, email, "collaboratore", user["user_id"], nome=body.nome, cognome=body.cognome)
         await db.org_invites.update_one({"id": inv["id"]}, {"$set": {"permissions": p, "persona_id": person["id"], "event_id": event_id}})
@@ -288,9 +288,13 @@ def build(db, deps: dict):
                         "all_events": p["events"] == "all", "events": evs, "sections": p["sections"], "flags": {f: p[f] for f in P.FLAGS}})
         out.sort(key=lambda x: (x["org_nome"] or "").lower())
         invs = await db.org_invites.find({"email": (u.get("email") or "").lower(), "status": {"$ne": "accepted"}}, {"_id": 0, "token": 0}).to_list(100)
+        ea = await db.event_user_assignments.find({"user_id": u["user_id"]}, {"_id": 0}).to_list(500) if u.get("role") == "event_user" else []
+        en = {e["id"]: e.get("nome") for e in await db.events.find({"id": {"$in": [a["event_id"] for a in ea]}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)}
         return {"user_id": u["user_id"], "name": u.get("name"), "email": u.get("email"), "active": u.get("active", True),
                 "deactivated_at": u.get("deactivated_at"), "deactivation_reason": u.get("deactivation_reason"), "reactivated_at": u.get("reactivated_at"),
-                "last_login_at": u.get("last_login_at"), "memberships": out,
+                "last_login_at": u.get("last_login_at"), "memberships": out, "role": u.get("role"),
+                "event_assignments": [{"id": a["id"], "event_id": a["event_id"], "nome": en.get(a["event_id"]) or "Evento eliminato", "incarico": a.get("incarico"),
+                                       "status": a.get("status"), "revoked_at": a.get("revoked_at")} for a in ea],
                 "invites": [{"id": i["id"], "org_id": i["org_id"], "status": deps["invite_status"](i), "role": i.get("role"), "expires_at": i.get("expires_at")} for i in invs],
                 "sections": [{"key": k, "label": lbl} for k, lbl in P.SECTIONS if k not in P.HIDDEN_SECTIONS], "flags": P.FLAGS}
 
@@ -305,7 +309,10 @@ def build(db, deps: dict):
             return {"ok": True, "changed": False}
         acc = await _access(u)
         scope = "; ".join(f"{m['org_nome']}" + (f" ({', '.join(e['nome'] for e in m['events'] if e['status'] == 'active')})" if m["role"] == "collaboratore" and not m["all_events"] else "")
-                          for m in acc["memberships"] if m["active"]) or "nessuna organizzazione attiva"
+                          for m in acc["memberships"] if m["active"]) or ""
+        if acc["event_assignments"]:
+            scope = "Utente via link: " + (", ".join(a["nome"] for a in acc["event_assignments"] if a["status"] == "active") or "nessun evento attivo")
+        scope = scope or "nessuna organizzazione attiva"
         if not body.active:
             blocking = await deps["blocking_admin_orgs"](uid)
             if blocking:

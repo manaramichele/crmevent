@@ -51,6 +51,7 @@ import option_lists
 import people_pdf
 import coverage
 import collab_access
+import event_users
 import plan_addons
 import planner
 import addons
@@ -717,8 +718,10 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     if role == "superadmin":
         base["needs_org"] = False
         return base
-    if role in ("volunteer", "staff"):
+    if role in ("volunteer", "staff", "event_user"):
         base["needs_org"] = not bool(u.get("org_id"))
+        if role == "event_user":
+            base["needs_phone"] = False
         if u.get("org_id"):
             org = await db.organizations.find_one({"id": u["org_id"]}, {"_id": 0})
             base["org_name"] = (org or {}).get("nome")
@@ -4355,7 +4358,7 @@ async def delete_lead(lead_id: str, admin: dict = Depends(require_superadmin)):
 
 
 # ==================== Organizations, memberships & invites management ====================
-ORG_ROLE_LABELS = {"admin_org": "Admin Organizzazione", "user": "Utente", "collaboratore": "Collaboratore"}
+ORG_ROLE_LABELS = {"admin_org": "Organizzatore", "user": "Amministratore", "collaboratore": "Collaboratore"}
 
 
 def _norm_role(r: str) -> str:
@@ -4727,8 +4730,8 @@ ORG_CASCADE_COLLECTIONS = ["controlroom_purchases", "cr_settings", "cr_sectors",
                            "structures", "fic_settings", "org_invites", "leads", "memberships",
                            "planner_projects", "planner_revisions", "planner_bom", "eventmap_video_groups", "addon_grants", "addon_activations",
                            "addon_usage", "eventmap_tracks", "eventmap_videos", "eventmap_logos", "eventmap_settings", "eventmap_races"]
-ROLE_LABELS_USER = {"superadmin": "Super Admin", "admin": "Admin Organizzazione",
-                    "member": "Utente", "staff": "Staff", "volunteer": "Volontario"}
+ROLE_LABELS_USER = {"superadmin": "Super Admin", "admin": "Organizzatore",
+                    "member": "Amministratore", "staff": "Staff", "volunteer": "Volontario", "event_user": "Utente (link evento)"}
 
 
 async def _blocking_admin_orgs(user_id: str) -> list:
@@ -4770,7 +4773,7 @@ async def _user_row(u: dict) -> dict:
             "last_login_at": u.get("last_login_at"), "auth_provider": u.get("auth_provider"),
             "person_id": u.get("person_id"), "primary_org": primary,
             "org_names": sorted(set(n for n in org_names if n)), "memberships": memberships,
-            "kind": "collaboratore" if mems and all(m.get("role") == "collaboratore" for m in mems) else "utente",
+            "kind": "utente" if u.get("role") == "event_user" else "staff_vol" if u.get("role") in ("staff", "volunteer") else "collaboratore" if mems and all(m.get("role") == "collaboratore" for m in mems) else "gestionale",
             "deactivated_at": u.get("deactivated_at"), "deactivation_reason": u.get("deactivation_reason"),
             "is_superadmin": u.get("role") == "superadmin"}
 
@@ -4859,7 +4862,7 @@ async def platform_users(q: Optional[str] = None, admin: dict = Depends(require_
         o = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0, "nome": 1}) or {}
         rows.append({"user_id": f"invite:{inv['id']}", "invite_id": inv["id"], "is_invite": True, "invite_status": st, "email": em,
                      "nome": inv.get("nome") or "", "cognome": inv.get("cognome") or "", "name": f"{inv.get('nome') or ''} {inv.get('cognome') or ''}".strip(),
-                     "active": False, "kind": "collaboratore" if inv.get("role") == "collaboratore" else "utente",
+                     "active": False, "kind": "collaboratore" if inv.get("role") == "collaboratore" else "gestionale",
                      "org_names": [o.get("nome")] if o.get("nome") else [], "memberships": [{"org_id": inv["org_id"], "org_nome": o.get("nome"), "role": inv.get("role"), "active": False}],
                      "role_label": ORG_ROLE_LABELS.get(inv.get("role"), inv.get("role")), "created_at": inv.get("created_at"), "expires_at": inv.get("expires_at")})
     if q:
@@ -6902,6 +6905,10 @@ AUDIT_ACTION_LABELS = {
     "collab_event_revoked": "Revoca accesso evento",
     "collab_event_disabled": "Disattivazione accesso evento",
     "collab_event_restored": "Ripristino accesso evento",
+    "event_user_assigned": "Assegnazione Utente a evento (link)",
+    "event_user_changed": "Modifica incarico Utente",
+    "event_user_revoked": "Revoca Utente da evento",
+    "event_user_link_sent": "Invio link Utente",
     "account_deleted": "Eliminazione account",
     "org_disabled": "Disabilitazione organizzazione",
     "org_enabled": "Riattivazione organizzazione",
@@ -14541,6 +14548,9 @@ app.include_router(collab_access.build(db, {"require_admin": require_admin, "req
                                             "now_iso": now_iso, "new_id": new_id, "create_invite": _create_invite, "send_invite_email": _send_invite_email,
                                             "invite_status": _invite_status, "org_or_404": _org_or_404, "guard_last_admin": _guard_last_admin,
                                             "check_limit": lambda o, k: SAAS["check_limit"](o, k), "blocking_admin_orgs": _blocking_admin_orgs})["router"])
+app.include_router(event_users.build(db, {"require_admin": require_admin, "get_current_user": get_current_user, "record_audit": record_audit,
+                                         "now_iso": now_iso, "new_id": new_id, "email_utils": email_utils, "app_url": APP_URL,
+                                         "set_auth_cookie": set_auth_cookie})["router"])
 ADDONS = addons.build(db, {"require_admin": require_admin, "require_superadmin": require_superadmin, "record_audit": record_audit,
                            "state_for": SAAS["state_for"], "ensure_customer": _ensure_stripe_customer, "billing_missing": _billing_missing,
                            "stripe_mode": STRIPE_MODE})

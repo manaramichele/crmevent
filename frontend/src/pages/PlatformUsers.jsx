@@ -13,7 +13,7 @@ import { formatApiError } from "@/lib/api";
 import AccountStateDialog from "@/components/platform/AccountStateDialog";
 import UserAccessDialog from "@/components/platform/UserAccessDialog";
 
-const ORG_ROLE = { admin_org: "Admin Organizzatore", user: "Utente", collaboratore: "Collaboratore" };
+const ORG_ROLE = { admin_org: "Organizzatore", user: "Amministratore", collaboratore: "Collaboratore" };
 const fullName = (u) => `${u.cognome || ""} ${u.nome || ""}`.trim() || u.name || "—";
 const roleLabels = (u) => (u.memberships?.length ? [...new Set(u.memberships.map((m) => ORG_ROLE[m.role] || m.role))] : [u.role_label]);
 const orgLabel = (u) => (u.org_names || []).join(", ") || u.primary_org?.nome || "—";
@@ -107,7 +107,7 @@ export default function PlatformUsers({ embedded = false, onChanged }) {
     </DropdownMenu>
   );
   const state = (u) => { const [l, c] = STATE[stateKey(u)]; const n = accessNote(u); return <div><StatusBadge color={c}>{l}</StatusBadge>{n && <div className="text-[11px] text-amber-700 mt-0.5">{n}</div>}{!u.active && u.deactivated_at && <div className="text-[11px] text-slate-400">dal {fmt(u.deactivated_at)}</div>}</div>; };
-  const kind = (u) => (u.kind === "collaboratore" ? "Collaboratore" : "Utente");
+  const kind = (u) => ({ collaboratore: "Collaboratore", utente: "Utente (link evento)", staff_vol: "Staff / Volontari" }[u.kind] || "Gestionale");
 
   return (
     <div className="animate-fade-up" data-testid="platform-users-page">
