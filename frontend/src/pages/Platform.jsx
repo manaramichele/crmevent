@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building2, Users, CalendarDays, Wallet, TrendingUp, Inbox, ReceiptText, Link2, Plus, X, Trash2, Power, ShieldAlert } from "lucide-react";
 import PlatformUsers from "@/pages/PlatformUsers";
+import AccountStateDialog from "@/components/platform/AccountStateDialog";
 import SaasAdmin from "@/pages/SaasAdmin";
 import ModulesAdmin from "@/pages/ModulesAdmin";
 import NormalizePreview from "@/components/NormalizePreview";
@@ -52,6 +53,7 @@ export default function Platform() {
   const [creating, setCreating] = useState(false);
   const [users, setUsers] = useState([]);
   const [delUser, setDelUser] = useState(null);
+  const [stateFor, setStateFor] = useState(null);
   const [working, setWorking] = useState(false);
 
   const loadUsers = () => api.get("/platform/users").then(({ data }) => setUsers(data.filter((u) => !u.is_invite))).catch(() => {});
@@ -82,10 +84,7 @@ export default function Platform() {
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); setCreating(false); }
   };
 
-  const toggleUser = async (u) => {
-    try { await api.patch(`/platform/users/${u.user_id}`, { active: !u.active }); toast.success(u.active ? "Account disabilitato" : "Account riattivato"); loadUsers(); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
+  const toggleUser = (u) => setStateFor(u);
   const confirmDeleteUser = async () => {
     if (!delUser) return;
     setWorking(true);
@@ -156,6 +155,7 @@ export default function Platform() {
 
       {sez === "utenti" && <>
       <PlatformUsers embedded />
+      {stateFor && <AccountStateDialog user={stateFor} onClose={() => setStateFor(null)} onDone={() => { setStateFor(null); loadUsers(); }} />}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-8" data-testid="platform-accounts">
         <div className="px-5 py-3 border-b border-slate-100 font-semibold text-sm text-slate-800 flex items-center gap-2"><Users className="w-4 h-4" />Account utenti <span className="text-slate-400 font-normal">({users.length})</span></div>
         <div className="overflow-x-auto">

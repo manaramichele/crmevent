@@ -1,0 +1,53 @@
+{
+  "summary": "Tested the rework of collaborator access per event and the Super Admin access management, backend and frontend. Backend: new pytest file test_collab_access.py, 14/14 passing after one assertion fix in the test itself (a disabled session gets 403, which is fine). It covers invite, resend, edit, revoke from the event card; adding an existing collaborator without a duplicate account; 404 on unauthorized events; 403 on sections and on the export flag; grants capped to the granter's own permissions; Super Admin event disable/restore/revoke/assign (a revoked event cannot be restored, and reassignment requires explicit permissions); account disable blocks the live session and login, reactivation works with the password; org-level disable/enable; the Super Admin cannot be disabled; non-Super Admin gets 403; audit entries exist. Frontend: every flow in the briefing works (event-card Collaboratori dialog, invite/resend/revoke, edit Carla, revoke Carla on Evento Due while Evento Uno stays Attivo, collaborator sidebar/events/Staff tabs, SA users table with its columns and actions, account-state dialog both ways, Gestisci accessi with disable/restore/revoke/Riassegna and org toggle, Modifica permessi, mobile m- prefix, org admin perm-dialog with the 6 new sections and 4 sensitive toggles). Two real bugs: (1) org admin setting 'Tutti gli eventi' silently brings back a revoked event; (2) a collaborator can see people and event names from events they are not authorized for, via /persons and /persons-enriched. google_login.py lines 69/187 reject active=False and accept reactivated users (read in code only, no end-to-end test).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/org/permissions/{target_id} + permissions.effective()", "issue": "When the org admin saves events='all' for a collaborator, revoked (or disabled) events become accessible again. Repro: Carla has TEST_Evento Tre revoked; org admin PUT {events:'all'} -> Carla GET /api/events/<Tre> returns 200, while the event card still shows Accesso: Revocato. effective() only filters event_states when events is an explicit list. This breaks the rule that a revoked access is never restored automatically. The opposite case is also confusing: if the admin explicitly ticks a revoked event in the list, it is saved but stays inaccessible (404), with no indication in the UI.", "priority": "HIGH"},
+      {"endpoint": "GET /api/persons, GET /api/persons-enriched (_person_scope)", "issue": "Person scope is based on teams, not events. Carla, authorized only on TEST_Evento Uno, gets people linked only to TEST_Evento Tre (e.g. test_inv_* persons), and her own row lists eventi_nomi of all 3 events, including the revoked ones. /api/staff is scoped correctly; the Staff/Volontari page in the UI shows the leaked rows. Collaborator people lists should be filtered by perm.event_ids, and eventi_nomi/eventi_ids should be limited to authorized events.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/org/permissions/{id}", "issue": "cur = P.effective(m) already has disabled events removed, so any save from the org admin dialog drops disabled events from permissions.events. The SA 'Ripristina' still adds the event back, so restore works, but the stored config changes."},
+      {"endpoint": "POST /api/events/{id}/collaborators (existing collaborator) and SA assign", "issue": "body.sections replaces the collaborator's permissions for the whole org (sections that are not sent become 'none'). Adding Carla to Evento Tre or reassigning Due silently changed her permissions on Evento Uno too (Dashboard and Team e Gruppi were lost in my run). The dialog text says permissions apply to all events, but an explicit warning or a diff before saving would avoid accidental downgrades."},
+      {"endpoint": "PATCH /api/platform/users/{id} (legacy)", "issue": "The legacy account toggle still works with no confirmation and no reason. The legacy 'Account utenti' table in Platform.jsx calls it from its 'Disabilita' button, and the table does not refresh: Carla still showed Attivo there while the new table showed Disattivato."},
+      {"endpoint": "POST /api/events/{id}/collaborators/{inviteId}/resend", "issue": "A revoked invite can be resent from the event card (the Reinvia button is still shown), which sets it back to pending. The SA dialog hides resend for revoked invites. Behaviour is inconsistent; consider requiring a new invite."},
+      {"endpoint": "POST /api/events/{id}/collaborators", "issue": "Every invite creates a Person and a Staff record (categoria collaboratore) right away, and they stay after the invite is revoked. Revoked or test invites pile up in Staff."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Events.jsx / Persons.jsx for a collaborator", "issue": "A view-only collaborator still sees 'Aggiungi', edit/delete icons and a 'Pipeline' button on /eventi (pipeline section = none), and 'Esporta PDF' on Staff without export_personal. The backend correctly returns 403, but these actions should be hidden.", "selector": "/eventi Aggiungi, Esporta PDF", "priority": "MEDIUM"},
+      {"component": "PlatformUsers users-search", "issue": "Search only matches name/surname. Searching by email ('test_collab', 'example.com') returns 0 rows.", "selector": "[data-testid=users-search]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Platform > Utenti", "issue": "The legacy 'Account utenti' table under the new users-table duplicates the controls (Disabilita/Elimina), shows Ruolo 'Utente' for a collaborator, and goes stale after account-state changes.", "affected_selectors": ["[data-testid^=user-toggle-]"]}
+    ],
+    "design_issues": [
+      {"screen": "Event card Collaboratori", "issues": ["Revoked invites pile up in the list (5 rows after testing); consider collapsing them or filtering them out", "CollabPermEditor's 3 levels map 'view+create' to 'Visualizzazione e modifica', and saving then grants all 4 actions including delete"]},
+      {"screen": "Platform users", "issues": ["Pending/expired invite rows show '1 org. disattivate', which is misleading", "Mobile card shows 'Collaboratore · TEST_Collab Org · Collaboratore' (label repeated)", "Gestisci accessi: when org access is disabled, the event lines still show Attivo with Disattiva/Revoca buttons"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_collab_access.py", "/app/test_reports/pytest/pytest_iter211.xml"],
+  "action_items": [
+    "HIGH: in permissions.effective(), always exclude events whose event_states are disabled/revoked, including when events=='all' (expand to the explicit org event list or filter in _enforce_perm). In update_org_permissions, also clear or respect event_states when the admin picks events (a revoked event should need explicit reassignment, or the UI should say it is revoked).",
+    "HIGH: scope /persons, /persons-enriched (and any eventi_nomi/eventi_ids they return) to perm.event_ids for collaborators.",
+    "In update_org_permissions, build cur from normalize_permissions(m.permissions) instead of effective(), so disabled events are not dropped.",
+    "Hide or disable UI actions the collaborator has no permission for (Aggiungi, edit/delete, Pipeline, Esporta PDF).",
+    "Remove the legacy 'Account utenti' table and toggle, or route them through AccountStateDialog.",
+    "Decide whether 'Reinvia' should be allowed on revoked invites; align the event card with the SA dialog.",
+    "Warn before org-wide permission changes when adding an existing collaborator to another event or reassigning."
+  ],
+  "critical_code_review_comments": [
+    "permissions.effective(): state filtering skipped when events=='all' (root cause of HIGH #1).",
+    "server.py update_org_permissions uses effective() as the base, so the runtime view leaks into stored config.",
+    "_person_scope is team-based and ignores event_ids (root cause of HIGH #2).",
+    "collab_access._apply with cap: when a manage_permissions collaborator edits someone else, sections the granter lacks are stripped even if not in the body (body.sections None keeps base but then caps it). This can silently downgrade the target.",
+    "server.py is 14.6k lines; collab_access.py is a good split pattern."
+  ],
+  "updated_files": ["/app/backend/tests/test_collab_access.py"],
+  "success_rate": {"backend": "14/14 regression checks pass; 2 HIGH issues found by exploratory API probes", "frontend": "~90% (all requested flows work; UI action visibility and legacy table issues)"},
+  "seed_data_creation": "Created TEST invites with person and staff records in org 5a80bfbe69a74355a2ec3f0ae81df5f6: test_collab_new@example.com (invite 43d4024698914ceebb234dde0dd0ba8e, revoked, Evento Uno), test_cap_ecbcd0/test_cap_bbe67e@example.com (revoked, Evento Uno), test_inv_e8bb63/test_inv_d80385@example.com (revoked, Evento Tre). Carla now also has a Staff record on Evento Tre. Carla's final state: account active, org active, Evento Uno and Evento Due active (Due reassigned by SA), Evento Tre revoked; sections dashboard/eventi/team_gruppi/copertura view, staff full; manage_permissions on. Each test run adds a few more test_cap_*/test_inv_* invites.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest /app/backend/tests/test_collab_access.py -p no:xdist -o addopts=''. The tests expect Carla to start with Evento Tre revoked (TestSuperAdmin cycle ends with a revoke). /tmp/probe3.py reproduces the events='all' bug. users-search only matches names, so search 'Carla'. Events list: use visible locators for more-actions-<id>.",
+  "rca of the issue": "HIGH #1: P.effective() only removes disabled/revoked event_states when p['events'] is a list; collab_access._set_event turns 'all' into an explicit list on disable/revoke, but the org-admin Permissions endpoint can set it back to 'all', so access returns even though event_states still says revoked. HIGH #2: _person_scope returns team member ids plus staff without a team, and never intersects with event_ids, so people tied only to unauthorized events are visible."
+}

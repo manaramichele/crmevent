@@ -289,19 +289,20 @@ function MapsDialog({ eventId, open, onOpenChange }) {
 }
 
 function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, onDuplicate, onCollab }) {
+  const { user } = useAuth();
   const all = [
     { key: "staffvol", label: "Staff / Volontari", Icon: Users, run: () => navigate(`/staff-volontari?evento=${row.id}`), title: "Staff e Volontari di questo evento" },
     { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
     { key: "briefing", label: "Briefing", Icon: FileText, run: () => navigate(`/eventi/${row.id}/briefing`), title: "Briefing evento" },
     { key: "planner", label: "Event Planner", Icon: FileText, run: () => navigate(`/eventi/${row.id}/planner`), title: "Event Planner" },
-    { key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" },
+    ...(can(user, "pipeline") ? [{ key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" }] : []),
     { key: "maps", label: "Percorsi", Icon: MapIcon, run: () => setMapsFor(row.id), title: "Mappe & Percorsi" },
     { key: "calsync", label: "Calendario", Icon: CalendarPlus, run: () => syncCal(row), title: "Aggiungi a Google Calendar" },
     ...(onDuplicate ? [{ key: "duplicate", label: "Duplica evento", Icon: Copy, run: () => onDuplicate(row), title: "Duplica evento" }] : []),
     ...(onCollab ? [{ key: "collab", label: "Collaboratori", Icon: UserPlus, run: () => onCollab(row), title: "Collaboratori dell'evento" }] : []),
   ];
   const byKey = (k) => all.find((a) => a.key === k);
-  const primary = ["staffvol", "availability", "pipeline", "maps"].map(byKey);
+  const primary = ["staffvol", "availability", "pipeline", "maps"].map(byKey).filter(Boolean);
   const secondary = ["collab", "calsync", "duplicate", "event-credits", "briefing"].map(byKey).filter(Boolean);
 
   return (
@@ -443,7 +444,7 @@ export default function Events() {
       <DemoProjectBanner navigate={navigate} />
       <EntityManager key={ver} title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event" defaultSort={{ key: "data_inizio", dir: "asc" }}
-        searchKeys={["nome", "citta", "tipologia"]} fullActions filters={[{ name: "stato", label: "Fase", options: FASE_EDIT_OPTIONS }]}
+        searchKeys={["nome", "citta", "tipologia"]} fullActions section="eventi" filters={[{ name: "stato", label: "Fase", options: FASE_EDIT_OPTIONS }]}
         rowActions={(row, helpers) => (
           <EventRowActions row={row} navigate={navigate}
             setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal}

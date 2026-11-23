@@ -350,6 +350,9 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
     if flag and not eff.get(flag):
         raise HTTPException(status_code=403, detail=f"Serve il permesso specifico «{P.FLAGS[flag]}»")
     ids = None if eff["events"] == "all" else list(eff["events"])
+    blocked = [k for k, v in (mem.get("event_states") or {}).items() if (v or {}).get("status") in ("disabled", "revoked")]
+    if ids is None and blocked:  # "tutti gli eventi" non riapre mai eventi disattivati o revocati
+        ids = [e for e in await db.events.distinct("id", {"org_id": org_id}) if e not in blocked]
     team_ids = list(led) if via_tl else await _allowed_team_ids(user, org_id, eff.get("teams") or {}, mem.get("persona_id"), led)
     perm = {"admin": False, "role": eff["role"], "sections": eff["sections"], "event_ids": ids, "team_ids": team_ids,
             "teams": eff.get("teams") or {}, "send_invites": eff.get("send_invites", False),
@@ -372,7 +375,7 @@ async def _enforce_perm(request: Request, user: dict, org_id: str, org_role: str
         a = await db.availabilities.find_one({"org_id": org_id, "id": pp["aid"]}, {"_id": 0, "persona_id": 1, "evento_id": 1})
         if a and a.get("persona_id") not in await _team_person_ids(org_id, team_ids, via_tl, a.get("evento_id")):
             raise nf
-    if team_ids is not None and "person_id" in pp and request.method == "GET":
+    if (team_ids is not None or ids is not None) and "person_id" in pp and request.method == "GET":
         if pp["person_id"] not in await _person_scope({**user, "org_id": org_id, "perm": perm}):
             raise HTTPException(status_code=404, detail="Persona non trovata")
     if ids is None:
@@ -436,9 +439,14 @@ async def _person_scope(user: dict) -> Optional[set]:
     """None = nessun limite; altrimenti persone visibili: componenti dei Team accessibili + contatti non Staff se ha Anagrafiche."""
     p = user.get("perm") or {"admin": True}
     tids = p.get("team_ids")
-    if p.get("admin") or tids is None:
+    evs = p.get("event_ids")
+    if p.get("admin") or (tids is None and evs is None):
         return None
-    vis = await _team_person_ids(user["org_id"], tids, p.get("via_tl"))
+    vis = await _team_person_ids(user["org_id"], tids, p.get("via_tl")) if tids is not None else None
+    if evs is not None:  # solo persone degli eventi autorizzati
+        q = {"org_id": user["org_id"], "evento_id": {"$in": evs}}
+        ev_people = set(await db.staff.distinct("persona_id", q)) | set(await db.availabilities.distinct("persona_id", q))
+        vis = ev_people if vis is None else set(vis) & ev_people
     if _can(user, "anagrafiche"):
         staffed = set(await db.staff.distinct("persona_id", {"org_id": user["org_id"], "categoria": {"$in": list(MEMBER_CATS)}}))
         vis |= set(await db.persons.distinct("id", {"org_id": user["org_id"], "id": {"$nin": list(staffed)}}))
@@ -2045,7 +2053,8 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
     if scope is not None:
         persons = [p for p in persons if p["id"] in scope]
     rels = await db.person_companies.find(oq(admin), {"_id": 0}).to_list(10000)
-    pres = [x for x in await db.staff.find(oq(admin), {"_id": 0}).to_list(10000) if _link_visible(admin, x)]
+    evs_ok = (admin.get("perm") or {}).get("event_ids")
+    pres = [x for x in await db.staff.find(oq(admin), {"_id": 0}).to_list(10000) if _link_visible(admin, x) and (evs_ok is None or x.get("evento_id") in evs_ok)]
     companies = {c["id"]: c for c in await _list("companies", oq(admin))}
     teams_map = {t["id"]: t.get("nome") for t in await _list("teams", oq(admin))}
     events_map = {e["id"]: e.get("nome") for e in await _list("events", oq(admin))}
@@ -4433,7 +4442,7 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
         new_perm = {}
     elif any(x is not None for x in (body.sections, body.events, body.teams, body.send_invites, body.marketplace_purchase, body.team_leader,
                                      *(getattr(body, f) for f in P.FLAGS))):
-        cur = P.effective({**m, "role": new_role})
+        cur = {**P.effective({**m, "role": new_role}), "events": P.normalize_permissions(m.get("permissions"), new_role)["events"]}
         raw = {"sections": body.sections if body.sections is not None else cur["sections"],
                "events": body.events if body.events is not None else cur["events"],
                "teams": body.teams if body.teams is not None else cur.get("teams"),
@@ -4456,6 +4465,17 @@ async def update_org_permissions(target_id: str, body: PermUpdateIn, admin: dict
         if new_pid and not await db.persons.find_one({"org_id": oid, "id": new_pid}, {"_id": 1}):
             raise HTTPException(status_code=404, detail="Persona non trovata nell'organizzazione")
     before = {"role": m["role"], "permissions": P.effective(m), "persona_id": m.get("persona_id")}
+    states = dict(m.get("event_states") or {})
+    blocked = {k for k, v in states.items() if (v or {}).get("status") in ("disabled", "revoked")}
+    if new_perm.get("events") == "all" and blocked:  # "tutti" non riapre accessi disattivati/revocati
+        new_perm["events"] = [e for e in await db.events.distinct("id", {"org_id": oid}) if e not in blocked or (states[e] or {}).get("status") == "disabled"]
+    old_evs = P.normalize_permissions(m.get("permissions"), m["role"])["events"]
+    for e in (new_perm.get("events") if isinstance(new_perm.get("events"), list) else []):
+        if (states.get(e) or {}).get("status") == "revoked" and (old_evs == "all" or e not in old_evs):
+            states.pop(e)  # spuntato esplicitamente dall'Admin = riassegnazione esplicita
+    if states != (m.get("event_states") or {}):
+        await db.memberships.update_one({"org_id": oid, "user_id": target_id}, {"$set": {"event_states": states}})
+        m = {**m, "event_states": states}
     after_m = {**m, "role": new_role, "permissions": new_perm}
     after = {"role": new_role, "permissions": P.effective(after_m), "persona_id": new_pid}
     if before == after and (m.get("permissions") or {}) == new_perm:

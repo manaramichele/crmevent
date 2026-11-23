@@ -21,6 +21,7 @@ const fmt = (iso) => (iso ? new Date(iso).toLocaleString("it-IT", { day: "2-digi
 const stateKey = (u) => (u.is_invite ? (u.invite_status === "expired" ? "expired" : "pending") : u.active ? "active" : "disabled");
 const STATE = { active: ["Attivo", "green"], disabled: ["Disattivato", "red"], pending: ["Invito in attesa", "blue"], expired: ["Invito scaduto", "amber"] };
 const accessNote = (u) => {
+  if (u.is_invite) return "";
   const m = u.memberships || [];
   const off = m.filter((x) => x.active === false).length;
   const ev = Object.values(Object.assign({}, ...m.map((x) => x.event_states || {})));
@@ -75,7 +76,7 @@ export default function PlatformUsers({ embedded = false }) {
   const roleOpts = useMemo(() => [...new Set(users.flatMap(roleLabels))].sort().map((r) => [r, r]), [users]);
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return users.filter((u) => (!s || `${u.cognome || ""} ${u.nome || ""}`.toLowerCase().includes(s) || `${u.nome || ""} ${u.cognome || ""}`.toLowerCase().includes(s))
+    return users.filter((u) => (!s || `${u.cognome || ""} ${u.nome || ""}`.toLowerCase().includes(s) || `${u.nome || ""} ${u.cognome || ""}`.toLowerCase().includes(s) || (u.email || "").toLowerCase().includes(s))
       && (fOrg === "all" || (u.org_names || []).includes(fOrg))
       && (fRole === "all" || roleLabels(u).includes(fRole))
       && (fState === "all" || fState === stateKey(u)))
@@ -114,7 +115,7 @@ export default function PlatformUsers({ embedded = false }) {
       <div className="mb-4 flex flex-col sm:flex-row sm:flex-wrap gap-3">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input className="pl-9" placeholder="Cerca per cognome e nome..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="users-search" />
+          <Input className="pl-9" placeholder="Cerca per cognome, nome o email..." value={q} onChange={(e) => setQ(e.target.value)} data-testid="users-search" />
         </div>
         <Filter value={fOrg} onChange={setFOrg} all="Tutte le organizzazioni" options={orgOpts} testid="users-filter-org" />
         <Filter value={fRole} onChange={setFRole} all="Tutti i ruoli" options={roleOpts} testid="users-filter-role" />
@@ -125,7 +126,7 @@ export default function PlatformUsers({ embedded = false }) {
           <div key={u.user_id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-4" data-testid={`user-card-${u.user_id}`}>
             <div className="flex items-start justify-between gap-2"><div className="font-semibold text-slate-900 break-words">{fullName(u)}</div>{state(u)}</div>
             <div className="text-sm text-slate-600 break-all">{u.email}</div>
-            <div className="text-xs text-slate-500 mt-1">{kind(u)} · {orgLabel(u)} · {roleLabels(u).join(", ")} · Eventi: {eventsLabel(u)}</div>
+            <div className="text-xs text-slate-500 mt-1">{roleLabels(u).includes(kind(u)) ? "" : `${kind(u)} · `}{orgLabel(u)} · {roleLabels(u).join(", ")} · Eventi: {eventsLabel(u)}</div>
             <div className="text-xs text-slate-400 mt-0.5">Ultimo accesso: {fmt(u.last_login_at)}</div>
             <div className="mt-2">{action(u, "m-")}</div>
           </div>

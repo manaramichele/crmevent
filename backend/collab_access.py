@@ -134,7 +134,7 @@ def build(db, deps: dict):
                          "account_active": u.get("active", True), "org_access_active": m.get("active", True),
                          "last_login_at": u.get("last_login_at")})
         known = {(r_["email"] or "").lower() for r_ in rows}
-        for inv in await db.org_invites.find({"org_id": org_id, "event_id": event_id, "status": {"$ne": "accepted"}}, {"_id": 0, "token": 0}).sort("created_at", -1).to_list(500):
+        for inv in await db.org_invites.find({"org_id": org_id, "event_id": event_id, "status": {"$nin": ["accepted", "revoked"]}}, {"_id": 0, "token": 0}).sort("created_at", -1).to_list(500):
             if inv["email"].lower() in known:
                 continue
             known.add(inv["email"].lower())
@@ -174,10 +174,9 @@ def build(db, deps: dict):
         if not await db.staff.find_one({"org_id": org_id, "persona_id": person["id"], "evento_id": event_id}, {"_id": 1}):
             await db.staff.insert_one({"id": new_id(), "org_id": org_id, "persona_id": person["id"], "evento_id": event_id,
                                        "categoria": "collaboratore", "stato": "confermato", "created_at": now_iso()})
-        if m:  # già Collaboratore attivo: si aggiunge l'evento, nessun nuovo account
+        if m:  # già Collaboratore attivo: si aggiunge l'evento con i permessi che ha già, nessun nuovo account
             before = _perm(m)
-            p = _apply(before, body, cap)
-            p = await _set_event(m, event_id, None, user, perm=p)
+            p = await _set_event(m, event_id, None, user, perm=before)
             await audit(user, "collab_event_assigned", org_id=org_id, target_email=email, target_name=eu.get("name"),
                         detail=f"Evento «{ev['nome']}» · {_summary(p)}", meta={"event_id": event_id, "before": before, "after": p})
             return {"ok": True, "mode": "added"}

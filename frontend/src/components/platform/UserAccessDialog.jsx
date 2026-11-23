@@ -53,6 +53,7 @@ function OrgCard({ m, acc, ask, onPerms, onAssign }) {
       {!m.active && m.deactivated_at && <div className="text-[11px] text-slate-400 mt-1">Disattivato il {fmt(m.deactivated_at)}{m.deactivation_reason ? ` · ${m.deactivation_reason}` : ""}</div>}
       {m.role === "collaboratore" && <div className="mt-2">
         <div className="text-xs font-semibold uppercase text-slate-500 mb-1">Eventi autorizzati {m.all_events && "· tutti gli eventi"}</div>
+        {(!m.active || m.org_disabled) && <div className="text-[11px] text-amber-700 mb-1" data-testid={`access-org-suspended-${m.org_id}`}>Eventi sospesi finché l'accesso all'organizzazione resta disattivato.</div>}
         {m.events.length === 0 && !m.all_events && <div className="text-xs text-slate-400">Nessun evento.</div>}
         {m.events.map((e) => <EventLine key={e.id} m={m} e={e} ask={ask} onAssign={onAssign} />)}
       </div>}
