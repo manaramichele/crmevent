@@ -1,5 +1,11 @@
 # CRMEvent — Changelog
 
+## 2026-11-23 — OrgDetail › Utenti: pulsante Riattiva account
+- Il pulsante della tabella cambiava l'accesso all'organizzazione (membership.active) e non lo stato dell'account. Ora i due pulsanti sono separati:
+  - «Disabilita account» / «Riattiva account» (in base a account_active), con conferma tramite AccountStateDialog → POST /platform/users/{uid}/state, registrato nell'audit;
+  - «Revoca accesso org» / «Consenti accesso org»; il badge «Accesso org» ora mostra Consentito / Revocato.
+- La riattivazione non tocca ruolo, permessi né un accesso all'organizzazione revocato.
+
 ## 2026-11-23 — Correzione ruoli e modalità di accesso (solo sviluppo, iteration_213)
 - UTENTE = nuovo ruolo tecnico separato `users.role = "event_user"` (`backend/event_users.py`).
   - Riceve un link personale (validità 30 giorni) e accede con un codice email a 6 cifre (valido 10 minuti, massimo 5 all'ora), poi vede /miei-eventi: solo gli eventi assegnati e attivi, il proprio incarico e le informazioni autorizzate (orari, luogo, descrizione, contatti).
