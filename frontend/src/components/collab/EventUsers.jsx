@@ -44,11 +44,11 @@ function Row({ r, onEdit, onResend, onRevoke }) {
   const on = r.status === "active";
   return (
     <div className="flex flex-col lg:flex-row lg:items-center gap-2 border border-slate-200 rounded-lg px-3 py-2.5" data-testid={`event-user-row-${r.id}`}>
-      <div className="flex-1 min-w-0"><div className="font-medium text-slate-800">{r.name}</div><div className="text-xs text-slate-500 break-all">{r.email} · incarico: {r.incarico || "—"}</div></div>
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        <StatusBadge color={!r.account_active ? "amber" : on ? "green" : "red"}>{!r.account_active ? "Account disattivato" : on ? "Attivo" : "Revocato"}</StatusBadge>
-        <span className="text-slate-400">Link: {fmt(r.link_sent_at)} · Ultimo accesso: {fmt(r.last_login_at)}</span></div>
-      {on && <div className="flex gap-1">
+      <div className="flex-1 min-w-0"><div className="font-medium text-slate-800">{r.name}</div><div className="text-xs text-slate-500 break-words">{r.email} · incarico: {r.incarico || "—"}</div>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs mt-1">
+          <StatusBadge color={!r.account_active ? "amber" : on ? "green" : "red"}>{!r.account_active ? "Account disattivato" : on ? "Attivo" : "Revocato"}</StatusBadge>
+          <span className="text-slate-400">Link: {fmt(r.link_sent_at)} · Ultimo accesso: {fmt(r.last_login_at)}</span></div></div>
+      {on && <div className="flex gap-1 shrink-0">
         <Button size="sm" variant="outline" onClick={() => onEdit(r)} data-testid={`event-user-edit-${r.id}`}><Pencil className="w-3.5 h-3.5 mr-1" />Modifica</Button>
         <Button size="sm" variant="outline" onClick={() => onResend(r)} data-testid={`event-user-resend-${r.id}`}><Send className="w-3.5 h-3.5 mr-1" />Reinvia link</Button>
         <Button size="sm" variant="outline" className="text-red-600" onClick={() => onRevoke(r)} data-testid={`event-user-revoke-${r.id}`}><Ban className="w-3.5 h-3.5 mr-1" />Revoca</Button></div>}

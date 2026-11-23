@@ -221,7 +221,12 @@ async def get_current_user(request: Request) -> dict:
                                            "superadmin_name": user.get("name") or user.get("email")}}
     if user.get("active") is False:
         raise HTTPException(status_code=403, detail="Accesso disabilitato")
+    if user.get("role") == "event_user" and request.url.path not in EVENT_USER_PATHS:  # Utente via link: mai API gestionali
+        raise HTTPException(status_code=403, detail="Area riservata: gli Utenti vedono solo i propri eventi")
     return user
+
+
+EVENT_USER_PATHS = {"/api/auth/me", "/api/auth/logout", "/api/my-event-access"}
 
 
 async def _get_base_user(request: Request) -> dict:

@@ -114,7 +114,7 @@ function AdminOnly({ children }) {
 function EventUserOnly({ children }) {
   const { user, loading } = useAuth();
   if (loading || user === null) return <div className="min-h-screen flex items-center justify-center text-slate-400">Caricamento...</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <div className="min-h-screen flex items-center justify-center p-6 text-center text-slate-600" data-testid="my-events-logged-out">Sessione scaduta: riapri il link personale ricevuto via email per vedere i tuoi eventi.</div>;
   if (!isEventUser(user)) return <Navigate to="/app" replace />;
   return children;
 }

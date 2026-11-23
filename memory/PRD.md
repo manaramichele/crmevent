@@ -1194,3 +1194,9 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Dettagli in CHANGELOG. Solo sviluppo: Aruba non ancora aggiornata.
 - Backlog: avviso «modifica permessi su tutti gli eventi» prima del salvataggio; stato revocato visibile anche nell'elenco eventi del dialog permessi dell'Admin Org.
 
+
+## Regola definitiva dei ruoli (2026-11-23)
+- UTENTE: accesso tramite link personale con codice di verifica alla sola visualizzazione degli eventi assegnati; nessun back-end (ruolo tecnico event_user, separato da Staff/Volontari).
+- COLLABORATORE, AMMINISTRATORE (ruolo tecnico user), ORGANIZZATORE (admin_org) e SUPER ADMIN: login con credenziali al back-end, ciascuno con i propri permessi. I ruoli già salvati non vengono mai convertiti.
+- In attesa di autorizzazione per il salvataggio su GitHub e la pubblicazione su Aruba.
+

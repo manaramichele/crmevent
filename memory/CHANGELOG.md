@@ -1,5 +1,14 @@
 # CRMEvent — Changelog
 
+## 2026-11-23 — Correzione ruoli e modalità di accesso (solo sviluppo, iteration_213)
+- UTENTE = nuovo ruolo tecnico separato `users.role = "event_user"` (`backend/event_users.py`).
+  - Riceve un link personale (validità 30 giorni) e accede con un codice email a 6 cifre (valido 10 minuti, massimo 5 all'ora), poi vede /miei-eventi: solo gli eventi assegnati e attivi, il proprio incarico e le informazioni autorizzate (orari, luogo, descrizione, contatti).
+  - Un controllo in `get_current_user` gli blocca ogni API tranne /auth/me, /auth/logout e /my-event-access.
+  - Gestione dall'evento con «Utenti (link evento)», tramite `/api/event-users` (serve «eventi» in modifica).
+- Ruoli tecnici invariati; cambiano solo le etichette: admin_org = «Organizzatore», user = «Amministratore».
+- Permessi delicati: se assenti sono consentiti come prima (nessuna perdita per gli account esistenti); spenti solo per i nuovi collaboratori invitati dalla scheda evento.
+- Super Admin: elenco con Tipologia (Utente (link evento) / Collaboratore / Gestionale / Staff-Volontari); «Gestisci accessi» mostra gli eventi assegnati all'Utente; la riattivazione non ripristina le revoche.
+
 ## 2026-11-23 — Collaboratori per evento + gestione accessi Super Admin (solo sviluppo, iteration_211/212)
 - `backend/collab_access.py` (nuovo) espone `/api/events/{id}/collaborators`, per elencare, invitare, modificare i permessi, revocare e reinviare un invito.
 - Per il Super Admin aggiunge `/api/platform/users/{uid}/access|state|memberships/{org}/state|events/{eid}|permissions|invites/{id}/resend`.

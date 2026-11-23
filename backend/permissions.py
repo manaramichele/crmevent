@@ -96,7 +96,7 @@ ROUTE_RULES = [
     ("/controlroom", "controlroom", None),
     ("/planner", "planner", None),
     ("/events/{event_id}/collaborators", "*", None),  # verifica dedicata in collab_access (manage_permissions)
-    ("/event-users", "eventi", None),
+    ("/event-users", "eventi", "edit"),
     ("/events/{event_id}/activate", None, None),
     ("/events/{event_id}/checkout", None, None),
     ("/events/{event_id}/upgrade", None, None),
