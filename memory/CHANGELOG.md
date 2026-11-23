@@ -1,5 +1,26 @@
 # CRMEvent — Changelog
 
+## 2026-11-23 — Correzione ruoli e modalità di accesso (solo sviluppo, iteration_213)
+- UTENTE = nuovo ruolo tecnico separato `users.role = "event_user"` (`backend/event_users.py`).
+  - Riceve un link personale (validità 30 giorni) e accede con un codice email a 6 cifre (valido 10 minuti, massimo 5 all'ora), poi vede /miei-eventi: solo gli eventi assegnati e attivi, il proprio incarico e le informazioni autorizzate (orari, luogo, descrizione, contatti).
+  - Un controllo in `get_current_user` gli blocca ogni API tranne /auth/me, /auth/logout e /my-event-access.
+  - Gestione dall'evento con «Utenti (link evento)», tramite `/api/event-users` (serve «eventi» in modifica).
+- Ruoli tecnici invariati; cambiano solo le etichette: admin_org = «Organizzatore», user = «Amministratore».
+- Permessi delicati: se assenti sono consentiti come prima (nessuna perdita per gli account esistenti); spenti solo per i nuovi collaboratori invitati dalla scheda evento.
+- Super Admin: elenco con Tipologia (Utente (link evento) / Collaboratore / Gestionale / Staff-Volontari); «Gestisci accessi» mostra gli eventi assegnati all'Utente; la riattivazione non ripristina le revoche.
+
+## 2026-11-23 — Collaboratori per evento + gestione accessi Super Admin (solo sviluppo, iteration_211/212)
+- `backend/collab_access.py` (nuovo) espone `/api/events/{id}/collaborators`, per elencare, invitare, modificare i permessi, revocare e reinviare un invito.
+- Per il Super Admin aggiunge `/api/platform/users/{uid}/access|state|memberships/{org}/state|events/{eid}|permissions|invites/{id}/resend`.
+- `permissions.py`: nuove sezioni team_gruppi, copertura, turni, planner, eventmap, controlroom.
+  - Se mancano nei permessi salvati vengono ereditate (staff → team_gruppi/copertura/turni, eventi:view → planner, accesso completo → eventmap e controlroom).
+  - Seguono il piano tramite PLAN_PARENT.
+- 4 permessi delicati (bulk_delete, export_personal, manage_permissions, send_communications), spenti di default e applicati dal server tramite `flag_for`.
+- Le membership hanno `event_states` {eid: disabled|revoked}. "Tutti gli eventi" esclude sempre gli eventi bloccati (`_enforce_perm`). Un evento disattivato si ripristina con i permessi precedenti; uno revocato va riassegnato esplicitamente scegliendo i permessi.
+- La disattivazione dell'account salva data e motivo, cancella le `user_sessions` e blocca subito anche le sessioni JWT (controllo `active`). La riattivazione mantiene lo stesso user_id e le stesse associazioni. Tutte le operazioni vengono registrate nell'audit log, con i permessi prima e dopo.
+- Persone, schede persona e turni di un collaboratore sono filtrati per eventi autorizzati. Nell'interfaccia sono nascoste le azioni non permesse (modifica/elimina evento, Pipeline, Esporta PDF, schede Team/Copertura/Turni).
+- Interfaccia: pulsante «Collaboratori» nel menu «Altre» della riga evento. In Super Admin › Utenti: colonne Tipologia, Eventi autorizzati e Stato accesso, menu Azioni, finestre «Riattiva/Disattiva account» e «Gestisci accessi».
+
 ## 2026-11-23 — Copertura oraria: grafico originale di nuovo popolato + suddivisione per Team (solo sviluppo, iteration_210)
 - Causa del grafico vuoto: `coverage._load` contava solo i record con stato «confermato», quindi chi era da_contattare o disponibile restava escluso e le barre risultavano vuote (componente `Bars` in CoverageTab.jsx, commit fdca098, mai rimosso).
 - Ora sono inclusi Staff e Volontari di ogni stato tranne rinunciato e non_disponibile. Il filtro `cov-stato` (parametro `stato` = attivi | confermati) vale per summary, matrix, to-update ed export. Da classificare resta escluso.

@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the role fix: UTENTE (event_user, personal link + verification code), the Organizzatore/Amministratore labels, Super Admin disable/reactivate, and a regression check. Backend: 28/28 pytest pass (tests/test_event_users_roles.py). The Utente gets 401/403 on every back-end API tested, including POST /events and /auth/complete-organization. GET /my-event-access returns only the active assigned event, with its incarico and only the 'luogo' keys. Organizzatore can list/assign/edit/revoke. Assigning an email that already has a credential account (amm/col/superadmin) returns 409. Amministratore keeps PDF export. Disable blocks the Utente and the collaboratore. Reactivate gives the Utente only the still-active event, still no back-end; the collaboratore can log in again; roles in the DB are unchanged. Frontend: the event-users dialog, assign form, Utente edit, revoked row, Collaboratori dialog, /accesso-evento (masked email, 'Invia il codice', invalid-token error), /miei-eventi with 'Il tuo incarico', and the redirects from /app, /eventi, /staff-volontari, /piattaforma to /miei-eventi all work. The Super Admin users list shows Tipologia 'Utente (link evento)'/'Collaboratore'/'Gestionale', and 'Gestisci accessi' shows the access-event-user block. Organizzatore/Amministratore labels appear in Utenti e Permessi. One layout bug in the event-users dialog was fixed: the name/email column collapsed so the text wrapped one character per line.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/files/{file_id}", "issue": "Uses only get_current_user and checks that the file's org_id matches the user's org_id. An event_user has org_id set, so with a known file_id it can download any file of its org. This is a back-end data leak for UTENTE (low risk because the id must be known). Block role event_user here."},
+      {"endpoint": "Other get_current_user-only endpoints (/support/*, /calendar/*, /onboarding/*, /events/{id}/calendar-status)", "issue": "No explicit block for event_user. No org data leaked in my tests, but a global deny for role=='event_user' (for example in get_current_user, with an allowlist of /auth/me, /auth/logout, /my-event-access) would be fail-closed and stop future leaks."},
+      {"endpoint": "GET /api/event-users", "issue": "A collaboratore whose membership has no explicit permissions can list event Utenti (200), including their emails. Assigning still returns 403. Check that this is intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EventUsers Row", "issue": "FIXED by testing agent: the name/email column collapsed to about 10px, so the email and incarico wrapped one character per line. Status and link info moved into the left column; the buttons are now shrink-0.", "selector": "[data-testid^=event-user-row-]", "priority": "HIGH (fixed)"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Profile (/profilo)", "issues": ["The RUOLO field shows the raw global role 'Admin' (user.role, capitalized). For the Organizzatore it should show 'Organizzatore'/'Amministratore' to match the new labels."]},
+      {"screen": "/miei-eventi when logged out", "issues": ["EventUserOnly redirects to /login, but a Utente has no password. It should show a message such as 'riapri il link ricevuto via email'."]},
+      {"screen": "Cookie banner", "issues": ["Shows in English (EN selected) on the Italian pages /accesso-evento and /miei-eventi (pre-existing)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_event_users_roles.py", "/app/test_reports/pytest/pytest_event_users.xml"],
+  "action_items": [
+    "Block event_user on GET /api/files/{file_id}. Better: deny event_user in get_current_user except an allowlist (/auth/me, /auth/logout, /my-event-access).",
+    "Show the membership role label (Organizzatore/Amministratore/Collaboratore) on /profilo instead of the raw user.role 'Admin'.",
+    "For a logged-out Utente on /miei-eventi, show a 'riapri il link' message instead of redirecting to /login.",
+    "Confirm whether a collaboratore should see GET /event-users (list with emails)."
+  ],
+  "critical_code_review_comments": [
+    "event_users.py: verify() reads the latest unused code and blocks at 5 attempts. send_code allows 5 codes per hour, so a brute-force attempt is capped at about 25 guesses per hour per link, which is acceptable.",
+    "event_users.py: _send_link marks the user's earlier active links 'replaced', so resending (or assigning a second event) invalidates the previous email link. This is expected but should be documented in the UI.",
+    "event_users.py list_assign: the (us.get(a['user_id']) or {}) lookup is repeated 5 times; minor DRY issue.",
+    "Disabling an account deletes its user_sessions, and get_current_user also checks active, so blocking takes effect immediately. Verified."
+  ],
+  "updated_files": ["/app/frontend/src/components/collab/EventUsers.jsx", "/app/backend/tests/test_event_users_roles.py"],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "100% of requested flows (after 1 layout fix)"},
+  "seed_data_creation": "Utente sessions came from links and codes inserted straight into the DB (ids TEST_l_*, TEST_c_*, TEST_lui_*, TEST_cui_*), all deleted afterwards. One temporary Utente, test_eu_new_<hex>@example.com, was assigned through the API (1 real email sent to example.com) and then deleted. user_sessions rows for user_df941f23995e created by verify are left for the main agent's cleanup. The Super Admin disable/reactivate of test_eu_user and test_eu_col was restored to active.",
+  "test_credentials": "As given in the review request. /app/memory/test_credentials.md does not list the TEST_EU accounts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_event_users_roles.py -n 0. For a Utente session without email, insert into event_user_links and event_user_codes (see link_session()). In the UI, dismiss the 'Accept all' cookie banner and the 'Non ora' demo popup. Events rows have duplicate testids (mobile and desktop), so use the :visible selector. Event ids: TEST_EU Uno 8636697777e14d89a321868bca61b151, TEST_EU Due dde14718ee114ee095c7e2f48b71d2f1."
+}

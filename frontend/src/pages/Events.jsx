@@ -12,10 +12,12 @@ import {
 import { toast } from "sonner";
 import { Rocket, Image as ImageIcon } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal, Copy, Users } from "lucide-react";
+import { CalendarPlus, Map as MapIcon, Plus, Trash2, Eye, Pencil, Download, RefreshCw, Route, X, FileText, ClipboardList, MoreHorizontal, Copy, Users, UserPlus } from "lucide-react";
 import { DuplicateEventDialog } from "@/components/events/DuplicateEventDialog";
 import { useAuth } from "@/context/AuthContext";
-import { can } from "@/lib/perms";
+import { can, isOrgAdmin } from "@/lib/perms";
+import EventCollaborators from "@/components/collab/EventCollaborators";
+import EventUsers from "@/components/collab/EventUsers";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -287,20 +289,23 @@ function MapsDialog({ eventId, open, onOpenChange }) {
   );
 }
 
-function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, onDuplicate }) {
+function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, openEdit, onRequestDelete, onDuplicate, onCollab, onEventUsers }) {
+  const { user } = useAuth();
   const all = [
     { key: "staffvol", label: "Staff / Volontari", Icon: Users, run: () => navigate(`/staff-volontari?evento=${row.id}`), title: "Staff e Volontari di questo evento" },
     { key: "availability", label: "Disponibilità", Icon: ClipboardList, run: () => setAvailFor(row.id), title: "Raccolta disponibilità" },
     { key: "briefing", label: "Briefing", Icon: FileText, run: () => navigate(`/eventi/${row.id}/briefing`), title: "Briefing evento" },
     { key: "planner", label: "Event Planner", Icon: FileText, run: () => navigate(`/eventi/${row.id}/planner`), title: "Event Planner" },
-    { key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" },
+    ...(can(user, "pipeline") ? [{ key: "pipeline", label: "Pipeline", Icon: Rocket, run: () => navigate(`/eventi/${row.id}/pipeline`), title: "Pipeline evento" }] : []),
     { key: "maps", label: "Percorsi", Icon: MapIcon, run: () => setMapsFor(row.id), title: "Mappe & Percorsi" },
     { key: "calsync", label: "Calendario", Icon: CalendarPlus, run: () => syncCal(row), title: "Aggiungi a Google Calendar" },
     ...(onDuplicate ? [{ key: "duplicate", label: "Duplica evento", Icon: Copy, run: () => onDuplicate(row), title: "Duplica evento" }] : []),
+    ...(onCollab ? [{ key: "collab", label: "Collaboratori", Icon: UserPlus, run: () => onCollab(row), title: "Collaboratori dell'evento" },
+      { key: "eventusers", label: "Utenti (link evento)", Icon: Users, run: () => onEventUsers(row), title: "Utenti con accesso tramite link" }] : []),
   ];
   const byKey = (k) => all.find((a) => a.key === k);
-  const primary = ["staffvol", "availability", "pipeline", "maps"].map(byKey);
-  const secondary = ["calsync", "duplicate", "event-credits", "briefing"].map(byKey).filter(Boolean);
+  const primary = ["staffvol", "availability", "pipeline", "maps"].map(byKey).filter(Boolean);
+  const secondary = ["collab", "eventusers", "calsync", "duplicate", "event-credits", "briefing"].map(byKey).filter(Boolean);
 
   return (
     <>
@@ -328,10 +333,10 @@ function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, open
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="mx-0.5 h-5 w-px bg-slate-200" aria-hidden />
-        <Button variant="ghost" size="icon" title="Modifica" onClick={() => openEdit(row)} data-testid={`edit-event-${row.id}`}
-          className="h-9 w-9 text-slate-500 hover:text-tiffany-active"><Pencil className="w-[18px] h-[18px]" /></Button>
-        <Button variant="ghost" size="icon" title="Elimina" onClick={() => onRequestDelete(row)} data-testid={`delete-event-${row.id}`}
-          className="h-9 w-9 text-slate-500 hover:text-red-500"><Trash2 className="w-[18px] h-[18px]" /></Button>
+        {can(user, "eventi", "edit") && <Button variant="ghost" size="icon" title="Modifica" onClick={() => openEdit(row)} data-testid={`edit-event-${row.id}`}
+          className="h-9 w-9 text-slate-500 hover:text-tiffany-active"><Pencil className="w-[18px] h-[18px]" /></Button>}
+        {can(user, "eventi", "delete") && <Button variant="ghost" size="icon" title="Elimina" onClick={() => onRequestDelete(row)} data-testid={`delete-event-${row.id}`}
+          className="h-9 w-9 text-slate-500 hover:text-red-500"><Trash2 className="w-[18px] h-[18px]" /></Button>}
       </div>
 
       {/* Mobile: un unico pulsante "Azioni" con menu verticale icona + descrizione */}
@@ -349,12 +354,12 @@ function EventRowActions({ row, navigate, setAvailFor, setMapsFor, syncCal, open
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => openEdit(row)} className="gap-2 cursor-pointer" data-testid={`m-edit-event-${row.id}`}>
+            {can(user, "eventi", "edit") && <DropdownMenuItem onClick={() => openEdit(row)} className="gap-2 cursor-pointer" data-testid={`m-edit-event-${row.id}`}>
               <Pencil className="w-4 h-4 text-slate-500" />Modifica
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRequestDelete(row)} className="gap-2 cursor-pointer text-red-600 focus:text-red-600" data-testid={`m-delete-event-${row.id}`}>
+            </DropdownMenuItem>}
+            {can(user, "eventi", "delete") && <DropdownMenuItem onClick={() => onRequestDelete(row)} className="gap-2 cursor-pointer text-red-600 focus:text-red-600" data-testid={`m-delete-event-${row.id}`}>
               <Trash2 className="w-4 h-4" />Elimina
-            </DropdownMenuItem>
+            </DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -375,8 +380,11 @@ export default function Events() {
   const [availFor, setAvailFor] = useState(null);
   const [delRow, setDelRow] = useState(null);
   const [dupRow, setDupRow] = useState(null);
+  const [collabRow, setCollabRow] = useState(null);
+  const [euRow, setEuRow] = useState(null);
   const [ver, setVer] = useState(0);
   const { user } = useAuth();
+  const canCollab = !!user && (isOrgAdmin(user) || !!user.permissions?.admin || !!user.permissions?.manage_permissions);
   const canDup = !!user && (user.role === "superadmin" || (can(user, "eventi", "create") && !(user.permissions?.events && user.permissions.events !== "all")));
   if (settings === false) return <p className="text-sm text-red-600" data-testid="events-load-error">Impossibile caricare gli eventi. <button type="button" onClick={() => window.location.reload()} className="underline font-semibold" data-testid="events-retry">Riprova</button></p>;
   if (!settings) return <div className="text-slate-400" data-testid="events-loading">Caricamento...</div>;
@@ -439,13 +447,15 @@ export default function Events() {
       <DemoProjectBanner navigate={navigate} />
       <EntityManager key={ver} title="Eventi" subtitle="Gestione multi-evento, mappe e sincronizzazione calendario"
         endpoint="/events" fields={fields} columns={columns} entityLabel="evento" testid="event" defaultSort={{ key: "data_inizio", dir: "asc" }}
-        searchKeys={["nome", "citta", "tipologia"]} fullActions filters={[{ name: "stato", label: "Fase", options: FASE_EDIT_OPTIONS }]}
+        searchKeys={["nome", "citta", "tipologia"]} fullActions section="eventi" filters={[{ name: "stato", label: "Fase", options: FASE_EDIT_OPTIONS }]}
         rowActions={(row, helpers) => (
           <EventRowActions row={row} navigate={navigate}
             setAvailFor={setAvailFor} setMapsFor={setMapsFor} syncCal={syncCal}
-            openEdit={helpers.openEdit} onRequestDelete={() => setDelRow({ row, del: helpers.onDelete })} onDuplicate={canDup ? setDupRow : null} />
+            openEdit={helpers.openEdit} onRequestDelete={() => setDelRow({ row, del: helpers.onDelete })} onDuplicate={canDup ? setDupRow : null} onCollab={canCollab ? setCollabRow : null} onEventUsers={setEuRow} />
         )} />
       {dupRow && <DuplicateEventDialog row={dupRow} onClose={() => setDupRow(null)} onDone={() => { setDupRow(null); setVer((v) => v + 1); }} />}
+      {collabRow && <EventCollaborators event={collabRow} onClose={() => setCollabRow(null)} />}
+      {euRow && <EventUsers event={euRow} onClose={() => setEuRow(null)} />}
       {mapsFor && <MapsDialog eventId={mapsFor} open={!!mapsFor} onOpenChange={(o) => !o && setMapsFor(null)} />}
       {availFor && <AvailabilityDialog eventId={availFor} open={!!availFor} onOpenChange={(o) => !o && setAvailFor(null)} />}
       <AlertDialog open={!!delRow} onOpenChange={(o) => !o && setDelRow(null)}>

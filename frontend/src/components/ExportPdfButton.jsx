@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { isOrgAdmin } from "@/lib/perms";
 import api, { formatApiError } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,8 @@ const fileName = (slug, ev) => `CRMEvent_${slug}_${((ev || "Evento").replace(/(^
 
 export default function ExportPdfButton({ section, eventoId, eventName, personIds, teamIds, scopeLabel, testid = `export-pdf-${section}` }) {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const canExport = isOrgAdmin(user) || !user?.permissions || user.permissions.admin || !!user.permissions.export_personal;
   const [cols, setCols] = useState(() => loadPrefs(section));
   const [busy, setBusy] = useState(false);
   const [title, slug] = TITLES[section];
@@ -32,6 +36,7 @@ export default function ExportPdfButton({ section, eventoId, eventName, personId
       toast.error(formatApiError(msg?.detail || msg) || "Esportazione non riuscita");
     } finally { setBusy(false); }
   };
+  if (!canExport) return null;
   return (<>
     <Button type="button" variant="outline" size="sm" className="h-10 shrink-0" onClick={() => setOpen(true)} data-testid={testid}><FileDown className="w-4 h-4 mr-1.5" />Esporta PDF</Button>
     <Dialog open={open} onOpenChange={setOpen}>

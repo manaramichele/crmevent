@@ -30,6 +30,8 @@ import News from "@/pages/News";
 import PipelineTemplates from "@/pages/PipelineTemplates";
 import PipelineAttentionPage from "@/pages/PipelineAttentionPage";
 import Invite from "@/pages/Invite";
+import EventAccess from "@/pages/EventAccess";
+import MyEvents from "@/pages/MyEvents";
 import { trackPageView } from "@/lib/analytics";
 import { brevoPage, brevoIdentify, brevoReset } from "@/lib/brevoTracker";
 import { CHANGE_EVENT } from "@/lib/consent";
@@ -88,12 +90,14 @@ captureReferral();
 captureAttribution();
 
 const isVol = (u) => u && (u.role === "staff" || u.role === "volunteer");
+const isEventUser = (u) => u && u.role === "event_user";
 const isSuper = (u) => u && u.role === "superadmin";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
   if (loading || user === null) return <div className="min-h-screen flex items-center justify-center text-slate-400">Caricamento...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (isEventUser(user)) return <Navigate to="/miei-eventi" replace />;
   if (!isSuper(user) && user.needs_org) return <Navigate to="/completa-organizzazione" replace />;
   if (!isSuper(user) && !user.needs_org && user.needs_phone) return <Navigate to="/completa-profilo" replace />;
   if (isVol(user)) return <VolunteerLayout>{user.support && <div className="sticky top-0 z-40 -mx-4 -mt-4 mb-3 sm:mx-0 sm:mt-0"><SupportBanner /></div>}{children}</VolunteerLayout>;
@@ -107,6 +111,14 @@ function AdminOnly({ children }) {
   return children;
 }
 
+function EventUserOnly({ children }) {
+  const { user, loading } = useAuth();
+  if (loading || user === null) return <div className="min-h-screen flex items-center justify-center text-slate-400">Caricamento...</div>;
+  if (!user) return <div className="min-h-screen flex items-center justify-center p-6 text-center text-slate-600" data-testid="my-events-logged-out">Sessione scaduta: riapri il link personale ricevuto via email per vedere i tuoi eventi.</div>;
+  if (!isEventUser(user)) return <Navigate to="/app" replace />;
+  return children;
+}
+
 function SuperAdminOnly({ children }) {
   const { user } = useAuth();
   if (!isSuper(user)) return <Navigate to="/app" replace />;
@@ -117,7 +129,7 @@ function NoAccess() {
   return (
     <div className="max-w-lg mx-auto text-center py-24" data-testid="no-access">
       <div className="font-display text-2xl font-bold text-slate-900">Accesso non consentito</div>
-      <p className="text-slate-500 mt-2">Non hai i permessi per questa sezione. Chiedi all'Admin Organizzatore di abilitarla.</p>
+      <p className="text-slate-500 mt-2">Non hai i permessi per questa sezione. Chiedi all'Organizzatore di abilitarla.</p>
     </div>
   );
 }
@@ -171,6 +183,8 @@ function Shell() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/attiva" element={<Activate />} />
         <Route path="/invito" element={<Invite />} />
+        <Route path="/accesso-evento/:token" element={<EventAccess />} />
+        <Route path="/miei-eventi" element={<EventUserOnly><MyEvents /></EventUserOnly>} />
         <Route path="/app" element={<Protected><HomeRoute /></Protected>} />
         <Route path="/profilo" element={<Protected><Profile /></Protected>} />
         <Route path="/account" element={<AccountRedirect />} />
