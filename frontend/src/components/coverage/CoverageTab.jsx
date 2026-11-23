@@ -35,13 +35,15 @@ function Kpi({ label, value, id }) {
 
 const TEAM_COLORS = ["#0ABAB5", "#6366F1", "#F59E0B", "#EF4444", "#10B981", "#8B5CF6", "#EC4899", "#0EA5E9", "#84CC16", "#F97316", "#14B8A6", "#A855F7"];
 
+const teamColor = (n) => (n === "Senza team" ? "#94A3B8" : TEAM_COLORS[[...n].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % TEAM_COLORS.length]);
+
 function TeamBar({ s, names, max }) {
   let left = 0;
-  return names.map((n, i) => {
+  return names.map((n) => {
     const c = s.teams?.[n] || 0;
     if (!c) { return null; }
     const w = (c / max) * 100;
-    const el = <span key={n} title={`${n}: ${c}`} className="absolute inset-y-0" style={{ left: `${left}%`, width: `${w}%`, background: i === names.length - 1 && n === "Senza team" ? "#94A3B8" : TEAM_COLORS[i % TEAM_COLORS.length] }} />;
+    const el = <span key={n} title={`${n}: ${c}`} className="absolute inset-y-0" style={{ left: `${left}%`, width: `${w}%`, background: teamColor(n) }} />;
     left += w;
     return el;
   });
@@ -54,7 +56,7 @@ function Bars({ data, onPick, byTeam }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1.5" data-testid="cov-bars">
       <div className="flex flex-wrap gap-4 text-xs text-slate-500 mb-2" data-testid="cov-bars-legend">
-        {byTeam ? names.map((n, i) => <span key={n} className="inline-flex items-center gap-1" data-testid={`cov-team-legend-${i}`}><span className="w-3 h-3 rounded" style={{ background: n === "Senza team" ? "#94A3B8" : TEAM_COLORS[i % TEAM_COLORS.length] }} />{n}</span>) : (<>
+        {byTeam ? names.map((n, i) => <span key={n} className="inline-flex items-center gap-1" data-testid={`cov-team-legend-${i}`}><span className="w-3 h-3 rounded" style={{ background: teamColor(n) }} />{n}</span>) : (<>
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-tiffany" />Intera fascia</span>
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-tiffany/40" />Parziale</span></>)}
         <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3 bg-slate-800" />Necessari</span>
@@ -62,7 +64,7 @@ function Bars({ data, onPick, byTeam }) {
       </div>
       {byTeam && <p className="text-[11px] text-slate-400 -mt-1 mb-1">Chi fa parte di più Team compare in ognuno; il numero a destra conta ogni persona una sola volta.</p>}
       {data.slots.map((s) => (
-        <button key={s.start} type="button" onClick={() => onPick(s)} className="w-full grid grid-cols-[86px_1fr_170px] items-center gap-2 text-left rounded hover:bg-slate-50 px-1 py-0.5" data-testid={`cov-slot-${s.start}`}>
+        <button key={s.start} type="button" onClick={() => onPick(s)} className="w-full grid grid-cols-[72px_1fr_auto] sm:grid-cols-[86px_1fr_170px] items-center gap-2 text-left rounded hover:bg-slate-50 px-1 py-0.5" data-testid={`cov-slot-${s.start}`}>
           <span className="text-xs font-medium text-slate-600 tabular-nums">{s.start}–{s.end}</span>
           <span className="relative h-5 bg-slate-100 rounded overflow-hidden">
             {byTeam ? <TeamBar s={s} names={names} max={max} /> : (<>
