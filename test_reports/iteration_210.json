@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the restored Copertura oraria (Staff/Volontari) on TEST_Maratona Copertura (TEST org, test_cov_admin). Backend: new test_iter210_coverage_restore.py, 15/15 pass. Every expected count matched: the default (attivi) 12/12 slots run 06:00..18:00 with 2/2/3/3/3/2/2 then 2 x6, team counts {Ristoro:2,Pacer:1} at 09 and {Ristoro:1,Accoglienza:1} from 13 to 19, KPI 4 people and tbc 1. With stato=confermati the counts are 1/1/2/2/2/1/1 then 1. On 13/12 the 06-13 slots show 1 Accoglienza. The Ristoro filter, 30/15-minute steps (26/52 slots) and step=20 returning 400 all work. to-update returns Blu, Gialli, Neri. Matrix cells at 09:00 are [3,1]. PDF summary/by_mansione/names and XLSX exports return 200 with valid magic bytes. Rinuncia and DaClass never appear. UI (1920): chart visible, Per Team selected by default with stacked colored segments and an alphabetical legend (Accoglienza, Pacer, Ristoro), Complessivo shows Intera fascia/Parziale. cov-stato, cov-team (alphabetical), cov-date, cov-step and Più giorni all work. Clicking cov-slot-09:00 lists Bianchi, Neri (with the legacy badge) and Rossi. The 'Disponibilità da aggiornare: 3' dialog opens Neri's record; ticking Mattina for 12/12 and saving dropped the count to 2 and the chart went to 3 at 06-13. Stati were not changed. PDF/Excel buttons download files. Mobile 390: no horizontal page overflow and the dialog opens, but the bar track is very narrow. No page errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/staff-coverage/to-update (via CoverageToUpdate.jsx)", "issue": "The frontend does not pass `stato` to to-update. With 'Solo stato Confermato' selected, the indicator still counts people who are not Confermato (Gialli, who is da_contattare). The backend accepts stato, but CoverageToUpdate's q/deps omit params.stato."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Copertura oraria mobile 390px", "issues": ["The bar row uses grid-cols-[86px_1fr_170px]. The fixed 170px numbers column leaves only about 44px for the bar, so the team segments are barely readable. Use a smaller or auto numbers column on mobile (e.g. grid-cols-[72px_1fr_auto]), or put the numbers below the bar.", "The slot dialog table is cut off horizontally on mobile (Taglia/Orario/Assegnazione columns are off-screen). Check that it is wrapped in overflow-x-auto."]},
+      {"screen": "Stale copy", "issues": ["PersonMask.jsx:80 hint says 'Solo Staff e Volontari Confermati entrano nella Copertura oraria'. This is no longer true: the default now includes every stato except rinunce.", "CoverageFasceDialogs.jsx:92 LegacyDialog text says 'Staff e Volontari confermati con disponibilità...'. It now includes everyone who is not a rinuncia."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter210_coverage_restore.py", "/app/test_reports/pytest/iter210.xml"],
+  "action_items": [
+    "Pass params.stato to /staff-coverage/to-update in CoverageToUpdate.jsx (q and effect deps)",
+    "Improve the mobile bar width in Bars: the fixed 170px numbers column squeezes the bar",
+    "Update the stale 'Confermati' copy in PersonMask.jsx:80 and CoverageFasceDialogs.jsx:92",
+    "Old regression test backend/tests/test_staff_coverage.py now has 7 failures. It is obsolete: it expects people with only an availability record (no staff link) to be counted, and it seeds into the DEMO org. Update or retire it."
+  ],
+  "critical_code_review_comments": [
+    "coverage.py is 813 lines (>700). Consider splitting the export/fasce logic into its own module.",
+    "_fasce() still calls _load(org, evento_id) without stato, so it uses the default 'attivi'. That is consistent, but the fasce view has no stato filter.",
+    "Saving PersonMask normalised Neri's nome from 'TEST' to 'Test' (title case). This is a side effect of the save path, not of coverage; it is noted in case it is unintended."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter210_coverage_restore.py"],
+  "success_rate": {"backend": "100% (15/15 new tests)", "frontend": "100% functional; 2 design and 2 copy issues"},
+  "seed_data_creation": "None created. As requested, I modified TEST org data: TEST_Neri's 12/12 availability was converted to the Mattina fascia (06:00-13:00) through the UI. Legacy count is now 2. The main agent will delete the TEST org.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login test_cov_admin@example.com / TestCov2026!, /staff-volontari, tab-copertura, event f13e4213fd6349ca8816196488bd2aeb. NOTE: Neri is no longer legacy (converted to Mattina), so on 12/12 the 06-13 slots now count 3 and to-update returns 2 (Blu, Gialli). test_iter210_coverage_restore.py asserts the pre-conversion state, so test_default_day12, test_slot_09 legacy, test_to_update, test_matrix and test_stato_confermati will fail until the seed is restored. Run with REACT_APP_BACKEND_URL exported."
+}

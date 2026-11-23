@@ -18,6 +18,7 @@ ROME = ZoneInfo("Europe/Rome")
 TIFFANY = "#0ABAB5"
 STAFF_CATS = {"staff", "collaboratore"}
 CONFIRMED_CATS = STAFF_CATS | {"volontario"}
+RINUNCIA = {"rinunciato", "non_disponibile"}
 
 
 def _fold(s):
@@ -117,13 +118,14 @@ def build(db, deps: dict):
         st = await db.settings.find_one({"id": org}, {"_id": 0, "coverage_yellow_pct": 1}) or {}
         return int(st.get("coverage_yellow_pct", 10))
 
-    async def _load(org, evento_id, mansione=None, team_id=None, gruppo=None, cat="all"):
+    async def _load(org, evento_id, mansione=None, team_id=None, gruppo=None, cat="all", stato="attivi"):
         """Persone filtrate con intervalli assoluti (minuti) e date senza orario."""
         ev = await db.events.find_one({"org_id": org, "id": evento_id}, {"_id": 0})
         if not ev:
             raise HTTPException(status_code=404, detail="Evento non trovato")
         links = [x for x in await db.staff.find({"org_id": org, "evento_id": evento_id}, {"_id": 0}).to_list(20000)
-                 if _fold(x.get("categoria")) in CONFIRMED_CATS and _fold(x.get("stato")).startswith("conferm")]  # solo Staff/Volontari confermati per QUESTO evento
+                 if _fold(x.get("categoria")) in CONFIRMED_CATS and _fold(x.get("stato")) not in RINUNCIA
+                 and (stato != "confermati" or _fold(x.get("stato")).startswith("conferm"))]  # Staff/Volontari dell'evento (no Da classificare, no rinunce)
         conf = {x["persona_id"] for x in links if x.get("persona_id")}
         avs = await db.availabilities.find({"org_id": org, "evento_id": evento_id, "persona_id": {"$in": list(conf)}}, {"_id": 0}).to_list(20000)
         latest = {}
@@ -187,6 +189,7 @@ def build(db, deps: dict):
             out.append({"has_av": bool(av), "days": pdays, "id": pid, "nome": p.get("nome") or "", "cognome": p.get("cognome") or "", "cellulare": p.get("cellulare") or "",
                         "taglia": p.get("taglia") or "", "gruppo": p.get("gruppo_appartenenza") or "", "mansioni": roles, "preferenza": pref,
                         "team": ", ".join(sorted({teams[t] for t in tids if t in teams})), "team_ids": sorted(tids),
+                        "team_names": sorted({teams[t] for t in tids if t in teams}, key=_fold) or ["Senza team"],
                         "categoria": "Staff" if cats & STAFF_CATS else ("Volontario" if "volontario" in cats else "Da classificare"),
                         "assigned": bool(roles if not mansione else mansione in roles), "iv": _merge(iv), "tbc": tbc})
         out.sort(key=lambda x: (_fold(x["cognome"]), _fold(x["nome"])))
@@ -208,7 +211,12 @@ def build(db, deps: dict):
                     full.append(p["id"])
                 elif ov > 0:
                     part.append(p["id"])
-            res.append({"start": _fmt(s), "end": _fmt(s + step) if s + step < 1440 else "24:00", "s": s, "full": full, "partial": part})
+            tc = {}
+            for p in people:
+                if p["id"] in full or p["id"] in part:
+                    for tn_ in p["team_names"]:
+                        tc[tn_] = tc.get(tn_, 0) + 1
+            res.append({"start": _fmt(s), "end": _fmt(s + step) if s + step < 1440 else "24:00", "s": s, "full": full, "partial": part, "teams": tc})
         return res
 
     async def _needs(org, evento_id, mansione=None):
@@ -239,13 +247,13 @@ def build(db, deps: dict):
                 sl["status"] = None
         return slots
 
-    async def _day(org, evento_id, day_iso, step, mansione, team_id, gruppo, cat):
+    async def _day(org, evento_id, day_iso, step, mansione, team_id, gruppo, cat, stato="attivi"):
         if step not in (15, 30, 60):
             raise HTTPException(status_code=400, detail="Intervallo non valido")
         day = _d(day_iso)
         if not day:
             raise HTTPException(status_code=400, detail="Data non valida")
-        ev, people = await _load(org, evento_id, mansione, team_id, gruppo, cat)
+        ev, people = await _load(org, evento_id, mansione, team_id, gruppo, cat, stato)
         slots = _apply_needs(day_iso, _slots(day, people, step), await _needs(org, evento_id, mansione), people, await _yellow(org), step)
         d0 = _abs(day, 0)
         today = [p for p in people if any(a < d0 + 1440 and b > d0 for a, b in p["iv"])]
@@ -275,14 +283,14 @@ def build(db, deps: dict):
 
     @r.get("/staff-coverage")
     async def coverage(evento_id: str, date: Optional[str] = None, step: int = 60, mansione: Optional[str] = None, team_id: Optional[str] = None,
-                       gruppo: Optional[str] = None, cat: str = "all", user: dict = Depends(require)):
+                       gruppo: Optional[str] = None, cat: str = "all", stato: str = "attivi", user: dict = Depends(require)):
         org = user["org_id"]
         if not date:
-            ev, people = await _load(org, evento_id)
+            ev, people = await _load(org, evento_id, stato=stato)
             days = _event_days(ev, people)
             date = days[0] if days else datetime.now(ROME).date().isoformat()
-        ev, out = await _day(org, evento_id, date, step, mansione or None, team_id or None, gruppo or None, cat)
-        _, allp = await _load(org, evento_id)
+        ev, out = await _day(org, evento_id, date, step, mansione or None, team_id or None, gruppo or None, cat, stato)
+        _, allp = await _load(org, evento_id, stato=stato)
         out["days"] = _event_days(ev, allp)
         out["mansioni"] = sorted({m for p in allp for m in p["mansioni"]} | {p["preferenza"] for p in allp if p["preferenza"]} |
                                  {n["mansione"] for n in await _needs(org, evento_id)}, key=_fold)
@@ -291,11 +299,11 @@ def build(db, deps: dict):
 
     @r.get("/staff-coverage/matrix")
     async def matrix(evento_id: str, step: int = 60, mansione: Optional[str] = None, team_id: Optional[str] = None,
-                     gruppo: Optional[str] = None, cat: str = "all", user: dict = Depends(require)):
+                     gruppo: Optional[str] = None, cat: str = "all", stato: str = "attivi", user: dict = Depends(require)):
         org = user["org_id"]
         if step not in (15, 30, 60):
             raise HTTPException(status_code=400, detail="Intervallo non valido")
-        ev, people = await _load(org, evento_id, mansione or None, team_id or None, gruppo or None, cat)
+        ev, people = await _load(org, evento_id, mansione or None, team_id or None, gruppo or None, cat, stato)
         days = _event_days(ev, people)
         per = {d: _slots(_d(d), people, step) for d in days}
         lo = min((s[0]["s"] for s in per.values() if s), default=480)
@@ -354,8 +362,8 @@ def build(db, deps: dict):
         return out
 
     @r.get("/staff-coverage/to-update")
-    async def to_update(evento_id: str, team_id: Optional[str] = None, gruppo: Optional[str] = None, cat: str = "all", user: dict = Depends(require)):
-        _, people = await _load(user["org_id"], evento_id, None, team_id or None, gruppo or None, cat)
+    async def to_update(evento_id: str, team_id: Optional[str] = None, gruppo: Optional[str] = None, cat: str = "all", stato: str = "attivi", user: dict = Depends(require)):
+        _, people = await _load(user["org_id"], evento_id, None, team_id or None, gruppo or None, cat, stato)
         return {"people": _legacy(people)}
 
     async def _fasce(org, evento_id, team_id=None, gruppo=None, cat="all"):
@@ -508,11 +516,11 @@ def build(db, deps: dict):
 
     @r.get("/staff-coverage/export")
     async def export(evento_id: str, kind: str = "pdf", date: Optional[str] = None, step: int = 60, mansione: Optional[str] = None,
-                     team_id: Optional[str] = None, gruppo: Optional[str] = None, cat: str = "all", mode: str = "summary", user: dict = Depends(require)):
+                     team_id: Optional[str] = None, gruppo: Optional[str] = None, cat: str = "all", mode: str = "summary", stato: str = "attivi", user: dict = Depends(require)):
         org = user["org_id"]
         o = await db.organizations.find_one({"id": org}, {"_id": 0, "nome": 1}) or {}
         if kind == "xlsx":
-            ev, people = await _load(org, evento_id, mansione or None, team_id or None, gruppo or None, cat)
+            ev, people = await _load(org, evento_id, mansione or None, team_id or None, gruppo or None, cat, stato)
             data = _xlsx(ev, people)
             return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             headers={"Content-Disposition": f'attachment; filename="CRMEvent_Disponibilita_{_slug(ev.get("nome"))}.xlsx"'})
@@ -527,12 +535,12 @@ def build(db, deps: dict):
             raise HTTPException(status_code=400, detail="Seleziona una data")
         sections = []
         if mode == "by_mansione":
-            base = await coverage(evento_id, date, step, None, team_id, gruppo, cat, user)
+            base = await coverage(evento_id, date, step, None, team_id, gruppo, cat, stato, user)
             for m in base["mansioni"]:
-                ev, d = await _day(org, evento_id, date, step, m, team_id or None, gruppo or None, cat)
+                ev, d = await _day(org, evento_id, date, step, m, team_id or None, gruppo or None, cat, stato)
                 sections.append((m, d))
         else:
-            ev, d = await _day(org, evento_id, date, step, mansione or None, team_id or None, gruppo or None, cat)
+            ev, d = await _day(org, evento_id, date, step, mansione or None, team_id or None, gruppo or None, cat, stato)
             sections.append((mansione or "Tutte le mansioni", d))
         ev = await db.events.find_one({"org_id": org, "id": evento_id}, {"_id": 0})
         pdf = _pdf(ev, o.get("nome") or "", date, sections, names=(mode == "names"))

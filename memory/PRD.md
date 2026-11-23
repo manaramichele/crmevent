@@ -1183,3 +1183,7 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - Frontend PlanAddonPanel nel dettaglio Marketplace; marketplace._public espone billing_method.
 - Test: tests/e2e_plan_addon.py (Stripe test clock, prorata 6 mesi 49,64 euro, fattura unica, rinnovo con 2 item, pagamento fallito senza addebito, annullamento piano) + iteration_185.
 - Per accendere l acquisto: Super Admin imposta il servizio disponibile/acquistabile quando il modulo sarà sviluppato.
+
+## Copertura oraria: grafico ripristinato con suddivisione per Team (2026-11-23)
+- Il grafico originale è di nuovo popolato e diviso per Team. In Copertura contano Staff e Volontari di ogni stato tranne rinunciato e non disponibile; il filtro «Solo stato Confermato» è facoltativo. Dettagli in CHANGELOG. Solo sviluppo: Aruba non ancora aggiornata.
+

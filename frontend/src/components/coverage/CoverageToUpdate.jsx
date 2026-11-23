@@ -6,10 +6,10 @@ import { LegacyDialog } from "./CoverageFasceDialogs";
 export default function CoverageToUpdate({ params, version, onOpenPerson }) {
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(false);
-  const q = { evento_id: params.evento_id, team_id: params.team_id, gruppo: params.gruppo, cat: params.cat };
+  const q = { evento_id: params.evento_id, team_id: params.team_id, gruppo: params.gruppo, cat: params.cat, stato: params.stato };
   useEffect(() => {
     api.get("/staff-coverage/to-update", { params: q }).then(({ data }) => setList(data.people)).catch(() => setList([]));
-  }, [params.evento_id, params.team_id, params.gruppo, params.cat, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [params.evento_id, params.team_id, params.gruppo, params.cat, params.stato, version]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!list.length) return null;
   return (
     <>

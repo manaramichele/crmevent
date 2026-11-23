@@ -1,5 +1,11 @@
 # CRMEvent — Changelog
 
+## 2026-11-23 — Copertura oraria: grafico originale di nuovo popolato + suddivisione per Team (solo sviluppo, iteration_210)
+- Causa del grafico vuoto: `coverage._load` contava solo i record con stato «confermato», quindi chi era da_contattare o disponibile restava escluso e le barre risultavano vuote (componente `Bars` in CoverageTab.jsx, commit fdca098, mai rimosso).
+- Ora sono inclusi Staff e Volontari di ogni stato tranne rinunciato e non_disponibile. Il filtro `cov-stato` (parametro `stato` = attivi | confermati) vale per summary, matrix, to-update ed export. Da classificare resta escluso.
+- Ogni fascia restituisce anche il conteggio per Team (`teams`). Il pulsante «Per Team» (predefinito) mostra le barre divise per Team con colori fissi per nome; «Complessivo» mostra la vista originale.
+- Aggiornati i testi nella maschera anagrafica e la griglia per mobile.
+
 ## 2026-06 — Tipologia evento personalizzabile (riuso sistema opzioni org) ✅
 - Campo "Tipologia" dell'evento ora usa il componente riutilizzabile `SettingSelect` (inline "+ Aggiungi tipologia", dedupe case-insensitive, salvataggio per-org su `settings.tipologie_evento`). Selezione automatica della nuova voce, disponibile per gli eventi successivi, isolata per org_id.
 - Aggiunte tipologie sport standard CRMEvent (Running, Trail, Triathlon, Nuoto, Ciclismo, Tennis) ai default + mostrate sempre a tutte le org via union `mergeStd` (nessuna migrazione distruttiva).

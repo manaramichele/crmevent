@@ -89,7 +89,7 @@ export function LegacyDialog({ open, list, onClose, onOpenPerson }) {
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="cov-legacy-dialog">
         <DialogHeader><DialogTitle>Disponibilità da aggiornare ({list.length})</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-500">Staff e Volontari confermati con disponibilità del vecchio modulo, incomplete o non indicate. Apri la scheda e scegli Mattina e/o Pomeriggio: i giorni non modificati restano invariati.</p>
+        <p className="text-sm text-slate-500">Staff e Volontari (esclusi i rinunciatari) con disponibilità del vecchio modulo, incomplete o non indicate. Apri la scheda e scegli Mattina e/o Pomeriggio: i giorni non modificati restano invariati.</p>
         <div className="divide-y divide-slate-100">
           {[...list].sort(byName).map((p) => (
             <div key={p.id} className="py-2 flex flex-col sm:flex-row sm:items-center gap-2" data-testid={`cov-legacy-person-${p.id}`}>
