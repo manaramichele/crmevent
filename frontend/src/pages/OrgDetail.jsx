@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Building2, Users, CalendarDays, ScrollText, UserPlus, Mail, Trash2, RefreshCw, XCircle, Save, Database, AlertTriangle, Pencil } from "lucide-react";
 import StaffInviteDialog from "@/components/StaffInviteDialog";
+import AccountStateDialog from "@/components/platform/AccountStateDialog";
 import { UserProfileEditDialog } from "@/components/UserProfileEditDialog";
 import { usePermMeta } from "@/pages/Permissions";
 import PlanBadge, { BILLING } from "@/components/PlanBadge";
@@ -72,6 +73,7 @@ export default function OrgDetail() {
     try { await api.patch(`/platform/organizations/${id}/members/${uid}`, { role }); loadMembers(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
+  const [stateUser, setStateUser] = useState(null);
   const toggleActive = async (uid, active) => {
     try { await api.patch(`/platform/organizations/${id}/members/${uid}`, { active }); toast.success(active ? "Accesso riattivato" : "Accesso disabilitato"); loadMembers(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
@@ -217,7 +219,7 @@ export default function OrgDetail() {
                           : <select className="h-9 px-2 rounded-lg border border-slate-200 text-sm" value={m.role} onChange={(e) => changeRole(m.user_id, e.target.value)} data-testid={`member-role-${m.user_id}`}>{ROLE_OPTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}
                       </td>
                       <td className="px-4 py-2.5"><StatusBadge color={m.account_active ? "green" : "red"}>{m.account_active ? "Attivo" : "Disabilitato"}</StatusBadge></td>
-                      <td className="px-4 py-2.5"><StatusBadge color={m.active ? "green" : "gray"}>{m.active ? "Consentito" : "Disabilitato"}</StatusBadge></td>
+                      <td className="px-4 py-2.5"><StatusBadge color={m.active ? "green" : "gray"}>{m.active ? "Consentito" : "Revocato"}</StatusBadge></td>
                       <td className="px-4 py-2.5 text-slate-500">{AUTH_LABEL(m.auth_provider)}</td>
                       <td className="px-4 py-2.5 text-slate-500">{fmt(m.created_at)}</td>
                       <td className="px-4 py-2.5 text-slate-500">{fmt(m.last_login_at)}</td>
@@ -225,7 +227,10 @@ export default function OrgDetail() {
                         {m.is_superadmin ? <span className="text-xs text-slate-400">—</span> : (
                           <>
                             <Button variant="outline" size="sm" className="mr-1" onClick={() => setEditUser(m)} data-testid={`user-edit-${m.user_id}`}><Pencil className="w-3.5 h-3.5 mr-1" />Modifica anagrafica</Button>
-                            <Button variant="outline" size="sm" className="mr-1" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`member-toggle-${m.user_id}`}>{m.active ? "Disabilita accesso" : "Riattiva accesso"}</Button>
+                            {m.account_active
+                              ? <Button variant="outline" size="sm" className="mr-1 text-red-600" onClick={() => setStateUser(m)} data-testid={`member-account-disable-${m.user_id}`}>Disabilita account</Button>
+                              : <Button variant="outline" size="sm" className="mr-1 text-tiffany-active border-tiffany" onClick={() => setStateUser(m)} data-testid={`member-account-enable-${m.user_id}`}>Riattiva account</Button>}
+                            <Button variant="outline" size="sm" className="mr-1" onClick={() => toggleActive(m.user_id, !m.active)} data-testid={`member-toggle-${m.user_id}`}>{m.active ? "Revoca accesso org" : "Consenti accesso org"}</Button>
                             <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDelUser(m)} data-testid={`member-delete-${m.user_id}`}><Trash2 className="w-4 h-4" /></Button>
                           </>
                         )}
@@ -236,6 +241,7 @@ export default function OrgDetail() {
             </table></div>
           </div>
           <UserProfileEditDialog member={editUser} onClose={() => setEditUser(null)} onSaved={() => { setEditUser(null); loadMembers(); }} />
+          {stateUser && <AccountStateDialog user={{ ...stateUser, active: stateUser.account_active }} onClose={() => setStateUser(null)} onDone={() => { setStateUser(null); loadMembers(); }} />}
         </div>
       )}
 
