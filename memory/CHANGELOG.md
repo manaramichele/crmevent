@@ -1420,3 +1420,8 @@ Task 2 — Creatività manuale:
 ## 2026-11-22 - Copertura oraria per Team e fascia
 - coverage.py: righe giorno x fascia x Team (alfabetico); disponibili = confermati del team con copertura completa; assegnazioni in coverage_assignments (una per persona per fascia, solo dentro Copertura, scelta utente), POST/DELETE /staff-coverage/assign con avvisi 409 (fuori disponibilita, altro team; move/force), /staff-coverage/team-needs, mancanti; assegnazioni non piu valide segnalate come da verificare. Bulk ora per Team. Pannello Da sistemare (fabbisogni per mansione, confermati senza team). PDF per Team. Rimossi editor fabbisogni per mansione e stampa Per mansione dalla UI (dati conservati).
 - Test iteration_207-209 + fix (orfani con filtri, move/force separati).
+
+## 2026-11-23 - RIPRISTINO Copertura oraria originale
+- CoverageTab.jsx ripristinato dalla versione 4e1dda5 (grafico Giornata a intervalli + Piu giorni, filtri Evento/Giorno/Team/Gruppo/Categoria/Intervallo, senza Mansione, team alfabetici). Rimossi dalla UI tabella Per Team e fascia e assegnazioni (CoverageFasce.jsx, CoverageBulkDialog.jsx eliminati; endpoint backend lasciati inutilizzati, nessun dato cancellato).
+- Aggiunto solo: indicatore Disponibilita da aggiornare (CoverageToUpdate.jsx, GET /staff-coverage/to-update: confermati con vecchio formato/incompleti o senza disponibilita) con apertura Modifica anagrafica; badge nel dettaglio fascia.
+- Controllo confermati reso tollerante (categoria e stato normalizzati, stato che inizia per conferm).

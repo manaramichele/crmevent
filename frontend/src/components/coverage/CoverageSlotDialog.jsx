@@ -31,7 +31,8 @@ export default function CoverageSlotDialog({ slot, data, eventName, onClose, onO
                   <td className="py-2 pr-3">{p.gruppo || <i className="text-slate-400">Nessun gruppo</i>}</td>
                   <td className="py-2 pr-3">{p.team || "—"}</td>
                   <td className="py-2 pr-3">{p.taglia || "—"}</td>
-                  <td className="py-2 pr-3 whitespace-nowrap">{p.orario}{partial.has(p.id) && <div className="text-[11px] text-amber-600">parte della fascia</div>}</td>
+                  <td className="py-2 pr-3 whitespace-nowrap">{p.orario}{partial.has(p.id) && <div className="text-[11px] text-amber-600">parte della fascia</div>}
+                    {p.legacy && <div><span className="inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900" data-testid={`cov-person-legacy-${p.id}`}>Disponibilità da aggiornare</span></div>}</td>
                   <td className="py-2 pr-3">{p.assigned ? <StatusBadge color="green">Mansione assegnata</StatusBadge> : <StatusBadge color="gray">Solo disponibile</StatusBadge>}</td>
                 </tr>))}
             </tbody>
