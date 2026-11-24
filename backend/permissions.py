@@ -35,7 +35,7 @@ def plan_sections(secs):
     return tuple(sorted({PLAN_PARENT.get(s, s) for s in secs})) if isinstance(secs, tuple) else secs
 SECTION_KEYS = [k for k, _ in SECTIONS]
 # Sezioni non più mostrate nell'interfaccia (dati e permessi conservati).
-HIDDEN_SECTIONS = {"anagrafiche", "attivita", "followup"}
+HIDDEN_SECTIONS = {"anagrafiche", "attivita", "followup", "turni"}
 ACTIONS = ["view", "create", "edit", "delete"]
 ACTION_LABELS = {"view": "Visualizza", "create": "Crea", "edit": "Modifica", "delete": "Elimina"}
 ROLES = {"admin_org": "Organizzatore", "user": "Amministratore", "collaboratore": "Collaboratore"}  # solo etichette: i codici tecnici restano invariati
@@ -53,7 +53,6 @@ TL_RULES = [
     ("/availabilities/{aid}", "members", True),
     ("/staff", "members", False),
     ("/teams", "view", False),
-    ("/shifts", "shifts", False),
     ("/persons-enriched", "view", True),
     ("/persons/{person_id}/detail", "view", True),
     ("/dashboard", "view", True),
@@ -122,7 +121,6 @@ ROUTE_RULES = [
     ("/staff-coverage", "copertura", None),
     ("/staff", "staff", None),
     ("/teams", "team_gruppi", None),
-    ("/shifts", "turni", None),
     ("/brevo/availability-template-preview", "staff", "view"),
     ("/maps", "mappe", None),
     ("/events", "eventi", None),

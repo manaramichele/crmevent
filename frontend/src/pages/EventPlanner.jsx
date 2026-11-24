@@ -207,8 +207,8 @@ export default function EventPlanner() {
                 <Button size="sm" variant="outline" onClick={remove} data-testid="route-remove">Rimuovi dal progetto</Button></>
               : <>
                 <div className="font-semibold text-sm" style={{ color: (KIND[selected.properties.station?.kind] || KIND.generica)[1] }}>{selected.properties.station?.nome || selected.properties.nome} · {(KIND[selected.properties.station?.kind] || KIND.generica)[0]}</div>
-                {selected.properties.station && <div className="text-slate-500">{[selected.properties.station.tipologia, selected.properties.station.ruolo, selected.properties.station.data, selected.properties.station.ora_inizio && `${selected.properties.station.ora_inizio}-${selected.properties.station.ora_fine || ""}`].filter(Boolean).join(" · ")}{selected.properties.n_persone ? ` · ${selected.properties.n_persone} persone` : ""}</div>}
-                {!proj?.read_only && <Button size="sm" className="bg-tiffany text-slate-900 hover:bg-tiffany-hover" onClick={async () => { if (dirty.current) { clearTimeout(timer.current); await persist(h.features, layers); } setStDlg(selected.properties.id); }} data-testid="planner-station-open">Assegna staff / volontari</Button>}</>}
+                {selected.properties.station && <div className="text-slate-500">{[selected.properties.station.tipologia, selected.properties.station.ruolo].filter(Boolean).join(" · ")}</div>}
+                {!proj?.read_only && <Button size="sm" className="bg-tiffany text-slate-900 hover:bg-tiffany-hover" onClick={async () => { if (dirty.current) { clearTimeout(timer.current); await persist(h.features, layers); } setStDlg(selected.properties.id); }} data-testid="planner-station-open">Dettagli postazione</Button>}</>}
             </div>}
             <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-xl bg-white/95 p-1 shadow-md backdrop-blur" data-testid="planner-toolbar">
               <button type="button" onClick={() => setLeft(!left)} className="rounded-lg p-2.5 hover:bg-slate-100" aria-label="Pannello sinistro" data-testid="planner-toggle-left"><PanelLeft className="h-5 w-5" /></button>

@@ -193,7 +193,6 @@ export default function OperatorMobile() {
         <div className="mt-1 text-2xl font-bold" data-testid="op-name">{o.nome}</div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-300">
           <div>Postazione<br /><b className="text-white" data-testid="op-post">{d.post?.nome || "—"}</b></div><div>Settore<br /><b className="text-white">{d.sector?.nome || "—"}</b></div>
-          <div>Turno<br /><b className="text-white">{d.shift ? [d.shift.data, d.shift.ora_inizio && `${d.shift.ora_inizio}-${d.shift.ora_fine || ""}`].filter(Boolean).join(" ") : "—"}</b></div>
           <div>Responsabile<br /><b className="text-white">{d.post?.responsabile || d.sector?.responsabile || d.responsabile || "—"}</b></div>
         </div>
         <div className="mt-3 text-xs">Servizio: <b className={o.presente ? "text-emerald-400" : "text-amber-300"} data-testid="op-service">{o.presente ? "IN POSTAZIONE" : "PRESENZA NON CONFERMATA"}</b>{d.unread > 0 && <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 font-bold" data-testid="op-unread">{d.unread} nuove</span>}</div>

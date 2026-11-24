@@ -97,8 +97,6 @@ function BriefingBody({ data }) {
         <StatCard icon={Users} label="Staff" value={stats.staff_count} tone="tiffany" />
         <StatCard icon={Users} label="Volontari" value={stats.volontari_count} tone="blue" />
         <StatCard icon={Shield} label="Team" value={stats.teams_count} tone="orange" />
-        <StatCard icon={CalendarClock} label="Turni" value={stats.turni_count} />
-        <StatCard icon={AlertTriangle} label="Turni scoperti" value={stats.turni_scoperti} tone={stats.turni_scoperti ? "red" : "slate"} />
         <StatCard icon={MapIcon} label="Mappe" value={stats.mappe_count} />
         <StatCard icon={Utensils} label="Pernottamenti" value={stats.pernottamenti} />
         <StatCard icon={Utensils} label="Pasti" value={stats.pasti} />
@@ -176,24 +174,6 @@ function BriefingBody({ data }) {
         )}
       </Section>
 
-      <Section id="shifts" icon={CalendarClock} title="Turni" count={sections.shifts.length}>
-        {sections.shifts.length === 0 ? <Empty text="Nessun turno pianificato." /> : (
-          <div className="space-y-2">
-            {sections.shifts.map((s) => (
-              <div key={s.id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 border rounded-lg px-3 py-2 text-sm ${s.coperto ? "border-slate-200" : "border-red-200 bg-red-50"}`} data-testid={`briefing-shift-${s.id}`}>
-                <span className="font-medium text-slate-700 whitespace-nowrap"><Clock className="w-3.5 h-3.5 inline mr-1 text-slate-400" />{s.data || "—"} {s.ora_inizio || ""}{s.ora_fine ? `-${s.ora_fine}` : ""}</span>
-                {s.area && <StatusBadge color="gray">{s.area}</StatusBadge>}
-                {s.ruolo && <span className="text-slate-600">{s.ruolo}</span>}
-                {s.luogo && <span className="text-slate-500 text-xs"><MapPin className="w-3 h-3 inline mr-0.5" />{s.luogo}</span>}
-                <span className="ml-auto">
-                  {s.coperto ? <span className="font-medium text-slate-800">{s.persona_nome}</span> : <StatusBadge color="red">Turno scoperto</StatusBadge>}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
       <Section id="maps" icon={MapIcon} title="Mappe & percorsi" count={sections.maps.length}>
         {sections.maps.length === 0 ? <Empty text="Nessuna mappa o percorso caricato." /> : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -222,24 +202,6 @@ function BriefingBody({ data }) {
       <MealsSection days={sections.meals_by_day} legacy={sections.hospitality} />
       <LodgingSection structures={sections.lodging_structures} />
 
-      <Section id="timeline" icon={CalendarClock} title="Timeline operativa" count={sections.timeline.length}>
-        {sections.timeline.length === 0 ? <Empty text="Nessuna attività programmata con data." /> : (
-          <div className="space-y-4">
-            {sections.timeline.map((d) => (
-              <div key={d.data} data-testid={`briefing-timeline-${d.data}`}>
-                <div className="text-sm font-semibold text-tiffany-fg mb-1">{d.data}</div>
-                <div className="border-l-2 border-tiffany-border pl-3 space-y-1">
-                  {d.turni.map((t) => (
-                    <div key={t.id} className="text-sm text-slate-600">
-                      <span className="font-medium text-slate-700">{t.ora_inizio || ""}{t.ora_fine ? `-${t.ora_fine}` : ""}</span> · {t.area || t.ruolo || "Turno"} {t.coperto ? `— ${t.persona_nome}` : <span className="text-red-500">— scoperto</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
     </div>
   );
 }
@@ -279,11 +241,9 @@ function PresentationMode({ data, onClose }) {
     { title: "Panoramica", node: <OverviewGrid stats={data.stats} /> },
     ...(data.sections.teams.length ? [{ title: "Team & responsabili", node: <TeamsDeck teams={data.sections.teams} /> }] : []),
     ...(unassignedStaff.length ? [{ title: "Staff & volontari non assegnati a un Team", node: <StaffDeck staff={unassignedStaff} /> }] : []),
-    ...(data.sections.shifts.length ? [{ title: "Turni", node: <ShiftsDeck shifts={data.sections.shifts} /> }] : []),
     ...(data.sections.maps.length ? [{ title: "Mappe & percorsi", node: <MapsDeck maps={data.sections.maps} /> }] : []),
     ...(data.sections.meals_by_day?.length ? [{ title: "Pasti", node: <MealsList days={data.sections.meals_by_day} /> }] : []),
     ...(data.sections.lodging_structures?.length ? [{ title: "Ospitalità", node: <LodgingList structures={data.sections.lodging_structures} /> }] : []),
-    ...(data.sections.timeline.length ? [{ title: "Timeline", node: <TimelineDeck timeline={data.sections.timeline} /> }] : []),
   ];
   const [i, setI] = useState(0);
   const prev = useCallback(() => setI((v) => Math.max(0, v - 1)), []);
@@ -322,8 +282,6 @@ const OverviewGrid = ({ stats }) => (
     <StatCard icon={Users} label="Staff" value={stats.staff_count} tone="tiffany" />
     <StatCard icon={Users} label="Volontari" value={stats.volontari_count} tone="blue" />
     <StatCard icon={Shield} label="Team" value={stats.teams_count} tone="orange" />
-    <StatCard icon={CalendarClock} label="Turni" value={stats.turni_count} />
-    <StatCard icon={AlertTriangle} label="Turni scoperti" value={stats.turni_scoperti} tone={stats.turni_scoperti ? "red" : "slate"} />
     <StatCard icon={MapIcon} label="Mappe" value={stats.mappe_count} />
   </div>
 );
@@ -346,16 +304,6 @@ const StaffDeck = ({ staff }) => (
       <div key={s.persona_id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2">
         <span className="font-medium text-slate-800">{s.cognome || ""} {s.nome}</span>
         <StatusBadge color={CAT_COLOR[s.categoria] || "gray"}>{CAT_LABEL[s.categoria] || s.categoria}</StatusBadge>
-      </div>
-    ))}
-  </div>
-);
-const ShiftsDeck = ({ shifts }) => (
-  <div className="space-y-2">
-    {shifts.map((s) => (
-      <div key={s.id} className={`flex items-center justify-between border rounded-lg px-4 py-2 ${s.coperto ? "border-slate-200" : "border-red-200 bg-red-50"}`}>
-        <span className="text-slate-700">{s.data} {s.ora_inizio}{s.ora_fine ? `-${s.ora_fine}` : ""} · {s.area || s.ruolo}</span>
-        {s.coperto ? <span className="font-medium">{s.persona_nome}</span> : <StatusBadge color="red">Scoperto</StatusBadge>}
       </div>
     ))}
   </div>
@@ -483,19 +431,6 @@ const LegacyHosp = ({ hosp }) => (
       </div>
     )}
   </Section>
-);
-
-const TimelineDeck = ({ timeline }) => (
-  <div className="space-y-4">
-    {timeline.map((d) => (
-      <div key={d.data}>
-        <div className="text-lg font-semibold text-tiffany-fg">{d.data}</div>
-        <div className="border-l-2 border-tiffany-border pl-4 mt-1 space-y-1">
-          {d.turni.map((t) => <div key={t.id} className="text-slate-600">{t.ora_inizio} · {t.area || t.ruolo} {t.coperto ? `— ${t.persona_nome}` : "— scoperto"}</div>)}
-        </div>
-      </div>
-    ))}
-  </div>
 );
 
 export default function Briefing() {

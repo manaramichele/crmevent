@@ -127,7 +127,7 @@ def _fallback_post(topic, category):
         "topic": topic or "CRMEvent per organizzatori di eventi",
         "title": "Organizza il tuo evento senza stress",
         "body": "Gestisci staff, volontari, sponsor e logistica in un unico posto con CRMEvent.",
-        "caption": "Basta fogli Excel e messaggi persi: con CRMEvent coordini staff, volontari, turni e sponsor del tuo evento in un unico posto. 🎯 Prova la demo gratuita.",
+        "caption": "Basta fogli Excel e messaggi persi: con CRMEvent coordini staff, volontari e sponsor del tuo evento in un unico posto. 🎯 Prova la demo gratuita.",
         "cta": "Prova gratis 14 giorni",
         "hashtags": ["#CRMEvent", "#eventi", "#organizzazioneeventi", "#sport"],
         "image_suggestion": "Foto di uno staff evento coordinato dietro le quinte",

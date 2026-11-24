@@ -31,7 +31,7 @@ function Resources({ d, q, open, onAdd, onImport }) {
           <Row key={r.id} onClick={() => open("resources", r.id)} testid={`cr-resource-${r.id}`}>
             <I className="h-4 w-4 shrink-0 text-[#088F8A]" />
             <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{nameOf(r)}{r.caposquadra && <span className="ml-1 text-[10px] text-[#088F8A]">CAPOSQUADRA</span>}</div>
-              <div className="truncate text-[11px] text-slate-500">{[r.codice, posts[r.post_id]?.nome, r.turno_label].filter(Boolean).join(" · ") || "Non assegnata"}</div></div>
+              <div className="truncate text-[11px] text-slate-500">{[r.codice, posts[r.post_id]?.nome].filter(Boolean).join(" · ") || "Non assegnata"}</div></div>
             {r.kind === "persona" && <span className={`h-2 w-2 shrink-0 rounded-full ${r.presente ? "bg-emerald-500" : "bg-slate-300"}`} title={r.presente ? "Presente" : "Presenza non confermata"} />}
             <Badge c={s[2]}>{s[1]}</Badge>
           </Row>

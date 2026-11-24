@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Users, UserCog, CalendarClock, Mail, UserCheck, AlertTriangle, ClipboardList } from "lucide-react";
+import { Users, UserCog, Mail, UserCheck, AlertTriangle, ClipboardList } from "lucide-react";
 
 function Stat({ icon: Icon, label, value, tone = "slate", testid }) {
   const c = { slate: "text-slate-800", red: "text-red-600", green: "text-emerald-600", orange: "text-amber-600" }[tone];
@@ -28,7 +28,6 @@ function TeamCard({ t }) {
         <Stat icon={Users} label="Componenti" value={t.componenti} testid={`my-team-componenti-${t.id}`} />
         <Stat icon={UserCog} label="Staff · Volontari" value={`${t.staff} · ${t.volontari}`} testid={`my-team-split-${t.id}`} />
         <Stat icon={Users} label="Volontari richiesti / assegnati" value={t.volontari_richiesti == null ? `— / ${t.volontari_assegnati}` : `${t.volontari_richiesti} / ${t.volontari_assegnati}`} testid={`my-team-vol-${t.id}`} />
-        <Stat icon={CalendarClock} label="Turni (scoperti)" value={`${t.turni_totali} (${t.turni_scoperti})`} tone={t.turni_scoperti ? "orange" : "slate"} testid={`my-team-turni-${t.id}`} />
         <Stat icon={ClipboardList} label="Disponibilità ricevute" value={t.disponibilita} testid={`my-team-disp-${t.id}`} />
         <Stat icon={Mail} label="Inviti inviati" value={t.inviti_inviati} testid={`my-team-inviti-${t.id}`} />
         <Stat icon={UserCheck} label="Registrazioni completate" value={`${t.registrati} / ${t.componenti}`} tone="green" testid={`my-team-registrati-${t.id}`} />

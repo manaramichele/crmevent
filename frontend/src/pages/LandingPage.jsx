@@ -80,7 +80,7 @@ function PhoneFrame({ children }) {
 }
 
 function VolunteerMock() {
-  const rows = [[Clock, "Turno", "13 Dic · 07:30–13:30"], [MapPin, "Luogo", "Area arrivo"], [UserCog, "Ruolo", "Addetto ristoro"], [Users2, "Team", "Volontari percorso"], [Navigation, "Ritrovo", "Gazebo segreteria · 07:15"]];
+  const rows = [[Clock, "Disponibilità", "13 Dic · Mattina"], [MapPin, "Luogo", "Area arrivo"], [UserCog, "Ruolo", "Addetto ristoro"], [Users2, "Team", "Volontari percorso"], [Navigation, "Ritrovo", "Gazebo segreteria · 07:15"]];
   return (
     <div className="text-left" data-testid="home-volunteer-mock">
       <div className="bg-slate-900 p-4 text-white">
@@ -103,9 +103,8 @@ const FEATURES = [
   [Handshake, "Sponsor & Partner", "Prospect, trattative e partnership in una pipeline commerciale."],
   [UserCog, "Staff & Volontari", "Assegna persone, ruoli, aree operative e responsabilità."],
   [Users2, "Team", "Crea squadre operative e mostra subito chi lavora con chi."],
-  [Clock, "Turni", "Organizza giorni, orari, punti di ritrovo e attività."],
   [MapIcon, "Event Planner", "Progetta il tuo evento direttamente sulla mappa. Organizza percorsi, aree operative, gazebo, strutture, sponsor e punti di assistenza in un unico spazio."],
-  [CalendarCheck2, "Google Calendar", "Porta eventi e turni nel calendario degli utenti."],
+  [CalendarCheck2, "Google Calendar", "Porta eventi nel calendario degli utenti."],
   [Film, "Event Map", "Genera dalla traccia GPX un video animato del percorso, pronto per i social."],
   [RadioTower, "Control Room", "Gestisci in tempo reale postazioni, volontari, mezzi di soccorso e interventi durante l'evento.", null, "/funzionalita/control-room"],
 ];
@@ -183,7 +182,7 @@ const H2 = ({ children }) => <h2 className="font-display text-3xl md:text-4xl fo
 
 export default function LandingPage() {
   const [open, setOpen] = useState(false);
-  useHead({ title: "CRMEvent | Il CRM per organizzare eventi", description: "Gestisci eventi, sponsor, staff, volontari, team, turni e attività con CRMEvent. Tutto in un'unica piattaforma.", path: "/" });
+  useHead({ title: "CRMEvent | Il CRM per organizzare eventi", description: "Gestisci eventi, sponsor, staff, volontari, team e attività con CRMEvent. Tutto in un'unica piattaforma.", path: "/" });
   useEffect(() => {
     const go = () => { const id = decodeURIComponent(window.location.hash.slice(1)); if (id) setTimeout(() => scrollTo(id, "auto"), 300); };
     go();
@@ -221,7 +220,7 @@ export default function LandingPage() {
         <div className="grid lg:grid-cols-[1fr_1.1fr] gap-12 items-center">
           <div className="animate-fade-up">
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">Organizza il tuo evento. <span className="text-tiffany-active">Tutto in un'unica piattaforma.</span></h1>
-            <p className="text-lg text-slate-500 mt-6 max-w-xl">Gestisci eventi, staff, volontari, sponsor, turni e tutte le informazioni operative del tuo evento con <strong className="font-semibold text-slate-700">CRMEvent</strong>.</p>
+            <p className="text-lg text-slate-500 mt-6 max-w-xl">Gestisci eventi, staff, volontari, sponsor e tutte le informazioni operative del tuo evento con <strong className="font-semibold text-slate-700">CRMEvent</strong>.</p>
             <div className="flex flex-wrap gap-3 mt-8">
               <Link to="/registrati" data-testid="hero-cta-start-free" className="cta-shimmer h-12 px-6 rounded-lg bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2">Registrati gratis <ArrowRight className="w-4 h-4" /></Link>
             </div>
@@ -262,7 +261,7 @@ export default function LandingPage() {
             <h2 className="font-display text-3xl md:text-4xl font-bold text-white tracking-tight">Ogni volontario sa cosa deve fare.</h2>
             <p className="text-slate-300 mt-5 max-w-lg">Ogni membro dello staff accede alla propria area personale e trova tutte le informazioni necessarie per l'evento.</p>
             <div className="grid grid-cols-2 gap-3 mt-8 max-w-lg">
-              {[["Quando", "Data e ora di arrivo"], ["Dove", "Luogo e punto di ritrovo"], ["Cosa", "Ruolo e attività"], ["Con chi", "Team e colleghi"], ["Turni", "Programma personale"], ["Mappe", "Percorsi e info operative"]].map(([t, d]) => (
+              {[["Quando", "Data e ora di arrivo"], ["Dove", "Luogo e punto di ritrovo"], ["Cosa", "Ruolo e attività"], ["Con chi", "Team e colleghi"], ["Mappe", "Percorsi e info operative"]].map(([t, d]) => (
                 <div key={t} className="bg-white/5 rounded-lg p-3 ring-1 ring-white/10"><div className="text-tiffany text-sm font-semibold">{t}</div><div className="text-slate-300 text-xs mt-0.5">{d}</div></div>))}
             </div>
             <button onClick={() => scrollTo("registrati")} className="mt-8 inline-flex items-center gap-2 text-tiffany font-semibold hover:gap-3 transition-all">Scopri la gestione Staff & Volontari <ArrowRight className="w-4 h-4" /></button>
@@ -297,7 +296,7 @@ export default function LandingPage() {
       <Section id="come-funziona" className="py-20 bg-slate-50/60 border-y border-slate-100">
         <div className="text-center max-w-2xl mx-auto"><Eyebrow>Come funziona</Eyebrow><H2>Parti in pochi minuti.</H2></div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-12">
-          {[["Registrati a CRMEvent", "Crea il tuo account gratuito in pochi secondi, senza carta di credito."], ["Crea il tuo evento", "Inserisci date, luogo e informazioni principali."], ["Configura le funzionalità", "Attiva solo ciò che ti serve: staff, sponsor, turni, mappe, Event Planner."], ["Organizza e coordina il team", "Assegna ruoli, team e turni: ognuno sa dove essere e quando."]].map(([t, d], i) => (
+          {[["Registrati a CRMEvent", "Crea il tuo account gratuito in pochi secondi, senza carta di credito."], ["Crea il tuo evento", "Inserisci date, luogo e informazioni principali."], ["Configura le funzionalità", "Attiva solo ciò che ti serve: staff, sponsor, mappe, Event Planner."], ["Organizza e coordina il team", "Assegna ruoli, team: ognuno sa dove essere e quando."]].map(([t, d], i) => (
             <div key={t} className="relative bg-white rounded-xl border border-slate-200 p-6">
               <div className="w-9 h-9 rounded-lg bg-tiffany text-slate-900 font-bold font-display flex items-center justify-center mb-4">{i + 1}</div>
               <h3 className="font-display font-bold text-slate-900">{t}</h3><p className="text-sm text-slate-500 mt-1.5">{d}</p></div>))}

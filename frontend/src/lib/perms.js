@@ -13,17 +13,16 @@ export const planBlocks = (u, section) => {
 };
 export const planReadonly = (u) => !!u?.saas?.enabled && u.role !== "superadmin" && !u.saas.writable;
 
-// Nomina Team Leader: lettura dei propri Team garantita; modifica componenti / turni solo con i flag dedicati.
+// Nomina Team Leader: lettura dei propri Team garantita; modifica componenti solo con il flag dedicato.
 const tlCan = (u, section, action) => {
   if (!(u.led_team_ids || []).length) return false;
   const tl = u.permissions?.team_leader || {};
-  if (["staff", "teams", "team_gruppi", "turni", "dashboard"].includes(section) && action === "view") return true;
+  if (["staff", "teams", "team_gruppi", "dashboard"].includes(section) && action === "view") return true;
   if (section === "staff" && (action === "edit" || action === "delete")) return !!tl.edit_members;
-  if (section === "turni") return !!tl.manage_shifts;
   return false;
 };
 
-// "teams" e "turni" sono sotto-aree della sezione Staff
+// "teams" è una sotto-area della sezione Staff
 export const can = (u, section, action = "view") => {
   if (!u) return false;
   if (planBlocks(u, section)) return false;

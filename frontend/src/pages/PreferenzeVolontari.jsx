@@ -13,12 +13,12 @@ function Report({ r }) {
         <N l="Disponibilità esaminate" v={r.disponibilita_esaminate} id="esaminate" /><N l="Preferenze recuperate" v={r.preferenze_recuperate} id="recuperate" />
         <N l="Preferenze collegate" v={r.preferenze_collegate} id="collegate" /><N l="Partecipazioni già corrette" v={r.partecipazioni_gia_corrette} id="corrette" />
         <N l="Confermati aggiornati" v={r.confermati_aggiornati} id="confermati" /><N l="Classificati aggiornati" v={r.classificati_aggiornati} id="classificati" />
-        <N l="Con team o turni aggiornati" v={r.con_team_o_turni_aggiornati} id="teamturni" /><N l="Da classificare con preferenza" v={r.da_classificare_con_preferenza} id="daclass" />
+        <N l="Con team aggiornati" v={r.con_team_o_turni_aggiornati} id="teamturni" /><N l="Da classificare con preferenza" v={r.da_classificare_con_preferenza} id="daclass" />
       </div>
       <div className="text-xs text-slate-600">Stati: {Object.entries(r.stati).map(([k, v]) => `${k} ${v}`).join(" · ")} — Ruolo evento: {Object.entries(r.ruolo_evento).map(([k, v]) => `${k} ${v}`).join(" · ")}</div>
       <details className="text-xs"><summary className="cursor-pointer font-medium">Preferenze non recuperabili ({r.non_recuperabili.length})</summary>{r.non_recuperabili.map((x, i) => <div key={i}>{x.nome} · {x.evento} · {x.motivo}</div>)}</details>
       <details className="text-xs"><summary className="cursor-pointer font-medium">Anomalie e collegamenti ({r.anomalie.length})</summary>{r.anomalie.map((x, i) => <div key={i}>{x.tipo} · {x.nome} · {x.evento}</div>)}</details>
-      <p className="text-[11px] text-slate-500">Nessuna anagrafica creata; ruoli, categorie, team, turni e conferme non vengono modificati. Le risposte originali (preferenze e date) restano intatte; solo i collegamenti persona ricostruiti vengono corretti, con backup.</p>
+      <p className="text-[11px] text-slate-500">Nessuna anagrafica creata; ruoli, categorie, team e conferme non vengono modificati. Le risposte originali (preferenze e date) restano intatte; solo i collegamenti persona ricostruiti vengono corretti, con backup.</p>
     </div>
   );
 }
@@ -40,7 +40,7 @@ export default function PreferenzeVolontari() {
   return (
     <div className="space-y-4 p-4 md:p-8" data-testid="avp-page">
       <h1 className="text-2xl font-semibold">Recupero preferenze volontari</h1>
-      <p className="text-sm text-slate-600 max-w-3xl">Collega a ogni partecipazione la preferenza che il volontario aveva indicato nel modulo pubblico della Raccolta disponibilità, anche per chi è già confermato, classificato o assegnato a team e turni. Prima esegui l'anteprima, poi l'aggiornamento. È ripetibile senza creare duplicati.</p>
+      <p className="text-sm text-slate-600 max-w-3xl">Collega a ogni partecipazione la preferenza che il volontario aveva indicato nel modulo pubblico della Raccolta disponibilità, anche per chi è già confermato, classificato o assegnato a team. Prima esegui l'anteprima, poi l'aggiornamento. È ripetibile senza creare duplicati.</p>
       <div className="flex flex-wrap items-center gap-2">
         <select className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm" value={org} onChange={(e) => { setOrg(e.target.value); setPreviewed(false); setReps(null); }} data-testid="avp-org">
           <option value="">Tutte le organizzazioni</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.nome} ({o.disponibilita})</option>)}

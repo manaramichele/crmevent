@@ -382,7 +382,7 @@ def attach(r, db, deps, require_active):
                                                           {"_id": 0, "id": 1, "nome": 1, "cognome": 1}).to_list(5000)}
         teams = {t["id"]: t["nome"] for t in await db.teams.find({"org_id": u["org_id"], "evento_id": event_id}, {"_id": 0, "id": 1, "nome": 1}).to_list(1000)}
         used = set(await db.cr_resources.distinct("persona_id", q(u, event_id)))
-        shifts = await db.shifts.find({"org_id": u["org_id"], "evento_id": event_id}, {"_id": 0, "id": 1, "persona_id": 1, "data": 1, "ora_inizio": 1, "ora_fine": 1, "luogo": 1}).to_list(5000)
+        shifts = []
         out = [{"staff_id": x["id"], "persona_id": x["persona_id"], "nome": f"{(pers.get(x['persona_id']) or {}).get('nome') or ''} {(pers.get(x['persona_id']) or {}).get('cognome') or ''}".strip(),
                 "categoria": x.get("categoria"), "ruolo": x.get("ruolo"), "team": teams.get(x.get("team_id")), "stato": x.get("stato"), "in_control_room": x["persona_id"] in used}
                for x in rows if x.get("persona_id") in pers]

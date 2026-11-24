@@ -166,13 +166,13 @@ export default function OrgDetail() {
           {org.type === "test" && (
             <div className="bg-white border border-amber-200 rounded-xl p-5 space-y-3">
               <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm"><Database className="w-4 h-4" />Dataset dimostrativo</div>
-              <p className="text-xs text-slate-500">Popola questa organizzazione di test con il dataset demo completo (eventi, persone, team, turni, sponsor, attività, ospitalità). Operazione idempotente: rieseguendola non crea duplicati. Nessuna email, trial, Stripe o fatturazione viene attivata.</p>
+              <p className="text-xs text-slate-500">Popola questa organizzazione di test con il dataset demo completo (eventi, persone, team, sponsor, attività, ospitalità). Operazione idempotente: rieseguendola non crea duplicati. Nessuna email, trial, Stripe o fatturazione viene attivata.</p>
               <Button onClick={() => setShowSeed(true)} data-testid="seed-demo-btn" className="bg-slate-900 hover:bg-slate-800 text-white"><Database className="w-4 h-4 mr-1.5" />Popola / Ripristina dati Demo</Button>
             </div>
           )}
           <div className="bg-white border border-red-200 rounded-xl p-5 space-y-3" data-testid="org-delete-card">
             <div className="flex items-center gap-2 text-red-600 font-semibold text-sm"><AlertTriangle className="w-4 h-4" />Zona pericolosa · Elimina organizzazione</div>
-            <p className="text-xs text-slate-500">L'eliminazione è definitiva e cancella tutti i dati appartenenti esclusivamente a questa organizzazione (eventi, persone, aziende, team, turni, sponsor, attività, ospitalità, inviti, account staff/volontari). Nessun'altra organizzazione viene toccata. Per confermare, digita il nome esatto: <span className="font-semibold text-slate-700">{org.nome}</span></p>
+            <p className="text-xs text-slate-500">L'eliminazione è definitiva e cancella tutti i dati appartenenti esclusivamente a questa organizzazione (eventi, persone, aziende, team, sponsor, attività, ospitalità, inviti, account staff/volontari). Nessun'altra organizzazione viene toccata. Per confermare, digita il nome esatto: <span className="font-semibold text-slate-700">{org.nome}</span></p>
             <Input value={delName} onChange={(e) => setDelName(e.target.value)} placeholder="Digita il nome esatto dell'organizzazione" data-testid="org-delete-confirm-input" />
             <Button disabled={delName.trim() !== org.nome || deleting} onClick={deleteOrg} data-testid="org-delete-btn" className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-40"><Trash2 className="w-4 h-4 mr-1.5" />{deleting ? "Eliminazione…" : "Elimina definitivamente"}</Button>
           </div>

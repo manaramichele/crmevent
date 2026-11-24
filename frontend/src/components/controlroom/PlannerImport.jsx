@@ -9,7 +9,7 @@ export function PlannerImport({ open, onOpenChange, d, base, call }) {
   const [pid, setPid] = useState("");
   const [sel, setSel] = useState([]);
   const [cats, setCats] = useState({});
-  const [opt, setOpt] = useState({ with_staff: true, update_positions: false });
+  const [opt, setOpt] = useState({ with_staff: false, update_positions: false });
   useEffect(() => {
     if (!open) return;
     setData(null); setSel([]); setCats({});
@@ -41,7 +41,6 @@ export function PlannerImport({ open, onOpenChange, d, base, call }) {
               </div>))}
             {pr && !pr.features.length && <div className="p-2 text-xs text-slate-400">Nessun punto o struttura nel progetto.</div>}
           </div>
-          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={opt.with_staff} onChange={(e) => setOpt({ ...opt, with_staff: e.target.checked })} data-testid="cr-planner-with-staff" />Assegna anche le persone già collegate alle postazioni in Event Planner (con il loro turno)</label>
           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={opt.update_positions} onChange={(e) => setOpt({ ...opt, update_positions: e.target.checked })} data-testid="cr-planner-update-pos" />Per quelle già importate, aggiorna la posizione con quella attuale di Event Planner</label>
         </>}
         <DialogFooter><Button disabled={!sel.length} onClick={submit} className="bg-[#0ABAB5] text-slate-900 hover:bg-[#09A8A3]" data-testid="cr-planner-submit">Importa {sel.length || ""}</Button></DialogFooter>

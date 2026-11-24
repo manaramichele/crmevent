@@ -39,8 +39,6 @@ export function StaffImport({ open, onOpenChange, d, base, onSubmit }) {
         <div className="grid gap-2 sm:grid-cols-2">
           <select className={S} value={f.post_id || ""} onChange={(e) => setF({ ...f, post_id: e.target.value || null })} data-testid="cr-staff-post"><option value="">Postazione…</option>{sortIt(d.posts, (p) => p.nome).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
           <select className={S} value={f.sector_id || ""} onChange={(e) => setF({ ...f, sector_id: e.target.value || null })} data-testid="cr-staff-sector"><option value="">Settore…</option>{sortIt(d.sectors, (s) => s.nome).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select>
-          <select className={S} value={f.shift_id || ""} onChange={(e) => setF({ ...f, shift_id: e.target.value || null })} data-testid="cr-staff-shift"><option value="">Turno…</option>
-            {(rows?.shifts || []).map((s) => <option key={s.id} value={s.id}>{[s.data, s.ora_inizio && `${s.ora_inizio}-${s.ora_fine || ""}`, s.luogo].filter(Boolean).join(" · ") || "Turno"}</option>)}</select>
           <select className={S} value={f.caposquadra_staff_id || ""} onChange={(e) => setF({ ...f, caposquadra_staff_id: e.target.value || null })} data-testid="cr-staff-leader"><option value="">Caposquadra…</option>
             {(rows?.staff || []).filter((x) => sel.includes(x.staff_id)).map((x) => <option key={x.staff_id} value={x.staff_id}>{x.nome}</option>)}</select>
         </div>

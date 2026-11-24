@@ -46,8 +46,8 @@ export default function ActivationGate() {
           <DialogTitle>{suspended ? "Riattiva il tuo evento" : "Attiva il tuo evento"}</DialogTitle>
           <DialogDescription>
             {suspended
-              ? "L'evento è sospeso. Riattivalo per gestire di nuovo staff, volontari, sponsor, turni, attività, briefing e le altre funzioni operative."
-              : `Per iniziare a gestire staff, volontari, sponsor, turni, attività, briefing e le altre funzioni operative devi prima attivare l'evento${info.nome ? ` "${info.nome}"` : ""}.`}
+              ? "L'evento è sospeso. Riattivalo per gestire di nuovo staff, volontari, sponsor, attività, briefing e le altre funzioni operative."
+              : `Per iniziare a gestire staff, volontari, sponsor, attività, briefing e le altre funzioni operative devi prima attivare l'evento${info.nome ? ` "${info.nome}"` : ""}.`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 text-sm">

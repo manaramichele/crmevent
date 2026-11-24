@@ -30,7 +30,7 @@ DEFAULTS = [
      "subject": "Organizza tutti i tuoi eventi con CRMEvent", "preheader": "Scopri come gestire le tue manifestazioni da un'unica piattaforma.",
      "headline": "Tutti i tuoi eventi, un'unica piattaforma",
      "body": "Organizzare un evento sportivo richiede tempo, coordinamento e attenzione ai dettagli.\n\nCon CRMEvent puoi raccogliere in un unico ambiente le informazioni e le attività necessarie per gestire le tue manifestazioni.\n\nScopri come funziona guardando il nostro video dimostrativo.",
-     "benefits": ["Tutte le manifestazioni in un unico elenco, con date, città e fase", "Pipeline delle attività con scadenze calcolate sulla data dell'evento", "Briefing operativo con team, turni, percorsi e ospitalità"],
+     "benefits": ["Tutte le manifestazioni in un unico elenco, con date, città e fase", "Pipeline delle attività con scadenze calcolate sulla data dell'evento", "Briefing operativo con team, percorsi e ospitalità"],
      "mp4": "/media/eventi-demo.mp4", "webm": None, "poster": "/media/eventi-demo-poster.jpg", "preview": "/media/brevo/eventi-anteprima.jpg"},
     {"slug": "staff-volontari", "order": 4, "status": "bozza", "name": "Staff e Volontari", "title": "STAFF E VOLONTARI", "subtitle": "Organizza staff e volontari",
      "description": "Raccogli le disponibilità con un modulo pubblico, organizza team, ruoli e mansioni e assegna le persone ai turni e alle postazioni dell'evento.",

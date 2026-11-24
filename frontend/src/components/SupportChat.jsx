@@ -96,7 +96,7 @@ export default function SupportChat({ bottomOffset = false, fab = true }) {
               <div className="text-sm text-slate-500 space-y-3">
                 <p>Ciao! Sono l'assistente di <span className="font-semibold text-slate-700">CRMEvent</span>. Posso aiutarti sull'utilizzo della piattaforma.</p>
                 <div className="space-y-1.5">
-                  {["Come inserisco uno sponsor?", "Come assegno un volontario a un evento?", "Come creo un turno?"].map((s) => (
+                  {["Come inserisco uno sponsor?", "Come assegno un volontario a un evento?", "Come invio l'email di accesso ai volontari?"].map((s) => (
                     <button key={s} onClick={() => setQ(s)} className="block w-full text-left text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 hover:border-tiffany hover:bg-tiffany-light/40 transition-colors" data-testid="support-suggestion">{s}</button>
                   ))}
                 </div>

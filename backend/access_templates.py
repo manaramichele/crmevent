@@ -24,7 +24,7 @@ def _body(step: str) -> str:
                 + _cta("Torna su CRMEvent", "LOGIN_URL") + _closing())
     if step == "inactive_2":
         return (_greeting() + _p("ti ricordiamo cosa puoi fare con CRMEvent:")
-                + _p("• eventi e fasi operative<br>• staff, volontari, team e turni<br>• sponsor, aziende e pipeline<br>"
+                + _p("• eventi e fasi operative<br>• staff, volontari e team<br>• sponsor, aziende e pipeline<br>"
                      "• ospitalità, pasti e briefing")
                 + _p("Se vuoi ripartire più velocemente possiamo mostrarti la piattaforma in una breve demo "
                      "oppure aiutarti con il supporto.")
@@ -36,7 +36,7 @@ def _body(step: str) -> str:
     if step == "never_2":
         return (_greeting() + _p("non sei ancora entrato in CRMEvent: possiamo aiutarti a iniziare.")
                 + _p("Per configurare il primo evento bastano pochi passi: crea l'evento, aggiungi staff e volontari, "
-                     "organizza team e turni.")
+                     "organizza i team.")
                 + _p("Se preferisci, ti mostriamo tutto in una breve demo oppure ti assistiamo nella configurazione.")
                 + _cta("Inizia ora", "LOGIN_URL") + _cta("Richiedi una demo o assistenza", "DEMO_URL", primary=False) + _closing())
     raise ValueError(step)

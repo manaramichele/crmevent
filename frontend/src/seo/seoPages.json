@@ -8,7 +8,7 @@
       "h1": "Gestisci tutti i tuoi eventi sportivi in un'unica piattaforma",
       "intro": "Con CRMEvent ogni manifestazione ha la sua scheda: date, città, tipologia, fase e tutte le informazioni operative collegate. Gare podistiche, trail, triathlon o granfondo: lavori su più eventi contemporaneamente senza fogli Excel sparsi.",
       "sections": [
-        {"h2": "Cosa puoi fare", "items": ["Creare un evento in pochi passaggi e gestire più eventi ed edizioni dallo stesso elenco.", "Attivare la Pipeline evento: attività organizzative con scadenze calcolate sulla data dell'evento, partendo da un modello per tipo di gara.", "Consultare il Briefing: team, responsabili, turni, percorsi e ospitalità in una sola pagina.", "Raccogliere le disponibilità di staff e volontari con un link pubblico dedicato all'evento.", "Collegare percorsi GPX, KML e KMZ, sponsor e trattative al singolo evento."]},
+        {"h2": "Cosa puoi fare", "items": ["Creare un evento in pochi passaggi e gestire più eventi ed edizioni dallo stesso elenco.", "Attivare la Pipeline evento: attività organizzative con scadenze calcolate sulla data dell'evento, partendo da un modello per tipo di gara.", "Consultare il Briefing: team, responsabili, percorsi e ospitalità in una sola pagina.", "Raccogliere le disponibilità di staff e volontari con un link pubblico dedicato all'evento.", "Collegare percorsi GPX, KML e KMZ, sponsor e trattative al singolo evento."]},
         {"h2": "Per chi è pensato", "p": "Per associazioni, società sportive e comitati organizzatori che gestiscono una o più manifestazioni all'anno e vogliono avere informazioni, scadenze e persone in un unico ambiente."}
       ],
       "video": "/video/eventi",
@@ -17,12 +17,12 @@
     {
       "path": "/funzionalita/staff-volontari", "group": "Funzionalità", "name": "Staff e Volontari",
       "title": "Gestione staff e volontari per eventi sportivi | CRMEvent",
-      "description": "Raccogli le disponibilità dei volontari con un modulo pubblico, organizza team, ruoli e mansioni e assegna le persone a turni e postazioni.",
+      "description": "Raccogli le disponibilità dei volontari con un modulo pubblico, organizza team, ruoli e mansioni e segui conferme e disponibilità di ogni persona.",
       "h1": "Organizza staff e volontari del tuo evento sportivo",
-      "intro": "Gestire decine di volontari tra ristori, percorso, segreteria e logistica richiede ordine. CRMEvent riunisce in un unico elenco staff e volontari, con i loro team, ruoli, disponibilità e turni.",
+      "intro": "Gestire decine di volontari tra ristori, percorso, segreteria e logistica richiede ordine. CRMEvent riunisce in un unico elenco staff e volontari, con i loro team, ruoli, disponibilità.",
       "sections": [
-        {"h2": "Cosa puoi fare", "items": ["Pubblicare un modulo di disponibilità per ogni evento: le persone indicano giorni e attività senza registrarsi.", "Creare team operativi con un responsabile.", "Assegnare ruoli, mansioni e aree operative a ogni persona.", "Organizzare turni con data, orario e punto di ritrovo, vedendo subito i turni scoperti.", "Posizionare le postazioni dello staff sulla mappa con Event Planner ed esportare il riepilogo assegnazioni in Excel o PDF.", "Sincronizzare eventi e turni con Google Calendar."]},
-        {"h2": "Un'area personale per ogni collaboratore", "p": "Staff e volontari invitati accedono alla propria area personale, dove trovano i turni e le informazioni che li riguardano."}
+        {"h2": "Cosa puoi fare", "items": ["Pubblicare un modulo di disponibilità per ogni evento: le persone indicano giorni e attività senza registrarsi.", "Creare team operativi con un responsabile.", "Assegnare ruoli, mansioni e aree operative a ogni persona.", "Seguire conferme e disponibilità di Staff e Volontari e inviare le email di accesso.", "Posizionare le postazioni dello staff sulla mappa con Event Planner ed esportare il riepilogo assegnazioni in Excel o PDF.", "Sincronizzare eventi con Google Calendar."]},
+        {"h2": "Un'area personale per ogni collaboratore", "p": "Staff e volontari invitati accedono alla propria area personale, dove trovano le informazioni che li riguardano."}
       ],
       "video": "/video/staff-volontari",
       "related": ["/funzionalita/event-planner", "/organizzatori/gare-podistiche-maratone", "/faq"]
@@ -46,7 +46,7 @@
       "h1": "Event Planner: progetta il tuo evento sulla mappa",
       "intro": "Event Planner ti permette di progettare partenza, arrivo, villaggio e percorso del tuo evento direttamente su una mappa reale, con strutture e postazioni in scala condivise con il team.",
       "sections": [
-        {"h2": "Cosa puoi fare", "items": ["Inserire gazebo, transenne, archi, ristori e altre strutture sulla mappa.", "Importare i percorsi già caricati nei Percorsi dell'evento (GPX, KML, KMZ).", "Posizionare le postazioni di staff e volontari collegate ai turni.", "Generare l'elenco dei materiali e il riepilogo delle assegnazioni."]},
+        {"h2": "Cosa puoi fare", "items": ["Inserire gazebo, transenne, archi, ristori e altre strutture sulla mappa.", "Importare i percorsi già caricati nei Percorsi dell'evento (GPX, KML, KMZ).", "Posizionare le postazioni di staff e volontari.", "Generare l'elenco dei materiali e il riepilogo delle assegnazioni."]},
         {"h2": "Come si attiva", "p": "Event Planner è incluso nei piani Silver e Gold per un numero di eventi definito dal piano e può essere attivato dal Marketplace. I dettagli aggiornati sono nella pagina Prezzi."}
       ],
       "video": "/video/event-planner",
@@ -86,7 +86,7 @@
       "h1": "CRMEvent per gare podistiche e maratone",
       "intro": "Una gara su strada richiede decine di volontari, ristori, servizi di percorso, sponsor e permessi da gestire nei tempi giusti. CRMEvent mette tutto questo in un'unica piattaforma.",
       "sections": [
-        {"h2": "Come ti aiuta", "items": ["Raccogli le disponibilità dei volontari con un modulo pubblico e organizzali in team e turni per ristori, percorso e segreteria.", "Segui le attività organizzative con una pipeline e scadenze calcolate sulla data della gara.", "Disegna partenza, arrivo, ristori e transenne sulla mappa con Event Planner.", "Gestisci sponsor e partner con una pipeline commerciale collegata alla gara.", "Trasforma la traccia GPX in un video del percorso con Event Map."]}
+        {"h2": "Come ti aiuta", "items": ["Raccogli le disponibilità dei volontari con un modulo pubblico e organizzali in team per ristori, percorso e segreteria.", "Segui le attività organizzative con una pipeline e scadenze calcolate sulla data della gara.", "Disegna partenza, arrivo, ristori e transenne sulla mappa con Event Planner.", "Gestisci sponsor e partner con una pipeline commerciale collegata alla gara.", "Trasforma la traccia GPX in un video del percorso con Event Map."]}
       ],
       "related": ["/funzionalita/staff-volontari", "/funzionalita/event-planner", "/faq"]
     },
@@ -97,7 +97,7 @@
       "h1": "CRMEvent per trail e corse in montagna",
       "intro": "Nei trail il percorso è protagonista: ristori in quota, punti di controllo e volontari distribuiti su molti chilometri. CRMEvent ti aiuta a coordinare persone, percorsi e attività.",
       "sections": [
-        {"h2": "Come ti aiuta", "items": ["Carica i percorsi GPX, KML o KMZ dell'evento e riutilizzali in Event Planner ed Event Map.", "Crea un video del percorso con profilo altimetrico dinamico e punti di ristoro.", "Assegna volontari a ristori e postazioni con turni e orari.", "Usa la pipeline con il modello Trail Running per non dimenticare le scadenze organizzative."]}
+        {"h2": "Come ti aiuta", "items": ["Carica i percorsi GPX, KML o KMZ dell'evento e riutilizzali in Event Planner ed Event Map.", "Crea un video del percorso con profilo altimetrico dinamico e punti di ristoro.", "Assegna volontari a ristori e postazioni.", "Usa la pipeline con il modello Trail Running per non dimenticare le scadenze organizzative."]}
       ],
       "related": ["/funzionalita/event-map", "/funzionalita/staff-volontari", "/faq"]
     },
@@ -108,7 +108,7 @@
       "h1": "CRMEvent per gare di triathlon",
       "intro": "Un triathlon unisce nuoto, bici e corsa: tre percorsi, una zona cambio e molti volontari da coordinare. CRMEvent ti aiuta a tenere insieme percorsi, persone e attività.",
       "sections": [
-        {"h2": "Come ti aiuta", "items": ["Gestisci più percorsi per lo stesso evento e importali in Event Planner.", "Disegna zona cambio, transenne, archi e strutture sulla mappa.", "Organizza volontari e staff in team e turni per ogni area.", "Collega sponsor e partner all'evento e segui le trattative."]}
+        {"h2": "Come ti aiuta", "items": ["Gestisci più percorsi per lo stesso evento e importali in Event Planner.", "Disegna zona cambio, transenne, archi e strutture sulla mappa.", "Organizza volontari e staff in team per ogni area.", "Collega sponsor e partner all'evento e segui le trattative."]}
       ],
       "related": ["/funzionalita/event-planner", "/funzionalita/sponsor-partner", "/faq"]
     },
@@ -119,7 +119,7 @@
       "h1": "CRMEvent per granfondo e ciclismo",
       "intro": "Granfondo e gare ciclistiche si sviluppano su percorsi lunghi, con ristori, incroci da presidiare e molti partner coinvolti. CRMEvent riunisce percorsi, persone e collaborazioni.",
       "sections": [
-        {"h2": "Come ti aiuta", "items": ["Archivia i percorsi GPX, KML o KMZ dell'evento e riutilizzali in Event Map ed Event Planner.", "Genera un video animato del tracciato con profilo altimetrico per i social.", "Assegna volontari a incroci, ristori e postazioni con turni e orari.", "Gestisci sponsor, fornitori e media partner in una pipeline collegata all'evento."]}
+        {"h2": "Come ti aiuta", "items": ["Archivia i percorsi GPX, KML o KMZ dell'evento e riutilizzali in Event Map ed Event Planner.", "Genera un video animato del tracciato con profilo altimetrico per i social.", "Assegna volontari a incroci, ristori e postazioni.", "Gestisci sponsor, fornitori e media partner in una pipeline collegata all'evento."]}
       ],
       "related": ["/funzionalita/event-map", "/funzionalita/staff-volontari", "/faq"]
     }
@@ -131,18 +131,18 @@
     "h1": "Domande frequenti",
     "intro": "Le risposte alle domande che ci fanno più spesso gli organizzatori di eventi sportivi.",
     "items": [
-      {"q": "Che cos'è CRMEvent?", "a": "CRMEvent è una piattaforma web per organizzare eventi: gestisci eventi, staff e volontari, team e turni, aziende, sponsor e partner, percorsi e attività organizzative in un unico ambiente."},
+      {"q": "Che cos'è CRMEvent?", "a": "CRMEvent è una piattaforma web per organizzare eventi: gestisci eventi, staff e volontari, team, aziende, sponsor e partner, percorsi e attività organizzative in un unico ambiente."},
       {"q": "Per quali eventi sportivi è adatto?", "a": "È pensato per chi organizza manifestazioni come gare podistiche, maratone, trail, triathlon e granfondo, ma si adatta anche a eventi culturali e altre manifestazioni."},
       {"q": "Posso provarlo gratuitamente?", "a": "Sì. Ogni nuova organizzazione parte con 14 giorni di prova gratuita, senza carta di credito."},
       {"q": "Quali piani sono disponibili?", "a": "CRMEvent è disponibile nei piani Bronze, Silver e Gold, con abbonamento semestrale o annuale. Prezzi e limiti aggiornati sono nella pagina Prezzi."},
       {"q": "Come raccolgo le disponibilità dei volontari?", "a": "Per ogni evento puoi generare un link pubblico a un modulo di disponibilità: le persone indicano giorni e attività senza doversi registrare e i dati arrivano in CRMEvent."},
-      {"q": "Posso organizzare team e turni?", "a": "Sì. Puoi creare team con un responsabile, assegnare ruoli e mansioni e organizzare turni con data, orario e punto di ritrovo, vedendo i turni ancora scoperti."},
+      {"q": "Posso organizzare team?", "a": "Sì. Puoi creare team con un responsabile, assegnare ruoli e mansioni e seguire conferme e disponibilità di ogni persona."},
       {"q": "Quali formati di percorso posso caricare?", "a": "Nei Percorsi dell'evento puoi caricare file GPX, KML e KMZ e riutilizzarli in Event Planner ed Event Map senza caricarli di nuovo."},
       {"q": "Che cosa sono Event Planner ed Event Map?", "a": "Event Planner serve a progettare l'evento su una mappa reale con strutture, percorsi e postazioni. Event Map trasforma la traccia del percorso in un video animato con profilo altimetrico."},
       {"q": "Event Planner ed Event Map sono inclusi nell'abbonamento?", "a": "Sono inclusi nei piani Silver e Gold entro i limiti del piano e si possono attivare anche dal Marketplace. I dettagli aggiornati sono nella pagina Prezzi."},
       {"q": "Posso gestire gli sponsor?", "a": "Sì. Hai un'anagrafica unica di aziende e referenti e una pipeline commerciale per seguire ogni trattativa, collegata all'evento."},
       {"q": "I dati della mia organizzazione sono separati da quelli degli altri?", "a": "Sì. Ogni organizzazione vede soltanto i propri dati: eventi, persone, aziende e documenti sono separati per organizzazione."},
-      {"q": "CRMEvent si collega a Google Calendar?", "a": "Sì. Eventi e turni possono essere portati nel calendario Google degli utenti."}
+      {"q": "CRMEvent si collega a Google Calendar?", "a": "Sì. Eventi possono essere portati nel calendario Google degli utenti."}
     ],
     "related": ["/funzionalita/eventi", "/funzionalita/staff-volontari", "/prezzi"]
   }

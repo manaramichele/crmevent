@@ -66,12 +66,11 @@ export default function VolunteerEvent() {
   }, [id, nav]);
 
   if (!d) return <div className="text-slate-400 text-center py-10">Caricamento...</div>;
-  const { event, presence, shifts, team, team_leader, colleagues, maps, lodgings = [], meals = [] } = d;
+  const { event, presence, team, team_leader, colleagues, maps, lodgings = [], meals = [] } = d;
   const giorni = event.giorni_descrizioni && Object.keys(event.giorni_descrizioni).length
     ? Object.entries(event.giorni_descrizioni).sort(([a], [b]) => a.localeCompare(b)) : [];
 
   const syncEvent = async () => { try { const { data } = await api.post(`/me/events/${id}/calendar-sync`); toast.success("Aggiunto a Google Calendar"); if (data.html_link) window.open(data.html_link, "_blank"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
-  const syncShift = async (sid) => { try { const { data } = await api.post(`/me/shifts/${sid}/calendar-sync`); toast.success("Turno aggiunto a Google Calendar"); if (data.html_link) window.open(data.html_link, "_blank"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
 
   const arrivo = [presence.data_arrivo, presence.ora_arrivo].filter(Boolean).join(" ");
   const partenza = [presence.data_partenza, presence.ora_partenza].filter(Boolean).join(" ");
@@ -120,25 +119,6 @@ export default function VolunteerEvent() {
           <Row icon={Clock} label="Partenza" value={partenza} />
           {presence.note_operative && <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 mt-2 whitespace-pre-wrap">{presence.note_operative}</p>}
         </div>
-      </Block>
-
-      {/* I MIEI TURNI */}
-      <Block title="I miei turni" icon={Clock} testid="vol-turni">
-        {shifts.length === 0 ? <p className="text-sm text-slate-400">Nessun turno assegnato.</p> : (
-          <div className="space-y-3">
-            {shifts.map((s) => (
-              <div key={s.id} className="border border-slate-200 rounded-xl p-3" data-testid={`vol-shift-${s.id}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold text-slate-800 text-sm">{s.data}{s.ora_inizio ? ` · ${s.ora_inizio}${s.ora_fine ? `–${s.ora_fine}` : ""}` : ""}</div>
-                  <Button size="sm" variant="outline" onClick={() => syncShift(s.id)} data-testid={`vol-sync-shift-${s.id}`} className="h-7 text-xs shrink-0"><CalendarPlus className="w-3.5 h-3.5 mr-1" />Calendar</Button>
-                </div>
-                {(s.ruolo || s.area) && <div className="text-xs text-slate-600 mt-1 font-medium">{[s.ruolo, s.area].filter(Boolean).join(" · ")}</div>}
-                {(s.luogo || s.punto_ritrovo) && <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><MapPin className="w-3 h-3" />{[s.luogo, s.punto_ritrovo && `Ritrovo: ${s.punto_ritrovo}`].filter(Boolean).join(" · ")}</div>}
-                {s.note && <div className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{s.note}</div>}
-              </div>
-            ))}
-          </div>
-        )}
       </Block>
 
       {/* BRIEFING */}

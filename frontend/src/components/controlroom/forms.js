@@ -28,7 +28,6 @@ export const resourceFields = (d, shifts = [], personTypes = PERSON_TYPES) => [
   { k: "targa", label: "Targa", show: (v) => v.kind === "mezzo" }, { k: "equipaggio", label: "Equipaggio", show: (v) => v.kind !== "persona" },
   { k: "responsabile", label: "Responsabile" }, { ...phone(d), disabled: (v) => !d.perms.contacts || !!v.persona_id },
   { k: "post_id", label: "Postazione assegnata", type: "select", options: opts(d.posts) }, { k: "sector_id", label: "Settore", type: "select", options: opts(d.sectors) },
-  shifts.length ? { k: "shift_id", label: "Turno (Staff / Volontari)", type: "select", options: shifts.map((s) => [s.id, [s.data, s.ora_inizio && `${s.ora_inizio}-${s.ora_fine || ""}`, s.luogo].filter(Boolean).join(" · ")]) } : { k: "turno", label: "Turno" },
   { k: "stato", label: "Stato operativo", type: "select", required: true, options: RES_STATES },
   { k: "caposquadra", label: "Ruolo", type: "checkbox", hint: "Caposquadra", show: (v) => v.kind === "persona" },
   { k: "autorizzazione_ente", label: "Ente esterno", type: "checkbox", hint: "Registrazione autorizzata dall'ente", show: (v) => v.kind === "mezzo" && d.external_vehicles.includes(v.tipologia), wide: true },

@@ -235,7 +235,7 @@ def build_html(template_key: str) -> str:
         body = (
             _greeting()
             + _p("organizzare un evento significa gestire molte informazioni contemporaneamente.")
-            + _p("Persone, staff, volontari, sponsor, aziende, attività, turni, ospitalità, pasti, "
+            + _p("Persone, staff, volontari, sponsor, aziende, attività, ospitalità, pasti, "
                  "briefing e scadenze.")
             + _p("CRMEvent nasce per raccogliere tutto questo in un'unica piattaforma. "
                  "Meno informazioni sparse. Più controllo sull'organizzazione.")
