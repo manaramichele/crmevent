@@ -723,6 +723,14 @@ async def user_payload(u: dict, active_org_id: Optional[str] = None) -> dict:
     if role == "superadmin":
         base["needs_org"] = False
         return base
+    if role in ("volunteer", "staff"):
+        # Account nato come Staff/Volontario ma con accesso gestionale (es. Collaboratore): il ruolo di accesso
+        # è dato dalla membership attiva, non dall'anagrafica. Il ruolo salvato nel DB resta invariato.
+        for mm in await db.memberships.find({"user_id": u["user_id"], "active": True}, {"_id": 0, "org_id": 1}).to_list(50):
+            o = await db.organizations.find_one({"id": mm["org_id"]}, {"_id": 0, "status": 1})
+            if o and o.get("status") != "disabled":
+                base["portal_role"], base["role"], role = role, "member", "member"
+                break
     if role in ("volunteer", "staff", "event_user"):
         base["needs_org"] = not bool(u.get("org_id"))
         if role == "event_user":

@@ -1,5 +1,9 @@
 # CRMEvent — Changelog
 
+## 2026-11-24 — Collaboratore mandato al portale Staff/Volontari (fix in user_payload)
+- Causa: un account con ruolo globale `staff` o `volunteer` (nato dall'invito al portale Staff/Volontari) che riceveva anche una membership Collaboratore restava nel portale. `user_payload` usciva subito nel ramo staff/volunteer e App.js `isVol(u)` lo instradava a VolunteerLayout. Lato server il back-end funzionava già.
+- Fix: se c'è una membership attiva in un'organizzazione attiva, il payload restituisce role="member" e `portal_role` col ruolo originale. Il DB resta invariato. Vale per login con password, Google e /auth/me.
+
 ## 2026-11-23 — OrgDetail › Utenti: pulsante Riattiva account
 - Il pulsante della tabella cambiava l'accesso all'organizzazione (membership.active) e non lo stato dell'account. Ora i due pulsanti sono separati:
   - «Disabilita account» / «Riattiva account» (in base a account_active), con conferma tramite AccountStateDialog → POST /platform/users/{uid}/state, registrato nell'audit;
