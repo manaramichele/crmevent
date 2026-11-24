@@ -15,7 +15,7 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", route: () => "/app", steps: [
     { t: "La tua Dashboard", b: "È il punto di partenza: riepiloghi di eventi, contatti, trattative, Staff / Volontari e scadenze.", s: [T("kpi-eventi-attivi")] },
     { t: "Filtra per evento", b: "Con questo selettore scegli l'evento da analizzare: tutti i riepiloghi si aggiornano sull'evento scelto.", s: [T("dashboard-event-filter")] },
-    { t: "To Do List", b: "Qui trovi le attività in ritardo o critiche della Checklist Evento e i turni ancora scoperti.", s: [T("dashboard-attention"), T("kpi-turni-scoperti")] },
+    { t: "To Do List", b: "Qui trovi le attività in ritardo o critiche della Checklist Evento.", s: [T("dashboard-attention")] },
   ]},
   { key: "eventi", label: "Eventi", route: () => "/eventi", steps: [
     { t: "Crea e gestisci gli eventi", b: "Con «Aggiungi» crei un nuovo evento (nome, tipologia, date, logo); dall'elenco gestisci quelli esistenti.", s: [T("add-event-button")] },
@@ -37,10 +37,6 @@ const SECTIONS = [
     { t: "Organizza i Team", b: "Nella scheda Team raggruppi Staff / Volontari per area operativa (es. Partenza, Ristori, Segreteria).", s: [T("tab-team")] },
     { t: "Team Leader e componenti", b: "Per ogni Team indichi il Team Leader e assegni i componenti dell'evento.", s: [T("tab-team")] },
   ]},
-  { key: "turni", label: "Turni", route: () => "/staff-volontari", steps: [
-    { t: "Organizza i Turni", b: "Nella scheda Turni definisci giorni, orari, luogo e punto di ritrovo, assegnando Staff / Volontari o Team.", s: [T("tab-turni")] },
-    { t: "Turni scoperti", b: "Un turno senza persona assegnata risulta scoperto ed è segnalato anche in Dashboard.", s: [T("tab-turni")] },
-  ]},
   { key: "aziende", label: "Aziende", route: () => "/aziende", steps: [
     { t: "Aziende", b: "Gestisci le aziende collegate ai tuoi eventi e i loro referenti (nome, cognome, email e cellulare) direttamente nella scheda azienda.", s: [T("add-company-button")] },
     { t: "Ricerca", b: "Trova rapidamente un'azienda per nome o dati di contatto.", s: [T("search-company-input")] },
@@ -55,7 +51,7 @@ const SECTIONS = [
     { t: "Pasti e assegnazioni", b: "Assegna pasti e servizi a più persone insieme e consulta il riepilogo per persona, giorno o struttura.", s: [T("open-bulk-assign"), T("view-persona"), T("hosp-event-select")] },
   ]},
   { key: "briefing", label: "Briefing", ev: true, route: (e) => `/eventi/${e}/briefing`, steps: [
-    { t: "Briefing operativo", b: "Raccoglie dati evento, Staff / Volontari, Team, Turni, mappe, ospitalità e pasti in un unico documento.", s: [T("briefing-cover")] },
+    { t: "Briefing operativo", b: "Raccoglie dati evento, Staff / Volontari, Team, mappe, ospitalità e pasti in un unico documento.", s: [T("briefing-cover")] },
     { t: "Completezza", b: "L'indicatore mostra quali informazioni mancano per un briefing completo.", s: [T("briefing-completeness")] },
     { t: "Versioni, PDF e presentazione", b: "Puoi pubblicare versioni, scaricare il PDF o mostrarlo in modalità presentazione al team.", s: [T("briefing-publish-btn"), T("briefing-pdf-btn")] },
   ]},

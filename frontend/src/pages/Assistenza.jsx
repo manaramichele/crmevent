@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "sonner";
 import { Video, Clock, Coins, Check, X, CalendarDays, ExternalLink, MonitorUp } from "lucide-react";
 
-const INCLUDED = ["Supporto dedicato con un esperto CRMEvent", "Condivisione dello schermo su Google Meet", "Configurazione di eventi, staff, team, turni e permessi", "Risposte alle domande sull'uso della piattaforma"];
+const INCLUDED = ["Supporto dedicato con un esperto CRMEvent", "Condivisione dello schermo su Google Meet", "Configurazione di eventi, staff, team e permessi", "Risposte alle domande sull'uso della piattaforma"];
 const EXCLUDED = ["Inserimento dei dati al posto tuo", "Sviluppo di funzioni personalizzate", "Consulenza organizzativa sull'evento", "Assistenza su software esterni a CRMEvent"];
 const dayLabel = (k) => new Date(`${k}T12:00:00`).toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" });
 const when = (slot) => new Date(`${slot.slice(0, 10)}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }) + ` alle ${slot.slice(11)}`;

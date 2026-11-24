@@ -40,8 +40,6 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
   const [edit, setEdit] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [conflict, setConflict] = useState(null);
-  const [shiftForm, setShiftForm] = useState(null);
-  const [savingShift, setSavingShift] = useState(false);
 
   const load = useCallback(async () => {
     if (!personId) return;
@@ -49,7 +47,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   }, [personId]);
   useEffect(() => {
-    if (open) { setD(null); setEditMode(false); setEdit(null); setConflict(null); setShiftForm(null); setPf({ categoria: "volontario", stato: "da_contattare" }); load(); }
+    if (open) { setD(null); setEditMode(false); setEdit(null); setConflict(null); setPf({ categoria: "volontario", stato: "da_contattare" }); load(); }
   }, [open, load]);
 
   const p = d?.person;
@@ -78,35 +76,13 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
 
-  // --- Turni: stesse strutture esistenti (/shifts), nessun sistema parallelo. ---
-  const newShift = () => setShiftForm({ evento_id: (d?.events?.[0]?.presence?.evento_id) || "", data: "", ora_inizio: "", ora_fine: "", area: "", ruolo: "", team_id: "", luogo: "", note: "" });
-  const editShift = (s) => setShiftForm({ id: s.id, evento_id: s.evento_id || "", data: s.data || "", ora_inizio: s.ora_inizio || "", ora_fine: s.ora_fine || "", area: s.area || "", ruolo: s.ruolo || "", team_id: s.team_id || "", luogo: s.luogo || "", note: s.note || "" });
-  const saveShift = async () => {
-    if (!shiftForm.evento_id) { toast.error("Seleziona un evento per il turno"); return; }
-    setSavingShift(true);
-    try {
-      const payload = { evento_id: shiftForm.evento_id, persona_id: personId, data: shiftForm.data || "",
-        ora_inizio: shiftForm.ora_inizio || "", ora_fine: shiftForm.ora_fine || "", area: shiftForm.area || "",
-        ruolo: shiftForm.ruolo || "", team_id: shiftForm.team_id || "", luogo: shiftForm.luogo || "", note: shiftForm.note || "" };
-      if (shiftForm.id) await api.put(`/shifts/${shiftForm.id}`, payload);
-      else await api.post("/shifts", payload);
-      toast.success(shiftForm.id ? "Turno aggiornato" : "Turno aggiunto");
-      setShiftForm(null); await load(); onChanged && onChanged();
-    } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-    finally { setSavingShift(false); }
-  };
-  const delShift = async (id) => {
-    try { await api.delete(`/shifts/${id}`); await load(); onChanged && onChanged(); toast.success("Turno rimosso"); }
-    catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
-  };
-
   // --- Modalità modifica (unica finestra, tab sempre visibili) ---
   const startEdit = () => {
     setConflict(null);
     setEdit({ nome: p.nome || "", cognome: p.cognome || "", email: p.email || "", cellulare: p.cellulare || "", data_nascita: p.data_nascita || "", codice_fiscale: p.codice_fiscale || "", note: p.note || "" });
     setEditMode(true);
   };
-  const cancelEdit = () => { setEditMode(false); setEdit(null); setConflict(null); setShiftForm(null); };
+  const cancelEdit = () => { setEditMode(false); setEdit(null); setConflict(null); };
   const saveEdit = async () => {
     if (!edit.nome.trim()) { toast.error("Il nome è obbligatorio"); return; }
     if (edit.cellulare && !isValidPhoneNumber(edit.cellulare)) { toast.error("Numero di cellulare non valido"); return; }
@@ -169,7 +145,7 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
               )}
             </div>
 
-            {editMode && <p className="mt-3 text-xs text-slate-500">Puoi modificare Anagrafica, Eventi, Ruoli, Team e Turni dai rispettivi tab. Le associazioni vengono applicate subito; i dati anagrafici si salvano con «Salva». Passando tra i tab non perdi le modifiche.</p>}
+            {editMode && <p className="mt-3 text-xs text-slate-500">Puoi modificare Anagrafica, Eventi, Ruoli e Team dai rispettivi tab. Le associazioni vengono applicate subito; i dati anagrafici si salvano con «Salva». Passando tra i tab non perdi le modifiche.</p>}
 
             <Tabs defaultValue="anagrafica" className="mt-4">
               <TabsList className="flex-wrap h-auto">
@@ -177,7 +153,6 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                 <TabsTrigger value="eventi" data-testid="ptab-eventi"><CalendarDays className="w-4 h-4 mr-1" />Eventi</TabsTrigger>
                 <TabsTrigger value="ruoli" data-testid="ptab-ruoli"><ListChecks className="w-4 h-4 mr-1" />Ruoli</TabsTrigger>
                 <TabsTrigger value="team" data-testid="ptab-team"><Users className="w-4 h-4 mr-1" />Team</TabsTrigger>
-                <TabsTrigger value="turni" data-testid="ptab-turni"><Clock className="w-4 h-4 mr-1" />Turni</TabsTrigger>
                 <TabsTrigger value="accesso" data-testid="ptab-accesso"><KeyRound className="w-4 h-4 mr-1" />Accesso</TabsTrigger>
               </TabsList>
 
@@ -323,53 +298,6 @@ export default function PersonDetailDialog({ personId, open, onOpenChange, event
                       </div>
                     ))
                 )}
-              </TabsContent>
-
-              {/* ---------------- Turni ---------------- */}
-              <TabsContent value="turni" className="pt-2 space-y-2">
-                {editMode && (
-                  <div className="flex justify-end">
-                    {!shiftForm && <Button size="sm" variant="outline" onClick={newShift} data-testid="shift-add-btn"><Plus className="w-4 h-4 mr-1" />Aggiungi turno</Button>}
-                  </div>
-                )}
-                {editMode && shiftForm && (
-                  <div className="border border-dashed border-slate-300 rounded-lg p-3 bg-slate-50/50 space-y-2" data-testid="shift-form">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="sm:col-span-3"><Label className="text-xs text-slate-600">Evento *</Label>
-                        <Select value={shiftForm.evento_id || ""} onValueChange={(v) => setShiftForm((f) => ({ ...f, evento_id: v, team_id: "" }))}>
-                          <SelectTrigger data-testid="shift-event"><SelectValue placeholder="Evento" /></SelectTrigger>
-                          <SelectContent>{sortIt(events, (e) => e.nome).map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}</SelectContent></Select></div>
-                      <div><Label className="text-xs text-slate-600">Data</Label><Input type="date" value={shiftForm.data} onChange={(e) => setShiftForm((f) => ({ ...f, data: e.target.value }))} data-testid="shift-data" /></div>
-                      <div><Label className="text-xs text-slate-600">Ora inizio</Label><Input type="time" value={shiftForm.ora_inizio} onChange={(e) => setShiftForm((f) => ({ ...f, ora_inizio: e.target.value }))} data-testid="shift-ora-inizio" /></div>
-                      <div><Label className="text-xs text-slate-600">Ora fine</Label><Input type="time" value={shiftForm.ora_fine} onChange={(e) => setShiftForm((f) => ({ ...f, ora_fine: e.target.value }))} data-testid="shift-ora-fine" /></div>
-                      <div><Label className="text-xs text-slate-600">Area</Label><Input value={shiftForm.area} onChange={(e) => setShiftForm((f) => ({ ...f, area: e.target.value }))} data-testid="shift-area" /></div>
-                      <div><Label className="text-xs text-slate-600">Ruolo</Label><Input value={shiftForm.ruolo} onChange={(e) => setShiftForm((f) => ({ ...f, ruolo: e.target.value }))} data-testid="shift-ruolo" /></div>
-                      <div><Label className="text-xs text-slate-600">Luogo</Label><Input value={shiftForm.luogo} onChange={(e) => setShiftForm((f) => ({ ...f, luogo: e.target.value }))} data-testid="shift-luogo" /></div>
-                      <div className="sm:col-span-3"><Label className="text-xs text-slate-600">Team</Label>
-                        <TeamSelect value={shiftForm.team_id || ""} eventoId={shiftForm.evento_id} onChange={(v) => setShiftForm((f) => ({ ...f, team_id: v }))} testid="shift-team" /></div>
-                      <div className="sm:col-span-3"><Label className="text-xs text-slate-600">Note</Label><Textarea rows={2} value={shiftForm.note} onChange={(e) => setShiftForm((f) => ({ ...f, note: e.target.value }))} data-testid="shift-note" /></div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setShiftForm(null)} data-testid="shift-cancel"><X className="w-4 h-4 mr-1" />Annulla</Button>
-                      <Button size="sm" onClick={saveShift} disabled={savingShift} className="bg-tiffany hover:bg-tiffany-hover text-slate-900 font-semibold" data-testid="shift-save"><Save className="w-4 h-4 mr-1" />{savingShift ? "Salvataggio..." : "Salva turno"}</Button>
-                    </div>
-                  </div>
-                )}
-                {d.shifts.length === 0 ? <p className="text-sm text-slate-400 py-4">Nessun turno assegnato.</p> :
-                  d.shifts.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-2.5" data-testid={`shift-row-${s.id}`}>
-                      <div className="min-w-0">
-                        <span className="text-sm text-slate-700">{s.data || "—"} · {s.ora_inizio || "--"}–{s.ora_fine || "--"}</span>
-                        <div className="text-xs text-slate-500">{eName(s.evento_id)} · {s.luogo || s.area || "—"}</div>
-                      </div>
-                      {editMode && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-tiffany-fg" onClick={() => editShift(s)} data-testid={`shift-edit-${s.id}`}><Pencil className="w-4 h-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => delShift(s.id)} data-testid={`shift-del-${s.id}`}><Trash2 className="w-4 h-4" /></Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
               </TabsContent>
 
               {/* ---------------- Accesso ---------------- */}

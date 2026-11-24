@@ -1722,7 +1722,6 @@ crud_routes("persons", "persons", Person)
 crud_routes("deals", "deals", Deal)
 crud_routes("staff", "staff", Presence)
 crud_routes("teams", "teams", Team)
-crud_routes("shifts", "shifts", Shift)
 crud_routes("maps", "event_maps", EventMap)
 crud_routes("activities", "activities", Activity)
 crud_routes("followups", "followups", Followup)
@@ -2062,6 +2061,51 @@ async def _company_contacts(company_id: str, org_id: str):
     return out
 
 
+_FASCIA = {"mattina": "Mattina", "pomeriggio": "Pomeriggio"}
+
+
+def _conf_group(stato: Optional[str]) -> str:
+    return "confermato" if stato == "confermato" else "non_confermato" if stato in ("non_disponibile", "rinunciato") else "da_confermare"
+
+
+def _access_status(p: dict, account: Optional[dict]) -> str:
+    if (account or {}).get("last_login_at"):
+        return "accesso_effettuato"
+    if p.get("last_invite_at") or p.get("invite_status") in ("invito_inviato", "account_attivato", "accesso_disabilitato"):
+        return "email_inviata"
+    return "email_da_inviare"
+
+
+async def _accounts_by_person(org_id: str, ids: list) -> dict:
+    us = await db.users.find({"org_id": org_id, "person_id": {"$in": ids}}, {"_id": 0, "person_id": 1, "last_login_at": 1}).to_list(20000)
+    return {u["person_id"]: u for u in us}
+
+
+async def _availability_texts(org_id: str) -> dict:
+    """Ultima disponibilità indicata per persona/evento, in forma leggibile (giorno + fasce)."""
+    latest = {}
+    for a in await db.availabilities.find({"org_id": org_id, "persona_id": {"$nin": [None, ""]}},
+                                          {"_id": 0, "persona_id": 1, "evento_id": 1, "days": 1, "updated_at": 1, "created_at": 1}).to_list(50000):
+        k, ts = (a["persona_id"], a.get("evento_id")), str(a.get("updated_at") or a.get("created_at") or "")
+        if k not in latest or ts > latest[k][0]:
+            latest[k] = (ts, a)
+    out = defaultdict(list)
+    for (pid, eid), (_, a) in latest.items():
+        parts = []
+        for d in sorted(a.get("days") or [], key=lambda x: x.get("date") or ""):
+            if not d.get("date") or d.get("disponibile") is False:
+                continue
+            try:
+                lab = datetime.strptime(d["date"][:10], "%Y-%m-%d").strftime("%d/%m")
+            except ValueError:
+                continue
+            when = ", ".join(_FASCIA.get(f.get("id"), f.get("id") or "") for f in d.get("fasce") or []) or "–".join(x for x in (d.get("dalle"), d.get("alle")) if x)
+            parts.append(f"{lab} {when}".strip())
+        if parts:
+            out[pid].append({"evento_id": eid, "testo": " · ".join(parts)})
+    return out
+
+
 @api.get("/persons-enriched")
 async def persons_enriched(admin: dict = Depends(require_admin)):
     persons = await _list("persons", oq(admin, archiviato={"$ne": True}))
@@ -2082,6 +2126,8 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
         pres_by[p["persona_id"]].append(p)
     prefs = await AVP["prefs_for"](admin["org_id"])
     soci = await ASD["soci_map"](admin)
+    accounts = await _accounts_by_person(admin["org_id"], [p["id"] for p in persons])
+    disp = await _availability_texts(admin["org_id"])
     out = []
     for p in persons:
         pid = p["id"]
@@ -2117,6 +2163,9 @@ async def persons_enriched(admin: dict = Depends(require_admin)):
                     "eventi_ids": list({x["evento_id"] for x in prs}),
                     "eventi_count": len({x["evento_id"] for x in prs}),
                     "preferenze": prefs.get(pid, []),
+                    "access_status": _access_status(p, accounts.get(pid)),
+                    "last_login_at": (accounts.get(pid) or {}).get("last_login_at"),
+                    "disponibilita": [d for d in disp.get(pid, []) if evs_ok is None or d["evento_id"] in evs_ok],
                     "provenienza_tipo": (p.get("provenienza") or {}).get("tipo") or "non_determinata",
                     "assegnazioni": [{k: x.get(k) for k in ("id", "evento_id", "categoria", "team_id", "ruolo", "preferenza", "stato", "mansione_auto")} for x in prs],
                     "mansioni": [{"evento_id": x["evento_id"], "ruolo": x.get("ruolo")} for x in prs]})
@@ -2242,13 +2291,11 @@ async def person_detail(person_id: str, admin: dict = Depends(require_admin)):
     if _team_ids(admin) is not None:
         tids &= set(_team_ids(admin))
     teams = [t for t in [await db.teams.find_one({"id": tid, "org_id": admin["org_id"]}, {"_id": 0}) for tid in tids] if t]
-    shifts = [s for s in await db.shifts.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300)
-              if (_team_ids(admin) is None or s.get("team_id") in _team_ids(admin)) and (evs_ok is None or s.get("evento_id") in evs_ok)]
     activities = await db.activities.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "attivita") else []
     followups = await db.followups.find(oq(admin, persona_id=person_id), {"_id": 0}).to_list(300) if _can(admin, "followup") else []
     preferenze = (await AVP["prefs_for"](admin["org_id"], [person_id])).get(person_id, [])
     return {"person": p, "companies": companies, "events": events, "teams": teams,
-            "shifts": shifts, "activities": activities, "followups": followups, "preferenze": preferenze}
+            "activities": activities, "followups": followups, "preferenze": preferenze}
 
 
 @api.get("/companies/{company_id}/detail")
@@ -2543,10 +2590,12 @@ async def _do_person_invite(admin: dict, person: dict, role: str, email: str, ev
         logger.error(f"invite email failed: {e}")
         sent = False
     ts = now_iso()
-    st = {"user_role": role, "last_invite_at": ts, "last_invite_by": admin.get("name") or admin.get("email")}
-    if not activated:
-        st["invite_status"] = "invito_inviato"
-    await db.persons.update_one(oq(admin, id=person_id), {"$set": st, "$inc": {"invite_count": 1}})
+    st = {"user_role": role}
+    if sent:
+        st.update({"last_invite_at": ts, "last_invite_by": admin.get("name") or admin.get("email")})
+        if not activated:
+            st["invite_status"] = "invito_inviato"
+    await db.persons.update_one(oq(admin, id=person_id), {"$set": st, **({"$inc": {"invite_count": 1}} if sent else {})})
     await record_audit(admin, "person_invite_sent", org_id=admin["org_id"], target_email=email,
                        target_name=f"{person.get('cognome') or ''} {person.get('nome') or ''}".strip(),
                        detail=f"Ruolo: {'Staff' if role == 'staff' else 'Volontario'}" + (" · account già attivo" if activated else "") + ("" if sent else " · email non inviata"))
@@ -2593,6 +2642,106 @@ async def invite_persons_bulk(body: BulkInviteIn, admin: dict = Depends(require_
             d = e.detail
             skipped.append({"id": pid, "name": name, "reason": d.get("message") if isinstance(d, dict) else d})
     return {"sent": sent, "skipped": skipped}
+
+
+class AccessEmailIn(BaseModel):
+    person_ids: Optional[List[str]] = None
+    all_unsent: bool = False
+    evento_id: Optional[str] = None
+    resend: bool = False
+    force: bool = False
+
+
+async def _access_targets(admin: dict, body: AccessEmailIn) -> list:
+    """Destinatari dell'email di accesso: solo Staff/Volontari confermati, mai doppioni involontari."""
+    _assert_can_invite(admin)
+    scope = await _person_scope(admin)
+    evs_ok = (admin.get("perm") or {}).get("event_ids")
+    lq = oq(admin, categoria={"$in": ["staff", "collaboratore", "volontario"]})
+    if body.evento_id:
+        lq["evento_id"] = body.evento_id
+    by_p = defaultdict(list)
+    for x in await db.staff.find(lq, {"_id": 0}).to_list(20000):
+        if _link_visible(admin, x) and (evs_ok is None or x.get("evento_id") in evs_ok):
+            by_p[x["persona_id"]].append(x)
+    ids = list(by_p) if body.all_unsent else list(dict.fromkeys(body.person_ids or []))
+    if scope is not None:
+        ids = [i for i in ids if i in scope]
+    persons = {p["id"]: p for p in await db.persons.find(oq(admin, id={"$in": ids}, archiviato={"$ne": True}), {"_id": 0}).to_list(20000)}
+    accounts = await _accounts_by_person(admin["org_id"], ids)
+    now, rows = datetime.now(timezone.utc), []
+    for pid in ids:
+        p = persons.get(pid)
+        if not p:
+            continue
+        groups = {_conf_group(x.get("stato")) for x in by_p.get(pid, [])}
+        acc, last = _access_status(p, accounts.get(pid)), p.get("last_invite_at")
+        recent = False
+        try:
+            recent = bool(last) and now - datetime.fromisoformat(last) < timedelta(hours=INVITE_DUP_HOURS)
+        except ValueError:
+            pass
+        reason = None
+        if not by_p.get(pid):
+            reason = "Non è Staff o Volontario dell'evento"
+        elif "confermato" not in groups:
+            reason = "Partecipazione non confermata"
+        elif not p.get("email"):
+            reason = "Senza indirizzo email"
+        elif p.get("invite_status") == "accesso_disabilitato":
+            reason = "Accesso disabilitato"
+        elif acc == "accesso_effettuato" and not body.resend:
+            reason = "Accesso già effettuato"
+        elif acc == "email_inviata" and not body.resend:
+            reason = "Email già inviata"
+        elif recent and not body.force:
+            reason = "Email già inviata nelle ultime 24 ore"
+        elif not await _invite_roles_for(admin, p):
+            reason = "Fuori dal tuo ambito di gestione"
+        if body.all_unsent and reason and reason != "Senza indirizzo email":
+            continue
+        rows.append({"id": pid, "name": f"{p.get('cognome') or ''} {p.get('nome') or ''}".strip(), "email": p.get("email"),
+                     "access_status": acc, "last_invite_at": last, "reason": reason})
+    return sorted(rows, key=lambda r: r["name"].lower())
+
+
+@api.post("/person-invites/access-preview")
+async def access_email_preview(body: AccessEmailIn, admin: dict = Depends(require_admin)):
+    rows = await _access_targets(admin, body)
+    ok = [r for r in rows if not r["reason"]]
+    ev = await db.events.find_one(oq(admin, id=body.evento_id), {"_id": 0}) if body.evento_id else None
+    if not ev and ok:
+        ev = await _staff_mail_event(admin["org_id"], ok[0]["id"], None)
+    role = "volunteer"
+    if ok:
+        fp = await db.persons.find_one(oq(admin, id=ok[0]["id"]), {"_id": 0})
+        allowed = await _invite_roles_for(admin, fp)
+        role = fp.get("user_role") if fp.get("user_role") in allowed else ("volunteer" if "volunteer" in allowed else "staff")
+    subject, html, from_name = _staff_mail("nuovo", ev, (ok[0]["name"].split(" ")[-1] if ok else "Mario"), role, f"{APP_URL}/attiva?token=ANTEPRIMA")
+    return {"recipients": rows, "to_send": len(ok), "subject": subject, "from_name": from_name, "html": html}
+
+
+ACCESS_SEND_MAX = 200
+
+
+@api.post("/person-invites/access-send")
+async def access_email_send(body: AccessEmailIn, admin: dict = Depends(require_admin)):
+    rows = await _access_targets(admin, body)
+    ok = [r for r in rows if not r["reason"]]
+    skipped = [{"id": r["id"], "name": r["name"], "reason": r["reason"]} for r in rows if r["reason"]]
+    persons = {p["id"]: p for p in await db.persons.find(oq(admin, id={"$in": [r["id"] for r in ok]}), {"_id": 0}).to_list(20000)}
+    sent = []
+    for r in ok[:ACCESS_SEND_MAX]:
+        try:
+            res = await _send_person_invite(admin, persons[r["id"]], None, True, body.evento_id)
+            if res["email_sent"]:
+                sent.append({"id": r["id"], "name": r["name"]})
+            else:
+                skipped.append({"id": r["id"], "name": r["name"], "reason": "Invio non riuscito: riprova più tardi"})
+        except HTTPException as e:
+            d = e.detail
+            skipped.append({"id": r["id"], "name": r["name"], "reason": d.get("message") if isinstance(d, dict) else d})
+    return {"sent": sent, "skipped": skipped, "remaining": max(len(ok) - ACCESS_SEND_MAX, 0)}
 
 
 @api.put("/persons/{person_id}/access")
@@ -2815,12 +2964,10 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
     deals = await db.deals.find(rel_q, {"_id": 0}).to_list(5000) if can["sponsor"] else []
     staff = await db.staff.find(rel_q, {"_id": 0}).to_list(5000) if can["staff"] else []
     teams = await db.teams.find(rel_q, {"_id": 0}).to_list(5000) if can["staff"] else []
-    shifts = await db.shifts.find(rel_q, {"_id": 0}).to_list(5000) if can["staff"] else []
     if _team_ids(admin) is not None:
         tids = set(_team_ids(admin))
         staff = [s for s in staff if s.get("team_id") in tids]
         teams = [t for t in teams if t["id"] in tids]
-        shifts = [s for s in shifts if s.get("team_id") in tids]
     activities = await db.activities.find(rel_q, {"_id": 0}).to_list(5000) if can["attivita"] else []
     followups = await db.followups.find(rel_q, {"_id": 0}).to_list(5000) if can["followup"] else []
     today = datetime.now(timezone.utc).date().isoformat()
@@ -2860,8 +3007,6 @@ async def dashboard(evento_id: Optional[str] = None, admin: dict = Depends(requi
                   "rinunce": len([s for s in staff if s.get("stato") in rinuncia]),
                   "team_creati": len(teams),
                   "team_senza_responsabile": len([t for t in teams if not t.get("responsabile_id")]),
-                  "turni_totali": len(shifts),
-                  "turni_scoperti": len([s for s in shifts if not s.get("persona_id")]),
                   "persone_senza_ruolo": len([s for s in staff if not s.get("ruolo")]),
                   "persone_senza_team": len([s for s in staff if not s.get("team_id")]),
                   **_team_coverage(teams, staff)},
@@ -2904,7 +3049,6 @@ async def _my_teams_overview(user: dict) -> list:
     teams = await db.teams.find({"org_id": oid, "id": {"$in": led}, **_ev_scope(user)}, {"_id": 0}).to_list(500)
     evs = {e["id"]: e.get("nome") for e in await db.events.find({"org_id": oid, "id": {"$in": [t.get("evento_id") for t in teams]}}, {"_id": 0, "id": 1, "nome": 1}).to_list(500)}
     links = await db.staff.find({"org_id": oid, "team_id": {"$in": led}}, {"_id": 0}).to_list(20000)
-    shifts = await db.shifts.find({"org_id": oid, "team_id": {"$in": led}}, {"_id": 0, "team_id": 1, "persona_id": 1}).to_list(20000)
     pids = list({l["persona_id"] for l in links if l.get("persona_id")})
     inv = {p["id"]: p.get("invite_status") for p in await db.persons.find({"org_id": oid, "id": {"$in": pids}}, {"_id": 0, "id": 1, "invite_status": 1}).to_list(20000)}
     out = []
@@ -2914,13 +3058,12 @@ async def _my_teams_overview(user: dict) -> list:
         vo = {l["persona_id"] for l in mine if l.get("categoria") == "volontario"}
         members = st | vo
         cov = _team_coverage([t], links)
-        sh = [s for s in shifts if s.get("team_id") == t["id"]]
         disp = await db.availabilities.count_documents({"org_id": oid, "evento_id": t.get("evento_id"), "persona_id": {"$in": list(members)}}) if members else 0
         req = t.get("volontari_richiesti")
         out.append({"id": t["id"], "nome": t.get("nome"), "evento_id": t.get("evento_id"), "evento_nome": evs.get(t.get("evento_id")),
                     "componenti": len(members), "staff": len(st), "volontari": len(vo), "volontari_richiesti": req,
                     "volontari_assegnati": len(vo), "volontari_mancanti": cov["volontari_mancanti"] if req is not None else None,
-                    "turni_totali": len(sh), "turni_scoperti": len([s for s in sh if not s.get("persona_id")]), "disponibilita": disp,
+                    "disponibilita": disp,
                     "inviti_inviati": len([p for p in members if inv.get(p) in ("invito_inviato", "account_attivato", "accesso_disabilitato")]),
                     "registrati": len([p for p in members if inv.get(p) == "account_attivato"])})
     return out
@@ -3193,7 +3336,6 @@ async def build_org_data_context(org_id: str, question: str = "") -> str:
         eid = ev["id"]
         staff = await db.staff.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
         teams = await db.teams.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(5000)
-        shifts = await db.shifts.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
         deals = await db.deals.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(5000)
         acts = await db.activities.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
         fups = await db.followups.find({"org_id": org_id, "evento_id": eid}, {"_id": 0}).to_list(20000)
@@ -3236,13 +3378,6 @@ async def build_org_data_context(org_id: str, question: str = "") -> str:
                              + (f" — {arr}" if arr else "")
                              + (f" — referente: {s.get('responsabile')}" if s.get('responsabile') else ""))
 
-        scoperti = [s for s in shifts if not s.get("persona_id")]
-        lines.append(f"  TURNI: {len(shifts)} totali, {len(scoperti)} SCOPERTI.")
-        for s in shifts[:120]:
-            p = persons.get(s.get("persona_id")) if s.get("persona_id") else None
-            lines.append(f"    - {s.get('data') or 'n/d'} {s.get('ora_inizio') or ''}-{s.get('ora_fine') or ''}"
-                         f" | area: {s.get('area') or 'n/d'} | team: {team_map.get(s.get('team_id'), {}).get('nome') or 'n/d'}"
-                         f" | {'COPERTO da ' + _fmt_person(p) if p else 'SCOPERTO'}")
 
         if deals:
             pipeline = sum(float(d.get("valore") or 0) for d in deals if d.get("fase") != "perso")
@@ -3305,8 +3440,6 @@ async def build_org_data_context(org_id: str, question: str = "") -> str:
 
         # Criticità sintetiche
         crit = []
-        if scoperti:
-            crit.append(f"{len(scoperti)} turni scoperti")
         teams_no_resp = [t.get("nome") for t in teams if not t.get("responsabile_id")]
         if teams_no_resp:
             crit.append("team senza responsabile: " + ", ".join(teams_no_resp))
@@ -3568,7 +3701,7 @@ async def seed_support():
             await _create("support_categories", {"org_id": DEFAULT_ORG, "nome": n, "slug": n.lower()})
     kb = [
         ("Creare un nuovo evento", "eventi", "Come creo un nuovo evento?",
-         "Vai in 'Eventi' e premi 'Aggiungi'. Inserisci nome, tipologia, date di inizio e fine, orari, località e organizzatore, poi salva. L'evento sarà subito disponibile per collegare persone, sponsor, team e turni.",
+         "Vai in 'Eventi' e premi 'Aggiungi'. Inserisci nome, tipologia, date di inizio e fine, orari, località e organizzatore, poi salva. L'evento sarà subito disponibile per collegare persone, sponsor, team.",
          ["creare evento", "nuovo evento", "aggiungere evento"]),
         ("Modificare o eliminare un evento", "eventi", "Come modifico o elimino un evento?",
          "In 'Eventi' usa l'icona a forma di matita sulla riga per modificare i dati, oppure l'icona cestino per eliminarlo (l'azione va confermata). Le associazioni collegate all'evento restano coerenti con l'anagrafica centrale.",
@@ -3613,7 +3746,7 @@ async def seed_support():
          "I turni senza persona risultano 'Scoperti'. Apri il turno in modifica e seleziona la persona da assegnare: il turno passerà da scoperto ad assegnato. Puoi filtrare i turni per evento, area e team per individuare rapidamente quelli ancora da coprire.",
          ["turno scoperto", "assegnare turno", "coprire turno"]),
         ("Preparare il briefing dello staff", "briefing", "Come preparo il briefing dello staff?",
-         "Nella scheda dell'evento trovi le viste operative Staff, Volontari, Team e Turni: da qui verifica ruoli, aree, punti di ritrovo e turni assegnati. Puoi allegare mappe e percorsi nella sezione Mappe dell'evento per distribuire le informazioni operative al team.",
+         "Nella scheda dell'evento trovi le viste operative Staff, Volontari, Team e Turni: da qui verifica ruoli, aree, punti di ritrovo assegnati. Puoi allegare mappe e percorsi nella sezione Mappe dell'evento per distribuire le informazioni operative al team.",
          ["briefing", "staff", "preparare briefing", "istruzioni staff"]),
         ("Caricare mappe e percorsi di un evento", "documenti", "Come carico mappe e percorsi per un evento?",
          "Nella scheda dell'evento apri la sezione Mappe e usa il caricamento per allegare immagini o PDF (planimetrie, percorsi) e aggiungere link a Google Maps. Le mappe sono poi visibili anche allo staff/volontari nella loro area personale.",
@@ -3628,7 +3761,7 @@ async def seed_support():
          "Dalla pagina di login usa 'Password dimenticata' per ricevere via email il link di reimpostazione. Se sei già dentro, vai in 'Profilo & Account' per cambiare la password inserendo quella attuale e la nuova.",
          ["password", "recupero password", "cambiare password", "reset password"]),
         ("Collegare e sincronizzare Google Calendar", "impostazioni", "Come collego Google Calendar?",
-         "Vai in 'Profilo & Account' (o Impostazioni) e collega il tuo account Google. Una volta connesso puoi sincronizzare eventi e turni sul tuo calendario; le voci create riportano il prefisso 'CRMEvent'. La sincronizzazione evita duplicati.",
+         "Vai in 'Profilo & Account' (o Impostazioni) e collega il tuo account Google. Una volta connesso puoi sincronizzare eventi sul tuo calendario; le voci create riportano il prefisso 'CRMEvent'. La sincronizzazione evita duplicati.",
          ["google calendar", "sincronizzare calendario", "collegare google", "calendario"]),
         ("Personalizzare le liste in Impostazioni", "impostazioni", "Come personalizzo tipologie, settori, ruoli e aree?",
          "In 'Impostazioni' gestisci le liste dinamiche: tipologie evento, settori azienda, ruoli staff, aree operative e livelli di sponsorship. Puoi aggiungere, rinominare ed eliminare le voci; prima di eliminarne una il sistema verifica che non sia già in uso.",
@@ -3679,9 +3812,9 @@ async def seed_support():
          "I turni sono assegnati dall'organizzatore e nella tua area personale sono in sola lettura: non puoi modificarli direttamente. Per richieste di cambio turno o segnalazioni contatta il tuo Team Leader o l'organizzatore dell'evento.",
          ["modificare turno", "cambiare turno", "segnalare problema turno"], "staff,volontario"),
         ("Area personale: usare CRMEvent da smartphone", "account", "Posso usare l'area personale dal telefono?",
-         "Sì, l'area personale è ottimizzata per smartphone e tablet: puoi consultare i tuoi eventi, turni, team, mappe e sincronizzare i tuoi impegni con Google Calendar direttamente dal cellulare.",
+         "Sì, l'area personale è ottimizzata per smartphone e tablet: puoi consultare i tuoi eventi, team, mappe e sincronizzare i tuoi impegni con Google Calendar direttamente dal cellulare.",
          ["smartphone", "telefono", "mobile", "cellulare", "app"], "staff,volontario"),
-        ("Area personale: aggiungere eventi e turni a Google Calendar", "impostazioni", "Come aggiungo i miei turni al calendario?",
+        ("Area personale: aggiungere eventi a Google Calendar", "impostazioni", "Come aggiungo i miei turni al calendario?",
          "Dal dettaglio dell'evento premi 'Aggiungi a Google Calendar' per l'evento, oppure il pulsante 'Calendar' accanto a ciascun turno. È necessario avere il proprio account Google collegato.",
          ["google calendar", "aggiungere al calendario", "sincronizzare turni"], "staff,volontario"),
         ("Accesso e recupero password (staff e volontari)", "account", "Non riesco ad accedere, come recupero la password?",
@@ -3695,6 +3828,8 @@ async def seed_support():
                                                  "domanda": dom, "risposta": risp, "parole_chiave": kw,
                                                  "stato": "pubblicato", "ruoli": ruoli})
         added += 1
+    # Gestione turni rimossa: le voci della guida vengono archiviate (non cancellate).
+    await db.support_knowledge_base.update_many({"org_id": DEFAULT_ORG, "categoria": "turni"}, {"$set": {"stato": "archiviato"}})
     # Segnala funzionalità area personale non ancora disponibili (da valutare)
     gaps = [
         ("Conferma disponibilità dall'area personale", "Staff e volontari vorrebbero confermare/aggiornare la propria disponibilità e lo stato di presenza direttamente dall'area personale (oggi in sola lettura)."),
@@ -4116,8 +4251,6 @@ async def my_event_detail(event_id: str, user: dict = Depends(get_current_user))
     if not presence:
         raise HTTPException(status_code=404, detail="Evento non trovato")  # object check
     event = await db.events.find_one({"id": event_id, "org_id": oid}, {"_id": 0})
-    my_shifts = await db.shifts.find({"persona_id": pid, "evento_id": event_id, "org_id": oid}, {"_id": 0}).to_list(200)
-    my_shifts.sort(key=lambda s: (s.get("data") or "", s.get("ora_inizio") or ""))
     team = None
     colleagues = []
     if presence.get("team_id"):
@@ -4156,19 +4289,9 @@ async def my_event_detail(event_id: str, user: dict = Depends(get_current_user))
             x.pop(f, None)
     await _attach_structures(my_lodgings + my_meals, oid)
     my_meals.sort(key=lambda m: ((m.get("data") or ""), (m.get("orario") or "")))
-    return {"event": event, "presence": presence, "shifts": my_shifts, "team": team,
+    return {"event": event, "presence": presence, "team": team,
             "team_leader": leader, "colleagues": colleagues, "maps": prio + others,
             "lodgings": my_lodgings, "meals": my_meals}
-
-
-@api.get("/me/shifts")
-async def my_shifts(user: dict = Depends(get_current_user)):
-    pid = user.get("person_id")
-    if not pid:
-        return {"shifts": []}
-    s = await db.shifts.find({"persona_id": pid, "org_id": user.get("org_id")}, {"_id": 0}).to_list(500)
-    s.sort(key=lambda x: (x.get("data") or "", x.get("ora_inizio") or ""))
-    return {"shifts": s}
 
 
 @api.post("/me/events/{event_id}/calendar-sync")
@@ -4185,25 +4308,6 @@ async def my_sync_event(event_id: str, user: dict = Depends(get_current_user)):
                                        date_start=e.get("data_inizio"), date_end=e.get("data_fine"),
                                        time_start=e.get("ora_inizio"), time_end=e.get("ora_fine"))
     ev = await _sync_object(user["user_id"], "event", event_id, body)
-    return {"ok": True, "html_link": ev.get("htmlLink")}
-
-
-@api.post("/me/shifts/{shift_id}/calendar-sync")
-async def my_sync_shift(shift_id: str, user: dict = Depends(get_current_user)):
-    pid = user.get("person_id")
-    sh = await db.shifts.find_one({"id": shift_id, "persona_id": pid}, {"_id": 0})
-    if not sh:
-        raise HTTPException(status_code=404, detail="Turno non trovato")
-    e = await db.events.find_one({"id": sh["evento_id"]}, {"_id": 0})
-    team = await db.teams.find_one({"id": sh.get("team_id")}, {"_id": 0}) if sh.get("team_id") else None
-    link = f"{APP_URL}/eventi?id={sh['evento_id']}"
-    desc = f"Turno {e['nome']} | Ruolo: {sh.get('ruolo') or '-'} | Team: {team.get('nome') if team else '-'} | Luogo: {sh.get('luogo') or '-'} | Ritrovo: {sh.get('punto_ritrovo') or '-'}\n{link}"
-    body = gcal_utils.build_event_body(summary=f"CRMEvent · Turno · {e['nome']}", description=desc, location=sh.get("luogo") or "",
-                                       date_start=sh.get("data"), date_end=sh.get("data"),
-                                       time_start=sh.get("ora_inizio"), time_end=sh.get("ora_fine"))
-    if not sh.get("data"):
-        raise HTTPException(status_code=400, detail="Il turno non ha una data")
-    ev = await _sync_object(user["user_id"], f"shift", shift_id, body)
     return {"ok": True, "html_link": ev.get("htmlLink")}
 
 
@@ -4407,7 +4511,7 @@ def _perm_summary(role: str, perm: dict) -> str:
     tl = perm.get("team_leader") or {}
     inv = ("inviti email: sì" if perm.get("send_invites") else "inviti email: no") + \
         (" · acquisti Marketplace: sì" if perm.get("marketplace_purchase") else "") + \
-        f" · Team Leader: componenti {'modifica' if tl.get('edit_members') else 'sola lettura'}, turni {'sì' if tl.get('manage_shifts') else 'no'}" + \
+        f" · Team Leader: componenti {'modifica' if tl.get('edit_members') else 'sola lettura'}" + \
         "".join(f" · {lbl}: sì" for f, lbl in P.FLAGS.items() if perm.get(f))
     return f"{P.ROLES.get(role, role)} · {evs} · {tms} · {inv} · " + ("; ".join(parts) or "nessuna sezione")
 
@@ -6336,7 +6440,6 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
     persons = {p["id"]: p for p in await db.persons.find({"org_id": org_id}, {"_id": 0}).to_list(10000)}
     teams = await db.teams.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(1000)
     links = await db.staff.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(5000)
-    shifts = await db.shifts.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).sort([("data", 1), ("ora_inizio", 1)]).to_list(5000)
     maps = await db.event_maps.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(1000)
     lodgings = await db.lodgings.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(5000)
     meals = await db.meals.find({"evento_id": event_id, "org_id": org_id}, {"_id": 0}).to_list(20000)
@@ -6390,18 +6493,6 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
         })
     teams_out.sort(key=lambda x: (x.get("nome") or "").lower())
 
-    shifts_out = []
-    for s in shifts:
-        p = persons.get(s.get("persona_id")) if s.get("persona_id") else None
-        shifts_out.append({
-            "id": s["id"], "data": s.get("data"), "ora_inizio": s.get("ora_inizio"), "ora_fine": s.get("ora_fine"),
-            "area": s.get("area"), "ruolo": s.get("ruolo"),
-            "team_nome": team_map.get(s.get("team_id"), {}).get("nome"),
-            "luogo": s.get("luogo"), "punto_ritrovo": s.get("punto_ritrovo"),
-            "persona_nome": (f"{p.get('cognome') or ''} {p.get('nome', '')}".strip() if p else None),
-            "coperto": bool(s.get("persona_id")),
-        })
-
     for x in lodgings + meals:
         for f in COST_FIELDS:
             x.pop(f, None)
@@ -6422,26 +6513,19 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
             "livello": d.get("livello"), "valore_confermato": d.get("valore_confermato"), "stato": d.get("stato"),
         })
 
-    tl = defaultdict(list)
-    for s in shifts_out:
-        if s.get("data"):
-            tl[s["data"]].append(s)
-    timeline = [{"data": d, "turni": tl[d]} for d in sorted(tl.keys())]
-
     staff_count = len([s for s in staff_out if s.get("categoria") in ("staff", "collaboratore")])
     volontari_count = len([s for s in staff_out if s.get("categoria") == "volontario"])
-    turni_scoperti = len([s for s in shifts_out if not s["coperto"]])
     stats = {
         "persone_count": len(staff_out), "staff_count": staff_count, "volontari_count": volontari_count,
-        "teams_count": len(teams_out), "turni_count": len(shifts_out), "turni_scoperti": turni_scoperti,
+        "teams_count": len(teams_out),
         "mappe_count": len(maps), "sponsor_count": len(sponsors_out),
         "pernottamenti": len(lodgings), "pasti": len(meals),
     }
 
     sections = {
-        "teams": teams_out, "staff": staff_out, "shifts": shifts_out,
+        "teams": teams_out, "staff": staff_out,
         "meals_by_day": meals_by_day, "lodging_structures": lodging_structures,
-        "maps": maps, "sponsors": sponsors_out, "timeline": timeline,
+        "maps": maps, "sponsors": sponsors_out,
     }
 
     checks = []
@@ -6458,8 +6542,6 @@ async def _build_briefing(event_id: str, org_id: str) -> dict:
     teams_no_resp = [t["nome"] for t in teams_out if not t["responsabile"]]
     add("team_responsabili", "Team con responsabile", len(teams_out) > 0 and not teams_no_resp,
         ("Team senza responsabile: " + ", ".join(teams_no_resp)) if teams_no_resp else ("Nessun team creato" if not teams_out else ""))
-    add("turni_coperti", "Turni tutti coperti", turni_scoperti == 0,
-        f"{turni_scoperti} turni scoperti da coprire" if turni_scoperti else "")
     add("mappe", "Mappe / percorsi presenti", len(maps) > 0,
         "Nessuna mappa o percorso caricato" if not maps else "")
     vol_no_resp = [f"{s.get('cognome') or ''} {s['nome']}".strip() for s in staff_out
@@ -9314,7 +9396,7 @@ def _prospect_email_html(domain: str) -> str:
     return f"""<!DOCTYPE html>
 <html lang="it"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="x-apple-disable-message-reformatting"/><title>CRMEvent</title></head>
 <body style="margin:0;padding:0;background:#f4f6f6;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
-<span style="display:none;font-size:1px;color:#f4f6f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Staff, volontari, sponsor, turni e briefing in un unico posto.</span>
+<span style="display:none;font-size:1px;color:#f4f6f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Staff, volontari, sponsor e briefing in un unico posto.</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f6;padding:24px 0;"><tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
 <tr><td style="padding:28px 32px 8px 32px;"><img src="{logo}" alt="CRMEvent" height="34" style="height:34px;display:block;border:0;"/></td></tr>
@@ -9324,7 +9406,7 @@ def _prospect_email_html(domain: str) -> str:
 <p style="margin:0 0 12px 0;">Staff e volontari su WhatsApp.<br/>Sponsor nelle email.<br/>Turni su Excel.<br/>Hotel e pasti su un altro file.<br/>Briefing e documenti sparsi nelle cartelle.</p>
 <p style="margin:0 0 12px 0;">È proprio da questa situazione che nasce <strong>CRMEvent</strong>.</p>
 <p style="margin:0 0 8px 0;">Un unico spazio pensato per chi organizza eventi sportivi, dove gestire:</p>
-<p style="margin:0 0 16px 0;color:#088F8A;font-weight:600;">Eventi · Staff · Volontari · Team e turni · Sponsor e partner · Ospitalità · Attività · Documenti e briefing</p>
+<p style="margin:0 0 16px 0;color:#088F8A;font-weight:600;">Eventi · Staff · Volontari · Team · Sponsor e partner · Ospitalità · Attività · Documenti e briefing</p>
 <p style="margin:0 0 20px 0;">L'obiettivo è semplice: avere le informazioni dell'evento organizzate e accessibili quando servono.</p>
 <p style="margin:0 0 20px 0;font-weight:600;">Vuoi vedere come funziona?</p></td></tr>
 <tr><td align="center" style="padding:4px 32px 8px 32px;"><a href="{cta}" style="display:inline-block;background:#088F8A;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:999px;">GUARDA LA DEMO</a></td></tr>
@@ -9359,7 +9441,7 @@ async def brevo_create_template(body: dict = {}, user: dict = Depends(require_or
             res = await c.create_email_template(brevo_client.PROSPECT_TEMPLATE_NAME, subject, html, sender)
             return {"created": True, "template_id": res.get("id"), "name": brevo_client.PROSPECT_TEMPLATE_NAME,
                     "sender": sender, "subject": subject,
-                    "preheader": "Staff, volontari, sponsor, turni e briefing in un unico posto.",
+                    "preheader": "Staff, volontari, sponsor e briefing in un unico posto.",
                     "cta_url": f"{domain}/demo?utm_source=brevo&utm_medium=email&utm_campaign=prospect&utm_content=email1",
                     "is_active": False}
     except brevo_client.BrevoError as e:
@@ -11835,12 +11917,12 @@ DISMISSED_EVENT_SERVICES = {"event_active_period", "event_activation", "event_ma
 # Descrizioni informative (verificate sul codice di addebito). Applicate una sola volta: poi modificabili dal Super Admin.
 CREDIT_SERVICE_DESCRIPTIONS = {
     "ai_assistant": "Risponde con l'AI alle domande sull'uso di CRMEvent e sui dati della tua organizzazione. Il costo viene scalato per ogni domanda che riceve una risposta utile. Se l'assistente non sa rispondere, oppure la richiesta è un suggerimento di nuova funzione, non viene scalato nulla.",
-    "ai_briefing": "Pubblica il briefing operativo dell'evento, generato automaticamente con i dati aggiornati di staff, team, turni, ospitalità e pasti. Il costo viene scalato una sola volta per evento, alla prima pubblicazione. Dopo l'addebito il briefing dello stesso evento può essere aggiornato e ripubblicato in nuove versioni senza ulteriori addebiti.",
-    "event_activation": "Rende operativo un evento: staff, team, turni, ospitalità, briefing e tutte le funzioni operative. Il costo viene scalato una sola volta per evento, al momento dell'attivazione, e comprende il primo mese di utilizzo. Dal mese successivo si applica il Mantenimento evento.",
+    "ai_briefing": "Pubblica il briefing operativo dell'evento, generato automaticamente con i dati aggiornati di staff, team, ospitalità e pasti. Il costo viene scalato una sola volta per evento, alla prima pubblicazione. Dopo l'addebito il briefing dello stesso evento può essere aggiornato e ripubblicato in nuove versioni senza ulteriori addebiti.",
+    "event_activation": "Rende operativo un evento: staff, team, ospitalità, briefing e tutte le funzioni operative. Il costo viene scalato una sola volta per evento, al momento dell'attivazione, e comprende il primo mese di utilizzo. Dal mese successivo si applica il Mantenimento evento.",
     "event_maintenance": "Mantiene operativo un evento già attivato. Il costo viene scalato in automatico ogni mese di calendario a partire dalla data di attivazione, fino alla data dell'evento: il mese che arriva fino all'evento non viene addebitato di nuovo. Se i crediti non sono sufficienti l'evento viene sospeso; riattivandolo si paga un solo mese di mantenimento e il ciclo riparte.",
     "event_pipeline_pro": "Attiva per un evento la Pipeline di preparazione: autorizzazioni, fornitori, materiali, staff, sicurezza, iscrizioni e tutte le attività da svolgere prima dell'evento. Il costo viene scalato una sola volta per evento, anche quando la Pipeline viene copiata da un'edizione precedente. Dopo l'attivazione modelli, attività e aggiornamenti dello stesso evento sono compresi.",
     "video_support": "Sessione di assistenza dedicata di 30 minuti tramite Google Meet, con possibilità di condividere lo schermo per ricevere supporto nell'utilizzo di CRMEvent.",
-    "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare eventi e turni con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
+    "google_calendar": "Collega CRMEvent a Google Calendar per sincronizzare eventi con il calendario. Il costo viene scalato una sola volta per organizzazione, alla prima attivazione. Dopo l'attivazione la sincronizzazione è compresa senza ulteriori addebiti.",
 }
 
 
@@ -13917,11 +13999,9 @@ async def pipeline_crm_counts(event_id: str, user: dict = Depends(require_admin)
     staff_rows = await db.staff.find(oq(user, evento_id=event_id), {"_id": 0, "categoria": 1}).to_list(10000)
     volontari = sum(1 for s in staff_rows if s.get("categoria") == "volontario")
     staff_n = sum(1 for s in staff_rows if s.get("categoria") in ("staff", "collaboratore"))
-    shifts = await db.shifts.find(oq(user, evento_id=event_id), {"_id": 0, "persona_id": 1}).to_list(10000)
-    scoperti = sum(1 for s in shifts if not s.get("persona_id"))
     counts = {
         "volunteers": {"count": volontari, "label": "volontari"},
-        "staff": {"count": staff_n, "label": "membri staff", "extra": {"turni": len(shifts), "turni_scoperti": scoperti}},
+        "staff": {"count": staff_n, "label": "membri staff"},
         "sponsors": {"count": await db.deals.count_documents(oq(user, evento_id=event_id)), "label": "sponsor/partner"},
         "hospitality": {"count": await db.lodgings.count_documents(oq(user, evento_id=event_id)), "label": "pernottamenti"},
         "routes": {"count": await db.event_maps.count_documents(oq(user, evento_id=event_id)), "label": "percorsi caricati"},

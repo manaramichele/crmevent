@@ -62,7 +62,7 @@ CONTRACTS_FEATURES = [
     {"title": "Invio e firma", "items": ["Invio individuale o multiplo via email", "Link personale per visualizzare e firmare il documento",
                                      "Integrazione futura con un provider di firma elettronica", "Archiviazione del documento firmato", "Storico delle operazioni e delle versioni"]},
     {"title": "Monitoraggio", "items": ["Stato dei documenti: da preparare, inviato, da firmare, firmato, scaduto", "Elenco delle persone che devono ancora firmare",
-                                     "Solleciti automatici", "Collegamento futuro con Persone, Eventi, Team & Turni e Dashboard"]},
+                                     "Solleciti automatici", "Collegamento futuro con Persone, Eventi, Team e Dashboard"]},
 ]
 
 

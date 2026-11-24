@@ -145,7 +145,6 @@ function TeamLeaderPerms({ perm, setPerm }) {
       <div className="rounded-lg border border-slate-200 px-3">
         <OnOff label="Visualizzazione componenti del team" hint="Garantita dalla nomina a Team Leader" value testid="perm-tl-view" />
         <OnOff label="Gestione e modifica componenti del team" value={!!tl.edit_members} onChange={setTl("edit_members")} testid="perm-tl-edit-members" />
-        <OnOff label="Gestione turni del team" value={!!tl.manage_shifts} onChange={setTl("manage_shifts")} testid="perm-tl-manage-shifts" />
         <OnOff label="Invio inviti email" hint="Area personale di Staff e Volontari accessibili" value={!!perm.send_invites} onChange={(send_invites) => setPerm((p) => ({ ...p, send_invites }))} testid="perm-send-invites" />
         <OnOff label="Acquisto servizi Marketplace" hint="Può acquistare servizi extra per l'organizzazione" value={!!perm.marketplace_purchase} onChange={(marketplace_purchase) => setPerm((p) => ({ ...p, marketplace_purchase }))} testid="perm-marketplace-purchase" />
         <OnOff label="Gestione abbonamento" hint="Può attivare, rinnovare o cambiare il piano CRMEvent dell'organizzazione" value={!!perm.subscription_manage} onChange={(subscription_manage) => setPerm((p) => ({ ...p, subscription_manage }))} testid="perm-subscription-manage" />

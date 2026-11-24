@@ -60,7 +60,7 @@ REELS = [
                   "sections": [{"text": "TUTTI I TUOI EVENTI, UN'UNICA PIATTAFORMA", "scenes": [S("eventi_list.png", EV_LIST, 2.4, "Elenco eventi"), C("clips/evento_create.mp4", 3.2, "Nuovo evento"), S("pipeline.png", PIPE, 2.6, "Attività e scadenze")]}],
                   "outro": OUTRO}},
     {"slug": "staff-15", "order": 2, "kind": "breve", "title": "Organizza staff e volontari",
-     "description": "Disponibilità raccolte con un modulo pubblico, team con responsabile, ruoli e turni: organizza il tuo team con CRMEvent. www.crmevent.it",
+     "description": "Disponibilità raccolte con un modulo pubblico, team con responsabile, ruoli: organizza il tuo team con CRMEvent. www.crmevent.it",
      "hashtags": "#CRMEvent #Volontari #StaffEventi #EventiSportivi #Volontariato #OrganizzazioneEventi",
      "timeline": {"music": "elettronica", "cover_text": "Organizza staff e volontari", "hook": {"text": "GESTIRE I VOLONTARI È COMPLICATO?", "dur": 3},
                   "sections": [{"text": "ORGANIZZA IL TUO TEAM CON CRMEVENT", "scenes": [S("partecipa.png", [704, 61, 514, 624], 2.1, "Disponibilità"), S("volontari.png", VOL, 2.0, "Ruoli e mansioni"), S("team.png", [288, 233, 814, 759], 2.0, "Team"), S("turni.png", TURNI, 2.1, "Assegnazioni")]}],

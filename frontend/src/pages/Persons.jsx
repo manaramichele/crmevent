@@ -18,7 +18,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, UserPlus, Search, Users, Phone, Eye, Crown, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, UserPlus, Search, Phone, Eye, Crown, Check, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useSort, SortIcon, sortRows } from "@/lib/sortable";
 import PersonDetailDialog from "@/components/PersonDetailDialog";
@@ -34,6 +34,7 @@ import GroupsTab from "@/components/GroupsTab";
 import CoverageTab from "@/components/coverage/CoverageTab";
 import { DeleteRequestButton, DeletedRequestsButton } from "@/components/DaClassificareActions";
 import { sortIt } from "@/lib/sortOptions";
+import { CONF, confOf, AccessCell, ConfSummary, AccessEmailDialog } from "@/components/AccessEmails";
 
 const CAT = { referente: "Referente", staff: "Staff", collaboratore: "Collaboratore", volontario: "Volontario", team: "Team" };
 const STATO = { da_contattare: "Da contattare", disponibilita_richiesta: "Disponibilità richiesta", disponibile: "Disponibile", da_riconfermare: "Da riconfermare", confermato: "Confermato", non_disponibile: "Non disponibile", rinunciato: "Rinunciato" };
@@ -51,7 +52,12 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const [teamFilter, setTeamFilter] = useState("all");
   const [mansFilter, setMansFilter] = useState("all");
   const [provFilter, setProvFilter] = useState("all");
-  const TAB_CATS = { staff: ["staff", "collaboratore"], volontari: ["volontario"] }[tab];
+  const [confFilter, setConfFilter] = useState("all");
+  const [catFilter, setCatFilter] = useState("all");
+  const [mailReq, setMailReq] = useState(null);
+  const ALL_CATS = { all: ["staff", "collaboratore", "volontario"], staff: ["staff", "collaboratore"], volontari: ["volontario"] };
+  const TAB_CATS = { tutti: ALL_CATS[catFilter], staff: ALL_CATS.staff, volontari: ALL_CATS.volontari }[tab];
+  const summaryTab = ["tutti", "staff", "volontari"].includes(tab);
   const asg = (r) => (r.assegnazioni || []).filter((a) => (evFilter === "all" || a.evento_id === evFilter) && (!TAB_CATS || TAB_CATS.includes(a.categoria)));
   const evName = (id) => events.find((e) => e.id === id)?.nome || "—";
   const teamName = (id) => teams.find((t) => t.id === id)?.nome;
@@ -76,7 +82,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const mansioniOf = (r) => (r.mansioni || []).filter((m) => evFilter === "all" || m.evento_id === evFilter);
   const mansioneText = (r) => { const ms = mansioniOf(r).map((m) => m.ruolo).filter(Boolean); return ms.length ? [...new Set(ms)].join(", ") : (isStaffTab ? "" : r.ruolo || ""); };
   const flip = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const filtered = rows.filter((r) => {
+  const baseFiltered = rows.filter((r) => {
+    if (tab === "tutti" && !asg(r).length) return false;
     if (tab === "referenti_aziende" && !r.is_referente) return false;
     if (tab === "staff" && !r.is_staff) return false;
     if (tab === "volontari" && !r.is_volontario) return false;
@@ -91,8 +98,15 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     if (q) { const s = `${r.nome} ${r.cognome} ${r.email || ""} ${r.codice_fiscale || ""} ${r.cellulare || ""} ${r.ruolo || ""} ${r.gruppo_appartenenza || ""} ${(r.aziende_nomi || []).join(" ")}`.toLowerCase(); if (!s.includes(q.toLowerCase())) return false; }
     return true;
   });
+  const confRow = (r) => confOf(asg(r));
+  const filtered = summaryTab && confFilter !== "all" ? baseFiltered.filter((r) => confRow(r) === confFilter) : baseFiltered;
+  const dispOf = (r) => (r.disponibilita || []).filter((d) => evFilter === "all" || d.evento_id === evFilter);
+  const dispText = (r) => dispOf(r).map((d) => (evFilter === "all" && dispOf(r).length > 1 ? `${evName(d.evento_id)}: ${d.testo}` : d.testo)).join(" | ");
+  const dispCell = (r) => { const t = dispText(r); return t ? <span className="block max-w-[220px] text-slate-700 text-xs leading-snug" title={t} data-testid={`disp-${r.id}`}>{t}</span> : <span className="text-slate-400" data-testid={`disp-${r.id}`}>—</span>; };
+  const confCell = (r) => { const g = confRow(r); return <StatusBadge color={CONF[g][1]} data-testid={`conf-status-${r.id}`}>{CONF[g][0]}</StatusBadge>; };
+  const mailEv = evFilter !== "all" ? evFilter : null;
   const { sort, toggle } = useSort({ key: groupMode ? "gruppo" : "cognome", dir: "asc" });
-  const isStaffTab = tab === "staff" || tab === "volontari" || tab === "da_classificare" || groupMode;
+  const isStaffTab = tab === "tutti" || tab === "staff" || tab === "volontari" || tab === "da_classificare" || groupMode;
   const leaderIds = new Set(teams.filter((t) => t.responsabile_id && (evFilter === "all" || t.evento_id === evFilter)).map((t) => t.responsabile_id));
   const ACC = {
     cognome: (r) => `${r.cognome || ""} ${r.nome || ""}`.trim(),
@@ -108,6 +122,10 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
     email: (r) => r.email || "",
     aziende: (r) => (r.aziende_nomi || []).join(", "),
     accesso: (r) => INV_LABEL[r.invite_status || "non_invitato"] || "",
+    qualifica_ana: (r) => r.ruolo || "",
+    disponibilita: (r) => dispText(r),
+    conferma: (r) => confRow(r),
+    accesso_email: (r) => r.access_status || "",
   };
   const colsMeta = Object.entries(ACC).map(([key, sortAccessor]) => ({ key, sortAccessor, sortType: "string" }));
   const displayRows = sortRows(filtered, sort, colsMeta);
@@ -183,7 +201,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
   const actionsCell = (r) => (
     <div className="flex items-center justify-end gap-0.5">
       {tab === "da_classificare" && <DeleteRequestButton person={r} events={events} onDone={onReload} eventIds={dcEvents(r)} />}
-      {onInvite && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title={r.last_invite_at ? "Reinvia invito" : "Invita"} onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>}
+      {onInvite && summaryTab && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title={r.last_invite_at ? "Reinvia email di accesso" : "Invia email di accesso"} onClick={() => setMailReq({ ids: [r.id], single: true })} data-testid={`access-email-${r.id}`}><Mail className="w-4 h-4" /></Button>}
+      {onInvite && <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Gestisci accesso" onClick={() => onInvite(r)} data-testid={`invite-${r.id}`}><UserPlus className="w-4 h-4" /></Button>}
       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-tiffany-active" title="Modifica" onClick={() => onEdit(r)} data-testid={`edit-person-${r.id}`}><Pencil className="w-4 h-4" /></Button>
       {canDelete && delDialog(r, <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500" title="Elimina" data-testid={`delete-person-${r.id}`}><Trash2 className="w-4 h-4" /></Button>, `confirm-delete-person-${r.id}`)}
     </div>
@@ -231,6 +250,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
         {isStaffTab && <select className={fsel} value={provFilter} onChange={(e) => setProvFilter(e.target.value)} data-testid="people-provenienza-filter"><option value="all">Tutte le provenienze</option>{sortIt(Object.entries(PROVENIENZA), (x) => x[1]).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {isStaffTab && <select className="h-10 w-full sm:w-36 rounded-md border border-slate-200 bg-white px-2 text-sm" value={tagliaFilter} onChange={(e) => setTagliaFilter(e.target.value)} data-testid="people-taglia-filter"><option value="all">Tutte le taglie</option><option value="none">Senza taglia</option>{tagliaOpts.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
         {isStaffTab && !groupMode && <select className={fsel} value={gruppoFilter} onChange={(e) => setGruppoFilter(e.target.value)} data-testid="people-gruppo-filter"><option value="all">Tutti i gruppi</option><option value="none">Nessun gruppo</option>{gruppoOpts.map((g) => <option key={g} value={g}>{g}</option>)}</select>}
+        {tab === "tutti" && <select className={fsel} value={catFilter} onChange={(e) => setCatFilter(e.target.value)} data-testid="people-cat-filter"><option value="all">Staff e Volontari</option><option value="staff">Solo Staff</option><option value="volontari">Solo Volontari</option></select>}
+        {summaryTab && onInvite && <Button variant="outline" onClick={() => setMailReq({ all: true })} data-testid="access-email-all-unsent"><Mail className="w-4 h-4 mr-1.5" />Invia accesso ai confermati</Button>}
         {(tab === "staff" || tab === "volontari") && <ExportPdfButton section={tab} eventoId={evFilter !== "all" ? evFilter : null} eventName={evFilter !== "all" ? evName(evFilter) : ""} personIds={displayRows.map((r) => r.id)} scopeLabel={`${displayRows.length} ${displayRows.length === 1 ? "persona" : "persone"} con i filtri attuali`} />}
       </div>
       {isStaffTab && selectedRows.length > 0 && (
@@ -239,9 +260,11 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
           <Button size="sm" variant="outline" onClick={() => confirmPrefs(selectedRows)} data-testid="bulk-confirm-prefs"><Check className="w-4 h-4 mr-1" />Conferma preferenze</Button>
           <select className="h-9 rounded-md border border-slate-200 bg-white px-2" value={bulkRole} onChange={(e) => setBulkRole(e.target.value)} data-testid="bulk-mansione-select"><option value="">Mansione…</option>{sortIt(ruoli).map((x) => <option key={x} value={x}>{x}</option>)}</select>
           <Button size="sm" disabled={!bulkRole} onClick={() => assign(selectedRows, bulkRole)} className="bg-tiffany hover:bg-tiffany-hover text-slate-900" data-testid="bulk-mansione-apply">Assegna a {selectedRows.length}</Button>
+          {summaryTab && onInvite && <Button size="sm" variant="outline" onClick={() => setMailReq({ ids: selectedRows.map((r) => r.id) })} data-testid="bulk-access-email"><Mail className="w-4 h-4 mr-1" />Invia email di accesso</Button>}
           <Button size="sm" variant="ghost" onClick={() => setSel(new Set())} data-testid="bulk-clear">Annulla selezione</Button>
         </div>
       )}
+      {summaryTab && <ConfSummary groups={baseFiltered.map(confRow)} value={confFilter} onChange={setConfFilter} />}
       {tab === "volontari" && <VolunteerSummary teams={teams} staffLinks={staffLinks} events={events} evFilter={evFilter} />}
       <div className="md:hidden space-y-2.5" data-testid={`people-mobile-list-${tab}`}>
         {loading ? <div className="py-10 text-center text-slate-400 text-sm">Caricamento...</div>
@@ -253,15 +276,18 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
               {!isStaffTab && r.ruolo && <div className="text-sm text-slate-500">{r.ruolo}</div>}
               <div className="mt-2 space-y-1.5 text-sm text-slate-700">
                 {r.cellulare && <a href={`tel:${r.cellulare}`} className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{r.cellulare}</a>}
-                <div>{roleBadges(r)}</div>
+                <div className="flex flex-wrap items-center gap-1.5">{roleBadges(r)}{summaryTab && confCell(r)}</div>
+                {summaryTab && <AccessCell person={r} />}
+                {summaryTab && <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400">Qualifica</span><span>{r.ruolo || "—"}</span></div>}
+                {summaryTab && <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400">Disponib.</span>{dispCell(r)}</div>}
                 {isStaffTab && <div className="flex items-start gap-2" data-testid={`m-pref-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-1.5">Preferenza</span>{prefCell(r)}</div>}
                 {isStaffTab && <div className="flex items-start gap-2" data-testid={`m-taglia-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400">Taglia</span><span>{r.taglia || "—"}</span></div>}
                 {isStaffTab ? (<>
                   <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Team</span>{teamsCell(r)}</div>
-                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Mansione</span>{mansCell(r)}</div>
-                  <div className="flex items-start gap-2 min-w-0" data-testid={`m-gruppo-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Gruppo</span><div className="min-w-0">{gruppoCell(r)}</div></div>
+                  <div className="flex items-start gap-2" data-testid={`m-mansione-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Ruolo ass.</span>{mansCell(r)}</div>
+                  <div className="flex items-start gap-2 min-w-0" data-testid={`m-gruppo-${r.id}`}><span className="w-20 shrink-0 text-xs text-slate-400 pt-0.5">Associaz.</span><div className="min-w-0">{gruppoCell(r)}</div></div>
                   {r.eventi_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.eventi_nomi.join(", ")}</div>}
-                  <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
+                  {!summaryTab && <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>}
                 </>) : (<>
                   {r.aziende_nomi?.length > 0 && <div className="text-xs text-slate-500">{r.aziende_nomi.join(", ")}</div>}
                   <StatusBadge color={INV[r.invite_status || "non_invitato"]}>{INV_LABEL[r.invite_status || "non_invitato"]}</StatusBadge>
@@ -269,7 +295,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
               </div>
               <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                 {!isStaffTab && <TextAction icon={Eye} onClick={() => onOpen(r)} data-testid={`m-open-person-${r.id}`}>Apri</TextAction>}
-                {onInvite && <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>{r.last_invite_at ? "Reinvia" : "Invita"}</TextAction>}
+                {onInvite && summaryTab && <TextAction icon={Mail} onClick={() => setMailReq({ ids: [r.id], single: true })} data-testid={`m-access-email-${r.id}`}>{r.last_invite_at ? "Reinvia email" : "Email di accesso"}</TextAction>}
+                {onInvite && !summaryTab && <TextAction icon={UserPlus} onClick={() => onInvite(r)} data-testid={`m-invite-${r.id}`}>{r.last_invite_at ? "Reinvia" : "Invita"}</TextAction>}
                 <TextAction icon={Pencil} onClick={() => onEdit(r)} data-testid={`m-edit-person-${r.id}`}>Modifica</TextAction>
                 {canDelete && delDialog(r, <TextAction icon={Trash2} danger data-testid={`m-delete-person-${r.id}`}>Elimina</TextAction>, `m-confirm-delete-person-${r.id}`)}
                 {tab === "da_classificare" && <DeleteRequestButton person={r} events={events} onDone={onReload} eventIds={dcEvents(r)} testid={`m-delete-request-${r.id}`} />}
@@ -283,16 +310,19 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
             <thead><tr className="border-b border-slate-200 bg-slate-50/70">
               {(onInvite || isStaffTab) && <th className="pl-4 py-3 w-8"><input type="checkbox" className="accent-tiffany w-4 h-4" checked={allSel} onChange={toggleAll} aria-label="Seleziona tutti" data-testid={`select-invite-all-${tab}`} /></th>}
               {isStaffTab ? (<>
-                <Th k="cognome" label="Cognome" />
-                <Th k="nome" label="Nome" />
+                <Th k="cognome" label="Nome e cognome" />
+                <Th k="ruolo_evento" label="Staff / Volontario" />
+                <Th k="qualifica_ana" label="Qualifica" />
+                <Th k="gruppo" label="Associazione di appartenenza" />
+                <Th k="team" label="Team" />
+                <Th k="qualifica" label="Ruolo assegnato" />
+                <Th k="disponibilita" label="Disponibilità" />
+                {summaryTab && <Th k="conferma" label="Stato conferma" />}
+                {summaryTab && <Th k="accesso_email" label="Stato email di accesso" />}
                 <Th k="cellulare" label="Cellulare" />
                 {groupMode && <Th k="email" label="Email" />}
-                <Th k="ruolo_evento" label="Ruolo" />
                 <Th k="preferenza" label="Preferenza" />
                 <Th k="taglia" label="Taglia" />
-                <Th k="team" label="Team" />
-                <Th k="qualifica" label="Mansione" />
-                <Th k="gruppo" label="Gruppo di appartenenza" />
                 <Th k="evento" label="Evento" />
                 <th className="text-right font-semibold text-slate-600 px-4 py-3 whitespace-nowrap">Azioni</th>
               </>) : (<>
@@ -305,23 +335,26 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
               </>)}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={11} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
-                : displayRows.length === 0 ? <tr><td colSpan={11} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
+              {loading ? <tr><td colSpan={16} className="px-4 py-10 text-center text-slate-400">Caricamento...</td></tr>
+                : displayRows.length === 0 ? <tr><td colSpan={16} className="px-4 py-10 text-center text-slate-400">Nessuna persona trovata.</td></tr>
                 : displayRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => onOpen(r)} data-testid={`person-row-${r.id}`}>
                     {(onInvite || isStaffTab) && <td className="pl-4 py-3" onClick={(e) => e.stopPropagation()}>{pick(r)}</td>}
                     {isStaffTab ? (
                       <>
-                        <td className="px-4 py-3"><span className="font-medium text-slate-800" data-testid={`cognome-${r.id}`}>{r.cognome || "—"}</span><LastInvite person={r} /></td>
-                        <td className="px-4 py-3 text-slate-800" data-testid={`nome-${r.id}`}>{r.nome}</td>
-                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
-                        {groupMode && <td className="px-4 py-3 text-slate-700" data-testid={`email-${r.id}`}>{r.email || "—"}</td>}
+                        <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-800"><span data-testid={`nome-${r.id}`}>{r.nome}</span> <span data-testid={`cognome-${r.id}`}>{r.cognome || ""}</span></td>
                         <td className="px-4 py-3">{roleBadges(r)}</td>
-                        <td className="px-4 py-3">{prefCell(r)}</td>
-                        <td className="px-3 py-3 text-slate-700 whitespace-nowrap" data-testid={`taglia-${r.id}`}>{r.taglia || "—"}</td>
+                        <td className="px-4 py-3 text-slate-700" data-testid={`qualifica-${r.id}`}>{r.ruolo || "—"}</td>
+                        <td className="px-4 py-3">{gruppoCell(r)}</td>
                         <td className="px-4 py-3">{teamsCell(r)}</td>
                         <td className="px-4 py-3">{mansCell(r)}</td>
-                        <td className="px-4 py-3">{gruppoCell(r)}</td>
+                        <td className="px-4 py-3">{dispCell(r)}</td>
+                        {summaryTab && <td className="px-4 py-3">{confCell(r)}</td>}
+                        {summaryTab && <td className="px-4 py-3"><AccessCell person={r} /></td>}
+                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.cellulare || "—"}</td>
+                        {groupMode && <td className="px-4 py-3 text-slate-700" data-testid={`email-${r.id}`}>{r.email || "—"}</td>}
+                        <td className="px-4 py-3">{prefCell(r)}</td>
+                        <td className="px-3 py-3 text-slate-700 whitespace-nowrap" data-testid={`taglia-${r.id}`}>{r.taglia || "—"}</td>
                         <td className="px-4 py-3 text-slate-600">{(r.eventi_nomi && r.eventi_nomi.length) ? r.eventi_nomi.join(", ") : "—"}</td>
                       </>
                     ) : (
@@ -340,7 +373,8 @@ function PeopleTable({ rows, loading, tab, events = [], teams = [], staffLinks =
           </table>
         </div>
       </div>
-      {onInvite && <BulkInviteBar selected={selectedRows} onClear={() => setSel(new Set())} onDone={onInvited} />}
+      {onInvite && !isStaffTab && <BulkInviteBar selected={selectedRows} onClear={() => setSel(new Set())} onDone={onInvited} />}
+      {mailReq && <AccessEmailDialog request={mailReq} eventoId={mailEv} onClose={() => setMailReq(null)} onDone={() => { setSel(new Set()); onInvited && onInvited(); }} />}
     </div>
   );
 }
@@ -416,7 +450,6 @@ export default function Persons({ mode = "anagrafiche" }) {
   };
   const delPerson = async (r) => { try { const { data } = await api.delete(`/persons/${r.id}`); await reload(); toast.success(data?.archived ? "Persona eliminata dall'elenco (storico conservato)" : "Persona eliminata"); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
 
-  // team & shift configs
   const personOpts = personOptions(rows);
   // Team Leader: solo Staff dell'evento selezionato (esclude Volontari, Da classificare,
   // Referenti aziendali non-staff e Staff di altri eventi).
@@ -435,11 +468,8 @@ export default function Persons({ mode = "anagrafiche" }) {
     return rows.filter((p) => set.has(p.id));
   }, [rows, staffByEvent]);
   const eventOpts = events.map((e) => ({ value: e.id, label: e.nome }));
-  const teamOpts = teams.map((t) => ({ value: t.id, label: t.nome }));
-  const areaOpts = toOptions(settings?.aree_operative);
   const pName = (id) => { const p = rows.find((x) => x.id === id); return p ? personName(p) : "—"; };
   const eName = (id) => events.find((e) => e.id === id)?.nome || "—";
-  const tName = (id) => teams.find((t) => t.id === id)?.nome || "—";
 
   const teamFields = [
     { name: "nome", label: "Nome team", required: true, full: true }, { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts },
@@ -484,19 +514,6 @@ export default function Persons({ mode = "anagrafiche" }) {
       </div>
     );
   };
-  const shiftFields = [
-    { name: "evento_id", label: "Evento", required: true, type: "select", options: eventOpts }, { name: "persona_id", label: "Persona (vuoto = scoperto)", type: "select", options: personOpts },
-    { name: "data", label: "Data", type: "date" }, { name: "ora_inizio", label: "Ora inizio", type: "time" }, { name: "ora_fine", label: "Ora fine", type: "time" },
-    { name: "area", label: "Area", type: "select", settingKey: "aree_operative", addLabel: "Aggiungi nuova Area", options: settings?.aree_operative || [] }, { name: "ruolo", label: "Ruolo", type: "select", settingKey: "ruoli_staff", addLabel: "Aggiungi nuovo Ruolo", options: settings?.ruoli_staff || [] },
-    { name: "team_id", label: "Team", type: "teamselect", eventFrom: "evento_id" }, { name: "luogo", label: "Luogo" }, { name: "punto_ritrovo", label: "Punto di ritrovo" },
-    { name: "note", label: "Note", type: "textarea", full: true },
-  ];
-  const shiftCols = [
-    { key: "data", label: "Data", sortAccessor: (r) => `${r.data || ""} ${r.ora_inizio || ""}`.trim(), sortType: "string", render: (r) => <span className="font-medium text-slate-800">{r.data}</span> },
-    { key: "ora", label: "Orario", render: (r) => `${r.ora_inizio || ""}–${r.ora_fine || ""}` },
-    { key: "persona_id", label: "Persona", sortAccessor: (r) => (r.persona_id ? pName(r.persona_id) : ""), sortType: "string", render: (r) => r.persona_id ? pName(r.persona_id) : <StatusBadge color="red">Scoperto</StatusBadge> },
-    { key: "area", label: "Area" }, { key: "team_id", label: "Team", render: (r) => r.team_id ? tName(r.team_id) : "—" },
-  ];
 
   const isStaff = mode === "staff";
   const canInvite = canSendInvites(user);
@@ -510,7 +527,7 @@ export default function Persons({ mode = "anagrafiche" }) {
     <div className="animate-fade-up">
       <PageHeader
         title={isStaff ? "Staff / Volontari" : "Anagrafiche"}
-        subtitle={isStaff ? "Staff e Volontari degli eventi: ruoli, team e turni" : "Referenti e contatti delle aziende"}
+        subtitle={isStaff ? "Staff e Volontari degli eventi: conferme, ruoli, team e disponibilità" : "Referenti e contatti delle aziende"}
         action={!can(user, isStaff ? "staff" : "anagrafiche", "create") ? null : isStaff ? (
           <div className="flex flex-wrap gap-2">
             <ImportLink target="persone" />
@@ -520,17 +537,17 @@ export default function Persons({ mode = "anagrafiche" }) {
         ) : <PrimaryButton onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="add-person-button"><Plus className="w-4 h-4 mr-1.5" />Aggiungi persona</PrimaryButton>} />
       {isStaff ? (<>
         {evBanner}
-        <Tabs defaultValue="staff">
+        <Tabs defaultValue="tutti">
           <TabsList className="mb-4 flex-wrap h-auto">
+            <TabsTrigger value="tutti" data-testid="tab-tutti">Tutti</TabsTrigger>
             <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
             <TabsTrigger value="volontari" data-testid="tab-volontari">Volontari</TabsTrigger>
             <TabsTrigger value="da_classificare" data-testid="tab-da-classificare">Da classificare{daClassificare > 0 && <span className="ml-1.5 rounded-full bg-amber-100 text-amber-800 px-1.5 text-[11px] font-bold" data-testid="da-classificare-count">{daClassificare}</span>}</TabsTrigger>
             {can(user, "team_gruppi") && <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>}
             {can(user, "team_gruppi") && <TabsTrigger value="gruppi" data-testid="tab-gruppi">Gruppi</TabsTrigger>}
             {can(user, "copertura") && <TabsTrigger value="copertura" data-testid="tab-copertura">Copertura oraria</TabsTrigger>}
-            {can(user, "turni") && <TabsTrigger value="turni" data-testid="tab-turni">Turni</TabsTrigger>}
           </TabsList>
-          {["staff", "volontari", "da_classificare"].map((t) => (
+          {["tutti", "staff", "volontari", "da_classificare"].map((t) => (
             <TabsContent key={t} value={t}>
               {t === "da_classificare" && user?.role === "superadmin" && <div className="flex justify-end mb-2"><DeletedRequestsButton onRestored={reload} /></div>}
               <PeopleTable tab={t} events={events} teams={teams} staffLinks={staffLinks} ruoli={settings?.ruoli_staff || []} onReload={reload} evValue={effEv} onEvChange={setPageEv} {...peopleProps} />
@@ -557,11 +574,6 @@ export default function Persons({ mode = "anagrafiche" }) {
           <TabsContent value="copertura">
             <CoverageTab key={`c-${effEv}`} initialEvent={effEv !== "all" ? effEv : ""} events={events} teams={teams} settings={settings} version={rows} onChanged={reload}
               onOpenPerson={(pid) => { const p = rows.find((x) => x.id === pid); if (p) setMask({ person: p }); }} />
-          </TabsContent>
-          <TabsContent value="turni">
-            <EntityManager key={`t-${effEv}`} initialFilters={effEv !== "all" ? { evento_id: effEv } : undefined} title="Turni" subtitle="Turni operativi; lascia la persona vuota per un turno scoperto" endpoint="/shifts"
-              fields={shiftFields} columns={shiftCols} entityLabel="turno" testid="shift" section="turni" searchKeys={["ruolo", "area", "luogo"]}
-              filters={[{ name: "evento_id", label: "Evento", options: eventOpts }, { name: "area", label: "Area", options: areaOpts }, { name: "team_id", label: "Team", options: teamOpts }]} />
           </TabsContent>
         </Tabs>
       </>) : (

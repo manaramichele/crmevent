@@ -14,7 +14,7 @@ import {
 import { MessageSquare, BookOpen, HelpCircle, Lightbulb, TrendingUp, Sparkles, BookPlus, ThumbsDown, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
-const CATS = ["eventi", "persone", "aziende", "sponsor", "partner", "fornitori", "staff", "volontari", "team", "turni", "attivita", "documenti", "briefing", "impostazioni", "account", "altro"];
+const CATS = ["eventi", "persone", "aziende", "sponsor", "partner", "fornitori", "staff", "volontari", "team", "attivita", "documenti", "briefing", "impostazioni", "account", "altro"];
 const catOpts = CATS.map((c) => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }));
 const statoOpts = [{ value: "bozza", label: "Bozza" }, { value: "pubblicato", label: "Pubblicato" }, { value: "archiviato", label: "Archiviato" }];
 const frStati = [{ value: "nuova", label: "Nuova" }, { value: "da_valutare", label: "Da valutare" }, { value: "pianificata", label: "Pianificata" }, { value: "in_sviluppo", label: "In sviluppo" }, { value: "completata", label: "Completata" }, { value: "scartata", label: "Scartata" }];

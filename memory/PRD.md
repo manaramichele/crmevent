@@ -1200,3 +1200,12 @@ Richiesta utente: nuovo modello commerciale a 3 abbonamenti (BRONZE €19/€182
 - COLLABORATORE, AMMINISTRATORE (ruolo tecnico user), ORGANIZZATORE (admin_org) e SUPER ADMIN: login con credenziali al back-end, ciascuno con i propri permessi. I ruoli già salvati non vengono mai convertiti.
 - In attesa di autorizzazione per il salvataggio su GitHub e la pubblicazione su Aruba.
 
+
+## Staff/Volontari: turni rimossi, riepilogo conferme, email di accesso (2026-11-24)
+- Turni rimossi da tutta l'interfaccia e dalle API (/shifts, /me/shifts, briefing, dashboard, scheda persona, Team, area personale, permessi, tutorial, testi). Event Planner: la postazione salva solo nome/tipologia/ruolo/Team, senza persone né orari. Control Room: nessun turno. Dati storici in db.shifts conservati; sezione permessi "turni" nascosta (HIDDEN_SECTIONS), voci guida archiviate.
+- Scheda "Tutti" + contatori cliccabili Totale / Confermati / Da confermare / Non confermati (anche in Staff e Volontari). Raggruppamento: confermato | da_contattare, disponibilita_richiesta, disponibile, da_riconfermare | non_disponibile, rinunciato. I 7 stati salvati non cambiano.
+- Stato email di accesso (Email da inviare / Email inviata / Accesso effettuato) + ultimo invio. persons-enriched: access_status, last_login_at, disponibilita.
+- POST /api/person-invites/access-preview e /access-send: singolo, selezione, tutti i confermati non ancora invitati, reinvio; solo confermati; anteprima e riepilogo destinatari; un invio fallito non segna più la persona come invitata.
+- Colonne: Nome e cognome, Staff/Volontario, Qualifica, Associazione di appartenenza, Team, Ruolo assegnato, Disponibilità, Stato conferma, Stato email di accesso, Cellulare, Preferenza, Taglia, Evento, Azioni. Frontend: components/AccessEmails.jsx.
+- Test: iteration_214 (backend 16/16, frontend desktop+mobile). Non verificati: consegna reale dell'email (in anteprima il provider rifiuta l'invio), Event Planner e Control Room dopo la rimozione dei turni.
+- Solo sviluppo: nessun salvataggio su GitHub, Aruba non aggiornata.

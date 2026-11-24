@@ -56,7 +56,7 @@ export default function Login() {
         </div>
         <div className="relative">
           <h1 className="font-display text-4xl font-bold text-white leading-tight">La piattaforma operativa per eventi, staff e volontari.</h1>
-          <p className="text-slate-300 mt-4 max-w-md">Eventi, aziende, sponsor, team, turni e mappe in un unico gestionale.</p>
+          <p className="text-slate-300 mt-4 max-w-md">Eventi, aziende, sponsor, team e mappe in un unico gestionale.</p>
         </div>
         <div className="relative text-slate-500 text-sm">crmevent.it</div>
       </div>

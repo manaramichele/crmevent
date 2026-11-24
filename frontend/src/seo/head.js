@@ -5,7 +5,7 @@ export const SITE = SEO.site;
 
 const ORG = { "@type": "Organization", "@id": `${SITE}/#org`, name: "CRMEvent", url: `${SITE}/`, logo: `${SITE}/logo-crmevent.png` };
 const APP = { "@type": "SoftwareApplication", name: "CRMEvent", applicationCategory: "BusinessApplication", operatingSystem: "Web", url: `${SITE}/`, publisher: { "@id": `${SITE}/#org` },
-  description: "Piattaforma web per organizzare eventi sportivi: eventi, staff e volontari, team e turni, sponsor e partner, percorsi, Event Planner ed Event Map." };
+  description: "Piattaforma web per organizzare eventi sportivi: eventi, staff e volontari, team, sponsor e partner, percorsi, Event Planner ed Event Map." };
 
 export function breadcrumb(items) {
   return { "@type": "BreadcrumbList", itemListElement: items.map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, item: `${SITE}${path}` })) };

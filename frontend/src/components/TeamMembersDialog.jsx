@@ -70,7 +70,6 @@ function MemberCard({ m, canEdit, busy, onOpenPerson, onRemove }) {
       <div className="mt-1 space-y-0.5 text-sm text-slate-600">
         {m.ruolo && <div>Ruolo: {m.ruolo}</div>}
         <div><Tel n={m.cellulare} /></div>
-        {m.turno && <div>Turno: {m.turno}</div>}
       </div>
       <div className="mt-2.5 flex flex-wrap gap-2">
         {onOpenPerson && <TextAction icon={Pencil} onClick={() => onOpenPerson(m.id)} data-testid={`m-team-member-open-${m.id}`}>Modifica</TextAction>}
@@ -81,7 +80,6 @@ function MemberCard({ m, canEdit, busy, onOpenPerson, onRemove }) {
 }
 
 export default function TeamMembersDialog({ team, open, onOpenChange, persons = [], staffLinks = [], events = [], onReloadStaff, onOpenPerson, onEdit, onSaveNote, canEdit = true }) {
-  const [shifts, setShifts] = useState([]);
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [addQuery, setAddQuery] = useState("");
@@ -96,11 +94,6 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
 
   const eventName = events.find((e) => e.id === team?.evento_id)?.nome || "—";
 
-  useEffect(() => {
-    if (open && team?.evento_id) {
-      api.get("/shifts", { params: { evento_id: team.evento_id } }).then(({ data }) => setShifts(data)).catch(() => setShifts([]));
-    }
-  }, [open, team]);
 
   const resetAdd = () => { setCreating(false); setNf(emptyNew); setExisting(null); setAddQuery(""); };
 
@@ -111,16 +104,14 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
     (staffLinks || []).filter((l) => l.team_id === team.id).forEach((l) => { if (!byPerson.has(l.persona_id)) byPerson.set(l.persona_id, l); });
     return [...byPerson.entries()].map(([pid, link]) => {
       const p = persons.find((x) => x.id === pid) || {};
-      const shift = shifts.find((s) => s.persona_id === pid && (s.team_id === team.id || !s.team_id));
       return {
         id: pid, nome: p.nome || "", cognome: p.cognome || "", email: p.email || "", cellulare: p.cellulare || "",
         tipo: link.categoria === "volontario" ? "Volontario" : "Staff",
         ruolo: link.ruolo || "", link,
-        turno: shift ? `${shift.data || ""} ${shift.ora_inizio || ""}${shift.ora_fine ? "–" + shift.ora_fine : ""}`.trim() : "",
         isLeader: team.responsabile_id === pid,
       };
     }).filter((m) => hasName(m));
-  }, [team, staffLinks, persons, shifts]);
+  }, [team, staffLinks, persons]);
 
   const counts = useMemo(() => (team ? teamCounts(team, staffLinks) : { staff: new Set(), vol: new Set() }), [team, staffLinks]);
   const leader = team?.responsabile_id ? persons.find((p) => p.id === team.responsabile_id) : null;
@@ -133,7 +124,6 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
     { key: "tipo", label: "Tipo" },
     { key: "cellulare", label: "Cellulare" },
     { key: "ruolo", label: "Ruolo" },
-    { key: "turno", label: "Turno", sortType: "string" },
   ];
 
   const filtered = useMemo(() => {
@@ -141,7 +131,7 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
     const list = members.filter((m) => !ql || `${m.nome} ${m.cognome} ${m.cellulare}`.toLowerCase().includes(ql));
     // Team Leader non assegnato come presenza: compare comunque tra lo Staff (contato una sola volta)
     if (leader && !members.some((m) => m.id === leader.id) && (!ql || `${leader.nome} ${leader.cognome}`.toLowerCase().includes(ql))) {
-      list.push({ id: leader.id, nome: leader.nome || "", cognome: leader.cognome || "", cellulare: leader.cellulare || "", tipo: "Staff", ruolo: "", turno: "", isLeader: true, link: null });
+      list.push({ id: leader.id, nome: leader.nome || "", cognome: leader.cognome || "", cellulare: leader.cellulare || "", tipo: "Staff", ruolo: "", isLeader: true, link: null });
     }
     return list;
   }, [members, query, leader]);
@@ -275,7 +265,6 @@ export default function TeamMembersDialog({ team, open, onOpenChange, persons = 
                 <td className="px-4 py-2.5 text-slate-600">{m.tipo}</td>
                 <td className="px-4 py-2.5 text-slate-600">{m.cellulare || "—"}</td>
                 <td className="px-4 py-2.5 text-slate-600">{m.ruolo || "—"}</td>
-                <td className="px-4 py-2.5 text-slate-600">{m.turno || "—"}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex justify-end gap-2">
                     {onOpenPerson && <TextAction icon={Pencil} onClick={() => onOpenPerson(m.id)} data-testid={`team-member-open-${m.id}`}>Modifica</TextAction>}

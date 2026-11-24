@@ -60,7 +60,7 @@ function ResourceBody({ d, r, act }) {
       {r.kind === "persona" && <Presence d={d} r={r} act={act} />}
       <div className="grid grid-cols-2 gap-3"><Info l="Identificativo" v={r.codice} /><Info l="Tipologia" v={r.kind === "mezzo" ? d.vehicles.find((v) => v.key === r.tipologia)?.label : r.tipologia} />
         <Info l="Targa" v={r.targa} /><Info l="Equipaggio" v={r.equipaggio} /><Info l="Responsabile" v={r.responsabile} /><Info l="Postazione" v={p?.nome} />
-        <Info l="Settore" v={d.sectors.find((x) => x.id === (r.sector_id || p?.sector_id))?.nome} /><Info l="Turno" v={r.turno_label} /></div>
+        <Info l="Settore" v={d.sectors.find((x) => x.id === (r.sector_id || p?.sector_id))?.nome} /></div>
       {r.contatti_nascosti && <div className="text-xs text-slate-400">Contatti riservati</div>}
       <Call tel={r.telefono} testid="cr-resource-call" />
       <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600" data-testid="cr-resource-gps">

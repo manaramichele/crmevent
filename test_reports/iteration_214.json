@@ -1,0 +1,16 @@
+{
+  "summary": "Tested Staff/Volontari refactor: removal of Turni across platform + new confirmation-counters/access-email flows. Backend: ran /tmp/sv_test.py seed+test — all 16 assertions PASS. GET /api/shifts is unavailable (route 404-ish, actually returns a non-200), historic db.shifts preserved; persons-enriched returns access_status and disponibilita; /persons/{id}/detail has no 'shifts' key; briefing-live has no shifts section nor turni_count stat; dashboard payload has no 'turni_totali'; /person-invites/access-preview respects org isolation and confirmed-only; unconfirmed/other-org never marked sent; failed real send (Brevo 401) correctly keeps invite_status='non_invitato'; duplicate send blocked 'Email già inviata'; resend within 24h requires force=true; access_status transitions email_da_inviare -> email_inviata -> accesso_effettuato. Frontend (desktop + mobile 390x844): /staff-volontari shows tabs [Tutti, Staff, Volontari, Da classificare, Team, Gruppi, Copertura oraria] with NO Turni tab; 4 counters show 6/3/2/1 on Tutti; clicking Confermati filters to 3 rows, Da confermare to 2 rows; switching to Staff tab recomputes counters to 2/1/0/1 and Volontari to 4/2/2/0; people-cat-filter select present. Row/bulk/all-confermati access-email dialogs work: dialog lists 'Gialli Dario' as recipient, 'Rosa Elena · Senza indirizzo email' as excluded, preview iframe renders, confirm button enabled. Opening dialog for unconfirmed sv_p2 shows reason 'Partecipazione non confermata' and confirm is disabled. Bulk selection shows bulk-access-email button. Mobile shows counters, 12 conf-status + 12 access-status badges (6 persons × desktop/mobile), 6 per-person mail icons. Briefing /eventi/ev_svtest/briefing loads without any 'Turni' text; Dashboard loads without 'Turni'; Permissions page /utenti-permessi has no 'Turni' and no 'Gestione turni del team'. No console errors beyond harmless pre-login 401s.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/tmp/sv_test.py"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (16/16 assertions)", "frontend": "100% of requested flows"},
+  "test_credentials": "svtest.admin@example.com / SvTest2026! (from review request)",
+  "seed_data_creation": "Reseeded via /tmp/sv_test.py seed (org_svtest + org_svtest2 + 6 persons sv_p1..sv_p6). Did NOT run clean per agent-to-agent note. One real send attempt to svtest.p1@example.com failed at Brevo (expected) and left person as non_invitato.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Dismiss cookie banner with 'Accept all' (EN is default). Demo popup 'Non ora' may appear after login. Mobile viewport doubles testids (desktop+mobile cards), so counting selectors like conf-status-* yields 2x person count. Seed script at /tmp/sv_test.py — do not run its clean(). Access email real-send is disabled in preview; expected error 'Invio non riuscito: riprova più tardi'.",
+  "rca of the issue": "N/A — no defects found."
+}

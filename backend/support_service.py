@@ -46,7 +46,7 @@ SYSTEM_DATA = (
     "Hai a disposizione DUE fonti:\n"
     "A) KNOWLEDGE BASE: documentazione su COME funziona CRMEvent (procedure, funzionalità).\n"
     "B) DATI ORGANIZZAZIONE: dati operativi REALI e aggiornati dell'organizzazione attiva "
-    "dell'utente (eventi, staff, volontari, team, turni, sponsor/pipeline, attività, follow-up, "
+    "dell'utente (eventi, staff, volontari, team, sponsor/pipeline, attività, follow-up, "
     "ospitalità, pasti, criticità). Questi dati appartengono ESCLUSIVAMENTE all'organizzazione "
     "dell'utente autenticato e sono già filtrati: non fanno mai riferimento ad altre organizzazioni.\n"
     "REGOLE FONDAMENTALI:\n"
