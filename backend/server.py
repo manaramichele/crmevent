@@ -2712,7 +2712,12 @@ async def access_email_preview(body: AccessEmailIn, admin: dict = Depends(requir
     ev = await db.events.find_one(oq(admin, id=body.evento_id), {"_id": 0}) if body.evento_id else None
     if not ev and ok:
         ev = await _staff_mail_event(admin["org_id"], ok[0]["id"], None)
-    subject, html, from_name = _staff_mail("nuovo", ev, (ok[0]["name"].split(" ")[-1] if ok else "Mario"), "volunteer", f"{APP_URL}/attiva?token=ANTEPRIMA")
+    role = "volunteer"
+    if ok:
+        fp = await db.persons.find_one(oq(admin, id=ok[0]["id"]), {"_id": 0})
+        allowed = await _invite_roles_for(admin, fp)
+        role = fp.get("user_role") if fp.get("user_role") in allowed else ("volunteer" if "volunteer" in allowed else "staff")
+    subject, html, from_name = _staff_mail("nuovo", ev, (ok[0]["name"].split(" ")[-1] if ok else "Mario"), role, f"{APP_URL}/attiva?token=ANTEPRIMA")
     return {"recipients": rows, "to_send": len(ok), "subject": subject, "from_name": from_name, "html": html}
 
 
